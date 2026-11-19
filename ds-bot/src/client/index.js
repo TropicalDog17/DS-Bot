@@ -33,6 +33,7 @@ import { Overlays } from './overlays.js'
 import { createPages } from './pages.js'
 import { installBoardPage } from '../board/client/index.js'
 import { BOARD_CSS } from '../board/client/board.js'
+import { CARD_TAG_CSS } from '../board/client/card-tag.js'
 import { createBotBrowsers, serveBrowserReads } from './bot-browsers.js'
 import { BROWSER_CSS } from './browser-pane.js'
 import { SECRET_CSS, SecretDock } from './secret-card.js'
@@ -100,9 +101,6 @@ export function apply(ctx) {
     alert: ({ page, text, onOpen }) => ui.set(state => ({ ...state, toast: { text, token: Date.now(), page, onOpen } })),
   })
   if (typeof ctx.provide === 'function') ctx.provide('dsBotPages', pages.service)
-  // ds-bot/board's page rides in this bundle (DSH loads one per package) and shows
-  // only when that plugin's route answers.
-  ctx.effect(() => installBoardPage(pages.service), 'ds-bot: board page')
   // The left column's kept preference, and the frame geometry the layout rules
   // in frame-layout.js read: the window and the shell's collapsed track come from
   // installFrameWatch, the open column's width is the user's own.
@@ -1117,6 +1115,17 @@ export function apply(ctx) {
   const shadow = (name, options, component) => ctx.slots.inject(name, () => ctx.slots.register({
     name, ...options, ...(options.priority === undefined ? {} : { priority: freePriority(ctx.slots.entries(name), options) }),
   }, component))
+  // ds-bot/board's page rides in this bundle (DSH loads one per package) and shows
+  // only when that plugin's route answers. A card's note line in a chat shows as a tag
+  // of the card, on releases that draw user text by rules.
+  ctx.effect(() => installBoardPage(pages.service, {
+    cardTags: (rule, Node) => {
+      if (!hostDrawsUserText) return undefined
+      const offRule = ctx.uiConversation.userText.register(rule)
+      const offNode = shadow('conversation.user.text.node', { key: rule.id, inject: face }, Node)
+      return () => { offNode(); offRule() }
+    },
+  }), 'ds-bot: board page')
   const installHeader = () => ctx.slots.inject('conversation.session.header', () => installHeaderNavigation(ctx.slots, face, HeaderPill, BOT_PRIORITY))
 
   // The "@" menu's Bot group and the chats "+" references. The composer's controller
@@ -1193,6 +1202,7 @@ export function apply(ctx) {
     [MEMBER_CSS, 'members'],
     [TASK_CSS, 'tasks'],
     [BOARD_CSS, 'board'],
+    [CARD_TAG_CSS, 'board-card-tag'],
     [PASTE_CSS, 'paste'],
     [OPENING_CSS, 'opening'],
     [IM_CSS, 'im'],

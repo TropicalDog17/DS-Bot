@@ -6,6 +6,7 @@ import { createElement as h, useCallback, useEffect, useMemo, useState, useSyncE
 import { createSource } from '../../client/sources.js'
 import { BoardScreen } from './board.js'
 import { BoardIcon } from './icons.js'
+import { cardTagNode, cardTagRule } from './card-tag.js'
 import { hostText, t } from '../../client/i18n.js'
 
 export const BOARD_ROUTE = 'api/ds-bot-board'
@@ -105,17 +106,22 @@ export function boardWatch(pages, { first, call, openMs = POLL_MS, closedMs = WA
       refresh()
       return () => { open -= 1; pace() }
     },
-    // The card a notice led to, once.
+    // The card the page opens on next (a notice's Open, a card tag in a chat).
+    show(id) { focus = id },
+    // The card the page opens on, once.
     focus() { const id = focus; focus = null; return id },
     stop() { clearTimer(timer) },
   }
 }
 
 // Asks the route once (and once more after a network failure); registers the page when
-// the plugin answers. Returns a disposer that takes the page back.
-export function installBoardPage(pages, { call = boardCall, retryMs = 3000, watchMs = WATCH_MS } = {}) {
+// the plugin answers. `cardTags(rule, Node)`, from DS Bot, draws a card's note line in a
+// chat as a tag of the card (card-tag.js) and returns its disposer. Returns a disposer
+// that takes the page and the tags back.
+export function installBoardPage(pages, { call = boardCall, retryMs = 3000, watchMs = WATCH_MS, cardTags } = {}) {
   let disposed = false
   let unregister
+  let untag
   let timer
   let live
   const probe = (tries) => {
@@ -132,8 +138,9 @@ export function installBoardPage(pages, { call = boardCall, retryMs = 3000, watc
         },
       })
       live = boardWatch(pages, { first: value, call, closedMs: watchMs })
+      untag = cardTags?.(cardTagRule(), cardTagNode(id => live.show(id)))
     }, () => { if (!disposed && tries > 0) timer = setTimeout(() => probe(tries - 1), retryMs) })
   }
   probe(1)
-  return () => { disposed = true; clearTimeout(timer); live?.stop(); unregister?.() }
+  return () => { disposed = true; clearTimeout(timer); live?.stop(); untag?.(); unregister?.() }
 }

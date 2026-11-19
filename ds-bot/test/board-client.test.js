@@ -29,6 +29,7 @@ const bundled = async (entry) => {
 }
 const { BoardScreen, CardDetail, boardColumns, leadColumn, COLUMNS } = await bundled('board/client/board.js')
 const { installBoardPage, boardCall, boardWatch, replyNotice, BOARD_ROUTE } = await bundled('board/client/index.js')
+const { cardTagRule, cardTagNode, CARD_TAG_ID } = await bundled('board/client/card-tag.js')
 const plain = value => JSON.parse(JSON.stringify(value))
 
 const all = (node, cls, out = []) => {
@@ -262,4 +263,65 @@ test('the watch marks the Board button and shows one notice per new answer while
   assert.deepEqual(on.marks.at(-1), ['board', false])
   live.stop()
   assert.equal(replyNotice(card('x', 'todo', { title: 'Viết báo cáo', assignee: 'b', notes: [] }), bots), 'Coder replied on Viết báo cáo')
+})
+
+test('a card note in a chat is a tag of the card: the whole note line, after a Bot mention too', () => {
+  const rule = cardTagRule()
+  assert.equal(rule.id, CARD_TAG_ID)
+  const chat = 'Note on card c_bcd80b5f · LIFE-782 "Fix login redirect loop on Safari": Có cần thêm log cho Safari không?'
+  const piece = plain(rule.match(chat, 0))
+  assert.deepEqual(piece.data, { cardId: 'c_bcd80b5f', key: 'LIFE-782', title: 'Fix login redirect loop on Safari' })
+  assert.equal(piece.start, 0)
+  assert.equal(chat.slice(piece.end), 'Có cần thêm log cho Safari không?')
+  // In a group the note follows the Bot's mention; a card with no key keeps its title.
+  const group = '@Writer Note on card c_0a1b2c3d "Đặt lịch khám răng": gọi trước 5h'
+  const there = plain(rule.match(group, 0))
+  assert.equal(there.start, '@Writer '.length)
+  assert.deepEqual(there.data, { cardId: 'c_0a1b2c3d', title: 'Đặt lịch khám răng' })
+  assert.equal(group.slice(there.end), 'gọi trước 5h')
+  // Nothing past `from`, and ordinary text stays text.
+  assert.equal(rule.match(chat, 1), undefined)
+  assert.equal(rule.match('a note on card LIFE-782', 0), undefined)
+})
+
+test('tapping a card tag opens the Board on that card; a static tag only shows it', () => {
+  const shown = []
+  const opened = []
+  const Tag = cardTagNode(id => shown.push(id))
+  const node = { data: { cardId: 'c_bcd80b5f', key: 'LIFE-782', title: 'Fix login redirect loop on Safari' } }
+  const tag = Tag({ node, interactive: true, actions: { openPage: id => opened.push(id) } })
+  assert.equal(tag.type, 'button')
+  assert.equal(text(tag), 'LIFE-782')
+  assert.equal(tag.props.title, 'Fix login redirect loop on Safari')
+  tag.props.onClick()
+  assert.deepEqual(shown, ['c_bcd80b5f'])
+  assert.deepEqual(opened, ['board'])
+  const still = Tag({ node: { data: { cardId: 'c_1', title: 'Đặt lịch khám răng' } }, interactive: false, actions: {} })
+  assert.equal(still.type, 'span')
+  assert.equal(text(still), 'Đặt lịch khám răng')
+})
+
+test('the card tags come with the page and go with it; the tag leads the page to its card', async () => {
+  const on = seat()
+  const tags = []
+  const stop = installBoardPage(on, {
+    call: async endpoint => (endpoint === 'state' ? { cards: {}, bots: [] } : undefined),
+    cardTags: (rule, Node) => { const entry = { rule, Node, off: false }; tags.push(entry); return () => { entry.off = true } },
+  })
+  await settle()
+  assert.equal(tags.length, 1)
+  assert.equal(tags[0].rule.id, CARD_TAG_ID)
+  tags[0].Node({ node: { data: { cardId: 'c_9', title: 'x' } }, interactive: true, actions: { openPage: () => {} } }).props.onClick()
+  const page = on.list[0].Page({ close: () => {}, paneLeft: 0, leaving: false })
+  stop()
+  // The fake useState hands back its initializer as is.
+  const focus = typeof page.props.focus === 'function' ? page.props.focus() : page.props.focus
+  assert.equal(focus, 'c_9')
+  assert.equal(tags[0].off, true)
+  // Plugin off: no tags either.
+  const off = seat()
+  let asked = 0
+  installBoardPage(off, { call: async () => undefined, cardTags: () => { asked += 1 } })
+  await settle()
+  assert.equal(asked, 0)
 })
