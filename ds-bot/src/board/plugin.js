@@ -19,7 +19,7 @@ export function install(ctx, config, { identity, roster, notes, tools, connectio
 
   const tool = defineTool({
     name: 'board',
-    description: 'The user\'s work board, shared by the whole team. Put every piece of work you take on it so the user sees it without asking: open when you take it, update as it moves (status, progress, a PR link), complete with a one-line result, cancel with a reason. Works from any chat. show lists the board.',
+    description: 'The user\'s work board, shared by the whole team. Put every piece of work you take on it so the user sees it without asking: open when you take it, update as it moves (status, progress, a PR link), complete with a one-line result, cancel with a reason. A note from the user on a card asks you there: answer with reply, on the card, not only in chat. Works from any chat. show lists the board.',
     parameters: {
       action: { type: 'string', required: true, enum: ACTIONS, description: 'What to do' },
       id: { type: 'string', description: 'Card id or ticket key; default your newest open card' },
@@ -32,6 +32,7 @@ export function install(ctx, config, { identity, roster, notes, tools, connectio
       link: { type: 'string', description: 'A URL to attach, e.g. the PR' },
       result: { type: 'string', description: 'complete: the result, one line' },
       reason: { type: 'string', description: 'cancel: why it stops' },
+      text: { type: 'string', description: 'reply: your answer to the user, shown in the card' },
     },
     output,
     async execute(args, exec) {

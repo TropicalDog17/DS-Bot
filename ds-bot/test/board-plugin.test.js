@@ -153,8 +153,8 @@ test('the Board page adds, moves, notes and cancels; notes reach the Bot through
   const mineId = Object.values(mine.cards).find(entry => entry.title === 'Mine').id
   await h.post('note', { id: mineId, text: 'remember' })
   assert.deepEqual(h.team.sent, [
-    ['b', `Note on board card ${card.id} "Đặt lịch khám răng": gọi trước 5h`],
-    ['r1', `@Writer Note on board card ${group.id} "Group work": add tests`],
+    ['b', `Note on board card ${card.id} "Đặt lịch khám răng": gọi trước 5h (Answer on the card: board reply, id ${card.id}.)`],
+    ['r1', `@Writer Note on board card ${group.id} "Group work": add tests (Answer on the card: board reply, id ${group.id}.)`],
   ])
   assert.deepEqual(h.cards().find(entry => entry.id === mineId).notes.map(note => note.text), ['remember'])
 
@@ -163,6 +163,43 @@ test('the Board page adds, moves, notes and cancels; notes reach the Bot through
   assert.equal((await h.post('move', { id: card.id, status: 'todo' })).error.message, 'That card is cancelled.')
   assert.equal((await h.post('move', { id: 'nope', status: 'todo' })).error.message, 'No such card.')
   assert.equal((await h.post('wat')).error.code, 'board/unknown')
+})
+
+test('a card holds a conversation: the user\'s note, the Bot\'s reply on the card, in order', async (t) => {
+  const h = host(t)
+  const added = await h.post('add', { title: 'Đặt lịch khám răng', assignee: 'b' })
+  const id = Object.keys(added.value.cards)[0]
+  await h.post('note', { id, text: 'gọi trước 5h nhé' })
+  assert.equal(await h.tool({ action: 'reply', id, text: '  Ok, mình gọi lúc 4h.\r\n\n\n\nXong sẽ báo.  ' }), `Replied on ${id}.\n- ${id} · Writer · Đặt lịch khám răng (yours)\n  latest note from Writer: Ok, mình gọi lúc 4h.\n\nXong sẽ báo.`)
+  await h.post('note', { id, text: 'cảm ơn' })
+  const thread = (await h.post('state')).value.cards[id].notes
+  assert.deepEqual(thread.map(note => [note.by, note.text]), [
+    ['user', 'gọi trước 5h nhé'],
+    ['b', 'Ok, mình gọi lúc 4h.\n\nXong sẽ báo.'],
+    ['user', 'cảm ơn'],
+  ])
+  assert.equal(thread.every(note => typeof note.at === 'number'), true)
+  // Only a Bot that may change the card answers on it; a Main Bot may.
+  assert.equal(await h.tool({ action: 'reply', id, text: 'me too' }, 'c'), `${id} belongs to Writer.`)
+  assert.match(await h.tool({ action: 'reply', id, text: 'Chief here' }, 'a'), /^Replied on/)
+  assert.equal(await h.tool({ action: 'reply', id, text: '   ' }), 'A reply needs text.')
+  assert.equal(await h.tool({ action: 'reply', id: 'c_nope', text: 'x' }), 'No open card of yours. Name one with its id or ticket key.')
+  // With no id, the reply goes on the Bot's newest open card.
+  assert.match(await h.tool({ action: 'reply', text: 'still on it' }), new RegExp(`^Replied on ${id}\\.`))
+  // A question that lands as the work completes still gets its answer on the card.
+  await h.tool({ action: 'complete', id, result: 'Đã đặt lịch' })
+  assert.match(await h.tool({ action: 'reply', id, text: 'Thứ 6, 4h chiều' }), /^Replied on/)
+  assert.equal((await h.post('note', { id, text: 'x' })).error.message, 'That card is already finished.')
+})
+
+test('a card keeps the last 200 messages of its conversation', async (t) => {
+  const h = host(t)
+  const added = await h.post('add', { title: 'Long talk', assignee: 'b' })
+  const id = Object.keys(added.value.cards)[0]
+  for (let n = 1; n <= 205; n += 1) await h.tool({ action: 'reply', id, text: `m${n}` })
+  const thread = h.cards()[0].notes
+  assert.equal(thread.length, 200)
+  assert.deepEqual([thread[0].text, thread.at(-1).text], ['m6', 'm205'])
 })
 
 test('a note whose delivery fails is kept on the card and says it was not sent', async (t) => {

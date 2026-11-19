@@ -1,14 +1,14 @@
 // The Board page: the user's work in five columns (Todo, In progress, Review, Blocked,
 // Done). Bots put their work on it with the `board` tool; the user adds cards, drags
-// them between columns (or moves them from the open card on a phone), adds a note that
-// reaches the card's Bot, and cancels. Recent Done cards show; older ones and cancelled
+// them between columns (or moves them from the open card on a phone), talks with the
+// card's Bot inside the card, and cancels. Recent Done cards show; older ones and cancelled
 // ones wait under History. It is a page of the app, beside the sidebar; on a phone it
 // fills the screen, the columns become a segmented control, and Add card sits under the
 // thumb.
 //
 // `roster` here is the board's own view (page.js): { bots, byId, board: { cards } },
 // read from the plugin's route; `actions` call that route.
-import { createElement as h, useCallback, useEffect, useState } from 'react'
+import { createElement as h, useCallback, useEffect, useRef, useState } from 'react'
 import { BotMark } from '../../client/mark.js'
 import { CloseIcon, ChevronLeftIcon, PlusIcon } from '../../client/icons.js'
 import { useEscape } from '../../client/overlay-hooks.js'
@@ -100,11 +100,33 @@ function AddCard({ roster, actions, onDone }) {
       h('button', { type: 'button', className: 'bt-send bt-board-go', disabled: title.trim() === '' || busy, onClick: add }, t('Add card'))))
 }
 
-function CardDetail({ card, roster, actions }) {
+// The card's conversation: the user's notes on the right, the Bots' replies on the left
+// under their mark, oldest first.
+function Thread({ notes, roster }) {
+  return h('ol', { className: 'bt-board-thread' },
+    notes.map((note, index) => {
+      const bot = note.by === undefined || note.by === USER ? undefined : roster.byId?.[note.by]
+      const fromBot = note.by !== undefined && note.by !== USER
+      return h('li', { key: index, className: 'bt-board-msg', 'data-by': fromBot ? 'bot' : 'user' },
+        fromBot ? (bot ? h(BotMark, { bot, size: 24 }) : h('span', { className: 'bt-board-msg-mark', 'aria-hidden': true })) : null,
+        h('div', { className: 'bt-board-msg-body' },
+          h('span', { className: 'bt-board-msg-text' }, note.text),
+          h('span', { className: 'bt-board-age' }, clockLabel(note.at ?? 0))))
+    }))
+}
+
+export function CardDetail({ card, roster, actions }) {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const [error, setError] = useState('')
+  const scroller = useRef(null)
+  const said = (card.notes ?? []).length
+  // A new message, the user's or a Bot's reply, scrolls into view.
+  useEffect(() => {
+    const node = scroller.current
+    if (node && typeof node.scrollTo === 'function') node.scrollTo({ top: node.scrollHeight })
+  }, [card.id, said])
   useEffect(() => {
     if (!confirming) return undefined
     const timer = setTimeout(() => setConfirming(false), 3000)
@@ -132,7 +154,7 @@ function CardDetail({ card, roster, actions }) {
   const notes = card.notes ?? []
   const links = [...(card.url && !card.key ? [{ url: card.url }] : []), ...(card.links ?? [])]
   return h('div', { className: 'bt-board-sheet-body', 'data-status': card.status },
-    h('div', { className: 'bt-board-detail' },
+    h('div', { className: 'bt-board-detail', ref: scroller },
       card.key ? (card.url
         ? h('a', { className: 'bt-board-key', href: card.url, target: '_blank', rel: 'noreferrer noopener' }, card.key)
         : h('span', { className: 'bt-board-key' }, card.key)) : null,
@@ -154,18 +176,15 @@ function CardDetail({ card, roster, actions }) {
       links.length > 0 ? h('div', { className: 'bt-board-links' },
         links.map(link => h('a', { key: link.url, className: 'bt-board-link', href: link.url, target: '_blank', rel: 'noreferrer noopener' },
           h(LinkIcon), h('span', null, link.url.replace(/^https?:\/\//, ''))))) : null,
-      notes.length > 0 ? h('ol', { className: 'bt-board-notes' },
-        notes.map((note, index) => h('li', { key: index, className: 'bt-board-note' },
-          h('span', { className: 'bt-board-note-text' }, note.text),
-          h('span', { className: 'bt-board-age' }, clockLabel(note.at ?? 0))))) : null,
-      error ? h('div', { className: 'bt-error', role: 'alert' }, error) : null,
       open ? h('button', {
         type: 'button', className: 'bt-board-cancel', 'data-confirm': confirming || undefined, disabled: busy,
         'aria-label': confirming ? t('Click again to cancel') : t('Cancel card'), onClick: cancel,
-      }, t('Cancel card')) : null),
+      }, t('Cancel card')) : null,
+      notes.length > 0 ? h(Thread, { notes, roster }) : null,
+      error ? h('div', { className: 'bt-error', role: 'alert' }, error) : null),
     open ? h('div', { className: 'bt-board-sheet-foot bt-board-write' },
       h('input', {
-        className: 'bt-input', value: text, placeholder: t('Add a note'), 'aria-label': t('Add a note'), maxLength: 500,
+        className: 'bt-input', value: text, placeholder: t('Message'), 'aria-label': t('Message'), maxLength: 500,
         onChange: event => setText(event.target.value),
         onKeyDown: (event) => { if (event.key === 'Enter' && !event.nativeEvent?.isComposing) { event.preventDefault(); send() } },
       }),
@@ -311,13 +330,16 @@ a.bt-board-key:hover{color:var(--bt-ink)}
 .bt-board-link:hover>span{text-decoration:underline}
 .bt-board-link svg{flex:none;width:14px;height:14px}
 .bt-board-link>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.bt-board-notes{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
-.bt-board-note{position:relative;display:flex;flex-direction:column;gap:4px;padding:0 0 16px 20px;font-size:14px;line-height:20px}
-.bt-board-note::before{content:'';position:absolute;left:3px;top:7px;width:7px;height:7px;border-radius:50%;background:var(--bt-ink-3)}
-.bt-board-note::after{content:'';position:absolute;left:6px;top:18px;bottom:2px;width:1px;background:var(--bt-line-2)}
-.bt-board-note:last-child{padding-bottom:0}
-.bt-board-note:last-child::after{display:none}
-.bt-board-note-text{overflow-wrap:anywhere}
+.bt-board-thread{list-style:none;margin:8px 0 0;padding:16px 0 0;border-top:.5px solid var(--bt-line);display:flex;flex-direction:column;gap:12px}
+.bt-board-msg{display:flex;align-items:flex-end;gap:8px;max-width:100%}
+.bt-board-msg[data-by=user]{justify-content:flex-end}
+.bt-board-msg>.bt-board-msg-mark{flex:none;width:24px;height:24px}
+.bt-board-msg-body{display:flex;flex-direction:column;gap:4px;min-width:0;max-width:85%}
+.bt-board-msg[data-by=user] .bt-board-msg-body{align-items:flex-end}
+.bt-board-msg-text{padding:7px 12px;border-radius:18px;font-size:14px;line-height:20px;white-space:pre-wrap;overflow-wrap:anywhere;text-wrap:pretty}
+.bt-board-msg[data-by=user] .bt-board-msg-text{background:var(--bt-user);color:var(--bt-user-ink)}
+.bt-board-msg[data-by=bot] .bt-board-msg-text{background:var(--bt-hover);color:var(--bt-ink)}
+.bt-board-msg .bt-board-age{padding:0 4px}
 .bt-board-cancel{align-self:flex-start;margin-top:8px;height:32px;padding:0;border:0;background:none;color:var(--bt-ink-3);font:inherit;font-size:13px;cursor:pointer}
 .bt-board-cancel:hover,.bt-board-cancel[data-confirm]{color:var(--bt-danger)}
 .bt-board-cancel[data-confirm]{font-weight:600}

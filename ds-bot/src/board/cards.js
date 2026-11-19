@@ -11,12 +11,16 @@ export const TITLE_MAX = 200
 export const PROGRESS_MAX = 300
 export const RESULT_MAX = 2000
 export const NOTE_MAX = 500
+export const REPLY_MAX = 2000
+export const THREAD_MAX = 200
 export const REASON_MAX = 500
 export const KEY_MAX = 32
 export const URL_MAX = 2000
 export const LINKS_MAX = 20
 
 export const oneLine = (text, max) => String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, max)
+// A Bot's reply keeps its lines; runs of blank lines become one.
+export const replyText = (text, max) => String(text ?? '').replace(/\r\n?/g, '\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, max)
 export const newCardId = () => `c_${randomBytes(4).toString('hex')}`
 export const isOpen = card => OPEN_STATUSES.includes(card?.status)
 
@@ -39,7 +43,7 @@ export function webUrl(text) {
 }
 
 
-export const ACTIONS = ['open', 'update', 'complete', 'cancel', 'show']
+export const ACTIONS = ['open', 'update', 'complete', 'cancel', 'reply', 'show']
 export const BOT_STATUSES = ['todo', 'active', 'review', 'blocked']
 // The user may also drag a card into Done, or back out of it.
 export const USER_STATUSES = [...OPEN_STATUSES, 'done']
@@ -117,6 +121,14 @@ export function createBoard({ roster, now = Date.now }) {
     }
   }
   const touch = (card) => { card.updatedAt = now() }
+  // The card's conversation: the user's notes and the Bots' replies, oldest first, the
+  // last THREAD_MAX kept.
+  const say = (card, by, text) => {
+    const thread = (card.notes ??= [])
+    thread.push({ at: now(), by, text })
+    if (thread.length > THREAD_MAX) thread.splice(0, thread.length - THREAD_MAX)
+    touch(card)
+  }
   const addLink = (card, link) => {
     if (!(card.links ??= []).some(entry => entry.url === link)) card.links.push({ url: link, at: now() })
   }
@@ -211,6 +223,17 @@ export function createBoard({ roster, now = Date.now }) {
       touch(card)
       return { card, said: `Cancelled ${label(card)}.` }
     },
+    // An answer to the user on the card itself, where the user asked. A finished card
+    // still takes one: a question can land just as the work completes.
+    reply(cards, self, _roomId, args) {
+      const card = pick(cards, args.id, self)
+      if (card === undefined) return { error: 'No open card of yours. Name one with its id or ticket key.' }
+      if (!mayChange(card, self)) return { error: `${label(card)} belongs to ${nameOf(card.assignee)}.` }
+      const text = replyText(args.text, REPLY_MAX)
+      if (text === '') return { error: 'A reply needs text.' }
+      say(card, self, text)
+      return { card, said: `Replied on ${label(card)}.` }
+    },
   }
 
   const found = (cards, id) => {
@@ -253,7 +276,7 @@ export function createBoard({ roster, now = Date.now }) {
       touch(card)
       return { card }
     },
-    // A note stays on the card; `deliver` says where it goes as the user's message
+    // A note joins the card's conversation; `deliver` says where it goes as the user's message
     // (dsBotNotes): the card's group when it came from one, else the Bot's own chat.
     // A card the user holds takes the note and nothing is sent.
     note(cards, id, text) {
@@ -262,12 +285,11 @@ export function createBoard({ roster, now = Date.now }) {
       if (!isOpen(card)) return { error: 'That card is already finished.' }
       const said = oneLine(text, NOTE_MAX)
       if (said === '') return { error: 'Write a note first.' }
-      ;(card.notes ??= []).push({ at: now(), by: USER, text: said })
-      touch(card)
+      say(card, USER, said)
       const bot = card.assignee === USER ? undefined : roster.bot(card.assignee)
       return {
         card,
-        ...(bot === undefined ? {} : { deliver: { botId: bot.id, ...(card.roomId === undefined ? {} : { roomId: card.roomId }), text: `Note on board card ${label(card)} "${card.title}": ${said}` } }),
+        ...(bot === undefined ? {} : { deliver: { botId: bot.id, ...(card.roomId === undefined ? {} : { roomId: card.roomId }), text: `Note on board card ${label(card)} "${card.title}": ${said} (Answer on the card: board reply, id ${card.id}.)` } }),
       }
     },
     cancel(cards, id, reason) {
