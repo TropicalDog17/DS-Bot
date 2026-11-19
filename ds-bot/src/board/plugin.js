@@ -7,7 +7,7 @@
 // While a card waits for its answer, the page also shows the Bot's reasoning and tool
 // calls, read from DSH's own Session events (live.js).
 import { join } from 'node:path'
-import { defineTool } from '@deepseek-ai/dsh-tools'
+import { defineTool } from '../host/tool-schema.js'
 import { dshHomeOf } from '../host/folders.js'
 import { ACTIONS, BOT_STATUSES, createBoard, isOpen } from './cards.js'
 import { LEVELS, createLive, levelOf } from './live.js'

@@ -8,7 +8,7 @@
 // A Session whose owner is unknown or conflicting is never written to a namespace.
 import { join } from 'node:path'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import { defineTool } from '@deepseek-ai/dsh-tools'
+import { defineTool } from '../host/tool-schema.js'
 import { DEFAULTS, capResult, closeNamespace, openNamespace, utf8 } from './core.js'
 import { buildAll, llmSummarizer } from './summarize.js'
 

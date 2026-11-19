@@ -184,6 +184,9 @@ test('real loop: tools answer from the caller\'s own namespace only', async t =>
   assert.match(await search.execute({ query: 'mango' }, { agent: a1 }), /^0 \[.*\] user: alpha mango/)
   assert.equal(await search.execute({ query: 'mango' }, { agent: b1 }), 'No message has all of those words.')
   assert.match(await zoom.execute({ id: 0 }, { agent: b1 }), /^0\+0\|user: bravo kiwi\ndate: /)
+  // A model sometimes writes the number as a string; DS Bot's defineTool reads it as the number.
+  assert.match(await zoom.execute({ id: '0', count: '1' }, { agent: b1 }), /^0\+0\|user: bravo kiwi\ndate: /)
+  assert.match(await search.execute({ query: 'mango', limit: '5' }, { agent: a1 }), /^0 \[/)
   assert.equal(await search.execute({ query: 'mango' }, { agent: { id: 'nobody' } }), 'OptChat memory is not on for this Session.')
 })
 
