@@ -16081,6 +16081,8 @@ body[data-bt-motion=quiet] .bt-mark[data-poke]{cursor:default}
 .bt-side[data-page] :is(.bt-tile,.bt-row,.bt-agent-sub-row)[aria-current=page]{background:none}
 .bt-side[data-page] .bt-row[aria-current=page] .bt-row-name{font-weight:inherit}
 .bt-page-button[aria-current=page]{background:var(--bt-active)}
+.bt-page-button{position:relative}
+.bt-page-dot{position:absolute;top:2px;right:2px;width:8px;height:8px;border-radius:50%;background:var(--bt-accent);box-shadow:0 0 0 2px var(--bt-main)}
 .bt-row-body{display:flex;flex-direction:column;min-width:0;flex:1 1 auto}
 .bt-row-name{display:flex;align-items:center;gap:6px;min-width:0;font-size:14px;line-height:20px;font-weight:400}
 .bt-row-title{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -18081,8 +18083,9 @@ function AgentBadge({ engine, size = 15 }) {
 // src/client/pages.js
 var import_react5 = require("react");
 var ID = /^[a-z][a-z0-9-]{0,39}$/;
-function createPages() {
+function createPages({ alert } = {}) {
   const source = createSource([]);
+  const registered = (id) => source.getSnapshot().some((entry) => entry.id === id);
   const register = (page) => {
     if (page === null || typeof page !== "object") throw new TypeError("dsBotPages.register takes a page");
     const { id, title, icon: icon2, Page, order = 0 } = page;
@@ -18099,7 +18102,15 @@ function createPages() {
       source.set((list) => list.filter((item) => item !== entry));
     };
   };
-  return { source, service: Object.freeze({ register, list: () => source.getSnapshot() }) };
+  const mark2 = (id, on) => {
+    source.set((list) => list.some((entry) => entry.id === id && entry.marked !== (on === true)) ? list.map((entry) => entry.id === id ? Object.freeze({ ...entry, marked: on === true }) : entry) : list);
+  };
+  const notice = (id, text, onOpen) => {
+    const said = typeof text === "string" ? text.trim() : "";
+    if (!registered(id) || said === "") return;
+    alert?.({ page: id, text: said, onOpen: typeof onOpen === "function" ? onOpen : void 0 });
+  };
+  return { source, service: Object.freeze({ register, mark: mark2, alert: notice, list: () => source.getSnapshot() }) };
 }
 function PageButtons({ pages, open = null, actions }) {
   return (pages ?? []).map((page) => (0, import_react5.createElement)("button", {
@@ -18110,8 +18121,9 @@ function PageButtons({ pages, open = null, actions }) {
     "aria-label": page.title,
     title: page.title,
     "aria-current": page.id === open ? "page" : void 0,
+    "data-marked": page.marked === true || void 0,
     onClick: () => actions.openPage(page.id)
-  }, (0, import_react5.createElement)(page.icon)));
+  }, (0, import_react5.createElement)(page.icon), page.marked === true ? (0, import_react5.createElement)("span", { className: "bt-page-dot", "aria-hidden": true }) : null));
 }
 function PageView({ page, paneLeft, leaving, actions }) {
   return (0, import_react5.createElement)(page.Page, { paneLeft, leaving: leaving === true, close: () => actions.closePage() });
@@ -35684,14 +35696,19 @@ function ErrorToast({ useUi, actions }) {
     };
   }, [toast?.token]);
   if (!toast) return null;
+  const follow = toast.page ? (0, import_react47.createElement)("button", { type: "button", className: "bt-toast-link", onClick: () => {
+    actions.dismissToast(toast.token);
+    toast.onOpen?.();
+    actions.openPage(toast.page);
+  } }, t("Open")) : (0, import_react47.createElement)("button", { type: "button", className: "bt-toast-link", onClick: () => {
+    actions.dismissToast(toast.token);
+    actions.openSettings("feedback");
+  } }, t("Details"));
   return (0, import_react47.createElement)(
     "div",
-    { className: "bt-toast", role: "alert", "data-leaving": leaving || void 0 },
+    { className: "bt-toast", role: "alert", "data-kind": toast.page ? "page" : void 0, "data-leaving": leaving || void 0 },
     (0, import_react47.createElement)("span", { className: "bt-toast-text" }, toast.text),
-    (0, import_react47.createElement)("button", { type: "button", className: "bt-toast-link", onClick: () => {
-      actions.dismissToast(toast.token);
-      actions.openSettings("feedback");
-    } }, t("Details")),
+    follow,
     (0, import_react47.createElement)("button", { type: "button", className: "bt-icon-btn bt-toast-close", "aria-label": t("Dismiss"), onClick: () => actions.dismissToast(toast.token) }, (0, import_react47.createElement)(CloseIcon))
   );
 }
@@ -35716,6 +35733,8 @@ var FEEDBACK_CSS = `
 .bt-toast[data-leaving]{opacity:0;transform:translate(-50%,6px) scale(.98);filter:blur(3px);transition:opacity .18s ease-in,transform .18s ease-in,filter .18s ease-in}
 .bt-toast-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
 .bt-toast-text::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--bt-danger,#e02135);margin:0 8px 1px 0}
+.bt-toast[data-kind=page] .bt-toast-text::before{background:var(--bt-accent)}
+.bt-toast[data-kind=page] .bt-toast-link{color:var(--bt-accent);font-weight:600}
 .bt-toast-link{flex:none;border:0;background:none;color:var(--bt-ink-2);font:inherit;font-size:12px;cursor:pointer;padding:4px 6px;border-radius:6px}
 .bt-toast-link:hover{background:var(--bt-hover);color:var(--bt-ink)}
 .bt-toast-close{flex:none}
@@ -43415,7 +43434,8 @@ function boardColumns(cards, now = Date.now()) {
   return { columns: columns2, history };
 }
 function leadColumn(columns2) {
-  return ["review", "blocked", "active", "todo"].find((status) => columns2[status]?.length > 0) ?? "todo";
+  const order = ["review", "blocked", "active", "todo"];
+  return order.find((status) => columns2[status]?.some((card) => card.unread === true)) ?? order.find((status) => columns2[status]?.length > 0) ?? "todo";
 }
 var Dot2 = ({ status }) => (0, import_react74.createElement)("span", { className: "bt-board-dot", "data-status": status, "aria-hidden": true });
 function Who({ id, roster, size = 20 }) {
@@ -43430,13 +43450,16 @@ function Who({ id, roster, size = 20 }) {
 }
 function Card3({ card, roster, onOpen, onDrag }) {
   const links = (card.links ?? []).length;
-  const line = card.status === "done" ? card.result : card.status === "cancelled" ? card.reason : card.progress;
+  const unread = card.unread === true;
+  const reply = unread ? (card.notes ?? []).findLast((note) => note.by !== USER) : void 0;
+  const line = reply?.text ?? (card.status === "done" ? card.result : card.status === "cancelled" ? card.reason : card.progress);
   return (0, import_react74.createElement)(
     "button",
     {
       type: "button",
       className: "bt-board-card",
       "data-status": card.status,
+      "data-unread": unread || void 0,
       draggable: true,
       onClick: () => onOpen(card.id),
       onDragStart: (event) => {
@@ -43454,6 +43477,7 @@ function Card3({ card, roster, onOpen, onDrag }) {
       { className: "bt-board-card-foot" },
       (0, import_react74.createElement)(Who, { id: card.assignee, roster }),
       links > 0 || card.url ? (0, import_react74.createElement)("span", { className: "bt-board-has-link", "aria-label": t("Link") }, (0, import_react74.createElement)(LinkIcon2)) : null,
+      unread ? (0, import_react74.createElement)("span", { className: "bt-board-new", role: "img", "aria-label": t("New reply") }) : null,
       (0, import_react74.createElement)("span", { className: "bt-board-age" }, relativeShort(card.updatedAt ?? card.createdAt ?? Date.now()))
     )
   );
@@ -43659,10 +43683,10 @@ function CardDetail({ card, roster, actions }) {
     ) : null
   );
 }
-function BoardScreen({ roster, actions, paneLeft = 0, leaving = false }) {
+function BoardScreen({ roster, actions, paneLeft = 0, leaving = false, focus = null }) {
   const { columns: columns2, history } = boardColumns(roster.board?.cards);
   const [shown, setShown] = (0, import_react74.useState)(null);
-  const [sheet, setSheet] = (0, import_react74.useState)(null);
+  const [sheet, setSheet] = (0, import_react74.useState)(typeof focus === "string" && roster.board?.cards?.[focus] ? { card: focus } : null);
   const [historyOpen, setHistoryOpen] = (0, import_react74.useState)(false);
   const [dragging, setDragging] = (0, import_react74.useState)(null);
   const [over2, setOver] = (0, import_react74.useState)(null);
@@ -43671,6 +43695,11 @@ function BoardScreen({ roster, actions, paneLeft = 0, leaving = false }) {
   useEscape(() => sheet !== null ? setSheet(null) : close());
   const column = shown ?? leadColumn(columns2);
   const card = sheet?.card === void 0 ? void 0 : roster.board?.cards?.[sheet.card];
+  const read = card?.unread === true ? card.id : null;
+  (0, import_react74.useEffect)(() => {
+    if (read !== null) Promise.resolve(actions.boardSeen?.(read)).catch(() => {
+    });
+  }, [read]);
   const openCard = (id) => setSheet({ card: id });
   const addCard = () => setSheet({ add: true });
   const drop = (event, status) => {
@@ -43795,6 +43824,9 @@ var BOARD_CSS = `
 .bt-board-card[data-status=cancelled]{opacity:.6}
 .bt-board-key{display:inline-flex;align-items:center;height:20px;padding:0 6px;border-radius:6px;background:var(--bt-tag-bg);color:var(--bt-tag-ink);font-family:var(--bt-mono,ui-monospace,SFMono-Regular,Menlo,monospace);font-size:11px;font-weight:500;letter-spacing:.01em;text-decoration:none;white-space:nowrap}
 a.bt-board-key:hover{color:var(--bt-ink)}
+.bt-board-card[data-unread]{border-color:var(--bt-accent)}
+.bt-board-card[data-unread] .bt-board-progress{color:var(--bt-ink)}
+.bt-board-new{flex:none;width:8px;height:8px;border-radius:50%;background:var(--bt-accent)}
 .bt-board-title{width:100%;font-size:14px;line-height:20px;font-weight:500;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
 .bt-board-progress{width:100%;margin-top:-4px;font-size:12px;line-height:16px;color:var(--bt-ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bt-board-card-foot{display:flex;align-items:center;gap:8px;width:100%;min-width:0}
@@ -43890,6 +43922,7 @@ a.bt-board-key:hover{color:var(--bt-ink)}
 var import_react75 = require("react");
 var BOARD_ROUTE = "api/ds-bot-board";
 var POLL_MS3 = 4e3;
+var WATCH_MS = 8e3;
 async function boardCall(endpoint, payload, { fetchImpl = globalThis.fetch } = {}) {
   const response = await fetchImpl(BOARD_ROUTE, {
     method: "POST",
@@ -43908,51 +43941,101 @@ async function boardCall(endpoint, payload, { fetchImpl = globalThis.fetch } = {
   if (!result.ok) throw Object.assign(new Error(hostText(result.error?.message ?? "Request failed")), { code: result.error?.code });
   return result.value;
 }
-function BoardPage({ first, call: call2, close, paneLeft, leaving }) {
-  const [view, setView] = (0, import_react75.useState)(first);
-  const alive = (0, import_react75.useRef)(true);
-  const refresh = (0, import_react75.useCallback)(() => call2("state").then((value) => {
-    if (alive.current && value) setView(value);
-  }, () => {
-  }), [call2]);
-  (0, import_react75.useEffect)(() => {
-    alive.current = true;
-    refresh();
-    const timer = setInterval(() => {
-      if (globalThis.document?.visibilityState !== "hidden") refresh();
-    }, POLL_MS3);
-    return () => {
-      alive.current = false;
-      clearInterval(timer);
-    };
-  }, [refresh]);
+function BoardPage({ live, focus, call: call2, close, paneLeft, leaving }) {
+  const view = (0, import_react75.useSyncExternalStore)(live.source.subscribe, live.source.getSnapshot);
+  (0, import_react75.useEffect)(() => live.opened(), [live]);
   const roster = (0, import_react75.useMemo)(() => {
     const bots = view?.bots ?? [];
     return { bots, byId: Object.fromEntries(bots.map((bot) => [bot.id, bot])), board: { cards: view?.cards ?? {} } };
   }, [view]);
   const act = (0, import_react75.useCallback)((endpoint, payload) => call2(endpoint, payload).then(
     (value) => {
-      if (alive.current && value) setView(value);
+      if (value) live.take(value);
     },
     (error) => {
-      refresh();
+      live.refresh();
       throw error;
     }
-  ), [call2, refresh]);
+  ), [call2, live]);
   const actions = (0, import_react75.useMemo)(() => ({
     boardAdd: (card) => act("add", card),
     boardMove: (id, status) => act("move", { id, status }),
     boardNote: (id, text) => act("note", { id, text }),
     boardCancel: (id, reason) => act("cancel", { id, reason }),
+    boardSeen: (id) => act("seen", { id }),
     closeBoard: close,
-    reportError: () => refresh()
-  }), [act, close, refresh]);
-  return (0, import_react75.createElement)(BoardScreen, { roster, actions, paneLeft, leaving });
+    reportError: () => live.refresh()
+  }), [act, close, live]);
+  return (0, import_react75.createElement)(BoardScreen, { roster, actions, paneLeft, leaving, focus });
 }
-function installBoardPage(pages, { call: call2 = boardCall, retryMs = 3e3 } = {}) {
+var unreadOf = (view) => Object.values(view?.cards ?? {}).filter((card) => card?.unread === true).map((card) => ({ card, key: `${card.id}:${(card.notes ?? []).at(-1)?.at ?? card.updatedAt ?? 0}` }));
+function replyNotice(card, bots) {
+  const note = (card.notes ?? []).findLast((entry) => entry.by !== "user");
+  const name = bots.find((bot) => bot.id === note?.by)?.name ?? bots.find((bot) => bot.id === card.assignee)?.name ?? t("A Bot");
+  return t("{name} replied on {card}", { name, card: card.key ?? card.title });
+}
+function boardWatch(pages, { first, call: call2, openMs = POLL_MS3, closedMs = WATCH_MS, setTimer = setInterval, clearTimer = clearInterval }) {
+  const source = createSource(first);
+  let open = 0;
+  let focus = null;
+  const told = new Set(unreadOf(first).map((entry) => entry.key));
+  const take = (view) => {
+    const fresh = unreadOf(view);
+    pages.mark("board", fresh.length > 0);
+    if (open === 0) {
+      for (const { card, key } of fresh) {
+        if (told.has(key)) continue;
+        pages.alert("board", replyNotice(card, view.bots ?? []), () => {
+          focus = card.id;
+        });
+      }
+    }
+    for (const { key } of fresh) told.add(key);
+    source.set(view);
+  };
+  const refresh = () => Promise.resolve().then(() => call2("state")).then((value) => {
+    if (value) take(value);
+  }, () => {
+  });
+  let timer;
+  const pace = () => {
+    clearTimer(timer);
+    timer = setTimer(() => {
+      if (globalThis.document?.visibilityState !== "hidden") refresh();
+    }, open > 0 ? openMs : closedMs);
+  };
+  pages.mark("board", unreadOf(first).length > 0);
+  pace();
+  return {
+    source,
+    take,
+    refresh,
+    // The page is on screen: poll faster, and say nothing it already shows.
+    opened() {
+      open += 1;
+      pace();
+      refresh();
+      return () => {
+        open -= 1;
+        pace();
+      };
+    },
+    // The card a notice led to, once.
+    focus() {
+      const id = focus;
+      focus = null;
+      return id;
+    },
+    stop() {
+      clearTimer(timer);
+    }
+  };
+}
+function installBoardPage(pages, { call: call2 = boardCall, retryMs = 3e3, watchMs = WATCH_MS } = {}) {
   let disposed = false;
   let unregister;
   let timer;
+  let live;
   const probe = (tries) => {
     Promise.resolve().then(() => call2("state")).then((value) => {
       if (disposed || value === void 0) return;
@@ -43961,8 +44044,12 @@ function installBoardPage(pages, { call: call2 = boardCall, retryMs = 3e3 } = {}
         title: t("Board"),
         icon: BoardIcon,
         order: 10,
-        Page: ({ close, paneLeft, leaving }) => (0, import_react75.createElement)(BoardPage, { first: value, call: call2, close, paneLeft, leaving })
+        Page: ({ close, paneLeft, leaving }) => {
+          const [focus] = (0, import_react75.useState)(() => live.focus());
+          return (0, import_react75.createElement)(BoardPage, { live, focus, call: call2, close, paneLeft, leaving });
+        }
       });
+      live = boardWatch(pages, { first: value, call: call2, closedMs: watchMs });
     }, () => {
       if (!disposed && tries > 0) timer = setTimeout(() => probe(tries - 1), retryMs);
     });
@@ -43971,6 +44058,7 @@ function installBoardPage(pages, { call: call2 = boardCall, retryMs = 3e3 } = {}
   return () => {
     disposed = true;
     clearTimeout(timer);
+    live?.stop();
     unregister?.();
   };
 }
@@ -46114,7 +46202,10 @@ function apply(ctx) {
   const seenStore = sharedMap(STORAGE.seen);
   let seenAt = seenStore.read();
   const ui2 = createSource({ details: null, view: "details", readOnlyPart: null, renaming: false, tab: null, side: null, newChat: null, exchange: null, menu: null, voice: null, palette: null, quote: null, paste: {}, pendingOpen: null, settings: null, memory: null, toast: null, signIn: null, renameAgent: null, unread: unreadStore.read(), reactions: reactionStore.read(), visits: {}, panelYield: false, leftDrawer: false, bootFailed: false, goalCompose: null, goalOpen: null, page: null });
-  const pages = createPages();
+  const pages = createPages({
+    // A companion's notice is a toast whose Open leads to its page.
+    alert: ({ page, text, onOpen }) => ui2.set((state) => ({ ...state, toast: { text, token: Date.now(), page, onOpen } }))
+  });
   if (typeof ctx.provide === "function") ctx.provide("dsBotPages", pages.service);
   ctx.effect(() => installBoardPage(pages.service), "ds-bot: board page");
   let sidebarSaved = readSidebar();

@@ -64,6 +64,8 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
         return store.change(data => board.user.add(data.cards, { title: body.title, key: body.key, url: body.url, assignee: body.assignee, status: body.status }))
       case 'move':
         return store.change(data => board.user.move(data.cards, String(body.id ?? ''), String(body.status ?? '')))
+      case 'seen':
+        return store.change(data => board.user.seen(data.cards, String(body.id ?? '')))
       case 'cancel':
         return store.change(data => board.user.cancel(data.cards, String(body.id ?? ''), body.reason))
       case 'note': {

@@ -146,6 +146,8 @@ body[data-bt-motion=quiet] .bt-mark[data-poke]{cursor:default}
 .bt-side[data-page] :is(.bt-tile,.bt-row,.bt-agent-sub-row)[aria-current=page]{background:none}
 .bt-side[data-page] .bt-row[aria-current=page] .bt-row-name{font-weight:inherit}
 .bt-page-button[aria-current=page]{background:var(--bt-active)}
+.bt-page-button{position:relative}
+.bt-page-dot{position:absolute;top:2px;right:2px;width:8px;height:8px;border-radius:50%;background:var(--bt-accent);box-shadow:0 0 0 2px var(--bt-main)}
 .bt-row-body{display:flex;flex-direction:column;min-width:0;flex:1 1 auto}
 .bt-row-name{display:flex;align-items:center;gap:6px;min-width:0;font-size:14px;line-height:20px;font-weight:400}
 .bt-row-title{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

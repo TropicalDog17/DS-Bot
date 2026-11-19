@@ -24,11 +24,11 @@ const bundled = async (entry) => {
     external: ['react', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives'],
   })
   const module = { exports: {} }
-  runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports, require, setTimeout, clearTimeout, URL, URLSearchParams, Promise })
+  runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports, require, setTimeout, clearTimeout, setInterval, clearInterval, URL, URLSearchParams, Promise })
   return module.exports
 }
 const { BoardScreen, CardDetail, boardColumns, leadColumn, COLUMNS } = await bundled('board/client/board.js')
-const { installBoardPage, boardCall, BOARD_ROUTE } = await bundled('board/client/index.js')
+const { installBoardPage, boardCall, boardWatch, replyNotice, BOARD_ROUTE } = await bundled('board/client/index.js')
 const plain = value => JSON.parse(JSON.stringify(value))
 
 const all = (node, cls, out = []) => {
@@ -157,7 +157,14 @@ test('an open card is a conversation: the user on the right, the Bot\'s replies 
 // A fake `dsBotPages` seat: what the page registered, and whether it was taken back.
 const seat = () => {
   const list = []
-  return { list, register: (page) => { list.push(page); return () => { list.splice(list.indexOf(page), 1) } } }
+  const marks = []
+  const alerts = []
+  return {
+    list, marks, alerts,
+    register: (page) => { list.push(page); return () => { list.splice(list.indexOf(page), 1) } },
+    mark: (id, on) => { marks.push([id, on]) },
+    alert: (id, text, onOpen) => { alerts.push({ id, text, onOpen }) },
+  }
 }
 const settle = () => new Promise(resolve => setTimeout(resolve, 0))
 
@@ -193,4 +200,66 @@ test('the route client reads the plugin answer, treats the app page as no plugin
   assert.equal(await boardCall('add', { title: 'x' }, { fetchImpl: answer(200, '<!doctype html>') }), undefined)
   assert.equal(await boardCall('add', { title: 'x' }, { fetchImpl: answer(404, {}) }), undefined)
   await assert.rejects(boardCall('add', { title: 'x' }, { fetchImpl: answer(200, { ok: false, error: { code: 'board/refused', message: 'Write a title first.' } }) }), /Write a title first\./)
+})
+
+test('an unread answer marks its card: the answer shows on it, and its column leads on a phone', () => {
+  const roster = {
+    byId: { b: { id: 'b', name: 'Coder' } }, bots: [{ id: 'b', name: 'Coder' }],
+    board: { cards: {
+      r: card('r', 'review', { title: 'Release' }),
+      k: card('k', 'active', { title: 'Fix login', key: 'LIFE-782', progress: 'Đang viết test', unread: true,
+        notes: [{ at: now, by: 'user', text: 'cần log không?' }, { at: now, by: 'b', text: 'Có, thêm log ở redirect.' }] }),
+    } },
+  }
+  const tree = { type: BoardScreen, props: { roster, actions: {} }, children: [] }
+  const cards = all(tree, 'bt-board-card')
+  const marked = cards.filter(node => node.props['data-unread'])
+  assert.equal(marked.length, 1)
+  assert.match(text(marked[0]), /Có, thêm log ở redirect\./)
+  assert.equal(all(tree, 'bt-board-new').length, 1)
+  assert.equal(all(tree, 'bt-board-new')[0].props['aria-label'], 'New reply')
+  // Review would lead; the unread answer leads instead.
+  assert.equal(leadColumn(boardColumns(roster.board.cards).columns), 'active')
+  // A notice leads straight into its card.
+  const focused = { type: BoardScreen, props: { roster, actions: {}, focus: 'k' }, children: [] }
+  assert.equal(all(focused, 'bt-board-sheet').length, 1)
+  assert.equal(all({ type: BoardScreen, props: { roster, actions: {}, focus: 'gone' }, children: [] }, 'bt-board-sheet').length, 0)
+})
+
+test('the watch marks the Board button and shows one notice per new answer while the page is closed', async () => {
+  const bots = [{ id: 'b', name: 'Coder' }]
+  const answered = (at, extra = {}) => card('k', 'active', { title: 'Fix login', key: 'LIFE-782', unread: true, notes: [{ at, by: 'b', text: 'ok' }], ...extra })
+  let state = { cards: { k: answered(1) }, bots }
+  const on = seat()
+  const timers = []
+  const live = boardWatch(on, { first: state, call: async () => state, setTimer: (fn, ms) => { timers.push(ms); return timers.length }, clearTimer: () => {} })
+  // An answer already there when the app loads: a dot, no notice.
+  assert.deepEqual(on.marks.at(-1), ['board', true])
+  assert.equal(on.alerts.length, 0)
+  await live.refresh()
+  assert.equal(on.alerts.length, 0)
+  // A newer answer: one notice naming the Bot and the card, however often the watch looks.
+  state = { cards: { k: answered(2) }, bots }
+  await live.refresh()
+  await live.refresh()
+  assert.equal(on.alerts.length, 1)
+  assert.equal(on.alerts[0].id, 'board')
+  assert.equal(on.alerts[0].text, 'Coder replied on LIFE-782')
+  // Its Open leads to that card, once.
+  on.alerts[0].onOpen()
+  assert.equal(live.focus(), 'k')
+  assert.equal(live.focus(), null)
+  // While the page is open it polls faster and the card itself says it.
+  const off = live.opened()
+  assert.ok(timers.at(-1) < timers[0])
+  state = { cards: { k: answered(3) }, bots }
+  await live.refresh()
+  assert.equal(on.alerts.length, 1)
+  off()
+  // Read: the dot goes.
+  state = { cards: { k: answered(3, { unread: undefined }) }, bots }
+  await live.refresh()
+  assert.deepEqual(on.marks.at(-1), ['board', false])
+  live.stop()
+  assert.equal(replyNotice(card('x', 'todo', { title: 'Viết báo cáo', assignee: 'b', notes: [] }), bots), 'Coder replied on Viết báo cáo')
 })

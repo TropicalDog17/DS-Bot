@@ -38,7 +38,10 @@ export function boardColumns(cards, now = Date.now()) {
 
 // The column that needs the user first: something to review, then something blocked.
 export function leadColumn(columns) {
-  return ['review', 'blocked', 'active', 'todo'].find(status => columns[status]?.length > 0) ?? 'todo'
+  const order = ['review', 'blocked', 'active', 'todo']
+  // A Bot's answer the user has not read leads, wherever its card is.
+  return order.find(status => columns[status]?.some(card => card.unread === true))
+    ?? order.find(status => columns[status]?.length > 0) ?? 'todo'
 }
 
 const Dot = ({ status }) => h('span', { className: 'bt-board-dot', 'data-status': status, 'aria-hidden': true })
@@ -54,9 +57,12 @@ function Who({ id, roster, size = 20 }) {
 
 function Card({ card, roster, onOpen, onDrag }) {
   const links = (card.links ?? []).length
-  const line = card.status === 'done' ? card.result : card.status === 'cancelled' ? card.reason : card.progress
+  // A Bot's answer the user has not read shows in place of the card's line, marked new.
+  const unread = card.unread === true
+  const reply = unread ? (card.notes ?? []).findLast(note => note.by !== USER) : undefined
+  const line = reply?.text ?? (card.status === 'done' ? card.result : card.status === 'cancelled' ? card.reason : card.progress)
   return h('button', {
-    type: 'button', className: 'bt-board-card', 'data-status': card.status, draggable: true,
+    type: 'button', className: 'bt-board-card', 'data-status': card.status, 'data-unread': unread || undefined, draggable: true,
     onClick: () => onOpen(card.id),
     onDragStart: (event) => { event.dataTransfer.setData(DRAG_TYPE, card.id); event.dataTransfer.effectAllowed = 'move'; onDrag(card.id) },
     onDragEnd: () => onDrag(null),
@@ -67,6 +73,7 @@ function Card({ card, roster, onOpen, onDrag }) {
   h('span', { className: 'bt-board-card-foot' },
     h(Who, { id: card.assignee, roster }),
     links > 0 || card.url ? h('span', { className: 'bt-board-has-link', 'aria-label': t('Link') }, h(LinkIcon)) : null,
+    unread ? h('span', { className: 'bt-board-new', role: 'img', 'aria-label': t('New reply') }) : null,
     h('span', { className: 'bt-board-age' }, relativeShort(card.updatedAt ?? card.createdAt ?? Date.now()))))
 }
 
@@ -196,10 +203,11 @@ export function CardDetail({ card, roster, actions }) {
       h('button', { type: 'button', className: 'bt-send', disabled: text.trim() === '' || busy, onClick: send }, t('Send'))) : null)
 }
 
-export function BoardScreen({ roster, actions, paneLeft = 0, leaving = false }) {
+export function BoardScreen({ roster, actions, paneLeft = 0, leaving = false, focus = null }) {
   const { columns, history } = boardColumns(roster.board?.cards)
   const [shown, setShown] = useState(null)
-  const [sheet, setSheet] = useState(null)
+  // `focus` is the card a notice led here for: it opens first.
+  const [sheet, setSheet] = useState(typeof focus === 'string' && roster.board?.cards?.[focus] ? { card: focus } : null)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [dragging, setDragging] = useState(null)
   const [over, setOver] = useState(null)
@@ -208,6 +216,11 @@ export function BoardScreen({ roster, actions, paneLeft = 0, leaving = false }) 
   useEscape(() => (sheet !== null ? setSheet(null) : close()))
   const column = shown ?? leadColumn(columns)
   const card = sheet?.card === undefined ? undefined : roster.board?.cards?.[sheet.card]
+  // An open card's answer is read.
+  const read = card?.unread === true ? card.id : null
+  useEffect(() => {
+    if (read !== null) Promise.resolve(actions.boardSeen?.(read)).catch(() => {})
+  }, [read])
   const openCard = id => setSheet({ card: id })
   const addCard = () => setSheet({ add: true })
   const drop = (event, status) => {
@@ -295,6 +308,9 @@ export const BOARD_CSS = `
 .bt-board-card[data-status=cancelled]{opacity:.6}
 .bt-board-key{display:inline-flex;align-items:center;height:20px;padding:0 6px;border-radius:6px;background:var(--bt-tag-bg);color:var(--bt-tag-ink);font-family:var(--bt-mono,ui-monospace,SFMono-Regular,Menlo,monospace);font-size:11px;font-weight:500;letter-spacing:.01em;text-decoration:none;white-space:nowrap}
 a.bt-board-key:hover{color:var(--bt-ink)}
+.bt-board-card[data-unread]{border-color:var(--bt-accent)}
+.bt-board-card[data-unread] .bt-board-progress{color:var(--bt-ink)}
+.bt-board-new{flex:none;width:8px;height:8px;border-radius:50%;background:var(--bt-accent)}
 .bt-board-title{width:100%;font-size:14px;line-height:20px;font-weight:500;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
 .bt-board-progress{width:100%;margin-top:-4px;font-size:12px;line-height:16px;color:var(--bt-ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bt-board-card-foot{display:flex;align-items:center;gap:8px;width:100%;min-width:0}
