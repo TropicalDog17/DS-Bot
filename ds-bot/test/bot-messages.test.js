@@ -337,6 +337,9 @@ test('a message its recipient has not read yet takes in the next one, however ma
   // An approval the Bot waits for shows in what the sender is told.
   for (const listener of ctx.listeners.get('approval/request')) void listener({ agent: { session: { id: 'b' } }, toolName: 'bash', reason: 'rm' }, () => new Promise(() => {}))
   assert.match(await tool('message_bot', { to: 'Writer', message: 'task 14' }, 'a'), /Writer now: waiting for the user's approval to run bash in its own chat \(for less than a minute\); not read yet: 1 from Chief\.$/)
+  // Chief, whose request Writer works on, hears of it without asking.
+  const notice = agentOf('a').calls.find(([kind, message]) => kind === 'followup' && message.source.role === 'approval')?.[1]
+  assert.match(textOf(notice.content), /^\[Writer waits for the user's approval · tell the user here\]\nWriter is waiting for the user's approval to run bash \(rm\)\. The user answers it in Writer's own chat\./)
 })
 
 test('requests from two Bots, or for different work, stay apart', async (t) => {

@@ -3,7 +3,12 @@
 // the group chat. A Bot's own chat keeps DSH's card, but DS Bot can answer those too
 // (IM chats, the phone app): the request is raced — whichever side answers first wins,
 // and the other card withdraws.
+//
+// The user may be in neither place: a Bot that gave the waiting Bot its work hears of
+// the approval at once, and the Main Bots once it has stayed open a while, so the Bot
+// the user is talking to can say so.
 import { randomUUID } from 'node:crypto'
+import { APPROVAL_REMIND_MS } from './constants.js'
 
 const OUTCOMES = { allow: 'allowed-once', reject: 'rejected' }
 
@@ -21,6 +26,60 @@ export function install(rt) {
       try { listener(kind, data) } catch (error) { rt.warn('ds-bot: approval listener failed: %s', error) }
     }
   }
+
+  // Who gave the waiting Bot the work its own chat does now: the Bot whose request the
+  // turn answers, or the one that asked for the work it goes on with. A group shows the
+  // approval in its own chat, so a group turn has no one to tell.
+  const askerOf = (entry) => {
+    if (entry.roomId !== undefined) return undefined
+    const info = rt.live?.get(entry.sessionId)?.info
+    if (info === undefined) return undefined
+    const asker = info.role === 'request' || info.role === 'stopped' ? info.senderSessionId : rt.state?.works?.[rt.workOf?.(info)]?.from
+    return asker !== entry.botId && rt.botOf(asker) !== undefined ? asker : undefined
+  }
+  const noticeText = (entry, waited) => {
+    const name = rt.botOf(entry.botId)?.name ?? 'A Bot'
+    const room = entry.roomId === undefined ? undefined : rt.roomOf(entry.roomId)
+    const where = room !== undefined ? `the group chat "${room.name}"` : `${name}'s own chat`
+    const reason = entry.reason === '' ? '' : ` (${entry.reason.slice(0, 160)})`
+    const since = waited ? `has waited ${Math.max(1, Math.round((Date.now() - entry.at) / 60_000))} min` : 'is waiting'
+    return `${name} ${since} for the user's approval to run ${entry.tool || 'a tool'}${reason}. The user answers it in ${where}. Tell the user in this chat in a line or two. Do not message ${name} about it: only the user can answer it.`
+  }
+  // Per open approval, the Bots told of it and the reminder still to come. Never twice to
+  // the same Bot, and nothing is told once the approval is answered.
+  const notices = new Map()
+  const tell = (entry, toId, waited) => {
+    const notice = notices.get(entry.id)
+    if (notice === undefined || notice.told.has(toId) || !pending.has(entry.id)) return
+    notice.told.add(toId)
+    void rt.deliver({ fromId: entry.botId, toId, role: 'approval', text: noticeText(entry, waited), recordExchange: false })
+      .catch(error => rt.warn('ds-bot: approval notice to %s failed: %s', toId, error))
+  }
+  const remind = (id) => {
+    const entry = pending.get(id)
+    if (entry === undefined) return
+    for (const mainId of rt.state?.mainBotIds ?? []) {
+      if (mainId !== entry.botId && rt.botOf(mainId) !== undefined) tell(entry, mainId, true)
+    }
+  }
+  function noticeOpened(entry) {
+    const timer = setTimeout(() => remind(entry.id), APPROVAL_REMIND_MS)
+    timer.unref?.()
+    notices.set(entry.id, { told: new Set(), timer })
+    // After this tick: a request that was already cancelled tells no one.
+    queueMicrotask(() => {
+      const asker = askerOf(entry)
+      if (asker !== undefined) tell(entry, asker, false)
+    })
+  }
+  const noticeSettled = (id) => {
+    clearTimeout(notices.get(id)?.timer)
+    notices.delete(id)
+  }
+  ctx.effect?.(() => () => {
+    for (const notice of notices.values()) clearTimeout(notice.timer)
+    notices.clear()
+  }, 'ds-bot: approval notices')
 
   // Ahead of DSH's own answerer, which would hold a hidden Session's request unseen.
   ctx.on('approval/request', (request, next) => {
@@ -43,9 +102,11 @@ export function install(rt) {
     rt.noteApproval?.(sessionId, { tool: entry.tool, reason: entry.reason.slice(0, 200) })
     rt.approvalWaiting?.(entry)
     emit('open', { ...entry, answerable: true })
+    noticeOpened(entry)
     const settle = (outcome) => {
       if (!pending.has(id)) return false
       pending.delete(id)
+      noticeSettled(id)
       rt.noteApproval?.(sessionId, undefined)
       emit('settled', { id, outcome })
       return true

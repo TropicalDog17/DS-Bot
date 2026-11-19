@@ -88,6 +88,9 @@ export const ROOM_WORK_GRACE_MS = 15_000
 // Consecutive Bot-to-Bot relays with no tool call and only repetitive or ack text
 // before the round parks the remaining calls and asks the user before continuing.
 export const ROOM_IDLE_RELAY_LIMIT = 6
+// An approval still open this long is told to the Main Bots, once: the user may be in
+// none of the chats that show it.
+export const APPROVAL_REMIND_MS = 5 * 60_000
 
 export const OWN_CHAT_LINE_MAX = 400
 // The message an anchor points at is shown whole (up to this), so a long draft takes
