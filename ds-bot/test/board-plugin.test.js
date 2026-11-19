@@ -7,7 +7,7 @@ import { apply, inject, name } from '../src/board/entry.js'
 import { ROUTE, boardFileOf, install } from '../src/board/plugin.js'
 import { READ_ONLY, openBoardStore } from '../src/board/store.js'
 import { ACTIONS, ticketKey } from '../src/board/cards.js'
-import { notesService, rosterService } from '../src/host/companions.js'
+import { bridgeService, notesService, rosterService } from '../src/host/companions.js'
 import { homeLock } from '../src/host/home-lock.js'
 
 // The board plugin knows the team only through DS Bot's public services, so the tests
@@ -34,9 +34,10 @@ function fakeTeam() {
   const owners = { a: { botId: 'a' }, b: { botId: 'b' }, c: { botId: 'c' }, ga: { botId: 'a', roomId: 'r1' }, gb: { botId: 'b', roomId: 'r1' }, xb: { botId: 'b' } }
   const identity = { ownerOfSession: id => (hasOwn(owners, id) ? owners[id] : undefined), subscribe: () => () => {} }
   const notes = notesService(rt)
+  const bridge = bridgeService(rt)
   // What turns.js does when a Bot's turn ends with an answer the user reads.
   const reply = heard => rt.botReplied(heard)
-  return { state, sent, identity, roster: rosterService(rt), notes, reply }
+  return { state, sent, identity, roster: rosterService(rt), notes, bridge, bridged: () => rt.bridgedTools(), reply }
 }
 
 function host(t, { file, notes, now = Date.now } = {}) {
@@ -63,7 +64,7 @@ function host(t, { file, notes, now = Date.now } = {}) {
 
 test('the entry is a separate plugin that needs only public services', () => {
   assert.equal(name, 'ds-bot-board')
-  assert.deepEqual(inject, ['botSessionIdentity', 'dsBotRoster', 'dsBotNotes', 'tools', 'connection'])
+  assert.deepEqual(inject, ['botSessionIdentity', 'dsBotRoster', 'dsBotNotes', 'dsBotBridge', 'tools', 'connection'])
   let effects = 0
   apply({ effect: () => { effects += 1 } }, {})
   assert.equal(effects, 1)
@@ -260,12 +261,14 @@ test('a note whose delivery fails is kept on the card and says it was not sent',
   assert.equal(h.cards()[0].awaiting, undefined)
 })
 
-test('disposing the plugin takes back its tool and route', async (t) => {
+test('disposing the plugin takes back its tool, its share on the CLI bridge and its route', async (t) => {
   const h = host(t)
   assert.equal(h.registered.tools.length, 1)
+  assert.deepEqual(h.team.bridged(), ['board'])
   assert.equal(h.registered.routes.length, 1)
   h.handle.dispose()
   assert.equal(h.registered.tools.length, 0)
+  assert.deepEqual(h.team.bridged(), [])
   assert.equal(h.registered.routes.length, 0)
 })
 

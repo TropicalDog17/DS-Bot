@@ -8,6 +8,9 @@
 //                user's own messages (channel.js sendUser): into a group the Bot is in,
 //                as the user's `@Bot` message, else into the Bot's own chat. onReply
 //                hears each answer a Bot then writes where the user reads it.
+//   dsBotBridge  the tools a Bot on a local agent CLI (Claude Code, Codex, ACP) may call
+//                through DS Bot's MCP bridge. Only the team tools cross by default; a
+//                companion names the tools it registers so those Bots get them too.
 export const NOTE_MAX = 2000
 
 const oneLine = (text, max) => String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, max)
@@ -75,12 +78,36 @@ export function notesService(rt) {
   })
 }
 
+export function bridgeService(rt) {
+  // name -> how many shares hold it: a plugin reloaded before the old copy disposes
+  // shares the same name twice, and the first dispose must not drop it.
+  const shared = new Map()
+  rt.bridgedTools = () => [...shared.keys()]
+  return Object.freeze({
+    // Returns the disposer.
+    share(name) {
+      if (typeof name !== 'string' || name === '') throw new TypeError('dsBotBridge.share needs a tool name')
+      shared.set(name, (shared.get(name) ?? 0) + 1)
+      let held = true
+      return () => {
+        if (!held) return
+        held = false
+        const left = shared.get(name) - 1
+        if (left > 0) shared.set(name, left)
+        else shared.delete(name)
+      }
+    },
+  })
+}
+
 export function install(rt) {
   const roster = rosterService(rt)
   const notes = notesService(rt)
-  rt.companions = { roster, notes }
+  const bridge = bridgeService(rt)
+  rt.companions = { roster, notes, bridge }
   // A test context may have no Cordis service registry; the services only exist under a real host.
   if (typeof rt.ctx.provide !== 'function') return
   rt.ctx.provide('dsBotRoster', roster)
   rt.ctx.provide('dsBotNotes', notes)
+  rt.ctx.provide('dsBotBridge', bridge)
 }

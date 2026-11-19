@@ -16,6 +16,7 @@ services DS Bot provides. #6 adds those services; this plugin uses nothing else.
 | Which Bot (and group) a `board` call speaks for | `botSessionIdentity.ownerOfSession` |
 | Bot names, the Main Bot, a group's admin, the assignee list | `dsBotRoster` |
 | A note from the user reaching the card's Bot | `dsBotNotes.deliver` |
+| The `board` tool for a Bot on a local agent CLI, which gets tools only through DS Bot's MCP bridge | `dsBotBridge.share` |
 | An icon in the sidebar and a full page | `dsBotPages` (browser) |
 
 With the plugin off, DS Bot is unchanged: no tool, no route, no icon.
