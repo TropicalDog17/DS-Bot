@@ -24,7 +24,7 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
 
   const tool = defineTool({
     name: 'board',
-    description: 'The user\'s work board, shared by the whole team. Put every piece of work you take on it so the user sees it without asking: open when you take it, update as it moves (status, progress, a PR link), complete with a one-line result, cancel with a reason. Works from any chat. show lists the board.',
+    description: 'The user\'s work board, shared by the whole team. Put every piece of work you take on it so the user sees it without asking: open when you take it, update as it moves (status, progress, a PR link), complete with a one-line result, cancel with a reason. When you need the user to decide, ask with a question and the options: the card shows them as buttons and the pick comes back as a note. Works from any chat. show lists the board.',
     parameters: {
       action: { type: 'string', required: true, enum: ACTIONS, description: 'What to do' },
       id: { type: 'string', description: 'Card id or ticket key; default your newest open card' },
@@ -37,6 +37,8 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
       link: { type: 'string', description: 'A URL to attach, e.g. the PR' },
       result: { type: 'string', description: 'complete: the result, one line' },
       reason: { type: 'string', description: 'cancel: why it stops' },
+      question: { type: 'string', description: 'ask: what the user decides; Markdown' },
+      options: { type: 'array', items: { type: 'string' }, description: 'ask: 2 to 6 short choices, each one line' },
     },
     output,
     async execute(args, exec) {

@@ -143,6 +143,22 @@ test('board validates its input strictly and refuses Sessions that are not Bots'
   assert.equal(ticketKey('12-AB'), undefined)
 })
 
+test('a Bot asks the user with options: the card moves to Review and the pick comes back as a note', async (t) => {
+  const h = host(t)
+  await h.tool({ action: 'open', title: 'Deploy' })
+  assert.equal(await h.tool({ action: 'ask', question: 'Where?', options: ['Staging'] }), 'ask needs 2 to 6 different options.')
+  assert.equal(await h.tool({ action: 'ask', question: 'Where?', options: ['a', ' a ', ''] }), 'ask needs 2 to 6 different options.')
+  assert.equal(await h.tool({ action: 'ask', question: ' ', options: ['a', 'b'] }), 'ask needs a question.')
+  const [card] = h.cards()
+  assert.equal(await h.tool({ action: 'ask', id: card.id, question: 'Where?', options: ['a', 'b'] }, 'a'), `${card.id} belongs to Writer; only its assignee asks on it.`)
+  assert.match(await h.tool({ action: 'ask', question: 'Which **environment**?', options: [' Staging ', 'Production'] }),
+    /^Asked on c_\w+: Staging \/ Production\. The user's pick reaches you as a note on the card\.\n.*\n.*latest note from Writer: Which \*\*environment\*\*\? \(options: Staging \/ Production\)/)
+  const asked = h.cards()[0]
+  assert.deepEqual([asked.status, asked.unread, asked.notes.at(-1)], ['review', true, { at: asked.notes.at(-1).at, by: 'b', text: 'Which **environment**?', options: ['Staging', 'Production'] }])
+  await h.post('note', { id: card.id, text: 'Production' })
+  assert.deepEqual(h.team.sent.at(-1), ['b', `Note on card ${card.id} "Deploy": Production`])
+})
+
 test('the Board page adds, moves, notes and cancels; notes reach the Bot through dsBotNotes', async (t) => {
   const h = host(t)
   const state = await h.post('state')

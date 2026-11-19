@@ -46,6 +46,17 @@ Cards are kept in `<DSH_HOME>/bot-board/board.json`. To keep them elsewhere:
 - The `board` tool, with the same actions (`show`, `open`, `update`, `complete`,
   `cancel`) and permission rules as #5: the assignee, the Bot that opened a card or a
   Main Bot changes it; a group's admin may also cancel a card opened in that group.
+- `ask`: when a Bot needs the user to decide, it asks on its own card with a `question`
+  and 2 to 6 `options`. The question joins the card's conversation with its options,
+  the card moves to Review and is unread. The sheet shows the options as buttons under
+  the question; a tap sends the option as the user's note, so the pick reaches the Bot
+  the way any note does. Once answered, the options stay with the pick marked. Only the
+  card's assignee asks, since the pick goes to the assignee.
+- What a Bot wrote on a card (its replies, progress, result, reason) is drawn by DSH's
+  Markdown as the chat draws it, and a card it names is a tag that opens that card. A
+  card's links go through the same Markdown, so a link shows the site's mark (GitHub's
+  for github.com) and a short name: `owner/repo#12` for a pull request or issue,
+  `owner/repo@abc1234` for a commit. The card on the board shows one plain line.
 - Storage is one JSON file, written whole (temp file, fsync, rename) through one queue.
   A second dsh on the same home reads it and refuses changes, using DS Bot's home lock
   on `board.lock`. A file that does not parse is kept beside it as `.broken-<time>`.
