@@ -19,6 +19,8 @@ function fakeTeam() {
   }
   const hasOwn = (object, id) => typeof id === 'string' && Object.hasOwn(object, id)
   const sent = []
+  // The request id each note went with, in order.
+  const requests = []
   const rt = {
     ctx: {},
     state,
@@ -28,7 +30,7 @@ function fakeTeam() {
     isMain: id => id === 'a',
     findBot: ref => (hasOwn(state.bots, ref) ? state.bots[ref] : Object.values(state.bots).find(bot => bot.name.toLowerCase() === ref.toLowerCase())),
     onSaved: () => () => {},
-    sendUser: async input => { sent.push([input.sessionId, input.content[0].text]) },
+    sendUser: async input => { sent.push([input.sessionId, input.content[0].text]); requests.push(input.requestId) },
   }
   // Own chats a, b, c; group Sessions ga, gb; a talk between Writer and Coder, xb.
   const owners = { a: { botId: 'a' }, b: { botId: 'b' }, c: { botId: 'c' }, ga: { botId: 'a', roomId: 'r1' }, gb: { botId: 'b', roomId: 'r1' }, xb: { botId: 'b' } }
@@ -37,7 +39,7 @@ function fakeTeam() {
   const bridge = bridgeService(rt)
   // What turns.js does when a Bot's turn ends with an answer the user reads.
   const reply = heard => rt.botReplied(heard)
-  return { state, sent, identity, roster: rosterService(rt), notes, bridge, bridged: () => rt.bridgedTools(), reply }
+  return { state, sent, requests, identity, roster: rosterService(rt), notes, bridge, bridged: () => rt.bridgedTools(), reply }
 }
 
 function host(t, { file, notes, now = Date.now } = {}) {
@@ -171,29 +173,31 @@ test('the Board page adds, moves, notes and cancels; notes reach the Bot through
   assert.equal((await h.post('wat')).error.code, 'board/unknown')
 })
 
-test('chat is where the Bot answers: its next answer there after a note is copied onto the card', async (t) => {
+test('chat is where the Bot answers: the answer that read the note is copied onto the card', async (t) => {
   let clock = 1000
   const h = host(t, { now: () => clock })
   const added = await h.post('add', { title: 'Đặt lịch khám răng', assignee: 'b' })
   const id = Object.keys(added.value.cards)[0]
   await h.post('note', { id, text: 'gọi trước 5h nhé' })
-  assert.deepEqual(h.cards()[0].awaiting, { botId: 'b', since: 1000 })
+  const [first] = h.team.requests
+  assert.deepEqual(h.cards()[0].awaiting, { botId: 'b', since: 1000, requests: [first] })
 
-  // A turn that began before the note, another Bot, or the Bot in a group is not the answer.
-  h.team.reply({ botId: 'b', text: 'older work', since: 900 })
-  h.team.reply({ botId: 'c', text: 'not mine', since: 1100 })
-  h.team.reply({ botId: 'b', roomId: 'r1', text: 'in Ops', since: 1100 })
+  // Another Bot, the Bot in a group, or an answer to something else is not the answer.
+  h.team.reply({ botId: 'c', text: 'not mine', since: 1100, heard: [first] })
+  h.team.reply({ botId: 'b', roomId: 'r1', text: 'in Ops', since: 1100, heard: [first] })
+  h.team.reply({ botId: 'b', text: 'typed in chat', since: 1100 })
+  h.team.reply({ botId: 'b', text: 'another note', since: 1100, heard: ['elsewhere'] })
   await h.settle()
   assert.equal(h.cards()[0].notes.length, 1)
 
-  h.team.reply({ botId: 'b', text: '  Ok, mình gọi lúc 4h.\r\n\n\n\nXong sẽ báo.  ', since: 1200 })
+  h.team.reply({ botId: 'b', text: '  Ok, mình gọi lúc 4h.\r\n\n\n\nXong sẽ báo.  ', since: 1200, heard: ['elsewhere', first] })
   await h.settle()
   // One answer per note: the Bot's next turn stays in its chat.
-  h.team.reply({ botId: 'b', text: 'something else', since: 1300 })
+  h.team.reply({ botId: 'b', text: 'something else', since: 1300, heard: [first] })
   await h.settle()
   clock = 2000
   await h.post('note', { id, text: 'cảm ơn' })
-  h.team.reply({ botId: 'b', text: 'Không có gì', since: 2100 })
+  h.team.reply({ botId: 'b', text: 'Không có gì', since: 2100, heard: [h.team.requests[1]] })
   await h.settle()
   const card = (await h.post('state')).value.cards[id]
   assert.deepEqual(card.notes.map(note => [note.by, note.text]), [
@@ -208,6 +212,31 @@ test('chat is where the Bot answers: its next answer there after a note is copie
   assert.equal(ACTIONS.includes('reply'), false)
 })
 
+test('notes on three cards to one Bot: each answer lands on the cards whose notes it read, in any order', async (t) => {
+  const h = host(t)
+  const open = async title => Object.values((await h.post('add', { title, assignee: 'b' })).value.cards).find(card => card.title === title).id
+  const honey = await open('honey: flaky test')
+  const preset = await open('dual-investment-alpha: preset')
+  const gateway = await open('gateway: images')
+  await h.post('note', { id: honey, text: 'sao ròi' })
+  await h.post('note', { id: preset, text: 'sao rồi' })
+  await h.post('note', { id: gateway, text: 'check xem ok chưa' })
+  const [toHoney, toPreset, toGateway] = h.team.requests
+
+  // The first turn read two notes (the second was steered into it); it answers both cards.
+  h.team.reply({ botId: 'b', text: 'honey and preset', since: Date.now(), heard: [toHoney, toPreset] })
+  h.team.reply({ botId: 'b', text: 'gateway', since: Date.now(), heard: [toGateway] })
+  await h.post('note', { id: preset, text: '???' })
+  h.team.reply({ botId: 'b', text: 'preset again', since: Date.now(), heard: [h.team.requests[3]] })
+  await h.settle()
+  const byId = (await h.post('state')).value.cards
+  const thread = id => byId[id].notes.map(note => note.text)
+  assert.deepEqual(thread(honey), ['sao ròi', 'honey and preset'])
+  assert.deepEqual(thread(preset), ['sao rồi', 'honey and preset', '???', 'preset again'])
+  assert.deepEqual(thread(gateway), ['check xem ok chưa', 'gateway'])
+  assert.equal([honey, preset, gateway].some(id => byId[id].awaiting !== undefined), false)
+})
+
 test('a group card waits for the answer in its group; two notes wait from the first; stale waits lapse', async (t) => {
   let clock = 1000
   const h = host(t, { now: () => clock })
@@ -216,28 +245,41 @@ test('a group card waits for the answer in its group; two notes wait from the fi
   await h.post('note', { id: group, text: 'add tests' })
   clock = 1500
   await h.post('note', { id: group, text: 'and docs' })
+  // The group passes the note on as its own message: no request id to wait on.
   assert.deepEqual(h.cards()[0].awaiting, { botId: 'b', roomId: 'r1', since: 1000 })
   h.team.reply({ botId: 'b', text: 'in my own chat', since: 1200 })
+  h.team.reply({ botId: 'b', roomId: 'r1', text: 'older work', since: 900 })
   h.team.reply({ botId: 'b', roomId: 'r1', text: 'On it: tests first.', since: 1200 })
   await h.settle()
   assert.deepEqual(h.cards()[0].notes.map(note => note.text), ['add tests', 'and docs', 'On it: tests first.'])
 
-  // Two cards wait on Writer's chat: the one asked first gets the first answer.
+  // Two group cards wait on Writer there: the one asked first gets the first answer.
   clock = 5000
-  const first = Object.values((await h.post('add', { title: 'One', assignee: 'b' })).value.cards).find(card => card.title === 'One').id
-  const second = Object.values((await h.post('add', { title: 'Two', assignee: 'b' })).value.cards).find(card => card.title === 'Two').id
+  await h.tool({ action: 'open', title: 'One' }, 'gb')
+  await h.tool({ action: 'open', title: 'Two' }, 'gb')
+  const idOf = title => h.cards().find(card => card.title === title).id
+  const [first, second] = [idOf('One'), idOf('Two')]
   await h.post('note', { id: second, text: 'two?' })
   clock = 4000
   await h.post('note', { id: first, text: 'one?' })
-  h.team.reply({ botId: 'b', text: 'answer one', since: 6000 })
+  h.team.reply({ botId: 'b', roomId: 'r1', text: 'answer one', since: 6000 })
   await h.settle()
   const byId = (await h.post('state')).value.cards
   assert.deepEqual(byId[first].notes.map(note => note.text), ['one?', 'answer one'])
   assert.deepEqual(byId[second].notes.map(note => note.text), ['two?'])
-  // Half a day later the wait is over: a chat answer then is about something else.
-  h.team.reply({ botId: 'b', text: 'much later', since: 5000 + 12 * 60 * 60 * 1000 + 1 })
+  // Half a day later the wait is over: an answer then is about something else.
+  h.team.reply({ botId: 'b', roomId: 'r1', text: 'much later', since: 5000 + 12 * 60 * 60 * 1000 + 1 })
   await h.settle()
   assert.deepEqual(h.cards().find(card => card.id === second).notes.map(note => note.text), ['two?'])
+})
+
+test('a chat card that waited before request ids still gets the next answer there', async (t) => {
+  const h = host(t)
+  const id = Object.keys((await h.post('add', { title: 'Old wait', assignee: 'b' })).value.cards)[0]
+  await h.handle.store.change(data => { data.cards[id].awaiting = { botId: 'b', since: 1000 } })
+  h.team.reply({ botId: 'b', text: 'answer', since: 2000, heard: ['unknown'] })
+  await h.settle()
+  assert.deepEqual(h.cards()[0].notes.map(note => note.text), ['answer'])
 })
 
 test('a card keeps the last 200 messages of its conversation', async (t) => {

@@ -242,6 +242,46 @@ test('an answer the user reads reaches dsBotNotes onReply: the Bot\'s own chat a
   ])
 })
 
+test('an answer names the user messages its turns read, also one steered in and ones read by a turn that answered no one', async (t) => {
+  const { rt, emit, stop } = await start(team())
+  t.after(stop)
+  const heard = []
+  rt.companions.notes.onReply(reply => heard.push({ ...reply }))
+  const note = (session, rpcId) => emit(session, 'user/message', { content: textBlock(rpcId), source: { kind: 'user', rpcId } })
+
+  // Two notes read by one turn: the second was steered in while it ran.
+  emit('b', 'turn/start', { turn: 1 }, { time: 5000 })
+  note('b', 'n1')
+  emit('b', 'assistant/message', { message: { content: [...textBlock('Xem cả hai.'), { type: 'tool-call', id: 't1', name: 'look' }] } })
+  note('b', 'n2')
+  emit('b', 'assistant/message', assistantText('Cả hai xong.'))
+  emit('b', 'turn/end', { turn: 1, reason: { kind: 'completed' } })
+  // A turn that answers Chief and a failed turn answer the user nothing: their notes wait.
+  emit('b', 'turn/start', { turn: 2 }, { time: 6000 })
+  emit('b', 'user/message', { content: textBlock('[Message from Chief]\nstatus?'), source: replySource('request') })
+  note('b', 'n3')
+  emit('b', 'assistant/message', assistantText('all good'))
+  emit('b', 'turn/end', { turn: 2, reason: { kind: 'completed' } })
+  emit('b', 'turn/start', { turn: 3 }, { time: 7000 })
+  note('b', 'n4')
+  emit('b', 'turn/end', { turn: 3, reason: { kind: 'error', error: { code: 'QUOTA', message: 'out' } } })
+  emit('b', 'turn/start', { turn: 4 }, { time: 8000 })
+  note('b', 'n5')
+  emit('b', 'assistant/message', assistantText('Ba việc kia đây.'))
+  emit('b', 'turn/end', { turn: 4, reason: { kind: 'completed' } })
+  // A message typed without a request id is still answered, naming nothing.
+  emit('b', 'turn/start', { turn: 5 }, { time: 9000 })
+  emit('b', 'user/message', { content: textBlock('hi'), source: { kind: 'user' } })
+  emit('b', 'assistant/message', assistantText('hello'))
+  emit('b', 'turn/end', { turn: 5, reason: { kind: 'completed' } })
+
+  assert.deepEqual(heard, [
+    { botId: 'b', text: 'Xem cả hai.\n\nCả hai xong.', since: 5000, heard: ['n1', 'n2'] },
+    { botId: 'b', text: 'Ba việc kia đây.', since: 8000, heard: ['n3', 'n4', 'n5'] },
+    { botId: 'b', text: 'hello', since: 9000 },
+  ])
+})
+
 // #1501: a Bot may ask from a background part of its own chat while the user reads the
 // foreground one. The answer comes back to the thread it was asked from.
 test('a reply to a Bot that asked from a background part comes back to that part', async (t) => {
