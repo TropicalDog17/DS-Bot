@@ -4,10 +4,13 @@
 // for), dsBotRoster (names, marks, Main Bots, group admins) and dsBotNotes (a note
 // to a Bot as the user's own message, and the Bot's answer to copy onto the card) and
 // dsBotBridge (so a Bot on a local agent CLI gets the tool through DS Bot's MCP bridge).
+// While a card waits for its answer, the page also shows the Bot's reasoning and tool
+// calls, read from DSH's own Session events (live.js).
 import { join } from 'node:path'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { dshHomeOf } from '../host/folders.js'
-import { ACTIONS, BOT_STATUSES, createBoard } from './cards.js'
+import { ACTIONS, BOT_STATUSES, createBoard, isOpen } from './cards.js'
+import { createLive } from './live.js'
 import { openBoardStore } from './store.js'
 
 export const ROUTE = '/api/ds-bot-board'
@@ -17,6 +20,7 @@ export const boardFileOf = (config = {}, env = process.env) => config.file ?? jo
 
 export function install(ctx, config, { identity, roster, notes, bridge, tools, connection, store = openBoardStore(boardFileOf(config), { warn: (...args) => ctx.logger?.warn?.(...args) }), now = Date.now }) {
   const board = createBoard({ roster, now })
+  const live = createLive({ identity, now })
 
   const tool = defineTool({
     name: 'board',
@@ -48,12 +52,18 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
     },
   })
 
-  // What the Board page reads: every card, and who is on the team.
-  const view = () => ({
-    cards: store.read().cards,
-    bots: roster.bots(),
-    readOnly: store.readOnly(),
-  })
+  // What the Board page reads: every card, who is on the team, and what each Bot a
+  // card waits for is doing about it (`live`, by card id).
+  const view = () => {
+    const cards = store.read().cards
+    const working = {}
+    for (const card of Object.values(cards)) {
+      if (card.awaiting === undefined || !isOpen(card)) continue
+      const trace = live.current(card.awaiting)
+      if (trace !== undefined) working[card.id] = trace
+    }
+    return { cards, bots: roster.bots(), readOnly: store.readOnly(), live: working }
+  }
   async function handle(endpoint, payload) {
     const body = payload !== null && typeof payload === 'object' ? payload : {}
     await roster.ready()
@@ -97,9 +107,12 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
   const disposers = [
     // The Bot answers a note in its chat, where the user reads it; the card gets a copy.
     notes.onReply?.(reply => {
-      void store.change(data => board.mirror(data.cards, reply))
+      const trace = live.kept(reply)
+      void store.change(data => board.mirror(data.cards, { ...reply, ...(trace === undefined ? {} : { trace }) }))
         .catch(error => ctx.logger?.warn?.('ds-bot-board: copying an answer failed: %s', error))
     }),
+    ctx.on?.('session/event', (session, event) => live.onEvent(session?.id, event)),
+    ctx.on?.('agent/assistant-stream', ({ agent, frame } = {}) => live.onFrame(agent?.id, frame)),
     tools.register(tool),
     bridge.share(tool.name),
     connection.fetch.register({

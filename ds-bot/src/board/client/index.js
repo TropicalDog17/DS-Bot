@@ -13,6 +13,8 @@ export const BOARD_ROUTE = 'api/ds-bot-board'
 const POLL_MS = 4000
 // While the page is closed: often enough that an answer is noticed within seconds.
 const WATCH_MS = 8000
+// While a card waits for its Bot and the page is open, it follows the Bot's work closely.
+const LIVE_MS = 1000
 
 // One call to the plugin's route. A route that is not there (the plugin is off) answers
 // with the app's HTML or a 404, which is `undefined` here; a refusal throws its message.
@@ -36,7 +38,7 @@ function BoardPage({ live, focus, call, close, paneLeft, leaving }) {
   useEffect(() => live.opened(), [live])
   const roster = useMemo(() => {
     const bots = view?.bots ?? []
-    return { bots, byId: Object.fromEntries(bots.map(bot => [bot.id, bot])), board: { cards: view?.cards ?? {} } }
+    return { bots, byId: Object.fromEntries(bots.map(bot => [bot.id, bot])), board: { cards: view?.cards ?? {}, live: view?.live ?? {} } }
   }, [view])
   const act = useCallback((endpoint, payload) => call(endpoint, payload).then(
     (value) => { if (value) live.take(value) },
@@ -70,10 +72,12 @@ export function replyNotice(card, bots) {
 // Bot's answer that lands while the page is closed puts a dot on the Board button and
 // shows a notice whose Open leads straight to that card. Answers already there when the
 // app loads only get the dot.
-export function boardWatch(pages, { first, call, openMs = POLL_MS, closedMs = WATCH_MS, setTimer = setInterval, clearTimer = clearInterval }) {
+export function boardWatch(pages, { first, call, openMs = POLL_MS, liveMs = LIVE_MS, closedMs = WATCH_MS, setTimer = setInterval, clearTimer = clearInterval }) {
   const source = createSource(first)
   let open = 0
   let focus = null
+  const waits = view => Object.values(view?.cards ?? {}).some(card => card?.awaiting !== undefined)
+  let waiting = waits(first)
   const told = new Set(unreadOf(first).map(entry => entry.key))
   const take = (view) => {
     const fresh = unreadOf(view)
@@ -86,12 +90,14 @@ export function boardWatch(pages, { first, call, openMs = POLL_MS, closedMs = WA
     }
     for (const { key } of fresh) told.add(key)
     source.set(view)
+    if (waits(view) !== waiting) { waiting = !waiting; pace() }
   }
   const refresh = () => Promise.resolve().then(() => call('state')).then(value => { if (value) take(value) }, () => {})
   let timer
   const pace = () => {
     clearTimer(timer)
-    timer = setTimer(() => { if (globalThis.document?.visibilityState !== 'hidden') refresh() }, open > 0 ? openMs : closedMs)
+    const ms = open === 0 ? closedMs : waiting ? liveMs : openMs
+    timer = setTimer(() => { if (globalThis.document?.visibilityState !== 'hidden') refresh() }, ms)
   }
   pages.mark('board', unreadOf(first).length > 0)
   pace()

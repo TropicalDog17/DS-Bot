@@ -1,0 +1,204 @@
+// What a Bot is doing while a card waits for its answer: its reasoning as it streams
+// and the tools it calls, in order, per Session and for its current turn only. It
+// listens to DSH's own events (agent/assistant-stream, session/event) and learns who
+// a Session belongs to from botSessionIdentity. Process-local, never saved; the trace
+// of the turn that answers is copied onto the card with the answer (`keep`).
+
+// A live trace keeps the newest steps, and the tail of a long thought.
+export const LIVE_STEPS = 60
+export const LIVE_THINK_MAX = 4000
+// What stays on the card with an answer: the newest steps, and at most this much thought.
+export const KEPT_STEPS = 24
+export const KEPT_THINK_MAX = 2000
+// Sessions whose last turn is kept; the oldest finished one goes first.
+const SESSIONS_MAX = 64
+// A reply names its turn by when it began; DS Bot and this tracker read the same event.
+const SAME_TURN_MS = 2000
+// A local agent CLI's own tool calls ride its reasoning as lines that start with "▸ ".
+const ACTIVITY = '▸ '
+
+const tail = (text, max) => (text.length <= max ? text : `…${text.slice(text.length - max + 1)}`)
+
+// Reasoning can open with a `<signature>` block meant for the model, not the reader.
+export function visibleThought(text) {
+  if (text[0] !== '<') return text
+  if ('<signature>'.startsWith(text)) return ''
+  if (!text.startsWith('<signature>')) return text
+  const end = text.indexOf('</signature>')
+  return end === -1 ? '' : text.slice(end + '</signature>'.length).replace(/^(\r?\n)+/, '')
+}
+
+// What a call works on, in its own words: its description, else the file, search,
+// site or command it acts on.
+export function callAbout(argumentsText) {
+  let args
+  try { args = typeof argumentsText === 'string' ? JSON.parse(argumentsText || '{}') : argumentsText ?? {} } catch { args = {} }
+  if (args === null || typeof args !== 'object') return {}
+  const first = keys => keys.map(key => args[key]).find(value => typeof value === 'string' && value.trim() !== '')?.replace(/\s+/g, ' ').trim()
+  const note = first(['description', 'justification'])
+  const path = first(['file_path', 'path'])
+  const url = first(['url'])
+  let site
+  try { site = url && new URL(url).host } catch { site = undefined }
+  const target = path?.split(/[\\/]/).filter(Boolean).at(-1) ?? first(['query', 'pattern']) ?? site ?? first(['command', 'cmd'])
+  return { ...(note ? { note: note.slice(0, 120) } : {}), ...(target ? { target: target.slice(0, 80) } : {}) }
+}
+
+// The steps as the page shows them: thought with its signature dropped, a CLI's
+// activity lines pulled out of it as tool steps, empty thought left out.
+export function stepsOf(trace) {
+  const out = []
+  for (const step of trace.steps) {
+    if (step.kind !== 'think') {
+      out.push({ kind: 'tool', tool: step.tool, ...(step.note ? { note: step.note } : {}), ...(step.target ? { target: step.target } : {}), state: step.state })
+      continue
+    }
+    let thought = []
+    const flush = () => {
+      const text = thought.join('\n').trim()
+      if (text !== '') out.push({ kind: 'think', text })
+      thought = []
+    }
+    for (const line of visibleThought(step.text).split('\n')) {
+      if (!line.startsWith(ACTIVITY)) { thought.push(line); continue }
+      flush()
+      const text = line.slice(ACTIVITY.length).trim()
+      if (text !== '') out.push({ kind: 'tool', text, state: 'done' })
+    }
+    flush()
+  }
+  // A CLI's newest activity line is what it is doing while its turn runs.
+  const last = out.at(-1)
+  if (trace.endedAt === undefined && last?.kind === 'tool' && last.text !== undefined) last.state = 'running'
+  return out
+}
+
+// The trace a card keeps with its answer: the newest steps, the thought trimmed from
+// the oldest end to KEPT_THINK_MAX in all.
+export function keep(trace) {
+  const steps = stepsOf(trace).slice(-KEPT_STEPS)
+  let budget = KEPT_THINK_MAX
+  const kept = []
+  for (const step of steps.reverse()) {
+    if (step.kind !== 'think') { kept.push({ ...step, state: step.state === 'failed' ? 'failed' : 'done' }); continue }
+    if (budget <= 0) continue
+    const text = tail(step.text, budget)
+    budget -= text.length
+    kept.push({ kind: 'think', text })
+  }
+  if (kept.length === 0) return undefined
+  return { ms: Math.max(0, (trace.endedAt ?? trace.since) - trace.since), steps: kept.reverse() }
+}
+
+export function createLive({ identity, now = Date.now }) {
+  /** @type {Map<string, { since: number, endedAt?: number, steps: object[] }>} */
+  const traces = new Map()
+  // Attempts being streamed: attempt id -> Session id.
+  const attempts = new Map()
+
+  const evict = () => {
+    if (traces.size <= SESSIONS_MAX) return
+    const ended = [...traces].filter(([, trace]) => trace.endedAt !== undefined).sort((a, b) => a[1].endedAt - b[1].endedAt)
+    for (const [id] of ended.slice(0, traces.size - SESSIONS_MAX)) traces.delete(id)
+  }
+  const begin = (sessionId, at) => {
+    traces.delete(sessionId)
+    traces.set(sessionId, { since: at, steps: [] })
+    evict()
+  }
+  // A turn already running when the plugin came up is traced from now on.
+  const traceOf = (sessionId) => {
+    if (!traces.has(sessionId)) begin(sessionId, now())
+    return traces.get(sessionId)
+  }
+  const push = (trace, step) => {
+    trace.steps.push(step)
+    if (trace.steps.length > LIVE_STEPS) trace.steps.splice(0, trace.steps.length - LIVE_STEPS)
+  }
+  const toolStep = (trace, id) => (typeof id === 'string' ? trace.steps.findLast(step => step.kind === 'tool' && step.id === id) : undefined)
+  const isBots = sessionId => typeof sessionId === 'string' && identity.ownerOfSession(sessionId) !== undefined
+
+  function onEvent(sessionId, event) {
+    if (!isBots(sessionId)) return
+    const data = event?.data ?? {}
+    switch (event?.type) {
+      case 'turn/start':
+        begin(sessionId, event.time ?? now())
+        break
+      case 'turn/end': {
+        const trace = traces.get(sessionId)
+        if (trace === undefined) break
+        trace.endedAt = event.time ?? now()
+        for (const step of trace.steps) if (step.state === 'running') step.state = 'done'
+        break
+      }
+      case 'tool/call':
+      case 'tool/ptc-dispatch-start': {
+        const id = event.type === 'tool/call' ? data.callId : data.subCallId
+        const name = String(data.name ?? '')
+        if (name === '') break
+        push(traceOf(sessionId), { kind: 'tool', id, tool: name, ...callAbout(data.arguments), state: 'running' })
+        break
+      }
+      case 'tool/result':
+      case 'tool/ptc-dispatch': {
+        const trace = traces.get(sessionId)
+        const id = event.type === 'tool/result' ? data.message?.toolCallId : data.subCallId
+        const step = trace === undefined ? undefined : toolStep(trace, id)
+        if (step !== undefined) step.state = data.message?.isError === true || data.error !== undefined ? 'failed' : 'done'
+        break
+      }
+    }
+  }
+
+  function onFrame(sessionId, frame) {
+    if (frame?.type === 'start') {
+      if (isBots(sessionId)) attempts.set(frame.attemptId, sessionId)
+      return
+    }
+    const owner = attempts.get(frame?.attemptId)
+    if (owner === undefined) return
+    if (frame.type === 'chunk') {
+      if (frame.chunk?.type !== 'reasoning-delta' || typeof frame.chunk.text !== 'string') return
+      const trace = traceOf(owner)
+      const last = trace.steps.at(-1)
+      if (last?.kind === 'think' && last.attemptId === frame.attemptId) last.text = tail(last.text + frame.chunk.text, LIVE_THINK_MAX)
+      else push(trace, { kind: 'think', attemptId: frame.attemptId, text: frame.chunk.text })
+      return
+    }
+    if (frame.type === 'end') {
+      attempts.delete(frame.attemptId)
+      // An attempt that left no message (failed, then retried) did not happen for the reader.
+      if (frame.outcome?.kind === 'abandoned' || frame.outcome?.eventType === 'assistant/attempt') {
+        const trace = traces.get(owner)
+        if (trace !== undefined) trace.steps = trace.steps.filter(step => step.attemptId !== frame.attemptId)
+      }
+    }
+  }
+
+  // The Sessions of this Bot (in this group, or its own chats when roomId is undefined).
+  const sessionsOf = (botId, roomId) => [...traces].filter(([id]) => {
+    const owner = identity.ownerOfSession(id)
+    return owner !== undefined && owner.botId === botId && owner.roomId === roomId
+  })
+
+  return {
+    onEvent,
+    onFrame,
+    // The newest turn of the Bot there that began at or after `since`, as the page shows it.
+    current({ botId, roomId, since }) {
+      const found = sessionsOf(botId, roomId).map(([, trace]) => trace).filter(trace => trace.since >= since)
+        .sort((a, b) => b.since - a.since)[0]
+      if (found === undefined) return undefined
+      const steps = stepsOf(found)
+      return steps.length === 0 ? undefined : { since: found.since, ...(found.endedAt === undefined ? {} : { endedAt: found.endedAt }), steps }
+    },
+    // The turn a reply came from (dsBotNotes onReply), trimmed to what a card keeps.
+    kept({ botId, roomId, since }) {
+      const found = sessionsOf(botId, roomId).map(([, trace]) => trace)
+        .filter(trace => Math.abs(trace.since - since) <= SAME_TURN_MS)
+        .sort((a, b) => Math.abs(a.since - since) - Math.abs(b.since - since))[0]
+      return found === undefined ? undefined : keep(found)
+    },
+  }
+}

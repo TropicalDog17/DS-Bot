@@ -52,10 +52,19 @@ Cards are kept in `<DSH_HOME>/bot-board/board.json`. To keep them elsewhere:
 - The page: the redesigned board from #5 (columns, drag between columns, segmented
   columns and Add card by the thumb on a phone, card sheet with move, note and cancel).
   It reads the plugin's own route, `POST api/ds-bot-board`, and polls it every 4 s
-  while open.
+  while open, every 1 s while a card waits for a Bot's answer.
 - A note on a Bot's card reads `Note on board card <key or id> "<title>": <text>`, so
   the Bot knows which card it is about. `dsBotNotes` sends it `@Bot` in the card's group,
   else in the Bot's own chat. A note on the user's own card is kept on the card only.
+- While a card waits for its Bot, the sheet shows what the Bot is doing about it under
+  its mark: its reasoning as it streams and each tool call, named as the chat's activity
+  row names it (a local agent CLI's own `▸` lines count as tool calls). The plugin reads
+  DSH's own `agent/assistant-stream` and `session/event` events for the Bot's Sessions
+  (`botSessionIdentity`) and keeps the current turn of each in memory only (`live.js`);
+  only a turn that began after the note shows. When the answer lands (`dsBotNotes`
+  `onReply`, matched to the turn by its start time), the card keeps a short copy with
+  it: the last 24 steps and at most 2000 characters of reasoning, folded under
+  "Thought it through" above the answer.
 
 ## Limits
 
