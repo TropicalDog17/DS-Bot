@@ -93,8 +93,8 @@ export const CARD_TAG_CSS = `
 .bt-card-tag-label{overflow:hidden;text-overflow:ellipsis}
 .bt-card-tag[data-static]{cursor:inherit}
 @media (hover:hover){.bt-card-tag:not([data-static]):hover{border-color:color-mix(in srgb,currentColor 45%,transparent)}}
-${BOT_TAG}{display:inline-flex;align-items:center;gap:4px;max-width:100%;padding:0 7px 0 5px;vertical-align:1px;border:1px solid color-mix(in srgb,currentColor 22%,transparent);border-radius:6px;background:color-mix(in srgb,currentColor 7%,transparent);color:inherit;font-size:.86em;font-weight:600;line-height:1.5;text-decoration:none;white-space:nowrap;cursor:pointer}
-${BOT_TAG}::before{content:"";flex:none;width:14px;height:14px;background:currentColor;opacity:.7;-webkit-mask:${BOARD_MASK} center/contain no-repeat;mask:${BOARD_MASK} center/contain no-repeat}
+${BOT_TAG}{display:inline-block;max-width:calc(100% - 1em);box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;padding:0 7px 0 5px;vertical-align:-.45em;border:1px solid color-mix(in srgb,currentColor 22%,transparent);border-radius:6px;background:color-mix(in srgb,currentColor 7%,transparent);color:inherit;font-size:.86em;font-weight:600;line-height:1.5;text-decoration:none;white-space:nowrap;cursor:pointer}
+${BOT_TAG}::before{content:"";display:inline-block;width:14px;height:14px;margin-right:4px;vertical-align:-2px;background:currentColor;opacity:.7;-webkit-mask:${BOARD_MASK} center/contain no-repeat;mask:${BOARD_MASK} center/contain no-repeat}
 ${BOT_TAG} svg{display:none}
 @media (hover:hover){${BOT_TAG}:hover{border-color:color-mix(in srgb,currentColor 45%,transparent)}}
 `
