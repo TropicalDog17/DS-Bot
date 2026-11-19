@@ -13,6 +13,8 @@ export const RESULT_MAX = 2000
 export const NOTE_MAX = 500
 export const REPLY_MAX = 2000
 export const THREAD_MAX = 200
+// A note's answer is copied from the Bot's chat only while it is this fresh.
+export const AWAIT_MAX_MS = 12 * 60 * 60 * 1000
 export const REASON_MAX = 500
 export const KEY_MAX = 32
 export const URL_MAX = 2000
@@ -43,7 +45,7 @@ export function webUrl(text) {
 }
 
 
-export const ACTIONS = ['open', 'update', 'complete', 'cancel', 'reply', 'show']
+export const ACTIONS = ['open', 'update', 'complete', 'cancel', 'show']
 export const BOT_STATUSES = ['todo', 'active', 'review', 'blocked']
 // The user may also drag a card into Done, or back out of it.
 export const USER_STATUSES = [...OPEN_STATUSES, 'done']
@@ -223,17 +225,6 @@ export function createBoard({ roster, now = Date.now }) {
       touch(card)
       return { card, said: `Cancelled ${label(card)}.` }
     },
-    // An answer to the user on the card itself, where the user asked. A finished card
-    // still takes one: a question can land just as the work completes.
-    reply(cards, self, _roomId, args) {
-      const card = pick(cards, args.id, self)
-      if (card === undefined) return { error: 'No open card of yours. Name one with its id or ticket key.' }
-      if (!mayChange(card, self)) return { error: `${label(card)} belongs to ${nameOf(card.assignee)}.` }
-      const text = replyText(args.text, REPLY_MAX)
-      if (text === '') return { error: 'A reply needs text.' }
-      say(card, self, text)
-      return { card, said: `Replied on ${label(card)}.` }
-    },
   }
 
   const found = (cards, id) => {
@@ -289,8 +280,17 @@ export function createBoard({ roster, now = Date.now }) {
       const bot = card.assignee === USER ? undefined : roster.bot(card.assignee)
       return {
         card,
-        ...(bot === undefined ? {} : { deliver: { botId: bot.id, ...(card.roomId === undefined ? {} : { roomId: card.roomId }), text: `Note on board card ${label(card)} "${card.title}": ${said} (Answer on the card: board reply, id ${card.id}.)` } }),
+        ...(bot === undefined ? {} : { deliver: { botId: bot.id, ...(card.roomId === undefined ? {} : { roomId: card.roomId }), text: `Note on card ${label(card)} "${card.title}": ${said}` } }),
       }
+    },
+    // The note reached the Bot (`where` from dsBotNotes): the card waits for its answer
+    // there. A wait already running keeps its start, so the first answer still lands.
+    sent(cards, id, { botId, roomId, since }) {
+      const { card, error } = found(cards, id)
+      if (error !== undefined) return { error }
+      const same = card.awaiting?.botId === botId && card.awaiting?.roomId === roomId
+      if (!same) card.awaiting = { botId, ...(roomId === undefined ? {} : { roomId }), since }
+      return { card }
     },
     cancel(cards, id, reason) {
       const { card, error } = found(cards, id)
@@ -304,5 +304,20 @@ export function createBoard({ roster, now = Date.now }) {
     },
   }
 
-  return { show, line, label, bot: (cards, action, self, roomId, args) => botActions[action](cards, self, roomId, args), user }
+  // A Bot's answer in its chat, or in a group (dsBotNotes onReply), joins the card
+  // that waited longest for that Bot there, from a turn that began after the note.
+  const mirror = (cards, { botId, roomId, text, since } = {}) => {
+    const said = replyText(text, REPLY_MAX)
+    if (said === '') return { error: 'Nothing to copy.' }
+    const waiting = list(cards).filter(card => card.awaiting?.botId === botId && card.awaiting.roomId === roomId
+      && card.awaiting.since <= since && since - card.awaiting.since <= AWAIT_MAX_MS)
+      .sort((a, b) => a.awaiting.since - b.awaiting.since)
+    const card = waiting[0]
+    if (card === undefined) return { error: 'No card waits for this answer.' }
+    delete card.awaiting
+    say(card, botId, said)
+    return { card }
+  }
+
+  return { show, line, label, bot: (cards, action, self, roomId, args) => botActions[action](cards, self, roomId, args), user, mirror }
 }

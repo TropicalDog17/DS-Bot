@@ -2,7 +2,7 @@
 // POST api/ds-bot-board route the Board page uses. It knows the team only through
 // DS Bot's public services: botSessionIdentity (which Bot and group a Session speaks
 // for), dsBotRoster (names, marks, Main Bots, group admins) and dsBotNotes (a note
-// to a Bot as the user's own message).
+// to a Bot as the user's own message, and the Bot's answer to copy onto the card).
 import { join } from 'node:path'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { dshHomeOf } from '../host/folders.js'
@@ -19,7 +19,7 @@ export function install(ctx, config, { identity, roster, notes, tools, connectio
 
   const tool = defineTool({
     name: 'board',
-    description: 'The user\'s work board, shared by the whole team. Put every piece of work you take on it so the user sees it without asking: open when you take it, update as it moves (status, progress, a PR link), complete with a one-line result, cancel with a reason. A note from the user on a card asks you there: answer with reply, on the card, not only in chat. Works from any chat. show lists the board.',
+    description: 'The user\'s work board, shared by the whole team. Put every piece of work you take on it so the user sees it without asking: open when you take it, update as it moves (status, progress, a PR link), complete with a one-line result, cancel with a reason. Works from any chat. show lists the board.',
     parameters: {
       action: { type: 'string', required: true, enum: ACTIONS, description: 'What to do' },
       id: { type: 'string', description: 'Card id or ticket key; default your newest open card' },
@@ -32,7 +32,6 @@ export function install(ctx, config, { identity, roster, notes, tools, connectio
       link: { type: 'string', description: 'A URL to attach, e.g. the PR' },
       result: { type: 'string', description: 'complete: the result, one line' },
       reason: { type: 'string', description: 'cancel: why it stops' },
-      text: { type: 'string', description: 'reply: your answer to the user, shown in the card' },
     },
     output,
     async execute(args, exec) {
@@ -67,11 +66,16 @@ export function install(ctx, config, { identity, roster, notes, tools, connectio
       case 'cancel':
         return store.change(data => board.user.cancel(data.cards, String(body.id ?? ''), body.reason))
       case 'note': {
-        const result = await store.change(data => board.user.note(data.cards, String(body.id ?? ''), body.text))
+        const id = String(body.id ?? '')
+        const result = await store.change(data => board.user.note(data.cards, id, body.text))
         if (result.error === undefined && result.deliver !== undefined) {
           // The note is saved either way; a delivery that fails says so on the page.
+          const since = now()
           const sent = await notes.deliver(result.deliver).catch(error => ({ error: error?.message ?? String(error) }))
           if (sent?.error !== undefined) return { error: `Saved on the card, but not sent: ${sent.error}` }
+          // The Bot answers where the note went; that answer is copied onto the card.
+          const roomId = sent?.where === 'group' ? result.deliver.roomId : undefined
+          return store.change(data => board.user.sent(data.cards, id, { botId: result.deliver.botId, roomId, since }))
         }
         return result
       }
@@ -85,6 +89,11 @@ export function install(ctx, config, { identity, roster, notes, tools, connectio
   }
 
   const disposers = [
+    // The Bot answers a note in its chat, where the user reads it; the card gets a copy.
+    notes.onReply?.(reply => {
+      void store.change(data => board.mirror(data.cards, reply))
+        .catch(error => ctx.logger?.warn?.('ds-bot-board: copying an answer failed: %s', error))
+    }),
     tools.register(tool),
     connection.fetch.register({
       path: ROUTE,

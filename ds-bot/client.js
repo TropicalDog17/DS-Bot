@@ -43503,7 +43503,8 @@ function AddCard({ roster, actions, onDone }) {
     )
   );
 }
-function Thread({ notes, roster }) {
+function Thread({ notes, roster, awaiting }) {
+  const waiter = awaiting?.botId === void 0 ? void 0 : roster.byId?.[awaiting.botId];
   return (0, import_react74.createElement)(
     "ol",
     { className: "bt-board-thread" },
@@ -43521,7 +43522,13 @@ function Thread({ notes, roster }) {
           (0, import_react74.createElement)("span", { className: "bt-board-age" }, clockLabel(note.at ?? 0))
         )
       );
-    })
+    }),
+    waiter ? (0, import_react74.createElement)(
+      "li",
+      { key: "waiting", className: "bt-board-msg bt-board-waiting", "data-by": "bot", "aria-hidden": true },
+      (0, import_react74.createElement)(BotMark, { bot: waiter, size: 24 }),
+      (0, import_react74.createElement)("div", { className: "bt-board-msg-body" }, (0, import_react74.createElement)("span", { className: "bt-board-msg-text bt-board-dots" }, (0, import_react74.createElement)("i"), (0, import_react74.createElement)("i"), (0, import_react74.createElement)("i")))
+    ) : null
   );
 }
 function CardDetail({ card, roster, actions }) {
@@ -43534,7 +43541,7 @@ function CardDetail({ card, roster, actions }) {
   (0, import_react74.useEffect)(() => {
     const node = scroller.current;
     if (node && typeof node.scrollTo === "function") node.scrollTo({ top: node.scrollHeight });
-  }, [card.id, said]);
+  }, [card.id, said, card.awaiting !== void 0]);
   (0, import_react74.useEffect)(() => {
     if (!confirming) return void 0;
     const timer = setTimeout(() => setConfirming(false), 3e3);
@@ -43618,7 +43625,7 @@ function CardDetail({ card, roster, actions }) {
         "aria-label": confirming ? t("Click again to cancel") : t("Cancel card"),
         onClick: cancel
       }, t("Cancel card")) : null,
-      notes.length > 0 ? (0, import_react74.createElement)(Thread, { notes, roster }) : null,
+      notes.length > 0 ? (0, import_react74.createElement)(Thread, { notes, roster, awaiting: open ? card.awaiting : void 0 }) : null,
       error ? (0, import_react74.createElement)("div", { className: "bt-error", role: "alert" }, error) : null
     ),
     open ? (0, import_react74.createElement)(
@@ -43830,6 +43837,12 @@ a.bt-board-key:hover{color:var(--bt-ink)}
 .bt-board-msg[data-by=user] .bt-board-msg-text{background:var(--bt-user);color:var(--bt-user-ink)}
 .bt-board-msg[data-by=bot] .bt-board-msg-text{background:var(--bt-hover);color:var(--bt-ink)}
 .bt-board-msg .bt-board-age{padding:0 4px}
+.bt-board-dots{display:flex;gap:4px;align-items:center;height:34px;padding:0 14px}
+.bt-board-dots>i{width:6px;height:6px;border-radius:50%;background:var(--bt-ink-3,currentColor);opacity:.4;animation:bt-board-dot 1.2s ease-in-out infinite}
+.bt-board-dots>i:nth-child(2){animation-delay:.15s}
+.bt-board-dots>i:nth-child(3){animation-delay:.3s}
+@keyframes bt-board-dot{30%{opacity:1;translate:0 -2px}}
+@media (prefers-reduced-motion:reduce){.bt-board-dots>i{animation:none}}
 .bt-board-cancel{align-self:flex-start;margin-top:8px;height:32px;padding:0;border:0;background:none;color:var(--bt-ink-3);font:inherit;font-size:13px;cursor:pointer}
 .bt-board-cancel:hover,.bt-board-cancel[data-confirm]{color:var(--bt-danger)}
 .bt-board-cancel[data-confirm]{font-weight:600}

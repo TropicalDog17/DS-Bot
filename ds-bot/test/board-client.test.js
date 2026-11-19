@@ -126,6 +126,13 @@ test('an open card is a conversation: the user on the right, the Bot\'s replies 
   assert.equal(find(done, 'bt-board-write'), null)
   // No messages yet, no thread.
   assert.equal(find({ type: CardDetail, props: { card: card('e', 'todo'), roster, actions: {} }, children: [] }, 'bt-board-thread'), null)
+  // While the Bot owes an answer, its mark waits under the last message; a finished card shows no wait.
+  const asked = { ...talk, awaiting: { botId: 'b', since: now } }
+  const waiting = all({ type: CardDetail, props: { card: asked, roster, actions: {} }, children: [] }, 'bt-board-waiting')
+  assert.equal(waiting.length, 1)
+  assert.equal(waiting[0].children.some(child => child?.props?.bot?.id === 'b'), true)
+  assert.equal(all({ type: CardDetail, props: { card: { ...asked, status: 'done' }, roster, actions: {} }, children: [] }, 'bt-board-waiting').length, 0)
+  assert.equal(all(tree, 'bt-board-waiting').length, 0)
 })
 
 // A fake `dsBotPages` seat: what the page registered, and whether it was taken back.

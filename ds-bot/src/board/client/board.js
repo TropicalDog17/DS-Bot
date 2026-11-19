@@ -101,8 +101,10 @@ function AddCard({ roster, actions, onDone }) {
 }
 
 // The card's conversation: the user's notes on the right, the Bots' replies on the left
-// under their mark, oldest first.
-function Thread({ notes, roster }) {
+// under their mark, oldest first. While the Bot owes an answer to the last note, its
+// mark waits with three dots; the answer it writes in its chat lands here.
+function Thread({ notes, roster, awaiting }) {
+  const waiter = awaiting?.botId === undefined ? undefined : roster.byId?.[awaiting.botId]
   return h('ol', { className: 'bt-board-thread' },
     notes.map((note, index) => {
       const bot = note.by === undefined || note.by === USER ? undefined : roster.byId?.[note.by]
@@ -112,7 +114,10 @@ function Thread({ notes, roster }) {
         h('div', { className: 'bt-board-msg-body' },
           h('span', { className: 'bt-board-msg-text' }, note.text),
           h('span', { className: 'bt-board-age' }, clockLabel(note.at ?? 0))))
-    }))
+    }),
+    waiter ? h('li', { key: 'waiting', className: 'bt-board-msg bt-board-waiting', 'data-by': 'bot', 'aria-hidden': true },
+      h(BotMark, { bot: waiter, size: 24 }),
+      h('div', { className: 'bt-board-msg-body' }, h('span', { className: 'bt-board-msg-text bt-board-dots' }, h('i'), h('i'), h('i')))) : null)
 }
 
 export function CardDetail({ card, roster, actions }) {
@@ -126,7 +131,7 @@ export function CardDetail({ card, roster, actions }) {
   useEffect(() => {
     const node = scroller.current
     if (node && typeof node.scrollTo === 'function') node.scrollTo({ top: node.scrollHeight })
-  }, [card.id, said])
+  }, [card.id, said, card.awaiting !== undefined])
   useEffect(() => {
     if (!confirming) return undefined
     const timer = setTimeout(() => setConfirming(false), 3000)
@@ -180,7 +185,7 @@ export function CardDetail({ card, roster, actions }) {
         type: 'button', className: 'bt-board-cancel', 'data-confirm': confirming || undefined, disabled: busy,
         'aria-label': confirming ? t('Click again to cancel') : t('Cancel card'), onClick: cancel,
       }, t('Cancel card')) : null,
-      notes.length > 0 ? h(Thread, { notes, roster }) : null,
+      notes.length > 0 ? h(Thread, { notes, roster, awaiting: open ? card.awaiting : undefined }) : null,
       error ? h('div', { className: 'bt-error', role: 'alert' }, error) : null),
     open ? h('div', { className: 'bt-board-sheet-foot bt-board-write' },
       h('input', {
@@ -340,6 +345,12 @@ a.bt-board-key:hover{color:var(--bt-ink)}
 .bt-board-msg[data-by=user] .bt-board-msg-text{background:var(--bt-user);color:var(--bt-user-ink)}
 .bt-board-msg[data-by=bot] .bt-board-msg-text{background:var(--bt-hover);color:var(--bt-ink)}
 .bt-board-msg .bt-board-age{padding:0 4px}
+.bt-board-dots{display:flex;gap:4px;align-items:center;height:34px;padding:0 14px}
+.bt-board-dots>i{width:6px;height:6px;border-radius:50%;background:var(--bt-ink-3,currentColor);opacity:.4;animation:bt-board-dot 1.2s ease-in-out infinite}
+.bt-board-dots>i:nth-child(2){animation-delay:.15s}
+.bt-board-dots>i:nth-child(3){animation-delay:.3s}
+@keyframes bt-board-dot{30%{opacity:1;translate:0 -2px}}
+@media (prefers-reduced-motion:reduce){.bt-board-dots>i{animation:none}}
 .bt-board-cancel{align-self:flex-start;margin-top:8px;height:32px;padding:0;border:0;background:none;color:var(--bt-ink-3);font:inherit;font-size:13px;cursor:pointer}
 .bt-board-cancel:hover,.bt-board-cancel[data-confirm]{color:var(--bt-danger)}
 .bt-board-cancel[data-confirm]{font-weight:600}

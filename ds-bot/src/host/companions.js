@@ -6,7 +6,8 @@
 //                chats (id, name, members, admin). Copies, never the saved objects.
 //   dsBotNotes   one short note from the user to a Bot, through the same path as the
 //                user's own messages (channel.js sendUser): into a group the Bot is in,
-//                as the user's `@Bot` message, else into the Bot's own chat.
+//                as the user's `@Bot` message, else into the Bot's own chat. onReply
+//                hears each answer a Bot then writes where the user reads it.
 export const NOTE_MAX = 2000
 
 const oneLine = (text, max) => String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, max)
@@ -41,6 +42,15 @@ export function rosterService(rt) {
 }
 
 export function notesService(rt) {
+  const listeners = new Set()
+  // turns.js calls this when a Bot's turn ends with text the user reads: its own chat,
+  // answering the user, or any of its turns in a group chat.
+  rt.botReplied = reply => {
+    const heard = Object.freeze({ ...reply })
+    for (const listener of listeners) {
+      try { listener(heard) } catch (error) { rt.warn?.('ds-bot: reply listener failed: %s', error) }
+    }
+  }
   return Object.freeze({
     // { botId, text, roomId? } -> { sessionId, where: 'group' | 'chat' } | { error }.
     // A roomId the Bot is not (or no longer) a member of falls back to its own chat.
@@ -55,6 +65,12 @@ export function notesService(rt) {
       const target = inGroup ? { sessionId: room.id, text: `@${bot.name} ${line}`, where: 'group' } : { sessionId: bot.id, text: line, where: 'chat' }
       await rt.sendUser({ sessionId: target.sessionId, content: [{ type: 'text', text: target.text }] })
       return { sessionId: target.sessionId, where: target.where }
+    },
+    // listener({ botId, roomId?, text, since }) once per finished answer; since is when
+    // its turn started. Returns the unsubscribe.
+    onReply(listener) {
+      listeners.add(listener)
+      return () => { listeners.delete(listener) }
     },
   })
 }
