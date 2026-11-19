@@ -265,12 +265,23 @@ A separate DSH plugin can build on the team without reaching into its state. The
 
 The browser half provides `dsBotPages`: `register({ id, title, icon, Page, order? })` puts one icon button in the sidebar's head and the collapsed rail, and opens `Page` over the main area with `{ paneLeft, leaving, close }`. It returns a disposer. Nothing shows for a plugin that does not register.
 
+`ds-bot/board` is such a plugin, in this package and off by default: the owner's kanban board, with a `board` tool for Bots and a Board page. Turn it on in the profile's `cordis.patch.yml`:
+
+```yaml
+- insert:
+    - id: board
+      name: ds-bot/board
+```
+
+Its cards live in `$DSH_HOME/bot-board/board.json` (`config.file` moves them). See `docs/plans/2026-11-19-board-plugin.md`.
+
 ## Layout
 
 | Path | Purpose |
 |---|---|
 | `index.js` | Host entry: installs the `src/host/` modules in order |
 | `src/host/` | Host: team and storage (`roster`, `store`), tools (`tools`), turns and delivery (`turns`, `delivery`), group chats (`groups`), chat parts, the context steward and the index (`parts`, `steward`, `chat-index`), image text (`images`), secrets (`secrets`), Bot browser (`browser`), the `POST api/bot` route (`channel`), the services for companion plugins (`session-identity`, `companions`) |
+| `src/board/` | The `ds-bot/board` plugin: the `board` tool and route (`plugin`, `cards`, `store`) and its page (`client/`, built into `client.js`) |
 | `src/client/` | Browser source: sidebar, chat header, transcript cells, panels and dialogs, themes, Bot browser panel |
 | `client.js` | Built from `src/client/` by `scripts/build-client.mjs` (esbuild); committed |
 | `web-search.js` | The `auto` search provider; independent of the team code |

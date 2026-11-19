@@ -8,7 +8,7 @@
 # Data lives in <checkout>/.dsh-test-<name>; `reset` wipes its Bot team and Sessions before
 # starting. Processes are tracked by pid files and stopped by process group, never by name.
 # Environment: CONTEXT_WINDOW (the mock models' context window, in tokens, with an 8,000
-# token reply; default: the adapter's own), CHECK_RATIO (the plugin's checkRatio), MOCK_DELAY_MS,
+# token reply; default: the adapter's own), CHECK_RATIO (the plugin's checkRatio), MOCK_DELAY_MS, BOARD (1 turns on ds-bot/board),
 # DSH_HARNESS (the deepseek-harness checkout; default: beside this checkout, else at the
 # same place in the main worktree).
 set -eu
@@ -90,6 +90,11 @@ write_overlay() {
       printf -- '      - { id: deepseek-v4-pro, contextWindow: %s, maxTokens: 8000 }\n' "$CONTEXT_WINDOW"
     } >> "$overlay"
   fi
+  # BOARD=1 turns on the separate ds-bot/board plugin, as a profile would.
+  if [ -n "${BOARD:-}" ]; then
+    [ "$(cat "$overlay")" != '[]' ] || : > "$overlay"
+    printf -- '- insert:\n    - id: board\n      name: ds-bot/board\n' >> "$overlay"
+  fi
 }
 
 start() {
@@ -141,7 +146,7 @@ case "$ACTION" in
     stop_one web
     stop_one mock
     rm -f "$HOME_DIR/mock.jsonl" "$HOME_DIR/cookies.txt"
-    rm -rf "$HOME_DIR/bot" "$HOME_DIR"/sessions/*workspace*/session-*
+    rm -rf "$HOME_DIR/bot" "$HOME_DIR/bot-board" "$HOME_DIR"/sessions/*workspace*/session-*
     start
     ;;
   status) status ;;

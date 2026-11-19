@@ -27,6 +27,7 @@
     ".": "./plugin.js",
     "./client": "./client.js",
     "./web-search": "./web-search.js",
+    "./board": "./src/board/entry.js",
     "./package.json": "./package.json"
   },
   "files": [
@@ -35,6 +36,7 @@
     "index.js",
     "src/host/",
     "src/shared/",
+    "src/board/",
     "src/office/",
     "client.js",
     "link.js",
