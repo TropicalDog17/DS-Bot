@@ -31,6 +31,8 @@ import { fileMentionSource } from './mention-source.js'
 import { FailureCell, TURN_ERROR_CSS } from './turn-error.js'
 import { Overlays } from './overlays.js'
 import { createPages } from './pages.js'
+import { installBoardPage } from '../board/client/index.js'
+import { BOARD_CSS } from '../board/client/board.js'
 import { createBotBrowsers, serveBrowserReads } from './bot-browsers.js'
 import { BROWSER_CSS } from './browser-pane.js'
 import { SECRET_CSS, SecretDock } from './secret-card.js'
@@ -95,6 +97,9 @@ export function apply(ctx) {
   // The seat companion plugins take: a sidebar icon and a full page (pages.js).
   const pages = createPages()
   if (typeof ctx.provide === 'function') ctx.provide('dsBotPages', pages.service)
+  // ds-bot/board's page rides in this bundle (DSH loads one per package) and shows
+  // only when that plugin's route answers.
+  ctx.effect(() => installBoardPage(pages.service), 'ds-bot: board page')
   // The left column's kept preference, and the frame geometry the layout rules
   // in frame-layout.js read: the window and the shell's collapsed track come from
   // installFrameWatch, the open column's width is the user's own.
@@ -1186,6 +1191,7 @@ export function apply(ctx) {
     [ABOUT_CSS, 'about'],
     [MEMBER_CSS, 'members'],
     [TASK_CSS, 'tasks'],
+    [BOARD_CSS, 'board'],
     [PASTE_CSS, 'paste'],
     [OPENING_CSS, 'opening'],
     [IM_CSS, 'im'],

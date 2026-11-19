@@ -1347,6 +1347,14 @@ var JA = {
   "Blocked": "ブロック中",
   "Add a note": "メモを追加",
   "Cancel task": "タスクをキャンセル",
+  "Board": "ボード",
+  "Add card": "カードを追加",
+  "Title": "タイトル",
+  "Ticket": "チケット",
+  "Link": "リンク",
+  "Assignee": "担当",
+  "Move to": "移動先",
+  "Cancel card": "カードを取り消す",
   "Click again to cancel": "もう一度クリックでキャンセル",
   "History ({count})": "履歴（{count}）",
   "Hide history": "履歴を隠す",
@@ -3800,6 +3808,14 @@ var KO = {
   Blocked: "막힘",
   "Add a note": "메모 추가",
   "Cancel task": "작업 취소",
+  "Board": "보드",
+  "Add card": "카드 추가",
+  "Title": "제목",
+  "Ticket": "티켓",
+  "Link": "링크",
+  "Assignee": "담당자",
+  "Move to": "이동",
+  "Cancel card": "카드 취소",
   "Click again to cancel": "다시 클릭하면 취소",
   "History ({count})": "기록({count})",
   "Hide history": "기록 숨기기",
@@ -6261,6 +6277,14 @@ var ES = {
   Blocked: "Bloqueada",
   "Add a note": "Añadir una nota",
   "Cancel task": "Cancelar tarea",
+  "Board": "Tablero",
+  "Add card": "Añadir tarjeta",
+  "Title": "Título",
+  "Ticket": "Ticket",
+  "Link": "Enlace",
+  "Assignee": "Responsable",
+  "Move to": "Mover a",
+  "Cancel card": "Cancelar tarjeta",
   "Click again to cancel": "Haz clic otra vez para cancelar",
   "History ({count})": "Historial ({count})",
   "Hide history": "Ocultar historial",
@@ -8685,6 +8709,14 @@ var FR = {
   "Blocked": "Bloquée",
   "Add a note": "Ajouter une note",
   "Cancel task": "Annuler la tâche",
+  "Board": "Tableau",
+  "Add card": "Ajouter une carte",
+  "Title": "Titre",
+  "Ticket": "Ticket",
+  "Link": "Lien",
+  "Assignee": "Responsable",
+  "Move to": "Déplacer vers",
+  "Cancel card": "Annuler la carte",
   "Click again to cancel": "Cliquez encore pour annuler",
   "History ({count})": "Historique ({count})",
   "Hide history": "Masquer l’historique",
@@ -11138,6 +11170,14 @@ var DE = {
   Blocked: "Blockiert",
   "Add a note": "Notiz hinzufügen",
   "Cancel task": "Aufgabe abbrechen",
+  "Board": "Board",
+  "Add card": "Karte hinzufügen",
+  "Title": "Titel",
+  "Ticket": "Ticket",
+  "Link": "Link",
+  "Assignee": "Zuständig",
+  "Move to": "Verschieben nach",
+  "Cancel card": "Karte abbrechen",
   "Click again to cancel": "Erneut klicken zum Abbrechen",
   "History ({count})": "Verlauf ({count})",
   "Hide history": "Verlauf ausblenden",
@@ -13595,6 +13635,14 @@ var ZH = {
   Blocked: "阻塞",
   "Add a note": "补一句",
   "Cancel task": "取消任务",
+  "Board": "看板",
+  "Add card": "添加卡片",
+  "Title": "标题",
+  "Ticket": "工单",
+  "Link": "链接",
+  "Assignee": "负责人",
+  "Move to": "移到",
+  "Cancel card": "取消卡片",
   "Click again to cancel": "再点一次取消",
   "History ({count})": "历史（{count}）",
   "Hide history": "收起历史",
@@ -14549,8 +14597,8 @@ function bodyOf(def, paint, flat = false) {
     return "";
   }
 }
-var eyeMarkup = ([cx, cy, w, h74, tilt]) => `<g transform="translate(${cx} ${cy}) rotate(${tilt})"><rect class="bt-eye" x="${-w / 2}" y="${-h74 / 2}" width="${w}" height="${h74}" rx="${w / 2}"/></g>`;
-var happyEyeMarkup = ([cx, cy, w, h74, tilt]) => `<g transform="translate(${cx} ${cy}) rotate(${tilt})"><path class="bt-eye-happy" opacity="0" d="M${-w * 0.62} ${h74 * 0.14}Q0 ${-h74 * 0.42} ${w * 0.62} ${h74 * 0.14}" fill="none" stroke="#000" stroke-width="${w * 0.5}" stroke-linecap="round"/></g>`;
+var eyeMarkup = ([cx, cy, w, h77, tilt]) => `<g transform="translate(${cx} ${cy}) rotate(${tilt})"><rect class="bt-eye" x="${-w / 2}" y="${-h77 / 2}" width="${w}" height="${h77}" rx="${w / 2}"/></g>`;
+var happyEyeMarkup = ([cx, cy, w, h77, tilt]) => `<g transform="translate(${cx} ${cy}) rotate(${tilt})"><path class="bt-eye-happy" opacity="0" d="M${-w * 0.62} ${h77 * 0.14}Q0 ${-h77 * 0.42} ${w * 0.62} ${h77 * 0.14}" fill="none" stroke="#000" stroke-width="${w * 0.5}" stroke-linecap="round"/></g>`;
 var maskBox = (size) => `maskUnits="userSpaceOnUse" x="${-size}" y="${-size}" width="${size * 3}" height="${size * 3}"`;
 var holes = (def, eyes) => `<rect x="${-def.size}" y="${-def.size}" width="${def.size * 3}" height="${def.size * 3}" fill="#fff"/>${eyes}`;
 var MASK_ID = "%MASK%";
@@ -15570,12 +15618,12 @@ function liveSprings(apply2) {
     const dt = Math.min(0.5, Math.max(1e-3, (now - last) / 1e3));
     last = now;
     const steps = Math.ceil(dt * 240);
-    const h74 = dt / steps;
+    const h77 = dt / steps;
     let moving = false;
     for (const [key, value] of values) {
       for (let index = 0; index < steps; index += 1) {
-        value.v += (-value.k * (value.x - value.to) - value.c * value.v) * h74;
-        value.x += value.v * h74;
+        value.v += (-value.k * (value.x - value.to) - value.c * value.v) * h77;
+        value.x += value.v * h77;
       }
       if (Math.abs(value.x - value.to) < 0.05 && Math.abs(value.v) < 1) {
         value.x = value.to;
@@ -19358,11 +19406,11 @@ function ComputerPage({ roster, actions, run: run2, Section: Section2, Row: Row4
     )
   ];
 }
-function BotComputerCard({ bot, roster, actions, run: run2, Card: Card3, Row: Row4 }) {
+function BotComputerCard({ bot, roster, actions, run: run2, Card: Card4, Row: Row4 }) {
   const computer = roster.computer ?? { enabled: false };
   const apps = Object.entries(bot.computer?.apps ?? {});
   return (0, import_react13.createElement)(
-    Card3,
+    Card4,
     { title: t("Control") },
     !computer.enabled ? (0, import_react13.createElement)(Row4, { label: t("Computer use") }, (0, import_react13.createElement)("span", { className: "bt-muted" }, t("Off in Settings → Computer use"))) : [
       (0, import_react13.createElement)(Row4, { key: "level", label: t("Computer use"), hint: providerWorks(computer.provider ?? { state: "loading" }) ? void 0 : t("Bots get no computer tools until the provider is ready.") }, (0, import_react13.createElement)(LevelPicker, { bot, actions, run: run2 })),
@@ -24015,7 +24063,7 @@ var ReadingModels = () => (0, import_react22.createElement)(
   (0, import_react22.createElement)("i", { className: "bt-loading-spin", "aria-hidden": true }),
   t("Reading models…")
 );
-function RunModeCard({ bot, roster, actions, run: run2, Card: Card3 }) {
+function RunModeCard({ bot, roster, actions, run: run2, Card: Card4 }) {
   const [open, setOpen] = (0, import_react22.useState)(false);
   const [mode, setMode] = (0, import_react22.useState)("model");
   const [target, setTarget] = (0, import_react22.useState)("");
@@ -24038,7 +24086,7 @@ function RunModeCard({ bot, roster, actions, run: run2, Card: Card3 }) {
     if (done !== false) setOpen(false);
   });
   return (0, import_react22.createElement)(
-    Card3,
+    Card4,
     { title: t("Runs on") },
     (0, import_react22.createElement)(
       "div",
@@ -24817,13 +24865,13 @@ function CapabilitiesPage({ roster, actions, run: run2 }) {
     )
   );
 }
-function BotCapabilitiesCard({ bot, roster, actions, run: run2, Card: Card3, SwitchRow: SwitchRow2 }) {
+function BotCapabilitiesCard({ bot, roster, actions, run: run2, Card: Card4, SwitchRow: SwitchRow2 }) {
   const items = [...roster.capabilities ?? []].sort((a, b) => Number(b.kind === "pack") - Number(a.kind === "pack") || a.name.localeCompare(b.name));
   const attached = new Set(bot.capabilities ?? []);
   const statuses = roster.capabilityStatuses?.[bot.id] ?? {};
   if (items.length === 0) return null;
   return (0, import_react25.createElement)(
-    Card3,
+    Card4,
     { title: t("Capabilities") },
     items.map((item) => (0, import_react25.createElement)(SwitchRow2, {
       key: item.name,
@@ -43327,6 +43375,561 @@ function Overlays({ useRoster, useUi, useSessions, useSessionStatus, useActivity
   );
 }
 
+// src/board/client/icons.js
+var import_react73 = require("react");
+var lineIcon3 = (paths) => function LineIcon() {
+  return (0, import_react73.createElement)(
+    "svg",
+    { width: 16, height: 16, viewBox: "0 0 20 20", fill: "none", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true },
+    ...paths.map((d) => (0, import_react73.createElement)("path", { key: d, d }))
+  );
+};
+var LinkIcon2 = lineIcon3(["M8.5 11.5l3-3", "M9.5 6.5l1.2-1.2a2.8 2.8 0 0 1 4 4l-1.2 1.2", "M10.5 13.5l-1.2 1.2a2.8 2.8 0 0 1-4-4l1.2-1.2"]);
+var BoardIcon = lineIcon3(["M3.5 4.5h3.5v11H3.5z", "M8.25 4.5h3.5v7h-3.5z", "M13 4.5h3.5v9H13z"]);
+
+// src/board/client/board.js
+var import_react74 = require("react");
+var COLUMNS = [["todo", "Todo"], ["active", "In progress"], ["review", "Review"], ["blocked", "Blocked"], ["done", "Done"]];
+var OPEN2 = ["todo", "active", "review", "blocked"];
+var DONE_DAYS = 7;
+var DONE_SHOWN = 10;
+var USER = "user";
+var DRAG_TYPE = "text/x-ds-bot-card";
+function boardColumns(cards, now = Date.now()) {
+  const all = Object.values(cards ?? {}).filter((card) => card && typeof card.id === "string").sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0));
+  const columns2 = Object.fromEntries(OPEN2.map((status) => [status, all.filter((card) => card.status === status)]));
+  const done = all.filter((card) => card.status === "done").sort((a, b) => (b.doneAt ?? b.updatedAt ?? 0) - (a.doneAt ?? a.updatedAt ?? 0));
+  const recent = done.filter((card) => now - (card.doneAt ?? card.updatedAt ?? 0) < DONE_DAYS * 864e5).slice(0, DONE_SHOWN);
+  columns2.done = recent;
+  const history = [...done.filter((card) => !recent.includes(card)), ...all.filter((card) => card.status === "cancelled")].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+  return { columns: columns2, history };
+}
+function leadColumn(columns2) {
+  return ["review", "blocked", "active", "todo"].find((status) => columns2[status]?.length > 0) ?? "todo";
+}
+var Dot2 = ({ status }) => (0, import_react74.createElement)("span", { className: "bt-board-dot", "data-status": status, "aria-hidden": true });
+function Who({ id, roster, size = 20 }) {
+  const bot = id === USER ? void 0 : roster.byId?.[id];
+  const name = bot?.name ?? t("You");
+  return (0, import_react74.createElement)(
+    "span",
+    { className: "bt-board-who" },
+    bot ? (0, import_react74.createElement)(BotMark, { bot, size }) : (0, import_react74.createElement)("span", { className: "bt-board-me", style: { width: size, height: size, fontSize: Math.round(size * 0.5) }, "aria-hidden": true }, name.slice(0, 1).toUpperCase()),
+    (0, import_react74.createElement)("span", { className: "bt-board-who-name" }, name)
+  );
+}
+function Card3({ card, roster, onOpen, onDrag }) {
+  const links = (card.links ?? []).length;
+  const line = card.status === "done" ? card.result : card.status === "cancelled" ? card.reason : card.progress;
+  return (0, import_react74.createElement)(
+    "button",
+    {
+      type: "button",
+      className: "bt-board-card",
+      "data-status": card.status,
+      draggable: true,
+      onClick: () => onOpen(card.id),
+      onDragStart: (event) => {
+        event.dataTransfer.setData(DRAG_TYPE, card.id);
+        event.dataTransfer.effectAllowed = "move";
+        onDrag(card.id);
+      },
+      onDragEnd: () => onDrag(null)
+    },
+    card.key ? (0, import_react74.createElement)("span", { className: "bt-board-key" }, card.key) : null,
+    (0, import_react74.createElement)("span", { className: "bt-board-title" }, card.title),
+    line ? (0, import_react74.createElement)("span", { className: "bt-board-progress" }, line) : null,
+    (0, import_react74.createElement)(
+      "span",
+      { className: "bt-board-card-foot" },
+      (0, import_react74.createElement)(Who, { id: card.assignee, roster }),
+      links > 0 || card.url ? (0, import_react74.createElement)("span", { className: "bt-board-has-link", "aria-label": t("Link") }, (0, import_react74.createElement)(LinkIcon2)) : null,
+      (0, import_react74.createElement)("span", { className: "bt-board-age" }, relativeShort(card.updatedAt ?? card.createdAt ?? Date.now()))
+    )
+  );
+}
+function AddCard({ roster, actions, onDone }) {
+  const [title, setTitle] = (0, import_react74.useState)("");
+  const [key, setKey] = (0, import_react74.useState)("");
+  const [url, setUrl] = (0, import_react74.useState)("");
+  const [assignee, setAssignee] = (0, import_react74.useState)(USER);
+  const [busy, setBusy] = (0, import_react74.useState)(false);
+  const [error, setError] = (0, import_react74.useState)("");
+  const add = () => {
+    if (title.trim() === "" || busy) return;
+    setBusy(true);
+    Promise.resolve(actions.boardAdd({ title: title.trim(), key: key.trim(), url: url.trim(), assignee })).then(
+      () => {
+        setBusy(false);
+        onDone();
+      },
+      (failure) => {
+        setBusy(false);
+        setError(String(failure?.message ?? failure));
+      }
+    );
+  };
+  const enter = (event) => {
+    if (event.key === "Enter" && !event.nativeEvent?.isComposing) {
+      event.preventDefault();
+      add();
+    }
+  };
+  return (0, import_react74.createElement)(
+    "div",
+    { className: "bt-board-sheet-body" },
+    (0, import_react74.createElement)(
+      "div",
+      { className: "bt-board-form" },
+      (0, import_react74.createElement)("input", { className: "bt-input bt-board-title-input", value: title, autoFocus: true, placeholder: t("Title"), "aria-label": t("Title"), maxLength: 200, onChange: (event) => setTitle(event.target.value), onKeyDown: enter }),
+      (0, import_react74.createElement)(
+        "div",
+        { className: "bt-board-form-row" },
+        (0, import_react74.createElement)("input", { className: "bt-input bt-board-key-input", value: key, placeholder: "LIFE-782", "aria-label": t("Ticket"), maxLength: 32, onChange: (event) => setKey(event.target.value), onKeyDown: enter }),
+        (0, import_react74.createElement)("input", { className: "bt-input", value: url, placeholder: "https://", "aria-label": t("Link"), inputMode: "url", onChange: (event) => setUrl(event.target.value), onKeyDown: enter })
+      ),
+      (0, import_react74.createElement)(
+        "select",
+        { className: "bt-input bt-board-select", value: assignee, "aria-label": t("Assignee"), onChange: (event) => setAssignee(event.target.value) },
+        (0, import_react74.createElement)("option", { value: USER }, t("You")),
+        (roster.bots ?? []).map((bot) => (0, import_react74.createElement)("option", { key: bot.id, value: bot.id }, bot.name))
+      ),
+      error ? (0, import_react74.createElement)("div", { className: "bt-error", role: "alert" }, error) : null
+    ),
+    (0, import_react74.createElement)(
+      "div",
+      { className: "bt-board-sheet-foot" },
+      (0, import_react74.createElement)("button", { type: "button", className: "bt-send bt-board-go", disabled: title.trim() === "" || busy, onClick: add }, t("Add card"))
+    )
+  );
+}
+function CardDetail({ card, roster, actions }) {
+  const [text, setText] = (0, import_react74.useState)("");
+  const [busy, setBusy] = (0, import_react74.useState)(false);
+  const [confirming, setConfirming] = (0, import_react74.useState)(false);
+  const [error, setError] = (0, import_react74.useState)("");
+  (0, import_react74.useEffect)(() => {
+    if (!confirming) return void 0;
+    const timer = setTimeout(() => setConfirming(false), 3e3);
+    return () => clearTimeout(timer);
+  }, [confirming]);
+  const open = OPEN2.includes(card.status);
+  const run2 = (promise, after) => {
+    setBusy(true);
+    setError("");
+    Promise.resolve(promise).then(
+      () => {
+        setBusy(false);
+        after?.();
+      },
+      (failure) => {
+        setBusy(false);
+        setError(String(failure?.message ?? failure));
+      }
+    );
+  };
+  const send = () => {
+    const line = text.trim();
+    if (line === "" || busy) return;
+    run2(actions.boardNote(card.id, line), () => setText(""));
+  };
+  const cancel = () => {
+    if (!confirming) {
+      setConfirming(true);
+      return;
+    }
+    setConfirming(false);
+    run2(actions.boardCancel(card.id));
+  };
+  const notes = card.notes ?? [];
+  const links = [...card.url && !card.key ? [{ url: card.url }] : [], ...card.links ?? []];
+  return (0, import_react74.createElement)(
+    "div",
+    { className: "bt-board-sheet-body", "data-status": card.status },
+    (0, import_react74.createElement)(
+      "div",
+      { className: "bt-board-detail" },
+      card.key ? card.url ? (0, import_react74.createElement)("a", { className: "bt-board-key", href: card.url, target: "_blank", rel: "noreferrer noopener" }, card.key) : (0, import_react74.createElement)("span", { className: "bt-board-key" }, card.key) : null,
+      (0, import_react74.createElement)("h3", { className: "bt-board-detail-title" }, card.title),
+      (0, import_react74.createElement)(
+        "div",
+        { className: "bt-board-meta" },
+        (0, import_react74.createElement)(Who, { id: card.assignee, roster, size: 24 }),
+        (0, import_react74.createElement)("span", { className: "bt-board-age" }, clockLabel(card.createdAt ?? Date.now()))
+      ),
+      card.status === "cancelled" ? (0, import_react74.createElement)("div", { className: "bt-board-status" }, (0, import_react74.createElement)(Dot2, { status: "cancelled" }), t("Cancelled")) : (0, import_react74.createElement)(
+        "label",
+        { className: "bt-board-status bt-board-move", "data-status": card.status },
+        (0, import_react74.createElement)(Dot2, { status: card.status }),
+        (0, import_react74.createElement)("select", {
+          value: card.status,
+          disabled: busy,
+          "aria-label": t("Move to"),
+          onChange: (event) => {
+            if (event.target.value !== card.status) run2(actions.boardMove(card.id, event.target.value));
+          }
+        }, COLUMNS.map(([status, name]) => (0, import_react74.createElement)("option", { key: status, value: status }, t(name))))
+      ),
+      card.progress ? (0, import_react74.createElement)("p", { className: "bt-board-line" }, card.progress) : null,
+      card.result ? (0, import_react74.createElement)("p", { className: "bt-board-line bt-board-strong" }, card.result) : null,
+      card.reason ? (0, import_react74.createElement)("p", { className: "bt-board-line" }, card.reason) : null,
+      links.length > 0 ? (0, import_react74.createElement)(
+        "div",
+        { className: "bt-board-links" },
+        links.map((link) => (0, import_react74.createElement)(
+          "a",
+          { key: link.url, className: "bt-board-link", href: link.url, target: "_blank", rel: "noreferrer noopener" },
+          (0, import_react74.createElement)(LinkIcon2),
+          (0, import_react74.createElement)("span", null, link.url.replace(/^https?:\/\//, ""))
+        ))
+      ) : null,
+      notes.length > 0 ? (0, import_react74.createElement)(
+        "ol",
+        { className: "bt-board-notes" },
+        notes.map((note, index) => (0, import_react74.createElement)(
+          "li",
+          { key: index, className: "bt-board-note" },
+          (0, import_react74.createElement)("span", { className: "bt-board-note-text" }, note.text),
+          (0, import_react74.createElement)("span", { className: "bt-board-age" }, clockLabel(note.at ?? 0))
+        ))
+      ) : null,
+      error ? (0, import_react74.createElement)("div", { className: "bt-error", role: "alert" }, error) : null,
+      open ? (0, import_react74.createElement)("button", {
+        type: "button",
+        className: "bt-board-cancel",
+        "data-confirm": confirming || void 0,
+        disabled: busy,
+        "aria-label": confirming ? t("Click again to cancel") : t("Cancel card"),
+        onClick: cancel
+      }, t("Cancel card")) : null
+    ),
+    open ? (0, import_react74.createElement)(
+      "div",
+      { className: "bt-board-sheet-foot bt-board-write" },
+      (0, import_react74.createElement)("input", {
+        className: "bt-input",
+        value: text,
+        placeholder: t("Add a note"),
+        "aria-label": t("Add a note"),
+        maxLength: 500,
+        onChange: (event) => setText(event.target.value),
+        onKeyDown: (event) => {
+          if (event.key === "Enter" && !event.nativeEvent?.isComposing) {
+            event.preventDefault();
+            send();
+          }
+        }
+      }),
+      (0, import_react74.createElement)("button", { type: "button", className: "bt-send", disabled: text.trim() === "" || busy, onClick: send }, t("Send"))
+    ) : null
+  );
+}
+function BoardDialog({ roster, actions, paneLeft = 0, leaving = false }) {
+  const { columns: columns2, history } = boardColumns(roster.board?.cards);
+  const [shown, setShown] = (0, import_react74.useState)(null);
+  const [sheet, setSheet] = (0, import_react74.useState)(null);
+  const [historyOpen, setHistoryOpen] = (0, import_react74.useState)(false);
+  const [dragging, setDragging] = (0, import_react74.useState)(null);
+  const [over2, setOver] = (0, import_react74.useState)(null);
+  const close = (0, import_react74.useCallback)(() => actions.closeBoard(), []);
+  const back = () => setSheet(null);
+  useEscape(() => sheet !== null ? setSheet(null) : close());
+  const column = shown ?? leadColumn(columns2);
+  const card = sheet?.card === void 0 ? void 0 : roster.board?.cards?.[sheet.card];
+  const openCard = (id) => setSheet({ card: id });
+  const addCard = () => setSheet({ add: true });
+  const drop = (event, status) => {
+    event.preventDefault();
+    setOver(null);
+    const id = event.dataTransfer.getData(DRAG_TYPE) || dragging;
+    setDragging(null);
+    const moved = roster.board?.cards?.[id];
+    if (moved === void 0 || moved.status === status) return;
+    Promise.resolve(actions.boardMove(id, status)).catch((error) => actions.reportError?.(error, "board"));
+  };
+  const cardOf = (item) => (0, import_react74.createElement)(Card3, { key: item.id, card: item, roster, onOpen: openCard, onDrag: setDragging });
+  return (0, import_react74.createElement)(
+    "div",
+    { className: "bt-pane bt-board-page", style: { left: paneLeft }, role: "dialog", "aria-modal": true, "aria-label": t("Board"), "data-leaving": leaving || void 0, "data-sheet": sheet !== null || void 0 },
+    (0, import_react74.createElement)(
+      "div",
+      { className: "bt-board" },
+      (0, import_react74.createElement)(
+        "div",
+        { className: "bt-board-head" },
+        (0, import_react74.createElement)("h2", null, t("Board")),
+        (0, import_react74.createElement)("button", { type: "button", className: "bt-send bt-board-add", onClick: addCard }, (0, import_react74.createElement)(PlusIcon), (0, import_react74.createElement)("span", null, t("Add card"))),
+        (0, import_react74.createElement)("button", { type: "button", className: "bt-icon-btn bt-board-close", "aria-label": t("Close"), onClick: close }, (0, import_react74.createElement)(CloseIcon))
+      ),
+      (0, import_react74.createElement)(
+        "div",
+        { className: "bt-board-tabs", role: "tablist", "aria-label": t("Board") },
+        COLUMNS.map(([status, name]) => (0, import_react74.createElement)("button", {
+          key: status,
+          type: "button",
+          role: "tab",
+          className: "bt-board-tab",
+          "data-status": status,
+          "aria-selected": column === status,
+          onClick: () => setShown(status)
+        }, (0, import_react74.createElement)("span", { className: "bt-board-tab-count" }, (0, import_react74.createElement)(Dot2, { status }), columns2[status].length), (0, import_react74.createElement)("span", { className: "bt-board-tab-name" }, t(name))))
+      ),
+      (0, import_react74.createElement)(
+        "div",
+        { className: "bt-board-cols" },
+        COLUMNS.map(([status, name]) => (0, import_react74.createElement)(
+          "section",
+          {
+            key: status,
+            className: "bt-board-col",
+            "data-status": status,
+            "data-shown": column === status || void 0,
+            "data-drop": over2 === status || void 0,
+            "aria-label": t(name),
+            onDragOver: (event) => {
+              if (dragging === null) return;
+              event.preventDefault();
+              if (over2 !== status) setOver(status);
+            },
+            onDragLeave: (event) => {
+              if (!event.currentTarget.contains(event.relatedTarget)) setOver(null);
+            },
+            onDrop: (event) => drop(event, status)
+          },
+          (0, import_react74.createElement)("div", { className: "bt-board-col-head" }, (0, import_react74.createElement)(Dot2, { status }), (0, import_react74.createElement)("span", { className: "bt-board-col-name" }, t(name)), (0, import_react74.createElement)("span", { className: "bt-board-count" }, columns2[status].length)),
+          (0, import_react74.createElement)(
+            "div",
+            { className: "bt-board-list" },
+            columns2[status].length > 0 ? columns2[status].map(cardOf) : (0, import_react74.createElement)("div", { className: "bt-board-empty", "aria-hidden": true })
+          ),
+          status === "done" && history.length > 0 ? (0, import_react74.createElement)(
+            "button",
+            { type: "button", className: "bt-more bt-board-history-toggle", "aria-expanded": historyOpen, onClick: () => setHistoryOpen((value) => !value) },
+            historyOpen ? t("Hide history") : t("History ({count})", { count: history.length })
+          ) : null,
+          status === "done" && historyOpen ? (0, import_react74.createElement)("div", { className: "bt-board-list bt-board-history" }, history.map(cardOf)) : null
+        ))
+      ),
+      (0, import_react74.createElement)("button", { type: "button", className: "bt-board-fab", "aria-label": t("Add card"), onClick: addCard }, (0, import_react74.createElement)(PlusIcon))
+    ),
+    sheet !== null ? (0, import_react74.createElement)("div", { className: "bt-board-scrim", onMouseDown: back }) : null,
+    sheet !== null ? (0, import_react74.createElement)(
+      "div",
+      { className: "bt-board-sheet", role: "dialog", "aria-label": sheet.add ? t("Add card") : card?.title ?? t("Board") },
+      (0, import_react74.createElement)(
+        "div",
+        { className: "bt-board-sheet-head" },
+        (0, import_react74.createElement)("button", { type: "button", className: "bt-icon-btn", "aria-label": t("Back"), onClick: back }, (0, import_react74.createElement)(ChevronLeftIcon)),
+        sheet.add ? (0, import_react74.createElement)("h3", null, t("Add card")) : null
+      ),
+      sheet.add ? (0, import_react74.createElement)(AddCard, { roster, actions, onDone: back }) : card !== void 0 ? (0, import_react74.createElement)(CardDetail, { key: card.id, card, roster, actions }) : null
+    ) : null
+  );
+}
+var BOARD_CSS = `
+.bt-board-page{left:0;z-index:46;flex-direction:column;animation:bt-veil-in .18s ease-out}
+.bt-board-page[data-leaving]{opacity:0;transition:opacity .16s ease-out}
+.bt-board{position:relative;flex:1;min-height:0;display:flex;flex-direction:column}
+.bt-board-head{display:flex;align-items:center;gap:8px;padding:16px 24px 8px;flex:none}
+.bt-board-head h2{margin:0;flex:1;font-size:20px;line-height:28px;font-weight:600;letter-spacing:-.02em}
+.bt-board-add{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 16px 0 12px;font-weight:500}
+.bt-board-add svg{width:16px;height:16px}
+.bt-board-close svg,.bt-board-sheet-head .bt-icon-btn svg{width:16px;height:16px}
+.bt-board-close{width:36px;height:36px}
+.bt-board-tabs,.bt-board-fab{display:none}
+.bt-board-dot{flex:none;width:8px;height:8px;border-radius:50%;corner-shape:round;background:var(--bt-ink-3)}
+.bt-board-dot[data-status=active]{background:var(--bt-accent)}
+.bt-board-dot[data-status=review]{background:var(--bt-star)}
+.bt-board-dot[data-status=blocked]{background:var(--bt-danger)}
+.bt-board-dot[data-status=done]{background:var(--bt-green)}
+.bt-board-dot[data-status=cancelled]{background:transparent;box-shadow:inset 0 0 0 1.5px var(--bt-ink-3)}
+.bt-board-cols{flex:1;min-height:0;display:grid;grid-template-columns:repeat(5,minmax(160px,1fr));align-items:start;gap:16px;padding:16px 24px 32px;overflow:auto}
+.bt-board-col{display:flex;flex-direction:column;gap:8px;min-width:0;border-radius:12px;transition:background-color .14s ease}
+.bt-board-col[data-drop]{background:var(--bt-accent-soft)}
+.bt-board-col-head{display:flex;align-items:center;gap:8px;height:32px;padding:0 4px;font-size:13px;line-height:16px;font-weight:600;color:var(--bt-ink)}
+.bt-board-col-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-board-count{font-size:12px;font-weight:500;color:var(--bt-ink-3);font-variant-numeric:tabular-nums}
+.bt-board-list{display:flex;flex-direction:column;gap:8px}
+.bt-board-empty{height:72px;border-radius:12px;border:1px dashed var(--bt-line-2)}
+.bt-board-col[data-drop] .bt-board-empty{border-color:var(--bt-accent)}
+.bt-board-card{display:flex;flex-direction:column;align-items:flex-start;gap:8px;width:100%;box-sizing:border-box;text-align:left;border:.5px solid var(--bt-line);border-radius:12px;background:var(--bt-card);box-shadow:var(--bt-card-shadow);color:var(--bt-ink);padding:12px;font:inherit;cursor:pointer;transition:border-color .14s ease,transform .14s ease}
+.bt-board-card:hover{border-color:var(--bt-line-2)}
+.bt-board-card:active{transform:scale(.99)}
+.bt-board-card:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
+.bt-board-card[data-status=cancelled]{opacity:.6}
+.bt-board-key{display:inline-flex;align-items:center;height:20px;padding:0 6px;border-radius:6px;background:var(--bt-tag-bg);color:var(--bt-tag-ink);font-family:var(--bt-mono,ui-monospace,SFMono-Regular,Menlo,monospace);font-size:11px;font-weight:500;letter-spacing:.01em;text-decoration:none;white-space:nowrap}
+a.bt-board-key:hover{color:var(--bt-ink)}
+.bt-board-title{width:100%;font-size:14px;line-height:20px;font-weight:500;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
+.bt-board-progress{width:100%;margin-top:-4px;font-size:12px;line-height:16px;color:var(--bt-ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-board-card-foot{display:flex;align-items:center;gap:8px;width:100%;min-width:0}
+.bt-board-who{display:inline-flex;align-items:center;gap:8px;min-width:0;flex:1;font-size:12px;line-height:16px;color:var(--bt-ink-2)}
+.bt-board-who>.bt-mark,.bt-board-who>svg{flex:none}
+.bt-board-me{flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;corner-shape:round;background:var(--bt-user);color:var(--bt-user-ink);font-weight:600;line-height:1}
+.bt-board-who-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-board-has-link{flex:none;display:inline-flex;color:var(--bt-ink-3)}
+.bt-board-has-link svg{width:14px;height:14px}
+.bt-board-age{flex:none;font-size:11px;line-height:16px;color:var(--bt-ink-3);font-variant-numeric:tabular-nums;white-space:nowrap}
+.bt-board-history-toggle{align-self:flex-start;margin:0 4px}
+.bt-board-scrim{position:absolute;inset:0;background:color-mix(in srgb,var(--bt-ink) 12%,transparent);animation:bt-veil-in .16s ease-out}
+.bt-board-sheet{position:absolute;top:0;right:0;bottom:0;width:min(440px,100%);background:var(--bt-main);border-left:.5px solid var(--bt-line);box-shadow:var(--bt-dialog-shadow);display:flex;flex-direction:column;animation:bt-veil-in .16s ease-out}
+.bt-board-sheet-head{display:flex;align-items:center;gap:8px;height:56px;padding:0 16px;flex:none}
+.bt-board-sheet-head .bt-icon-btn{width:36px;height:36px}
+.bt-board-sheet-head h3{margin:0;font-size:16px;line-height:24px;font-weight:600}
+.bt-board-sheet-body{flex:1;min-height:0;display:flex;flex-direction:column}
+.bt-board-form,.bt-board-detail{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;align-items:stretch;gap:16px;padding:8px 24px 24px}
+.bt-board-form .bt-input{height:40px;font-size:14px}
+.bt-board-title-input{font-weight:500}
+.bt-board-form-row{display:flex;gap:8px}
+.bt-board-key-input{flex:0 0 128px;font-family:var(--bt-mono,ui-monospace,SFMono-Regular,Menlo,monospace);text-transform:uppercase}
+.bt-board-sheet-foot{flex:none;display:flex;gap:8px;align-items:center;padding:12px 24px calc(12px + env(safe-area-inset-bottom,0px));border-top:.5px solid var(--bt-line);background:var(--bt-main)}
+.bt-board-go{flex:1}
+.bt-board-detail>.bt-board-key{align-self:flex-start;margin-bottom:-8px}
+.bt-board-detail-title{margin:0;font-size:18px;line-height:26px;font-weight:600;letter-spacing:-.01em;overflow-wrap:anywhere}
+.bt-board-meta{display:flex;align-items:center;gap:8px}
+.bt-board-meta .bt-board-who{font-size:13px;color:var(--bt-ink)}
+.bt-board-status{position:relative;align-self:flex-start;display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 12px;border-radius:999px;background:var(--bt-hover);font-size:13px;font-weight:500;color:var(--bt-ink)}
+.bt-board-move{padding-right:32px;cursor:pointer;background-image:var(--bt-select-arrow);background-repeat:no-repeat;background-position:right 12px center}
+.bt-board-move:hover{background-color:var(--bt-active)}
+.bt-board-move select{appearance:none;-webkit-appearance:none;border:0;background:none;color:inherit;font:inherit;padding:0;margin:0;cursor:pointer;outline:none}
+.bt-board-move select::after{content:''}
+.bt-board-move:focus-within{box-shadow:0 0 0 2px var(--bt-accent-soft)}
+.bt-board-move select option{color:var(--bt-ink);background:var(--bt-card)}
+.bt-board-move::before{content:'';position:absolute;inset:0;border-radius:inherit}
+.bt-board-line{margin:0;font-size:14px;line-height:21px;color:var(--bt-ink-2);white-space:pre-wrap;overflow-wrap:anywhere}
+.bt-board-strong{color:var(--bt-ink)}
+.bt-board-links{display:flex;flex-direction:column;gap:4px}
+.bt-board-link{display:flex;align-items:center;gap:8px;min-height:32px;font-size:13px;line-height:18px;color:var(--bt-accent);text-decoration:none}
+.bt-board-link:hover>span{text-decoration:underline}
+.bt-board-link svg{flex:none;width:14px;height:14px}
+.bt-board-link>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-board-notes{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.bt-board-note{position:relative;display:flex;flex-direction:column;gap:4px;padding:0 0 16px 20px;font-size:14px;line-height:20px}
+.bt-board-note::before{content:'';position:absolute;left:3px;top:7px;width:7px;height:7px;border-radius:50%;background:var(--bt-ink-3)}
+.bt-board-note::after{content:'';position:absolute;left:6px;top:18px;bottom:2px;width:1px;background:var(--bt-line-2)}
+.bt-board-note:last-child{padding-bottom:0}
+.bt-board-note:last-child::after{display:none}
+.bt-board-note-text{overflow-wrap:anywhere}
+.bt-board-cancel{align-self:flex-start;margin-top:8px;height:32px;padding:0;border:0;background:none;color:var(--bt-ink-3);font:inherit;font-size:13px;cursor:pointer}
+.bt-board-cancel:hover,.bt-board-cancel[data-confirm]{color:var(--bt-danger)}
+.bt-board-cancel[data-confirm]{font-weight:600}
+.bt-board-write>.bt-input{flex:1;min-width:0;height:40px;font-size:14px}
+@media (max-width:640px){
+  .bt-board-page{left:0 !important;top:0}
+  .bt-board-head{padding:12px 8px 8px 16px}
+  .bt-board-add{display:none}
+  .bt-board-tabs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:2px;margin:0 16px;padding:2px;border-radius:12px;background:var(--bt-hover);flex:none}
+  .bt-board-tab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-width:0;height:48px;padding:0 4px;border:0;border-radius:10px;background:none;color:var(--bt-ink-2);font:inherit;cursor:pointer}
+  .bt-board-tab[aria-selected=true]{background:var(--bt-card);color:var(--bt-ink);box-shadow:var(--bt-card-shadow)}
+  .bt-board-tab-count{display:inline-flex;align-items:center;gap:4px;font-size:15px;line-height:20px;font-weight:600;font-variant-numeric:tabular-nums}
+  .bt-board-tab-count>.bt-board-dot{width:6px;height:6px}
+  .bt-board-tab-name{max-width:100%;font-size:11px;line-height:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .bt-board-cols{display:block;padding:16px 16px calc(96px + env(safe-area-inset-bottom,0px))}
+  .bt-board-col{display:none}
+  .bt-board-col[data-shown]{display:flex}
+  .bt-board-col-head{display:none}
+  .bt-board-empty{height:96px}
+  .bt-board-card{padding:16px;gap:8px}
+  .bt-board-title{font-size:15px;line-height:22px}
+  .bt-board-progress{font-size:13px;line-height:18px}
+  .bt-board .bt-board-fab{display:inline-flex;align-items:center;justify-content:center;position:absolute;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));width:56px;height:56px;border-radius:50%;corner-shape:round;border:0;background:var(--bt-accent);color:var(--bt-main);box-shadow:var(--bt-dialog-shadow);cursor:pointer}
+  .bt-board-fab svg{width:22px;height:22px}
+  .bt-board-fab:active{transform:scale(.96)}
+  .bt-board-sheet{width:100%;border-left:0}
+  .bt-board-sheet-head{padding:0 8px}
+  .bt-board-form,.bt-board-detail{padding:8px 16px 24px}
+  .bt-board-sheet-foot{padding:8px 16px calc(8px + env(safe-area-inset-bottom,0px))}
+}
+`;
+
+// src/board/client/index.js
+var import_react75 = require("react");
+var BOARD_ROUTE = "api/ds-bot-board";
+var POLL_MS3 = 4e3;
+async function boardCall(endpoint, payload, { fetchImpl = globalThis.fetch } = {}) {
+  const response = await fetchImpl(BOARD_ROUTE, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ endpoint, payload: payload ?? null })
+  });
+  if (!response.ok) return void 0;
+  let result;
+  try {
+    result = await response.json();
+  } catch {
+    return void 0;
+  }
+  if (result === null || typeof result !== "object" || typeof result.ok !== "boolean") return void 0;
+  if (!result.ok) throw Object.assign(new Error(hostText(result.error?.message ?? "Request failed")), { code: result.error?.code });
+  return result.value;
+}
+function BoardPage({ first, call: call2, close, paneLeft, leaving }) {
+  const [view, setView] = (0, import_react75.useState)(first);
+  const alive = (0, import_react75.useRef)(true);
+  const refresh = (0, import_react75.useCallback)(() => call2("state").then((value) => {
+    if (alive.current && value) setView(value);
+  }, () => {
+  }), [call2]);
+  (0, import_react75.useEffect)(() => {
+    alive.current = true;
+    refresh();
+    const timer = setInterval(() => {
+      if (globalThis.document?.visibilityState !== "hidden") refresh();
+    }, POLL_MS3);
+    return () => {
+      alive.current = false;
+      clearInterval(timer);
+    };
+  }, [refresh]);
+  const roster = (0, import_react75.useMemo)(() => {
+    const bots = view?.bots ?? [];
+    return { bots, byId: Object.fromEntries(bots.map((bot) => [bot.id, bot])), board: { cards: view?.cards ?? {} } };
+  }, [view]);
+  const act = (0, import_react75.useCallback)((endpoint, payload) => call2(endpoint, payload).then(
+    (value) => {
+      if (alive.current && value) setView(value);
+    },
+    (error) => {
+      refresh();
+      throw error;
+    }
+  ), [call2, refresh]);
+  const actions = (0, import_react75.useMemo)(() => ({
+    boardAdd: (card) => act("add", card),
+    boardMove: (id, status) => act("move", { id, status }),
+    boardNote: (id, text) => act("note", { id, text }),
+    boardCancel: (id, reason) => act("cancel", { id, reason }),
+    closeBoard: close,
+    reportError: () => refresh()
+  }), [act, close, refresh]);
+  return (0, import_react75.createElement)(BoardDialog, { roster, actions, paneLeft, leaving });
+}
+function installBoardPage(pages, { call: call2 = boardCall, retryMs = 3e3 } = {}) {
+  let disposed = false;
+  let unregister;
+  let timer;
+  const probe = (tries) => {
+    Promise.resolve().then(() => call2("state")).then((value) => {
+      if (disposed || value === void 0) return;
+      unregister = pages.register({
+        id: "board",
+        title: t("Board"),
+        icon: BoardIcon,
+        order: 10,
+        Page: ({ close, paneLeft, leaving }) => (0, import_react75.createElement)(BoardPage, { first: value, call: call2, close, paneLeft, leaving })
+      });
+    }, () => {
+      if (!disposed && tries > 0) timer = setTimeout(() => probe(tries - 1), retryMs);
+    });
+  };
+  probe(1);
+  return () => {
+    disposed = true;
+    clearTimeout(timer);
+    unregister?.();
+  };
+}
+
 // src/client/read-page.js
 var READ_LIMITS = {
   chars: 4e5,
@@ -44401,15 +45004,15 @@ function proposalCards({ proposals = [], settled = [], failures = {} }) {
 }
 
 // src/client/learning-card.js
-var import_react73 = require("react");
+var import_react76 = require("react");
 var failedAnswers = /* @__PURE__ */ new Map();
 function ProposalCard({ proposal, initialError = "", onFailure, onResolved, actions }) {
   const outcome = proposal.outcome;
-  const [busy, setBusy] = (0, import_react73.useState)(false);
-  const [error, setError] = (0, import_react73.useState)(initialError);
-  const [open, setOpen] = (0, import_react73.useState)(false);
-  const busyRef = (0, import_react73.useRef)(false);
-  const titleId = (0, import_react73.useId)();
+  const [busy, setBusy] = (0, import_react76.useState)(false);
+  const [error, setError] = (0, import_react76.useState)(initialError);
+  const [open, setOpen] = (0, import_react76.useState)(false);
+  const busyRef = (0, import_react76.useRef)(false);
+  const titleId = (0, import_react76.useId)();
   const answer = (approve) => {
     if (busyRef.current) return;
     busyRef.current = true;
@@ -44425,68 +45028,68 @@ function ProposalCard({ proposal, initialError = "", onFailure, onResolved, acti
   };
   const update = proposal.action === "update";
   const agents = proposal.kind === "agents";
-  const rows2 = (0, import_react73.useMemo)(() => lineDiff(update ? proposal.previous?.content : "", proposal.content), [update, proposal.previous?.content, proposal.content]);
+  const rows2 = (0, import_react76.useMemo)(() => lineDiff(update ? proposal.previous?.content : "", proposal.content), [update, proposal.previous?.content, proposal.content]);
   const change = agents ? [
-    (0, import_react73.createElement)(FileBox, { key: "file", name: "AGENTS.md", path: proposal.folder, state: proposal.exists === false ? "Added" : "Modified", blocks: proposal.edits.map((edit) => [
+    (0, import_react76.createElement)(FileBox, { key: "file", name: "AGENTS.md", path: proposal.folder, state: proposal.exists === false ? "Added" : "Modified", blocks: proposal.edits.map((edit) => [
       ...(edit.op === "add" ? [] : editLines(edit.old)).map((line) => ({ kind: "removed", line })),
       ...(edit.op === "remove" ? [] : editLines(edit.text)).map((line) => ({ kind: "added", line }))
     ]) }),
-    ...proposal.edits.map((edit, index) => edit.why ? (0, import_react73.createElement)("p", { className: "bt-learning-why", key: `why-${index}` }, edit.why) : null)
+    ...proposal.edits.map((edit, index) => edit.why ? (0, import_react76.createElement)("p", { className: "bt-learning-why", key: `why-${index}` }, edit.why) : null)
   ] : [
-    (0, import_react73.createElement)(FileBox, { key: "file", name: "SKILL.md", path: `skills/${proposal.name}`, state: update ? "Updated" : "Added", blocks: [rows2] }),
-    proposal.why ? (0, import_react73.createElement)("p", { className: "bt-learning-why", key: "why" }, proposal.why) : null
+    (0, import_react76.createElement)(FileBox, { key: "file", name: "SKILL.md", path: `skills/${proposal.name}`, state: update ? "Updated" : "Added", blocks: [rows2] }),
+    proposal.why ? (0, import_react76.createElement)("p", { className: "bt-learning-why", key: "why" }, proposal.why) : null
   ];
   const kind = t(agents ? "AGENTS.md update" : update ? "Skill update" : "New skill");
   if (outcome) {
     const what = agents ? proposal.folder : proposal.name;
-    return (0, import_react73.createElement)(
+    return (0, import_react76.createElement)(
       "section",
       { className: "bt-q bt-q-settled bt-learning-card bt-learning-settled", role: "group", "aria-label": `${kind} · ${what}`, "data-outcome": outcome },
-      (0, import_react73.createElement)(
+      (0, import_react76.createElement)(
         "button",
         { type: "button", className: "bt-learning-fold", "aria-expanded": open, onClick: () => setOpen(!open) },
-        (0, import_react73.createElement)("span", { className: "bt-learning-icon", "aria-hidden": true }, (0, import_react73.createElement)(agents ? PencilIcon : MemoryIcon)),
-        (0, import_react73.createElement)("span", { className: "bt-learning-kind" }, kind),
-        (0, import_react73.createElement)("span", { className: "bt-learning-sum" }, `${t(outcome === "approved" ? "Approved" : "Declined")} · ${what}`)
+        (0, import_react76.createElement)("span", { className: "bt-learning-icon", "aria-hidden": true }, (0, import_react76.createElement)(agents ? PencilIcon : MemoryIcon)),
+        (0, import_react76.createElement)("span", { className: "bt-learning-kind" }, kind),
+        (0, import_react76.createElement)("span", { className: "bt-learning-sum" }, `${t(outcome === "approved" ? "Approved" : "Declined")} · ${what}`)
       ),
       open ? change : null
     );
   }
   const oldDetail = update && typeof proposal.previous?.description === "string" && proposal.previous.description !== proposal.description ? proposal.previous.description : void 0;
-  return (0, import_react73.createElement)(
+  return (0, import_react76.createElement)(
     "section",
     { className: "bt-q bt-learning-card", role: "group", "aria-labelledby": titleId, "aria-busy": busy },
-    agents ? (0, import_react73.createElement)(ProposalHead, { titleId, icon: PencilIcon, title: kind }) : (0, import_react73.createElement)(ProposalHead, { titleId, title: proposal.name, kind, detail: proposal.description, oldDetail }),
+    agents ? (0, import_react76.createElement)(ProposalHead, { titleId, icon: PencilIcon, title: kind }) : (0, import_react76.createElement)(ProposalHead, { titleId, title: proposal.name, kind, detail: proposal.description, oldDetail }),
     change,
-    error ? (0, import_react73.createElement)("div", { className: "bt-learning-error", role: "alert" }, error) : null,
-    (0, import_react73.createElement)(ProposalFoot, { busy, answer })
+    error ? (0, import_react76.createElement)("div", { className: "bt-learning-error", role: "alert" }, error) : null,
+    (0, import_react76.createElement)(ProposalFoot, { busy, answer })
   );
 }
 function ProposalHead({ titleId, icon: icon2 = MemoryIcon, title, kind, detail, oldDetail }) {
-  return (0, import_react73.createElement)(
+  return (0, import_react76.createElement)(
     "div",
     { className: "bt-q-head" },
-    (0, import_react73.createElement)("span", { className: "bt-learning-icon", "aria-hidden": true }, (0, import_react73.createElement)(icon2)),
-    (0, import_react73.createElement)(
+    (0, import_react76.createElement)("span", { className: "bt-learning-icon", "aria-hidden": true }, (0, import_react76.createElement)(icon2)),
+    (0, import_react76.createElement)(
       "div",
       { className: "bt-q-text" },
-      (0, import_react73.createElement)("p", { className: "bt-q-title", id: titleId }, title),
-      kind ? (0, import_react73.createElement)("div", { className: "bt-q-detail" }, kind) : null,
-      oldDetail ? (0, import_react73.createElement)("p", { className: "bt-learning-description bt-learning-old" }, (0, import_react73.createElement)("del", null, oldDetail)) : null,
-      detail ? (0, import_react73.createElement)("p", { className: "bt-learning-description" }, detail) : null
+      (0, import_react76.createElement)("p", { className: "bt-q-title", id: titleId }, title),
+      kind ? (0, import_react76.createElement)("div", { className: "bt-q-detail" }, kind) : null,
+      oldDetail ? (0, import_react76.createElement)("p", { className: "bt-learning-description bt-learning-old" }, (0, import_react76.createElement)("del", null, oldDetail)) : null,
+      detail ? (0, import_react76.createElement)("p", { className: "bt-learning-description" }, detail) : null
     ),
-    (0, import_react73.createElement)("span", { className: "bt-q-badge bt-learning-status" }, (0, import_react73.createElement)("span", { className: "bt-learning-dot", "aria-hidden": true }), t("Awaiting approval"))
+    (0, import_react76.createElement)("span", { className: "bt-q-badge bt-learning-status" }, (0, import_react76.createElement)("span", { className: "bt-learning-dot", "aria-hidden": true }), t("Awaiting approval"))
   );
 }
 function ProposalFoot({ busy, answer }) {
-  return (0, import_react73.createElement)(
+  return (0, import_react76.createElement)(
     "div",
     { className: "bt-q-foot bt-learning-foot" },
-    (0, import_react73.createElement)("button", { type: "button", className: "bt-learning-btn bt-learning-decline", disabled: busy, onClick: () => answer(false) }, t("Decline")),
-    (0, import_react73.createElement)(
+    (0, import_react76.createElement)("button", { type: "button", className: "bt-learning-btn bt-learning-decline", disabled: busy, onClick: () => answer(false) }, t("Decline")),
+    (0, import_react76.createElement)(
       "button",
       { type: "button", className: "bt-learning-btn bt-learning-approve", disabled: busy, onClick: () => answer(true) },
-      (0, import_react73.createElement)(CheckIcon),
+      (0, import_react76.createElement)(CheckIcon),
       t("Approve")
     )
   );
@@ -44494,43 +45097,43 @@ function ProposalFoot({ busy, answer }) {
 var COLLAPSE_ROWS = 8;
 var SIGNS = { added: "+", removed: "−", same: "" };
 function FileBox({ name, path: path2, state, blocks }) {
-  const [open, setOpen] = (0, import_react73.useState)(false);
+  const [open, setOpen] = (0, import_react76.useState)(false);
   const all = blocks.flat();
   const added = all.filter((row) => row.kind === "added").length;
   const removed = all.filter((row) => row.kind === "removed").length;
   const folds = all.length > COLLAPSE_ROWS;
   const shut = folds && !open;
-  return (0, import_react73.createElement)(
+  return (0, import_react76.createElement)(
     "div",
     { className: "bt-learning-file" },
-    (0, import_react73.createElement)(
+    (0, import_react76.createElement)(
       "div",
       { className: "bt-learning-filehead" },
-      (0, import_react73.createElement)("span", { className: "bt-learning-name" }, name),
-      path2 ? (0, import_react73.createElement)("span", { className: "bt-learning-path" }, path2) : null,
-      (0, import_react73.createElement)("span", { className: "bt-learning-spacer" }),
-      added > 0 ? (0, import_react73.createElement)("span", { className: "bt-learning-plus" }, `+${added}`) : null,
-      removed > 0 ? (0, import_react73.createElement)("span", { className: "bt-learning-minus" }, `−${removed}`) : null,
-      (0, import_react73.createElement)("span", { className: `bt-learning-state bt-learning-state-${state.toLowerCase()}` }, t(state))
+      (0, import_react76.createElement)("span", { className: "bt-learning-name" }, name),
+      path2 ? (0, import_react76.createElement)("span", { className: "bt-learning-path" }, path2) : null,
+      (0, import_react76.createElement)("span", { className: "bt-learning-spacer" }),
+      added > 0 ? (0, import_react76.createElement)("span", { className: "bt-learning-plus" }, `+${added}`) : null,
+      removed > 0 ? (0, import_react76.createElement)("span", { className: "bt-learning-minus" }, `−${removed}`) : null,
+      (0, import_react76.createElement)("span", { className: `bt-learning-state bt-learning-state-${state.toLowerCase()}` }, t(state))
     ),
-    (0, import_react73.createElement)(
+    (0, import_react76.createElement)(
       "div",
       { className: shut ? "bt-learning-code bt-learning-shut" : "bt-learning-code" },
       blocks.map((rows2, blockIndex) => [
-        blockIndex > 0 ? (0, import_react73.createElement)("div", { className: "bt-learning-gap", key: `gap-${blockIndex}` }) : null,
-        ...rows2.map((row, rowIndex) => (0, import_react73.createElement)(
+        blockIndex > 0 ? (0, import_react76.createElement)("div", { className: "bt-learning-gap", key: `gap-${blockIndex}` }) : null,
+        ...rows2.map((row, rowIndex) => (0, import_react76.createElement)(
           "div",
           { className: `bt-learning-row bt-learning-${row.kind}`, key: `${blockIndex}-${rowIndex}` },
-          (0, import_react73.createElement)("span", { className: "bt-learning-num", "aria-hidden": true }, row.number ?? ""),
-          (0, import_react73.createElement)("span", { className: "bt-learning-sign", "aria-hidden": true }, SIGNS[row.kind]),
-          (0, import_react73.createElement)("span", { className: "bt-learning-text" }, row.line || " ")
+          (0, import_react76.createElement)("span", { className: "bt-learning-num", "aria-hidden": true }, row.number ?? ""),
+          (0, import_react76.createElement)("span", { className: "bt-learning-sign", "aria-hidden": true }, SIGNS[row.kind]),
+          (0, import_react76.createElement)("span", { className: "bt-learning-text" }, row.line || " ")
         ))
       ])
     ),
-    folds ? (0, import_react73.createElement)(
+    folds ? (0, import_react76.createElement)(
       "div",
       { className: shut ? "bt-learning-morebar bt-learning-morebar-shut" : "bt-learning-morebar" },
-      (0, import_react73.createElement)(
+      (0, import_react76.createElement)(
         "button",
         { type: "button", className: "bt-learning-more", "aria-expanded": open, onClick: () => setOpen(!open) },
         t(open ? "Show less" : "Show all {count} lines", { count: all.length })
@@ -44541,10 +45144,10 @@ function FileBox({ name, path: path2, state, blocks }) {
 function LearningProposals({ turn, dock, sessionId, useRoster, actions }) {
   const roster = useRoster((value) => value);
   const facts = useTurnFacts(sessionId, actions);
-  const [failed, setFailed] = (0, import_react73.useState)({});
+  const [failed, setFailed] = (0, import_react76.useState)({});
   const bot = roster.byId?.[sessionId];
   const settledIds = (bot === void 0 ? [] : roster.learningSettled?.[bot.id] ?? []).map((entry) => entry.id);
-  (0, import_react73.useEffect)(() => {
+  (0, import_react76.useEffect)(() => {
     const gone = Object.keys(failed).filter((id) => settledIds.includes(id));
     if (gone.length === 0) return;
     for (const id of gone) failedAnswers.delete(id);
@@ -44569,10 +45172,10 @@ function LearningProposals({ turn, dock, sessionId, useRoster, actions }) {
     failedAnswers.delete(id);
     return withoutEntry(current2, id);
   });
-  return (0, import_react73.createElement)("div", { className: dock ? "bt-learning-stack bt-learning-dock" : "bt-learning-stack" }, cards.map((proposal) => (0, import_react73.createElement)(
+  return (0, import_react76.createElement)("div", { className: dock ? "bt-learning-stack bt-learning-dock" : "bt-learning-stack" }, cards.map((proposal) => (0, import_react76.createElement)(
     "div",
     { className: "bt-q-inline", key: proposal.id },
-    (0, import_react73.createElement)(ProposalCard, {
+    (0, import_react76.createElement)(ProposalCard, {
       proposal,
       initialError: failed[proposal.id]?.error ?? failedAnswers.get(proposal.id)?.error,
       onFailure,
@@ -44582,10 +45185,10 @@ function LearningProposals({ turn, dock, sessionId, useRoster, actions }) {
   )));
 }
 function LearningTurnTail(props) {
-  return (0, import_react73.createElement)(LearningProposals, { ...props, dock: false });
+  return (0, import_react76.createElement)(LearningProposals, { ...props, dock: false });
 }
 function LearningDock(props) {
-  return (0, import_react73.createElement)(LearningProposals, { ...props, dock: true });
+  return (0, import_react76.createElement)(LearningProposals, { ...props, dock: true });
 }
 var LEARNING_CSS = `
 .bt-learning-stack{display:flex;flex-direction:column;gap:4px}
@@ -44646,17 +45249,17 @@ var LEARNING_CSS = `
 `;
 
 // src/client/read-only-dock.js
-var import_react74 = require("react");
+var import_react77 = require("react");
 function ReadOnlyDock({ sessionId, useUi, useRoster, actions }) {
   const readOnlyPart = useUi((state) => state.readOnlyPart);
   const bot = useRoster((state) => state.byId?.[sessionId] ?? Object.values(state.byId ?? {}).find((entry) => entry?.sessionId === sessionId));
   const running = useRoster((state) => state.partsRunning?.[sessionId] === true);
   const active = readOnlyPart !== null && readOnlyPart === sessionId && running;
-  const root = (0, import_react74.useRef)(null);
-  (0, import_react74.useEffect)(() => {
+  const root = (0, import_react77.useRef)(null);
+  (0, import_react77.useEffect)(() => {
     if (readOnlyPart !== null && readOnlyPart === sessionId && !running) actions.clearReadOnlyPart?.();
   }, [readOnlyPart, sessionId, running]);
-  (0, import_react74.useEffect)(() => {
+  (0, import_react77.useEffect)(() => {
     if (!active) return void 0;
     const card = root.current?.closest("[data-composer-card]") ?? document.querySelector("[data-composer-card]");
     if (card === null || card === void 0) return void 0;
@@ -44681,11 +45284,11 @@ function ReadOnlyDock({ sessionId, useUi, useRoster, actions }) {
       card.removeEventListener("click", onClick, true);
     };
   }, [active]);
-  return (0, import_react74.createElement)(
+  return (0, import_react77.createElement)(
     "div",
     { ref: root, className: "bt-readonly-dock", "data-on": active ? "" : void 0, role: "status", hidden: !active },
-    (0, import_react74.createElement)("span", { className: "bt-readonly-text" }, t("This session is still running. Wait for it to finish, or stop it.")),
-    (0, import_react74.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", onClick: () => actions.stopChat(bot.id) }, t("Stop"))
+    (0, import_react77.createElement)("span", { className: "bt-readonly-text" }, t("This session is still running. Wait for it to finish, or stop it.")),
+    (0, import_react77.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", onClick: () => actions.stopChat(bot.id) }, t("Stop"))
   );
 }
 var READ_ONLY_CSS = `
@@ -44817,7 +45420,7 @@ function installBotMentionRule(userText, roster) {
 }
 
 // src/client/queue-dock.js
-var import_react75 = require("react");
+var import_react78 = require("react");
 var OWN_QUEUE_KINDS = /* @__PURE__ */ new Set(["user", "schedule", "user-question-reply"]);
 var EMPTY_QUEUE = [];
 var QUEUE_TEXT_FACTS = { collapseWhitespace: true, trimWhitespace: true };
@@ -44834,17 +45437,17 @@ function queueAttachments(content) {
 var fileSizeText2 = (bytes) => typeof bytes !== "number" || !Number.isFinite(bytes) ? "" : bytes < 1024 ? `${bytes} B` : bytes < 1048576 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1048576).toFixed(1)} MB`;
 function QueueFile({ attachment, label }) {
   const size = fileSizeText2(attachment.bytes);
-  return (0, import_react75.createElement)(
+  return (0, import_react78.createElement)(
     "span",
     { className: "bt-queue-file", "aria-label": label, title: attachment.name },
-    (0, import_react75.createElement)("span", { className: "bt-queue-fileicon", "aria-hidden": true }, (0, import_react75.createElement)(PaperclipIcon)),
-    (0, import_react75.createElement)("span", { className: "bt-queue-filename" }, attachment.name),
-    size !== "" ? (0, import_react75.createElement)("span", { className: "bt-queue-filesize" }, size) : null
+    (0, import_react78.createElement)("span", { className: "bt-queue-fileicon", "aria-hidden": true }, (0, import_react78.createElement)(PaperclipIcon)),
+    (0, import_react78.createElement)("span", { className: "bt-queue-filename" }, attachment.name),
+    size !== "" ? (0, import_react78.createElement)("span", { className: "bt-queue-filesize" }, size) : null
   );
 }
 function QueueThumb({ attachment, loadImage, label }) {
-  const [url, setUrl] = (0, import_react75.useState)(null);
-  (0, import_react75.useEffect)(() => {
+  const [url, setUrl] = (0, import_react78.useState)(null);
+  (0, import_react78.useEffect)(() => {
     let alive = true;
     loadImage(attachment).then((resolved) => {
       if (alive) setUrl(resolved);
@@ -44854,22 +45457,22 @@ function QueueThumb({ attachment, loadImage, label }) {
       alive = false;
     };
   }, [attachment, loadImage]);
-  return url === null ? (0, import_react75.createElement)("span", { className: "bt-queue-thumb", "aria-hidden": true }) : (0, import_react75.createElement)("img", { className: "bt-queue-thumb", src: url, alt: label });
+  return url === null ? (0, import_react78.createElement)("span", { className: "bt-queue-thumb", "aria-hidden": true }) : (0, import_react78.createElement)("img", { className: "bt-queue-thumb", src: url, alt: label });
 }
 function Preview({ text, renderFactorySlot }) {
   const rendered = renderFactorySlot?.("conversation.user.text", { text, facts: QUEUE_TEXT_FACTS, interactive: false, ellipsis: true });
-  return (0, import_react75.createElement)("span", { className: "bt-queue-preview" }, rendered ?? text);
+  return (0, import_react78.createElement)("span", { className: "bt-queue-preview" }, rendered ?? text);
 }
 function EditField({ text, onChange, onSave, onCancel }) {
-  const field = (0, import_react75.useRef)(null);
-  (0, import_react75.useEffect)(() => {
+  const field = (0, import_react78.useRef)(null);
+  (0, import_react78.useEffect)(() => {
     const node = field.current;
     if (node === null) return;
     node.focus();
     node.style.height = "auto";
     node.style.height = `${node.scrollHeight}px`;
   }, [text]);
-  return (0, import_react75.createElement)("textarea", {
+  return (0, import_react78.createElement)("textarea", {
     ref: field,
     className: "bt-queue-edit",
     value: text,
@@ -44888,28 +45491,28 @@ function EditField({ text, onChange, onSave, onCancel }) {
   });
 }
 function RowButton({ label, title, disabled, onClick, children }) {
-  return (0, import_react75.createElement)("button", { type: "button", className: "bt-queue-action", "aria-label": label, title: title ?? label, disabled, onClick }, children);
+  return (0, import_react78.createElement)("button", { type: "button", className: "bt-queue-action", "aria-label": label, title: title ?? label, disabled, onClick }, children);
 }
 function QueueDock({ useSession, useProjection, updateQueue, loadImage, renderFactorySlot, actions }) {
   const inbox = useProjection?.("inbox");
   const pendingSubmissions = useSession?.((s) => s.pendingSubmissions) ?? EMPTY_QUEUE;
-  const queue = (0, import_react75.useMemo)(() => {
+  const queue = (0, import_react78.useMemo)(() => {
     const rows2 = (inbox?.["next-turn"] ?? EMPTY_QUEUE).filter((row) => OWN_QUEUE_KINDS.has(row.source?.kind));
     const inChat = new Set(pendingSubmissions.filter((item) => item.placement === "transcript").map((item) => item.requestId));
     return inChat.size === 0 ? rows2 : rows2.filter(({ source }) => source === null || typeof source !== "object" || !("rpcId" in source) || !inChat.has(source.rpcId));
   }, [inbox, pendingSubmissions]);
-  const pendingQueue = (0, import_react75.useMemo)(() => {
+  const pendingQueue = (0, import_react78.useMemo)(() => {
     const admitted = new Set(queue.flatMap(({ source }) => source !== null && typeof source === "object" && "rpcId" in source ? [source.rpcId] : []));
     return pendingSubmissions.filter((submission) => submission.placement === "queued" && !admitted.has(submission.requestId));
   }, [pendingSubmissions, queue]);
   const rowCount = queue.length + pendingQueue.length;
   const running = useSession?.((s) => s.running) === true;
   const queueMutable = useSession?.((s) => s.subagent === null || s.subagent === void 0 || s.subagent.address?.mode === "continuable") ?? true;
-  const [editing, setEditing] = (0, import_react75.useState)(null);
-  const [busy, setBusy] = (0, import_react75.useState)(null);
-  const [collapsed, setCollapsed] = (0, import_react75.useState)(true);
-  const listId = (0, import_react75.useId)();
-  (0, import_react75.useEffect)(() => {
+  const [editing, setEditing] = (0, import_react78.useState)(null);
+  const [busy, setBusy] = (0, import_react78.useState)(null);
+  const [collapsed, setCollapsed] = (0, import_react78.useState)(true);
+  const listId = (0, import_react78.useId)();
+  (0, import_react78.useEffect)(() => {
     if (rowCount === 0 && !collapsed) setCollapsed(true);
     if (editing !== null && (!queueMutable || !queue.some((row) => row.id === editing.id))) setEditing(null);
   }, [collapsed, editing, queue, queueMutable, rowCount]);
@@ -44937,77 +45540,77 @@ function QueueDock({ useSession, useProjection, updateQueue, loadImage, renderFa
     if (editing === null || editing.text.trim() === "") return;
     if (await applyAction(editing.id, { kind: "edit", content: [{ type: "text", text: editing.text }] }, t("Couldn’t edit the queued message — it may have started already."))) setEditing(null);
   };
-  return (0, import_react75.createElement)(
+  return (0, import_react78.createElement)(
     "div",
     { className: "bt-queue-dock", "data-queue-dock": "" },
-    (0, import_react75.createElement)(
+    (0, import_react78.createElement)(
       "div",
       { className: "bt-queue-panel" },
-      rowCount > 1 && (0, import_react75.createElement)(
+      rowCount > 1 && (0, import_react78.createElement)(
         "button",
         { type: "button", className: "bt-queue-head", "aria-controls": listId, "aria-expanded": expanded, disabled: interactionActive, onClick: () => setCollapsed((value) => !value) },
-        (0, import_react75.createElement)("span", { className: "bt-queue-lead", "aria-hidden": true }, (0, import_react75.createElement)(QueueIcon)),
-        (0, import_react75.createElement)("span", { className: "bt-queue-count" }, t("{n} queued messages", { n: rowCount })),
-        !listVisible && pendingQueue.length > 0 && (0, import_react75.createElement)("span", { className: "bt-queue-status", role: "status" }, t("Sending…")),
-        (0, import_react75.createElement)("span", { className: "bt-queue-chev", "aria-hidden": true }, expanded ? (0, import_react75.createElement)(ChevronDownIcon) : (0, import_react75.createElement)(ChevronUpIcon))
+        (0, import_react78.createElement)("span", { className: "bt-queue-lead", "aria-hidden": true }, (0, import_react78.createElement)(QueueIcon)),
+        (0, import_react78.createElement)("span", { className: "bt-queue-count" }, t("{n} queued messages", { n: rowCount })),
+        !listVisible && pendingQueue.length > 0 && (0, import_react78.createElement)("span", { className: "bt-queue-status", role: "status" }, t("Sending…")),
+        (0, import_react78.createElement)("span", { className: "bt-queue-chev", "aria-hidden": true }, expanded ? (0, import_react78.createElement)(ChevronDownIcon) : (0, import_react78.createElement)(ChevronUpIcon))
       ),
-      (0, import_react75.createElement)(
+      (0, import_react78.createElement)(
         "ul",
         { id: listId, className: "bt-queue-list", hidden: !listVisible },
         listVisible && queue.map((row) => {
           const attachments = queueAttachments(row.content);
           const text = textOf(row.content);
-          return (0, import_react75.createElement)(
+          return (0, import_react78.createElement)(
             "li",
             { key: row.id, className: "bt-queue-row" },
-            rowCount === 1 && (0, import_react75.createElement)("span", { className: "bt-queue-lead", "aria-hidden": true }, (0, import_react75.createElement)(QueueIcon)),
-            editing?.id === row.id ? (0, import_react75.createElement)(EditField, { text: editing.text, onChange: (text2) => setEditing({ id: row.id, text: text2 }), onSave: saveEdit, onCancel: () => setEditing(null) }) : (0, import_react75.createElement)(
-              import_react75.Fragment,
+            rowCount === 1 && (0, import_react78.createElement)("span", { className: "bt-queue-lead", "aria-hidden": true }, (0, import_react78.createElement)(QueueIcon)),
+            editing?.id === row.id ? (0, import_react78.createElement)(EditField, { text: editing.text, onChange: (text2) => setEditing({ id: row.id, text: text2 }), onSave: saveEdit, onCancel: () => setEditing(null) }) : (0, import_react78.createElement)(
+              import_react78.Fragment,
               null,
-              attachments.length > 0 && (0, import_react75.createElement)(
+              attachments.length > 0 && (0, import_react78.createElement)(
                 "span",
                 { className: "bt-queue-attachments" },
-                attachments.map((item, index) => item.type === "image" ? (0, import_react75.createElement)(QueueThumb, { key: `${item.attachment.attachmentId}:${index}`, attachment: item.attachment, loadImage, label: t("Queued image") }) : (0, import_react75.createElement)(QueueFile, { key: `${item.attachment.attachmentId}:${item.attachment.name}:${index}`, attachment: item.attachment, label: t("Queued file {name}", { name: item.attachment.name }) }))
+                attachments.map((item, index) => item.type === "image" ? (0, import_react78.createElement)(QueueThumb, { key: `${item.attachment.attachmentId}:${index}`, attachment: item.attachment, loadImage, label: t("Queued image") }) : (0, import_react78.createElement)(QueueFile, { key: `${item.attachment.attachmentId}:${item.attachment.name}:${index}`, attachment: item.attachment, label: t("Queued file {name}", { name: item.attachment.name }) }))
               ),
-              (0, import_react75.createElement)(Preview, { text: row.content.filter((block) => block.type === "text").map((block) => block.text).join(""), renderFactorySlot })
+              (0, import_react78.createElement)(Preview, { text: row.content.filter((block) => block.type === "text").map((block) => block.text).join(""), renderFactorySlot })
             ),
-            queueMutable && (0, import_react75.createElement)(
+            queueMutable && (0, import_react78.createElement)(
               "div",
               { className: "bt-queue-actions" },
-              editing?.id === row.id ? (0, import_react75.createElement)(
-                import_react75.Fragment,
+              editing?.id === row.id ? (0, import_react78.createElement)(
+                import_react78.Fragment,
                 null,
-                (0, import_react75.createElement)(RowButton, { label: t("Save queued message"), disabled: busy !== null || editing.text.trim() === "", onClick: saveEdit }, (0, import_react75.createElement)(CheckIcon)),
-                (0, import_react75.createElement)(RowButton, { label: t("Cancel editing"), disabled: busy !== null, onClick: () => setEditing(null) }, (0, import_react75.createElement)(CloseIcon))
-              ) : (0, import_react75.createElement)(
-                import_react75.Fragment,
+                (0, import_react78.createElement)(RowButton, { label: t("Save queued message"), disabled: busy !== null || editing.text.trim() === "", onClick: saveEdit }, (0, import_react78.createElement)(CheckIcon)),
+                (0, import_react78.createElement)(RowButton, { label: t("Cancel editing"), disabled: busy !== null, onClick: () => setEditing(null) }, (0, import_react78.createElement)(CloseIcon))
+              ) : (0, import_react78.createElement)(
+                import_react78.Fragment,
                 null,
-                (0, import_react75.createElement)(RowButton, { label: t("Edit queued message"), title: text === null ? t("Contains non-text content, so editing is not supported yet") : void 0, disabled: busy !== null || text === null, onClick: () => {
+                (0, import_react78.createElement)(RowButton, { label: t("Edit queued message"), title: text === null ? t("Contains non-text content, so editing is not supported yet") : void 0, disabled: busy !== null || text === null, onClick: () => {
                   if (text !== null) setEditing({ id: row.id, text });
-                } }, (0, import_react75.createElement)(PencilIcon)),
-                (0, import_react75.createElement)(RowButton, { label: t("Delete queued message"), disabled: busy !== null, onClick: () => applyAction(row.id, { kind: "remove" }, t("Couldn’t delete the queued message — it may have started already.")) }, (0, import_react75.createElement)(TrashIcon)),
-                (0, import_react75.createElement)(RowButton, { label: t("Steer queued message"), title: running ? void 0 : t("Only while a turn is running"), disabled: busy !== null || !running, onClick: () => applyAction(row.id, { kind: "steer" }, t("Couldn’t steer the queued message. Try again.")) }, (0, import_react75.createElement)(ArrowUpIcon))
+                } }, (0, import_react78.createElement)(PencilIcon)),
+                (0, import_react78.createElement)(RowButton, { label: t("Delete queued message"), disabled: busy !== null, onClick: () => applyAction(row.id, { kind: "remove" }, t("Couldn’t delete the queued message — it may have started already.")) }, (0, import_react78.createElement)(TrashIcon)),
+                (0, import_react78.createElement)(RowButton, { label: t("Steer queued message"), title: running ? void 0 : t("Only while a turn is running"), disabled: busy !== null || !running, onClick: () => applyAction(row.id, { kind: "steer" }, t("Couldn’t steer the queued message. Try again.")) }, (0, import_react78.createElement)(ArrowUpIcon))
               )
             )
           );
         }),
-        listVisible && pendingQueue.map((submission) => (0, import_react75.createElement)(
+        listVisible && pendingQueue.map((submission) => (0, import_react78.createElement)(
           "li",
           { key: submission.requestId, className: "bt-queue-row bt-queue-pending" },
-          rowCount === 1 && (0, import_react75.createElement)("span", { className: "bt-queue-lead", "aria-hidden": true }, (0, import_react75.createElement)(QueueIcon)),
-          submission.attachments.length > 0 && (0, import_react75.createElement)(
+          rowCount === 1 && (0, import_react78.createElement)("span", { className: "bt-queue-lead", "aria-hidden": true }, (0, import_react78.createElement)(QueueIcon)),
+          submission.attachments.length > 0 && (0, import_react78.createElement)(
             "span",
             { className: "bt-queue-attachments" },
-            submission.attachments.map((attachment, index) => attachment.type === "image" ? (0, import_react75.createElement)("img", { key: `${attachment.value.previewUrl}:${index}`, className: "bt-queue-thumb", src: attachment.value.previewUrl, alt: t("Queued image") }) : (0, import_react75.createElement)(QueueFile, { key: `${attachment.value.attachmentId}:${attachment.value.name}:${index}`, attachment: attachment.value, label: t("Queued file {name}", { name: attachment.value.name }) }))
+            submission.attachments.map((attachment, index) => attachment.type === "image" ? (0, import_react78.createElement)("img", { key: `${attachment.value.previewUrl}:${index}`, className: "bt-queue-thumb", src: attachment.value.previewUrl, alt: t("Queued image") }) : (0, import_react78.createElement)(QueueFile, { key: `${attachment.value.attachmentId}:${attachment.value.name}:${index}`, attachment: attachment.value, label: t("Queued file {name}", { name: attachment.value.name }) }))
           ),
-          (0, import_react75.createElement)(Preview, { text: submission.text, renderFactorySlot }),
-          (0, import_react75.createElement)("span", { className: "bt-queue-status", role: "status" }, t("Sending…")),
-          queueMutable && (0, import_react75.createElement)(
+          (0, import_react78.createElement)(Preview, { text: submission.text, renderFactorySlot }),
+          (0, import_react78.createElement)("span", { className: "bt-queue-status", role: "status" }, t("Sending…")),
+          queueMutable && (0, import_react78.createElement)(
             "div",
             { className: "bt-queue-actions" },
-            (0, import_react75.createElement)(RowButton, { label: t("Edit queued message"), title: t("Sending…"), disabled: true }, (0, import_react75.createElement)(PencilIcon)),
-            (0, import_react75.createElement)(RowButton, { label: t("Delete queued message"), title: t("Sending…"), disabled: true }, (0, import_react75.createElement)(TrashIcon)),
-            (0, import_react75.createElement)(RowButton, { label: t("Steer queued message"), title: t("Sending…"), disabled: true }, (0, import_react75.createElement)(ArrowUpIcon))
+            (0, import_react78.createElement)(RowButton, { label: t("Edit queued message"), title: t("Sending…"), disabled: true }, (0, import_react78.createElement)(PencilIcon)),
+            (0, import_react78.createElement)(RowButton, { label: t("Delete queued message"), title: t("Sending…"), disabled: true }, (0, import_react78.createElement)(TrashIcon)),
+            (0, import_react78.createElement)(RowButton, { label: t("Steer queued message"), title: t("Sending…"), disabled: true }, (0, import_react78.createElement)(ArrowUpIcon))
           )
         ))
       )
@@ -45268,7 +45871,7 @@ function singleFlight(map, key, run2) {
 }
 
 // src/client/text-annotation.js
-var import_react76 = require("react");
+var import_react79 = require("react");
 var quoteMarkdown = (text) => text.replace(/\r\n?/gu, "\n").split("\n").map((line) => `> ${line}`).join("\n");
 var withAnnotation = (text, annotation) => annotation.trim() ? `${text}
 
@@ -45281,23 +45884,23 @@ function insertAnnotation(inputActions, text, annotation) {
 function TextSelectionAction({ sessionId, dismiss, readText, clearSelection, inputActions, useSession, useRoster, actions, t: hostT }) {
   const enabled = useSession((state) => !state.removed && (state.subagent === null || state.subagent.address.mode === "continuable" && state.subagent.parentAvailable === true));
   const team = useRoster((state) => state.byId[sessionId] !== void 0 || state.roomsById[sessionId] !== void 0);
-  const [editing, setEditing] = (0, import_react76.useState)(false);
-  const [excerpt, setExcerpt] = (0, import_react76.useState)(null);
-  const [annotation, setAnnotation] = (0, import_react76.useState)("");
-  const [sending, setSending] = (0, import_react76.useState)(false);
-  const [closing, setClosing] = (0, import_react76.useState)(false);
-  const field = (0, import_react76.useRef)(null);
-  const pending = (0, import_react76.useRef)(false);
-  const closeTimer = (0, import_react76.useRef)(null);
-  (0, import_react76.useEffect)(() => {
+  const [editing, setEditing] = (0, import_react79.useState)(false);
+  const [excerpt, setExcerpt] = (0, import_react79.useState)(null);
+  const [annotation, setAnnotation] = (0, import_react79.useState)("");
+  const [sending, setSending] = (0, import_react79.useState)(false);
+  const [closing, setClosing] = (0, import_react79.useState)(false);
+  const field = (0, import_react79.useRef)(null);
+  const pending = (0, import_react79.useRef)(false);
+  const closeTimer = (0, import_react79.useRef)(null);
+  (0, import_react79.useEffect)(() => {
     if (!enabled) dismiss();
   }, [enabled, dismiss]);
-  (0, import_react76.useEffect)(() => {
+  (0, import_react79.useEffect)(() => {
     if (!team || !enabled || !editing) return;
     field.current?.focus();
     if (typeof window !== "undefined") window.dispatchEvent(new Event("resize"));
   }, [team, enabled, editing]);
-  (0, import_react76.useEffect)(() => () => clearTimeout(closeTimer.current), []);
+  (0, import_react79.useEffect)(() => () => clearTimeout(closeTimer.current), []);
   if (!enabled) return null;
   const close = () => {
     clearSelection();
@@ -45370,7 +45973,7 @@ function TextSelectionAction({ sessionId, dismiss, readText, clearSelection, inp
     else void send();
   };
   if (!team) {
-    return (0, import_react76.createElement)("button", {
+    return (0, import_react79.createElement)("button", {
       type: "button",
       className: "bt-quote-plain",
       "aria-label": hostT("quote.add"),
@@ -45379,17 +45982,17 @@ function TextSelectionAction({ sessionId, dismiss, readText, clearSelection, inp
     }, hostT("quote.add"));
   }
   if (!editing) {
-    return (0, import_react76.createElement)(
+    return (0, import_react79.createElement)(
       "div",
       { className: "bt-selection-actions" },
-      (0, import_react76.createElement)("button", {
+      (0, import_react79.createElement)("button", {
         type: "button",
         className: "bt-selection-action",
         "aria-label": hostT("quote.add"),
         onPointerDown: (event) => event.preventDefault(),
         onClick: quoteOnly
       }, hostT("quote.add")),
-      (0, import_react76.createElement)("button", {
+      (0, import_react79.createElement)("button", {
         type: "button",
         className: "bt-selection-action bt-quote-annotate",
         "aria-label": t("Annotate"),
@@ -45398,12 +46001,12 @@ function TextSelectionAction({ sessionId, dismiss, readText, clearSelection, inp
       }, t("Annotate"))
     );
   }
-  return (0, import_react76.createElement)(
+  return (0, import_react79.createElement)(
     "section",
     { className: "bt-annotation", "aria-label": t("Annotate quote"), "data-leaving": closing || void 0, onPointerDown: (event) => event.stopPropagation() },
-    (0, import_react76.createElement)("label", { className: "bt-annotation-label", htmlFor: "bt-annotation-field" }, t("Annotation")),
-    (0, import_react76.createElement)("blockquote", { className: "bt-annotation-quote" }, quoteText()),
-    (0, import_react76.createElement)("textarea", {
+    (0, import_react79.createElement)("label", { className: "bt-annotation-label", htmlFor: "bt-annotation-field" }, t("Annotation")),
+    (0, import_react79.createElement)("blockquote", { className: "bt-annotation-quote" }, quoteText()),
+    (0, import_react79.createElement)("textarea", {
       id: "bt-annotation-field",
       ref: field,
       value: annotation,
@@ -45414,11 +46017,11 @@ function TextSelectionAction({ sessionId, dismiss, readText, clearSelection, inp
       onChange: (event) => setAnnotation(event.target.value),
       onKeyDown
     }),
-    (0, import_react76.createElement)(
+    (0, import_react79.createElement)(
       "div",
       { className: "bt-annotation-actions" },
-      (0, import_react76.createElement)("button", { type: "button", className: "bt-annotation-add", disabled: sending || closing, onClick: add, title: t("Add quote and annotation to the composer · Enter") }, t("Add")),
-      (0, import_react76.createElement)("button", { type: "button", className: "bt-annotation-send", disabled: sending || closing, onClick: () => void send(), title: t("Send quote and annotation · Ctrl+Enter") }, sending ? t("Sending…") : t("Send"))
+      (0, import_react79.createElement)("button", { type: "button", className: "bt-annotation-add", disabled: sending || closing, onClick: add, title: t("Add quote and annotation to the composer · Enter") }, t("Add")),
+      (0, import_react79.createElement)("button", { type: "button", className: "bt-annotation-send", disabled: sending || closing, onClick: () => void send(), title: t("Send quote and annotation · Ctrl+Enter") }, sending ? t("Sending…") : t("Send"))
     )
   );
 }
@@ -45468,6 +46071,7 @@ function apply(ctx) {
   const ui2 = createSource({ details: null, view: "details", readOnlyPart: null, renaming: false, tab: null, side: null, newChat: null, exchange: null, menu: null, voice: null, palette: null, quote: null, paste: {}, pendingOpen: null, settings: null, memory: null, toast: null, signIn: null, renameAgent: null, unread: unreadStore.read(), reactions: reactionStore.read(), visits: {}, panelYield: false, leftDrawer: false, bootFailed: false, goalCompose: null, goalOpen: null, page: null });
   const pages = createPages();
   if (typeof ctx.provide === "function") ctx.provide("dsBotPages", pages.service);
+  ctx.effect(() => installBoardPage(pages.service), "ds-bot: board page");
   let sidebarSaved = readSidebar();
   const sidebarPref = createSource(sidebarSaved.pref);
   const frame = createSource({ viewport: typeof window === "undefined" ? 0 : window.innerWidth, sidebarWidth: sidebarSaved.width, collapsedWidth: 0, collapsed: false });
@@ -46510,6 +47114,7 @@ function apply(ctx) {
     [ABOUT_CSS, "about"],
     [MEMBER_CSS, "members"],
     [TASK_CSS, "tasks"],
+    [BOARD_CSS, "board"],
     [PASTE_CSS, "paste"],
     [OPENING_CSS, "opening"],
     [IM_CSS, "im"],
