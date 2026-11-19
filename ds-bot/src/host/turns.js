@@ -1143,6 +1143,9 @@ export function install(rt) {
         // turn is settled from the Session's log, is not one (resume.js does that).
         const watched = entry.turn !== undefined
         const turn = entry.turn
+        // The whole answer as the user read it, also steps already shown, and when it began.
+        const said = entry.texts
+        const began = entry.since
         entry.turn = undefined
         entry.info = undefined
         entry.texts = []
@@ -1234,6 +1237,14 @@ export function install(rt) {
           } else {
             void retryWrittenCall(id, info).catch(error => rt.warn('ds-bot: asking %s to run its written tool call failed: %s', id, error))
           }
+        }
+        // A companion (the board) hears the answer the user reads: in the Bot's own chat
+        // a turn the user opened, in a group any of the Bot's turns.
+        if (watched && !retry && failure === undefined && reason?.kind === 'completed') {
+          const roomId = rt.groupOwners.get(id)?.roomId
+          const toUser = roomId !== undefined || (owner !== undefined && (info === undefined || info.role === 'continue'))
+          const text = (wroteCall ? said.map(stripWrittenCalls) : said).join('\n\n').trim()
+          if (toUser && text !== '') rt.botReplied?.({ botId: rt.selfOf(id), ...(roomId === undefined ? {} : { roomId }), text, since: began ?? Date.now() })
         }
         const replyText = () => {
           const reply = (wroteCall ? texts.map(stripWrittenCalls) : texts).join('\n\n').trim()
