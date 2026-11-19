@@ -117,7 +117,7 @@ export const reviewSystem = ({ teamWrites = false, group = false, routes = false
   '  {"op": "edit", "entry": 3, "text": "…"}  replaces entry 3',
   '  {"op": "remove", "entry": 3}',
   'An add may also have "until": "YYYY-MM-DD" when the fact only holds for a while, such as a temporary arrangement or a plan with an end. An entry marked pinned is what the user wants kept: never edit or remove it.',
-  `An entry is one short fact of at most ${MEMORY_LIMITS.entry} characters, in the language the user writes in, that says whom it is about ("The user likes a plain style, mostly black, white, and grey", not "Plain style"). A name, a city, and a preference are three entries.`,
+  `An entry is one short fact of at most ${MEMORY_LIMITS.entry} characters, in the language the user writes in, that says whom it is about ("The user likes a plain style, mostly black, white, and grey", not "Plain style"). A name, a city, and a preference are three entries; a fact that needs more words goes in several entries that each make sense alone.`,
   ...(teamWrites ? [] : [group ? 'Team entries are read only here: keep what this group needs as an entry of the group.' : 'Team entries are read only for you: keep what the whole team needs as an entry of this Bot.']),
 ].join('\n')
 
@@ -146,6 +146,16 @@ export const reviewRequest = ({ who, tag = 'own', numbered, left = 0, sizes, whe
   '',
   `Write every new or changed entry in ${language}.`,
 ].join('\n')
+
+// What the memory review asks when an entry it wrote is too long to keep.
+export const shortenSystem = max => [
+  'You shorten long-term memory entries in DS Bot, an app where a team of AI Bots works for the user.',
+  `Each entry below is longer than the ${max} characters one entry may hold. Rewrite each as one entry of at most ${max} characters or, when it holds more than one fact, as several entries of at most ${max} characters each.`,
+  'Keep every name, number, date, commit, branch, and decision; drop only words that add nothing. Each entry must make sense alone: it says whom or what it is about, never only "it" or "this". Add nothing the entry does not say, and write in the language of the entry.',
+  'Reply with one JSON object and nothing else: {"entries": [["…"], ["…", "…"]]}, one list for each entry below, in the same order.',
+].join('\n')
+
+export const shortenRequest = texts => texts.map((text, at) => `[${at + 1}] ${text}`).join('\n')
 
 export const askRequest = ({ name, group = false, numbered, language, text }) => [
   group ? `Entries of the group chat "${name}" (group: shared by its members):` : `Entries of ${name} (yours: ${name}'s own; team: shared by every Bot):`,

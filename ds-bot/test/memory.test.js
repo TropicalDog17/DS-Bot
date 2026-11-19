@@ -9,7 +9,7 @@ import {
   MEMORY_LIMITS, addLink, cleanEntry, cleanTopic, formatEntry, insertEntry, looksLikeKey,
   looksSecret, matchEntries, parseAsk, parseMemory, parseReview, reviewEntries, removeLink, splitMeta, writtenIn,
 } from '../src/host/memory.js'
-import { fitWindow, promptEntry } from '../src/host/memory-entries.js'
+import { fitWindow, parseShortened, promptEntry, splitEntry } from '../src/host/memory-entries.js'
 import { rankEntries } from '../src/host/memory-search.js'
 import { estimateTokens } from '../src/host/text.js'
 import { latestMemoryChange, summaryBlocks } from '../src/client/text.js'
@@ -1516,7 +1516,6 @@ test('a review keeps what it can, sets aside what memory cannot keep, and says e
     { op: 'add', text: 'The user likes tea' },
     { op: 'remove', entry: 7 },
     { op: 'edit', entry: 9, text: 'The user likes black tea' },
-    { op: 'add', text: `The user tells ${'a long story '.repeat(30)}` },
     { op: 'add', text: 'The user writes C++', topic: 'C++' },
     { op: 'add', text: 'I use hunter2 as my password' },
   ] })]
@@ -1531,10 +1530,9 @@ test('a review keeps what it can, sets aside what memory cannot keep, and says e
   assert.deepEqual(parseMemory(read('bots', 'b2', 'MEMORY.md')).entries.map(entry => entry.text), ['The user likes tea'])
   assert.deepEqual(JSON.parse(read('reviewed.json')), { 'chat:b2': 11 })
   const dropped = warnings.filter(line => line.includes('left out a change'))
-  assert.equal(dropped.length, 5, warnings.join('\n'))
+  assert.equal(dropped.length, 4, warnings.join('\n'))
   assert.ok(dropped.some(line => line.includes('entry 7, which is not listed')))
   assert.ok(dropped.some(line => line.includes('entry 9, which is not listed')))
-  assert.ok(dropped.some(line => line.includes('at most 300 characters') && line.includes('a long story')))
   assert.ok(dropped.some(line => line.includes('the topic "C++", which cannot be a topic name')))
   assert.ok(dropped.some(line => line.includes('looks like a key, token, password, or ID number')))
   assert.ok(!dropped.some(line => line.includes('hunter2')), warnings.join('\n'))
@@ -1542,6 +1540,70 @@ test('a review keeps what it can, sets aside what memory cannot keep, and says e
   ctx.emit('agent/status', { agent: { id: 'b2' }, status: 'idle' })
   await reviewed(call)
   assert.equal(requests.length, 1)
+})
+
+const LONG_FACT = 'go-backend-template: origin/master was force-pushed with a new layout and its own arch test. On 17/11 the user chose to rebuild go-arch-lint on the new master, with LifeCoder checking the layers. The old branch feat/go-arch-lint (90a761e) stays unpushed until the rebuild is reviewed by the user, and trungnt1811 is told before anything is pushed to origin again.'
+
+test('a review entry too long to keep is shortened by the model into entries that fit', async (t) => {
+  assert.ok(LONG_FACT.length > 300)
+  const split = ['go-backend-template: origin/master was force-pushed with a new layout and its own arch test.', 'go-backend-template: on 17/11 the user chose to rebuild go-arch-lint on the new master; feat/go-arch-lint (90a761e) stays unpushed until reviewed.']
+  const replies = [JSON.stringify({ changes: [{ op: 'add', text: 'The user likes tea' }, { op: 'add', text: LONG_FACT, topic: 'projects' }] }), JSON.stringify({ entries: [split] })]
+  const { ctx, call, read, requests, warnings, stop } = start({ replies, config: { memoryReviewDelayMs: 0 } })
+  t.after(() => stop())
+  await call('state', {})
+  ctx.emit('agent/status', { agent: { id: 'b2' }, status: 'idle' })
+  await reviewed(call)
+  assert.equal(requests.length, 2)
+  assert.match(requests[1].messages[0].content[0].text, /^\[1\] go-backend-template: origin\/master/)
+  assert.match(JSON.stringify(requests[1]), /longer than the 300 characters/)
+  assert.deepEqual(parseMemory(read('bots', 'b2', 'MEMORY.md')).entries.map(entry => entry.text), ['The user likes tea'])
+  assert.deepEqual(parseMemory(read('bots', 'b2', 'projects.md')).entries.map(entry => entry.text), split)
+  assert.ok(!warnings.some(line => line.includes('left out a change') || line.includes('cut a long entry')), warnings.join('\n'))
+})
+
+test('a long review entry the model does not shorten is cut at sentence ends, every word kept', async (t) => {
+  const replies = [JSON.stringify({ changes: [{ op: 'add', text: LONG_FACT }] }), 'Sorry, I cannot.']
+  const { ctx, call, read, requests, warnings, stop } = start({ replies, config: { memoryReviewDelayMs: 0 } })
+  t.after(() => stop())
+  await call('state', {})
+  ctx.emit('agent/status', { agent: { id: 'b2' }, status: 'idle' })
+  await reviewed(call)
+  assert.equal(requests.length, 2)
+  const saved = parseMemory(read('bots', 'b2', 'MEMORY.md')).entries.map(entry => entry.text)
+  assert.ok(saved.length >= 2 && saved.every(text => text.length <= 300), saved.join('\n'))
+  assert.equal(saved.join(' '), LONG_FACT)
+  assert.ok(saved[0].endsWith('arch test.') || saved[0].endsWith('layers.'), saved[0])
+  assert.ok(warnings.some(line => line.includes('cut a long entry')), warnings.join('\n'))
+  assert.ok(!warnings.some(line => line.includes('left out a change')), warnings.join('\n'))
+})
+
+test('a long review edit replaces its entry with the first piece and puts the rest beside it', async (t) => {
+  const home = mkdtempSync(join(tmpdir(), 'ds-bot-memory-'))
+  mkdirSync(join(home, 'memory', 'bots', 'b2'), { recursive: true })
+  writeFileSync(join(home, 'memory', 'bots', 'b2', 'MEMORY.md'), '# Memory\n\n## Index\n- [[projects]]\n')
+  writeFileSync(join(home, 'memory', 'bots', 'b2', 'projects.md'), '# projects\n\n- go-backend-template: go-arch-lint is on a branch [id: 1a2b; added: 2026-11-10]\n')
+  const replies = [JSON.stringify({ changes: [{ op: 'edit', entry: 1, text: LONG_FACT }] }), JSON.stringify({ entries: [['go-backend-template: origin/master was force-pushed with a new layout.', 'go-backend-template: go-arch-lint is rebuilt on the new master.']] })]
+  const { ctx, call, read, requests, warnings, stop } = start({ home, replies, config: { memoryReviewDelayMs: 0 } })
+  t.after(() => stop())
+  await call('state', {})
+  ctx.emit('agent/status', { agent: { id: 'b2' }, status: 'idle' })
+  await reviewed(call)
+  assert.equal(requests.length, 2)
+  assert.deepEqual(parseMemory(read('bots', 'b2', 'projects.md')).entries.map(entry => entry.text), ['go-backend-template: origin/master was force-pushed with a new layout.', 'go-backend-template: go-arch-lint is rebuilt on the new master.'])
+  assert.ok(!warnings.some(line => line.includes('left out a change')), warnings.join('\n'))
+})
+
+test('the pieces of a split entry are no part of the change limit', async (t) => {
+  const changes = [...Array.from({ length: 6 }, (_, at) => ({ op: 'add', text: `The user likes thing ${at + 1}` })), { op: 'add', text: LONG_FACT }]
+  const replies = [JSON.stringify({ changes }), JSON.stringify({ entries: [['go-backend-template: master was force-pushed.', 'go-backend-template: go-arch-lint is rebuilt on it.']] })]
+  const { ctx, call, read, requests, stop } = start({ replies, config: { memoryReviewDelayMs: 0 } })
+  t.after(() => stop())
+  await call('state', {})
+  ctx.emit('agent/status', { agent: { id: 'b2' }, status: 'idle' })
+  await reviewed(call)
+  // Seven changes, eight entries: the same lines are not read again.
+  assert.equal(requests.length, 2)
+  assert.equal(parseMemory(read('bots', 'b2', 'MEMORY.md')).entries.length, 8)
 })
 
 test('a malformed change whose secret sits before the words that give it away is not written to the log', async (t) => {
@@ -1630,7 +1692,7 @@ test('a change set aside inside a full answer does not take the ones after it wi
   const replies = [
     JSON.stringify({ changes: [
       ...Array.from({ length: 7 }, (_, at) => ({ op: 'add', text: `The user likes thing ${at + 1}` })),
-      { op: 'add', text: `The user tells ${'a long story '.repeat(30)}` },
+      { op: 'add', text: 'The user writes C++', topic: 'C++' },
       { op: 'add', text: 'The user likes thing 9' },
     ] }),
     JSON.stringify({ changes: [] }),
@@ -1640,7 +1702,7 @@ test('a change set aside inside a full answer does not take the ones after it wi
   await call('state', {})
   ctx.emit('agent/status', { agent: { id: 'b2' }, status: 'idle' })
   await reviewed(call)
-  // Nine changes came in one answer: the long one was set aside and said, and
+  // Nine changes came in one answer: the bad topic was set aside and said, and
   // every other — the ninth included — was kept. A full answer was kept, so the
   // same lines were read once more.
   assert.equal(requests.length, 2)
@@ -1650,7 +1712,7 @@ test('a change set aside inside a full answer does not take the ones after it wi
   ])
   const dropped = warnings.filter(line => line.includes('left out a change'))
   assert.equal(dropped.length, 1, warnings.join('\n'))
-  assert.ok(dropped[0].includes('a long story'), warnings.join('\n'))
+  assert.ok(dropped[0].includes('the topic "C++"'), warnings.join('\n'))
   assert.deepEqual(JSON.parse(read('reviewed.json')), { 'chat:b2': 11 })
 })
 
@@ -2666,4 +2728,19 @@ test('a memory call names the current part of the Bot chat', async (t) => {
   const answer = await call('memory-ask', { botId: 'b2', text: 'Which part?' })
   assert.equal(answer.ok, true)
   assert.equal(requests[0].sessionId, 'b2-part2')
+})
+
+test('splitEntry cuts at sentence ends, then spaces, then the limit, and keeps every word', () => {
+  assert.deepEqual(splitEntry('Short one.', 300), ['Short one.'])
+  assert.deepEqual(splitEntry('Aaaa bbbb. Cccc dddd. Eeee ffff.', 22), ['Aaaa bbbb. Cccc dddd.', 'Eeee ffff.'])
+  assert.deepEqual(splitEntry('aaaa bbbb cccc dddd', 10), ['aaaa bbbb', 'cccc dddd'])
+  assert.deepEqual(splitEntry('x'.repeat(25), 10), ['x'.repeat(10), 'x'.repeat(10), 'x'.repeat(5)])
+  assert.deepEqual(splitEntry('用户喜欢茶。用户住在杭州。', 8), ['用户喜欢茶。', '用户住在杭州。'])
+  // A character outside the basic plane is not cut in half.
+  assert.deepEqual(splitEntry(`${'x'.repeat(9)}😀y`, 10), ['x'.repeat(9), '😀y'])
+})
+
+test('parseShortened reads one list per long entry and passes over what is not one', () => {
+  assert.deepEqual(parseShortened('```json\n{"entries": [["a", "b"], 3, [], ["c"]]}\n```', 5), [['a', 'b'], undefined, undefined, ['c'], undefined])
+  assert.deepEqual(parseShortened('no json', 2), [undefined, undefined])
 })
