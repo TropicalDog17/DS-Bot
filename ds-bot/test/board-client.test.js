@@ -90,4 +90,11 @@ test('the Board page shows each card with its ticket key and Vietnamese text int
   // Each column takes a drop, and on a phone the tabs pick the column that needs the user.
   assert.equal(all(tree, 'bt-board-col').filter(col => col.props.onDrop).length, 5)
   assert.equal(all(tree, 'bt-board-col').find(col => col.props['data-shown']).props['data-status'], 'blocked')
+  // The three empty columns are bare drop zones; a phone adds cards from one button by the thumb.
+  assert.equal(all(tree, 'bt-board-empty').length, 3)
+  assert.equal(text(find(tree, 'bt-board-empty')), '')
+  assert.equal(all(tree, 'bt-board-fab').length, 1)
+  // A card with a link says so.
+  const linked = { ...roster, board: { cards: { k: card('k', 'review', { title: 'PR', links: [{ url: 'https://github.com/x/y/pull/1' }] }) } } }
+  assert.equal(all({ type: BoardDialog, props: { roster: linked, actions: { closeBoard() {} } }, children: [] }, 'bt-board-has-link').length, 1)
 })
