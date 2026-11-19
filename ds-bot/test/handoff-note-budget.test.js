@@ -21,6 +21,7 @@ function* chunksOf(reply) {
   yield { type: 'block-start', index: 0, blockType: 'text' }
   if (reply.text !== '') yield { type: 'text-delta', index: 0, text: reply.text }
   yield { type: 'block-end', index: 0, block: { type: 'text', text: reply.text } }
+  if (reply.call !== undefined) yield { type: 'tool-call-delta', index: 1, id: 'call-1', name: reply.call, argumentsDelta: '{}' }
   if (reply.usage !== undefined) yield { type: 'usage', usage: reply.usage }
   yield { type: 'finish', reason: { kind: reply.kind ?? 'stop', ...(reply.failure === undefined ? {} : { failure: reply.failure }) } }
 }
@@ -268,3 +269,19 @@ test('handoff note retries transient TRANSPORT failures within the provider retr
   assert.equal(capped.requests.length, 2)
 })
 
+test('a reply that calls a tool instead of writing the note is asked again without tools', async () => {
+  // A route that carries on with the work answers with a progress line and a tool call.
+  // The warning names that, not missing headings, and the retry says not to call tools.
+  const run = await switchPart({
+    replies: [
+      { text: 'Import works. Next I will run lint.', call: 'bash', kind: 'tool-calls', usage: { outputTokens: 402 } },
+      { text: note('after-tool-call') },
+    ],
+  })
+  assert.equal(run.bot.sessionId, 's2', run.warnings.join(' | '))
+  assert.equal(run.requests.length, 2)
+  assert.match(run.requests[1].prompt, /called a tool instead of writing the note/)
+  assert.match(run.packageText, /after-tool-call/)
+  assert.doesNotMatch(run.packageText, /Next I will run lint/)
+  assert.ok(run.warnings.some(line => /it called a tool instead of writing the note \(finish tool-calls, output 402 tokens\)/.test(line)), run.warnings.join(' | '))
+})
