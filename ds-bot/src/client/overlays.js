@@ -13,12 +13,13 @@ import { frameLayout, FALLBACK_SIDEBAR_WIDTH } from './frame-layout.js'
 import { MemoryDialog } from './memory-panel.js'
 import { reducedMotion, useLinger } from './motion.js'
 import { OpeningCover, openingModel } from './opening.js'
+import { PageView } from './pages.js'
 
 // How long a closing dialog or menu stays for its exit (see their [data-leaving] CSS).
 const DIALOG_EXIT_MS = 160
 const MENU_EXIT_MS = 120
 
-export function Overlays({ useRoster, useUi, useSessions, useSessionStatus, useActivity, useWork, useRegistry, useBrowserPages, useBrowserTabs, useBrowserHolds, useUpdate, useFrame, useSidebarPref, useSettingsShellHeld, actions }) {
+export function Overlays({ useRoster, useUi, useSessions, useSessionStatus, useActivity, useWork, useRegistry, useBrowserPages, useBrowserTabs, useBrowserHolds, useUpdate, useFrame, useSidebarPref, useSettingsShellHeld, usePages, actions }) {
   const roster = useRoster(value => value)
   const ui = useUi(value => value)
   useRegistry(value => value)
@@ -63,6 +64,10 @@ export function Overlays({ useRoster, useUi, useSessions, useSessionStatus, useA
   const [memory, memoryLeaving] = useLinger(ui.memory && memoryOwner(ui.memory) ? ui.memory : null, DIALOG_EXIT_MS)
   const owner = memory ? memoryOwner(memory) : null
   const [menu, menuLeaving] = useLinger(ui.menu, MENU_EXIT_MS)
+  // A companion's page shows while it is open and still registered.
+  const pages = usePages ? usePages(value => value) : []
+  const [pageId, pageLeaving] = useLinger(typeof ui.page === 'string' && pages.some(page => page.id === ui.page) ? ui.page : null, DIALOG_EXIT_MS)
+  const page = pageId ? pages.find(entry => entry.id === pageId) : undefined
   // A Session the Host made a moment ago is not in the shell's list yet: the asked-for
   // Bot fills the conversation area instead of the chat that was there before.
   const opening = openingModel({ pending: ui.pendingOpen ?? null, current, roster })
@@ -79,5 +84,6 @@ export function Overlays({ useRoster, useUi, useSessions, useSessionStatus, useA
     ui.voice ? createPortal(h(VoiceMode, { key: ui.voice, sessionId: ui.voice, paneLeft: layout.column, roster, actions, useSessions, useSessionStatus }), document.body) : null,
     menu ? createPortal(h(ContextMenu, { key: `${menu.kind ?? ''}:${menu.id}:${menu.x}:${menu.y}`, menu, roster, actions, useWork, leaving: menuLeaving }), document.body) : null,
     settings ? createPortal(h(SettingsDialog, { page: settings.page, id: settings.id, roster, actions, useUpdate, leaving: settingsLeaving }), document.body) : null,
+    page ? createPortal(h(PageView, { key: `page:${page.id}`, page, paneLeft: layout.column, leaving: pageLeaving, actions }), document.body) : null,
     owner ? createPortal(h(MemoryDialog, { key: owner.id, owner, actions, leaving: memoryLeaving }), document.body) : null)
 }

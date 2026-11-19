@@ -253,12 +253,24 @@ dev/check.sh                             # all checks (see below)
 - **Screenshots**: `dev/ui-shots.mjs` works for both apps (`desktop <dsh repo> <dir> <renderer port>` or `web <dsh repo> <dir> <bench name> <web port>`).
 - `npm test` loads the `@deepseek-ai/*` packages from `dev/harness/` (`npm run harness`) or `DSH_HARNESS`.
 
+## Companion plugins
+
+A separate DSH plugin can build on the team without reaching into its state. The host provides read-only services that a plugin lists in its `inject`:
+
+| Service | What it gives |
+|---|---|
+| `botSessionIdentity` | `ownerOfSession(sessionId)`: the Bot (and group) a Session speaks for, or `undefined`; `subscribe(listener)` after ownership changes |
+| `dsBotRoster` | `bots()`, `groups()`, `bot(id)`, `group(id)`, `findBot(idOrName)`: frozen copies (id, name, role, color, avatar, main; id, name, members, admin); `ready()` awaits the saved team; `subscribe(listener)` after every save |
+| `dsBotNotes` | `deliver({ botId, text, roomId? })`: a note from the user, as the user's own message: `@Bot` in that group when the Bot is a member, else in the Bot's own chat |
+
+The browser half provides `dsBotPages`: `register({ id, title, icon, Page, order? })` puts one icon button in the sidebar's head and the collapsed rail, and opens `Page` over the main area with `{ paneLeft, leaving, close }`. It returns a disposer. Nothing shows for a plugin that does not register.
+
 ## Layout
 
 | Path | Purpose |
 |---|---|
 | `index.js` | Host entry: installs the `src/host/` modules in order |
-| `src/host/` | Host: team and storage (`roster`, `store`), tools (`tools`), turns and delivery (`turns`, `delivery`), group chats (`groups`), chat parts, the context steward and the index (`parts`, `steward`, `chat-index`), image text (`images`), secrets (`secrets`), Bot browser (`browser`), the `POST api/bot` route (`channel`) |
+| `src/host/` | Host: team and storage (`roster`, `store`), tools (`tools`), turns and delivery (`turns`, `delivery`), group chats (`groups`), chat parts, the context steward and the index (`parts`, `steward`, `chat-index`), image text (`images`), secrets (`secrets`), Bot browser (`browser`), the `POST api/bot` route (`channel`), the services for companion plugins (`session-identity`, `companions`) |
 | `src/client/` | Browser source: sidebar, chat header, transcript cells, panels and dialogs, themes, Bot browser panel |
 | `client.js` | Built from `src/client/` by `scripts/build-client.mjs` (esbuild); committed |
 | `web-search.js` | The `auto` search provider; independent of the team code |
