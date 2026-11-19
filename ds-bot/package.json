@@ -28,6 +28,7 @@
     "./client": "./client.js",
     "./web-search": "./web-search.js",
     "./board": "./src/board/entry.js",
+    "./optchat": "./src/optchat/entry.js",
     "./package.json": "./package.json"
   },
   "files": [
@@ -37,6 +38,7 @@
     "src/host/",
     "src/shared/",
     "src/board/",
+    "src/optchat/",
     "src/office/",
     "client.js",
     "link.js",
