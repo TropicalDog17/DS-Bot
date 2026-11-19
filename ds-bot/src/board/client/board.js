@@ -15,6 +15,7 @@ import { useEscape } from '../../client/overlay-hooks.js'
 import { clockLabel, relativeShort } from '../../client/text.js'
 import { t } from '../../client/i18n.js'
 import { LinkIcon } from './icons.js'
+import { nameCards } from './card-tag.js'
 
 export const COLUMNS = [['todo', 'Todo'], ['active', 'In progress'], ['review', 'Review'], ['blocked', 'Blocked'], ['done', 'Done']]
 const OPEN = ['todo', 'active', 'review', 'blocked']
@@ -69,7 +70,7 @@ function Card({ card, roster, onOpen, onDrag }) {
   },
   card.key ? h('span', { className: 'bt-board-key' }, card.key) : null,
   h('span', { className: 'bt-board-title' }, card.title),
-  line ? h('span', { className: 'bt-board-progress' }, line) : null,
+  line ? h('span', { className: 'bt-board-progress' }, nameCards(line, roster.board?.cards ?? {})) : null,
   h('span', { className: 'bt-board-card-foot' },
     h(Who, { id: card.assignee, roster }),
     links > 0 || card.url ? h('span', { className: 'bt-board-has-link', 'aria-label': t('Link') }, h(LinkIcon)) : null,
@@ -119,7 +120,7 @@ function Thread({ notes, roster, awaiting }) {
       return h('li', { key: index, className: 'bt-board-msg', 'data-by': fromBot ? 'bot' : 'user' },
         fromBot ? (bot ? h(BotMark, { bot, size: 24 }) : h('span', { className: 'bt-board-msg-mark', 'aria-hidden': true })) : null,
         h('div', { className: 'bt-board-msg-body' },
-          h('span', { className: 'bt-board-msg-text' }, note.text),
+          h('span', { className: 'bt-board-msg-text' }, nameCards(note.text, roster.board?.cards ?? {})),
           h('span', { className: 'bt-board-age' }, clockLabel(note.at ?? 0))))
     }),
     waiter ? h('li', { key: 'waiting', className: 'bt-board-msg bt-board-waiting', 'data-by': 'bot', 'aria-hidden': true },

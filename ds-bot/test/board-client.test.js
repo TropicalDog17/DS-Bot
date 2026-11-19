@@ -29,7 +29,7 @@ const bundled = async (entry) => {
 }
 const { BoardScreen, CardDetail, boardColumns, leadColumn, COLUMNS } = await bundled('board/client/board.js')
 const { installBoardPage, boardCall, boardWatch, replyNotice, BOARD_ROUTE } = await bundled('board/client/index.js')
-const { cardTagRule, cardTagNode, CARD_TAG_ID } = await bundled('board/client/card-tag.js')
+const { cardTagRule, cardTagNode, CARD_TAG_ID, linkCards, nameCards, CARD_LINK_ORIGIN } = await bundled('board/client/card-tag.js')
 const plain = value => JSON.parse(JSON.stringify(value))
 
 const all = (node, cls, out = []) => {
@@ -306,7 +306,7 @@ test('the card tags come with the page and go with it; the tag leads the page to
   const tags = []
   const stop = installBoardPage(on, {
     call: async endpoint => (endpoint === 'state' ? { cards: {}, bots: [] } : undefined),
-    cardTags: (rule, Node) => { const entry = { rule, Node, off: false }; tags.push(entry); return () => { entry.off = true } },
+    cardTags: ({ rule, Node, botText }) => { const entry = { rule, Node, botText, off: false }; tags.push(entry); return () => { entry.off = true } },
   })
   await settle()
   assert.equal(tags.length, 1)
@@ -324,4 +324,65 @@ test('the card tags come with the page and go with it; the tag leads the page to
   installBoardPage(off, { call: async () => undefined, cardTags: () => { asked += 1 } })
   await settle()
   assert.equal(asked, 0)
+})
+
+const known = {
+  c_bcd80b5f: { id: 'c_bcd80b5f', key: 'LIFE-782', title: 'Fix login redirect loop on Safari' },
+  c_0a1b2c3d: { id: 'c_0a1b2c3d', title: 'Đặt lịch khám răng' },
+}
+
+test('a card a Bot names in its text is a link its bubble draws as a tag; code and unknown ids stay', () => {
+  const link = id => `${CARD_LINK_ORIGIN}${id}`
+  // The note line the Bot quotes, whole: its id, key, title and colon.
+  assert.equal(linkCards('收到：Note on card c_bcd80b5f · LIFE-782 "Fix login redirect loop on Safari": ok', known),
+    `收到：[LIFE-782](${link('c_bcd80b5f')}) ok`)
+  // The label the board's tools show, and a card with no key by its title.
+  assert.equal(linkCards('Xong c_bcd80b5f · LIFE-782, còn c_0a1b2c3d.', known),
+    `Xong [LIFE-782](${link('c_bcd80b5f')}), còn [Đặt lịch khám răng](${link('c_0a1b2c3d')}).`)
+  // An id the board does not have, and code, stay as written.
+  assert.equal(linkCards('c_ffffffff và `c_bcd80b5f`', known), 'c_ffffffff và `c_bcd80b5f`')
+  assert.equal(linkCards('```\nc_bcd80b5f\n```', known), '```\nc_bcd80b5f\n```')
+  assert.equal(linkCards('no card here', known), 'no card here')
+  // A title's brackets do not break the link.
+  assert.equal(linkCards('c_00000001', { c_00000001: { id: 'c_00000001', title: 'a [b]' } }), `[a \\[b\\]](${link('c_00000001')})`)
+})
+
+test('the Board\'s own lines name a card by its key, not by its note line', () => {
+  assert.equal(nameCards('收到：Note on card c_bcd80b5f · LIFE-782 "Fix login redirect loop on Safari": ok', known), '收到：LIFE-782 ok')
+  assert.equal(nameCards('xem c_0a1b2c3d', known), 'xem Đặt lịch khám răng')
+  assert.equal(nameCards(undefined, known), undefined)
+  // On the card itself, the copied answer reads plainly.
+  const cards = { ...known, c_bcd80b5f: card('c_bcd80b5f', 'active', { key: 'LIFE-782', title: 'Fix login redirect loop on Safari', assignee: 'b', unread: true, notes: [{ by: 'b', text: 'Note on card c_bcd80b5f · LIFE-782 "Fix login redirect loop on Safari": đã thêm log', at: now }] }) }
+  const screen = BoardScreen({ roster: { bots: [], byId: {}, board: { cards } }, actions: {}, paneLeft: 0, leaving: false })
+  assert.ok(all(screen, 'bt-board-progress').some(node => text(node) === 'LIFE-782 đã thêm log'))
+})
+
+test('a Bot\'s card links follow the board: a tap opens the Board on the card, and a rename redraws', async () => {
+  const on = seat()
+  const tags = []
+  let view = { cards: { c_bcd80b5f: card('c_bcd80b5f', 'active', { key: 'LIFE-782', title: 'Fix login' }) }, bots: [] }
+  const stop = installBoardPage(on, {
+    call: async () => view,
+    watchMs: 1,
+    cardTags: (entry) => { tags.push(entry); return () => {} },
+  })
+  await settle()
+  const { botText } = tags[0]
+  assert.equal(botText.origin, CARD_LINK_ORIGIN)
+  assert.equal(botText.page, 'board')
+  assert.equal(botText.link('c_bcd80b5f'), `[LIFE-782](${CARD_LINK_ORIGIN}c_bcd80b5f)`)
+  let redraws = 0
+  botText.subscribe(() => { redraws += 1 })
+  // A poll with the same names is no redraw; a new key is one.
+  await new Promise(resolve => setTimeout(resolve, 20))
+  assert.equal(redraws, 0)
+  view = { cards: { c_bcd80b5f: card('c_bcd80b5f', 'active', { key: 'LIFE-900', title: 'Fix login' }) }, bots: [] }
+  await new Promise(resolve => setTimeout(resolve, 20))
+  assert.equal(redraws, 1)
+  assert.equal(botText.link('c_bcd80b5f · LIFE-900'), `[LIFE-900](${CARD_LINK_ORIGIN}c_bcd80b5f)`)
+  botText.open('c_bcd80b5f')
+  const page = on.list[0].Page({ close: () => {}, paneLeft: 0, leaving: false })
+  stop()
+  const focus = typeof page.props.focus === 'function' ? page.props.focus() : page.props.focus
+  assert.equal(focus, 'c_bcd80b5f')
 })

@@ -34,6 +34,7 @@ import { createPages } from './pages.js'
 import { installBoardPage } from '../board/client/index.js'
 import { BOARD_CSS } from '../board/client/board.js'
 import { CARD_TAG_CSS } from '../board/client/card-tag.js'
+import { textLinks } from './text-links.js'
 import { createBotBrowsers, serveBrowserReads } from './bot-browsers.js'
 import { BROWSER_CSS } from './browser-pane.js'
 import { SECRET_CSS, SecretDock } from './secret-card.js'
@@ -1117,13 +1118,14 @@ export function apply(ctx) {
   }, component))
   // ds-bot/board's page rides in this bundle (DSH loads one per package) and shows
   // only when that plugin's route answers. A card's note line in a chat shows as a tag
-  // of the card, on releases that draw user text by rules.
+  // of the card (on releases that draw user text by rules), and so does a card a Bot names.
   ctx.effect(() => installBoardPage(pages.service, {
-    cardTags: (rule, Node) => {
-      if (!hostDrawsUserText) return undefined
+    cardTags: ({ rule, Node, botText }) => {
+      const offLinks = textLinks.add(botText)
+      if (!hostDrawsUserText) return offLinks
       const offRule = ctx.uiConversation.userText.register(rule)
       const offNode = shadow('conversation.user.text.node', { key: rule.id, inject: face }, Node)
-      return () => { offNode(); offRule() }
+      return () => { offNode(); offRule(); offLinks() }
     },
   }), 'ds-bot: board page')
   const installHeader = () => ctx.slots.inject('conversation.session.header', () => installHeaderNavigation(ctx.slots, face, HeaderPill, BOT_PRIORITY))
