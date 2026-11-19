@@ -1,7 +1,8 @@
-import { createElement as h, Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createElement as h, Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { MarkdownText, writeClipboard } from './dsh-primitives.js'
 import { inkText } from './inks.js'
+import { linkTexts, linkTarget, textLinks } from './text-links.js'
 import { linkMentions, mentionTarget, dayLabel, contentText, stripHeader, stripToolCallTags, isHiddenTurn, isRelayContext, relaysBefore, relayPart, commRunOf, toolName, toolArgs, reminderPrompts, elapsedLabel, clockLabel, messageClock } from './text.js'
 import { SmileIcon, ReplyIcon, DotsIcon, CheckIcon, DownloadIcon, CopyIcon, GoalIcon, MemoryIcon } from './icons.js'
 import { ChangesCard } from './changes-card.js'
@@ -39,7 +40,16 @@ export { clockLabel }
 // of its message (see useFold). `time` marks the bubbles' message below them; a caller
 // whose own head already shows one (the flat speaker line, the group name row) leaves it unset.
 export function Bubbles({ texts, roster, selfId, actions, streaming, sessionId, msgKey, useUi, lead, mentions, fold = FOLD_AT, whole, time, textInteractionSource }) {
+  const links = useSyncExternalStore(textLinks.subscribe, textLinks.getSnapshot)
   const onClick = (event) => {
+    const link = linkTarget(event, links)
+    if (link !== null) {
+      event.preventDefault()
+      event.stopPropagation()
+      link.entry.open(link.id)
+      if (link.entry.page) actions.openPage(link.entry.page)
+      return
+    }
     const target = mentionTarget(event)
     if (target === null) return
     event.preventDefault()
@@ -52,7 +62,7 @@ export function Bubbles({ texts, roster, selfId, actions, streaming, sessionId, 
     cleaned.map((text, index) => {
       const last = index === cleaned.length - 1
       return h(Bubble, {
-        key: index, text, index, roster, selfId, actions, sessionId, msgKey, mentions, fold, textInteractionSource,
+        key: index, text, index, roster, selfId, actions, sessionId, msgKey, mentions, fold, textInteractionSource, links,
         picked: msgKey ? reactions?.[index] ?? [] : [],
         live: streaming && last,
         lead: lead && last ? lead : null,
@@ -94,10 +104,10 @@ const foldArea = (body, code, codeHead, actions) => (code === undefined ? body
     h('pre', { className: 'bt-fold-pre' }, h('code', null, codeHead)),
     h(FoldCodeCopy, { code, actions })))
 
-function Bubble({ text, index, roster, selfId, actions, sessionId, msgKey, mentions, fold, picked, live, lead, whole, textInteractionSource }) {
+function Bubble({ text, index, roster, selfId, actions, sessionId, msgKey, mentions, fold, picked, live, lead, whole, textInteractionSource, links = [] }) {
   const { shown, folded, control, code, codeHead } = useFold(text, { limit: fold, whole, live })
   const key = msgKey ? `${msgKey}:${index}` : undefined
-  const body = shown === '' ? null : h(MarkdownText, { text: linkMentions(shown, roster.bots, selfId), streaming: live, labels: mdLabels(), variant: 'compact', fileMentions: mentions })
+  const body = shown === '' ? null : h(MarkdownText, { text: linkMentions(linkTexts(shown, links), roster.bots, selfId), streaming: live, labels: mdLabels(), variant: 'compact', fileMentions: mentions })
   const row = useRef(null)
   // Touch has no hover: a tap on the bubble opens its tools, a tap elsewhere
   // closes them. Interactive targets keep their own meaning.

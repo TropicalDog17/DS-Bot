@@ -6,6 +6,7 @@ import { createElement as h, useCallback, useEffect, useMemo, useState, useSyncE
 import { createSource } from '../../client/sources.js'
 import { BoardScreen } from './board.js'
 import { BoardIcon } from './icons.js'
+import { CARD_LINK_ORIGIN, cardTagNode, cardTagRule, linkCards } from './card-tag.js'
 import { hostText, t } from '../../client/i18n.js'
 
 export const BOARD_ROUTE = 'api/ds-bot-board'
@@ -105,17 +106,45 @@ export function boardWatch(pages, { first, call, openMs = POLL_MS, closedMs = WA
       refresh()
       return () => { open -= 1; pace() }
     },
-    // The card a notice led to, once.
+    // The card the page opens on next (a notice's Open, a card tag in a chat).
+    show(id) { focus = id },
+    // The card the page opens on, once.
     focus() { const id = focus; focus = null; return id },
     stop() { clearTimer(timer) },
   }
 }
 
+// What a Bot's text may name: each card's id, key and title. The bubbles redraw only
+// when one of those changes, not on every poll.
+function tagCards(live, cardTags) {
+  const show = id => live.show(id)
+  const named = view => Object.fromEntries(Object.values(view?.cards ?? {}).map(card => [card.id, { id: card.id, key: card.key, title: card.title }]))
+  const names = createSource(named(live.source.getSnapshot()))
+  let seen = JSON.stringify(names.getSnapshot())
+  const offWatch = live.source.subscribe(() => {
+    const next = named(live.source.getSnapshot())
+    const key = JSON.stringify(next)
+    if (key === seen) return
+    seen = key
+    names.set(next)
+  })
+  const off = cardTags({
+    rule: cardTagRule(),
+    Node: cardTagNode(show),
+    botText: { origin: CARD_LINK_ORIGIN, page: 'board', link: text => linkCards(text, names.getSnapshot()), open: show, subscribe: names.subscribe },
+  })
+  return () => { offWatch(); off?.() }
+}
+
 // Asks the route once (and once more after a network failure); registers the page when
-// the plugin answers. Returns a disposer that takes the page back.
-export function installBoardPage(pages, { call = boardCall, retryMs = 3000, watchMs = WATCH_MS } = {}) {
+// the plugin answers. `cardTags({ rule, Node, botText })`, from DS Bot, draws a card in
+// a chat as a tag of it (card-tag.js): the note line in the user's message by `rule` and
+// `Node`, and a card a Bot names by the `botText` link. It returns its disposer. Returns a
+// disposer that takes the page and the tags back.
+export function installBoardPage(pages, { call = boardCall, retryMs = 3000, watchMs = WATCH_MS, cardTags } = {}) {
   let disposed = false
   let unregister
+  let untag
   let timer
   let live
   const probe = (tries) => {
@@ -132,8 +161,9 @@ export function installBoardPage(pages, { call = boardCall, retryMs = 3000, watc
         },
       })
       live = boardWatch(pages, { first: value, call, closedMs: watchMs })
+      untag = cardTags === undefined ? undefined : tagCards(live, cardTags)
     }, () => { if (!disposed && tries > 0) timer = setTimeout(() => probe(tries - 1), retryMs) })
   }
   probe(1)
-  return () => { disposed = true; clearTimeout(timer); live?.stop(); unregister?.() }
+  return () => { disposed = true; clearTimeout(timer); live?.stop(); untag?.(); unregister?.() }
 }
