@@ -65,6 +65,15 @@ Cards are kept in `<DSH_HOME>/bot-board/board.json`. To keep them elsewhere:
   `onReply`, matched to the turn by its start time), the card keeps a short copy with
   it: the last 24 steps and at most 2000 characters of reasoning, folded under
   "Thought it through" above the answer.
+- A tool line opens on the call's input (one `key: value` line per argument) and what it
+  gave back: up to 600 and 1200 characters while the Bot works, 300 and 600 on the
+  copy an answer keeps.
+- How much shows is the board's own setting, picked in its header and kept in
+  `board.json` (`settings.trace`): `off` (the dots only, nothing kept), `tools` (the tool
+  calls), `thinking` (calls and reasoning; the default) or `all` (tool lines open, and
+  an answer keeps up to 60 steps, 8000 characters of reasoning and the live lengths of
+  input and output). DS Bot's own "Show thinking" preference is not a seam, so the
+  board does not follow it.
 
 ## Limits
 

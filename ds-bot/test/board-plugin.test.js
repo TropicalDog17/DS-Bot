@@ -335,11 +335,11 @@ test('a waiting card shows what its Bot is doing: reasoning as it streams and ea
   assert.equal(live.since, 1100)
   assert.deepEqual(live.steps, [
     { kind: 'think', text: 'The user wants the login log.' },
-    { kind: 'tool', tool: 'read_file', target: 'login.log', state: 'running' },
+    { kind: 'tool', tool: 'read_file', target: 'login.log', input: 'path: /var/log/app/login.log', state: 'running' },
   ])
-  event('tool/result', { message: { toolCallId: 'k1', isError: true } })
+  event('tool/result', { message: { toolCallId: 'k1', isError: true, content: [{ type: 'text', text: 'ENOENT: no such file' }] } })
   event('tool/call', { callId: 'k2', name: 'bash', arguments: JSON.stringify({ command: 'tail -n 50 login.log', description: 'Read the last lines' }) })
-  event('tool/result', { message: { toolCallId: 'k2' } })
+  event('tool/result', { message: { toolCallId: 'k2', content: [{ type: 'text', text: 'token expired\n' + 'x'.repeat(3000) }] } })
   // An attempt that failed and was retried leaves nothing behind.
   frame({ type: 'start', attemptId: 'a2' })
   think('a2', 'half a thought')
@@ -353,12 +353,18 @@ test('a waiting card shows what its Bot is doing: reasoning as it streams and ea
     ['tool', 'bash', 'done'],
     ['think', 'Found it.', undefined],
   ])
-  assert.deepEqual(live.steps[2], { kind: 'tool', tool: 'bash', note: 'Read the last lines', target: 'tail -n 50 login.log', state: 'done' })
+  // Each call opens on what it was given and what it gave back, cut short.
+  assert.equal(live.steps[1].output, 'ENOENT: no such file')
+  assert.equal(live.steps[2].input, 'command: tail -n 50 login.log\ndescription: Read the last lines')
+  assert.match(live.steps[2].output, /^token expired\nx+…$/)
+  assert.equal(live.steps[2].output.length, 1200)
+  const { input: _input, output: _output, ...line } = live.steps[2]
+  assert.deepEqual(line, { kind: 'tool', tool: 'bash', note: 'Read the last lines', target: 'tail -n 50 login.log', state: 'done' })
 
   // The answer lands on the card with how the Bot got there; the card stops waiting.
   clock = 4100
   event('turn/end', { turn: 2 })
-  h.team.reply({ botId: 'b', text: 'Lỗi do token hết hạn.', since: 1100 })
+  h.team.reply({ botId: 'b', text: 'Lỗi do token hết hạn.', since: 1100, heard: h.team.requests })
   await h.settle()
   const state = (await h.post('state')).value
   assert.deepEqual(state.live, {})
@@ -366,10 +372,57 @@ test('a waiting card shows what its Bot is doing: reasoning as it streams and ea
   assert.equal(answer.text, 'Lỗi do token hết hạn.')
   assert.equal(answer.trace.ms, 3000)
   assert.deepEqual(answer.trace.steps.map(step => step.kind), ['think', 'tool', 'tool', 'think'])
+  assert.equal(answer.trace.steps[2].output.length, 600)
+  assert.equal(state.trace, 'thinking')
   // Another Bot's Session, or a Session that is no Bot's, is not traced.
   h.emit('session/event', { id: 'nobody' }, { type: 'turn/start', data: {}, time: 5000 })
   h.handle.dispose()
   assert.deepEqual(Object.keys(h.listeners), [])
+})
+
+test('the board level sets how much of a Bot\'s work shows and stays: off, tool calls, thinking, all', async (t) => {
+  let clock = 1000
+  const h = host(t, { now: () => clock })
+  const id = Object.keys((await h.post('add', { title: 'Logs', assignee: 'b' })).value.cards)[0]
+  const session = { id: 'b' }
+  const event = (type, data) => h.emit('session/event', session, { type, data, time: clock })
+  const frame = (frame) => h.emit('agent/assistant-stream', { agent: session, frame })
+  const turn = async (text) => {
+    await h.post('note', { id, text })
+    clock += 100
+    event('turn/start', {})
+    frame({ type: 'start', attemptId: `a${clock}` })
+    frame({ type: 'chunk', attemptId: `a${clock}`, chunk: { type: 'reasoning-delta', text: 'Thinking hard.' } })
+    event('tool/call', { callId: `k${clock}`, name: 'bash', arguments: '{"command":"ls"}' })
+    event('tool/result', { message: { toolCallId: `k${clock}`, content: 'a.txt' } })
+  }
+  const answer = async () => {
+    const since = clock
+    clock += 1000
+    event('turn/end', {})
+    h.team.reply({ botId: 'b', text: 'done', since, heard: [h.team.requests.at(-1)] })
+    await h.settle()
+    return h.cards()[0].notes.at(-1).trace
+  }
+
+  assert.equal((await h.post('trace', { trace: 'loud' })).error.message, 'Unknown level.')
+  assert.equal((await h.post('trace', { trace: 'tools' })).value.trace, 'tools')
+  await turn('one')
+  assert.deepEqual((await h.post('state')).value.live[id].steps.map(step => step.kind), ['tool'])
+  assert.deepEqual((await answer()).steps.map(step => step.kind), ['tool'])
+
+  await h.post('trace', { trace: 'off' })
+  await turn('two')
+  assert.deepEqual((await h.post('state')).value.live, {})
+  assert.equal(await answer(), undefined)
+
+  await h.post('trace', { trace: 'all' })
+  await turn('three')
+  assert.deepEqual((await h.post('state')).value.live[id].steps.map(step => step.kind), ['think', 'tool'])
+  const kept = await answer()
+  assert.deepEqual(kept.steps[1], { kind: 'tool', tool: 'bash', target: 'ls', input: 'command: ls', output: 'a.txt', state: 'done' })
+  // The level is the board's, kept in its file.
+  assert.equal(JSON.parse(readFileSync(h.boardFile, 'utf8')).settings.trace, 'all')
 })
 
 test('a Bot on a local agent CLI shows its own tool lines; a kept trace is short', () => {

@@ -16,7 +16,7 @@ import { useEscape } from '../../client/overlay-hooks.js'
 import { clockLabel, elapsedLabel, relativeShort } from '../../client/text.js'
 import { workPhrase } from '../../client/cells.js'
 import { t } from '../../client/i18n.js'
-import { LinkIcon } from './icons.js'
+import { LinkIcon, StepsIcon } from './icons.js'
 import { nameCards } from './card-tag.js'
 
 export const COLUMNS = [['todo', 'Todo'], ['active', 'In progress'], ['review', 'Review'], ['blocked', 'Blocked'], ['done', 'Done']]
@@ -110,12 +110,27 @@ function AddCard({ roster, actions, onDone }) {
       h('button', { type: 'button', className: 'bt-send bt-board-go', disabled: title.trim() === '' || busy, onClick: add }, t('Add card'))))
 }
 
+// One tool call: its line, which opens on what it was given and what it gave back.
+function ToolStep({ step, open }) {
+  const line = [
+    h('span', { key: 'dot', className: 'bt-board-tool-dot', 'aria-hidden': true }),
+    h('span', { key: 'text', className: 'bt-board-tool-text' }, step.text ?? workPhrase(step)),
+  ]
+  if (!step.input && !step.output) return h('li', { className: 'bt-board-step bt-board-tool', 'data-state': step.state }, line)
+  return h('li', { className: 'bt-board-step', 'data-state': step.state },
+    h('details', { className: 'bt-board-tool-fold', open: open || undefined },
+      h('summary', { className: 'bt-board-tool' }, line),
+      step.input ? h('pre', { className: 'bt-board-io bt-board-input' }, step.input) : null,
+      step.output ? h('pre', { className: 'bt-board-io bt-board-output' }, step.output) : null))
+}
+
 // How a Bot got to its answer, step by step: its reasoning as it streamed and each tool
 // call, named the way the chat's activity row names it. Live, it follows the newest step.
-export function Trace({ steps, live = false }) {
+// `open` starts the tool lines open (the board's `all` level).
+export function Trace({ steps, live = false, open = false }) {
   const box = useRef(null)
   const last = steps.at(-1)
-  const size = `${steps.length}:${last?.kind === 'think' ? last.text.length : last?.state}`
+  const size = `${steps.length}:${last?.kind === 'think' ? last.text.length : `${last?.state}${last?.output ? '+' : ''}`}`
   useEffect(() => {
     const node = box.current
     if (live && node) node.scrollTop = node.scrollHeight
@@ -123,19 +138,17 @@ export function Trace({ steps, live = false }) {
   return h('ol', { className: 'bt-board-trace', ref: box, 'data-live': live || undefined },
     steps.map((step, index) => step.kind === 'think'
       ? h('li', { key: index, className: 'bt-board-step bt-board-thought' }, step.text)
-      : h('li', { key: index, className: 'bt-board-step bt-board-tool', 'data-state': step.state },
-          h('span', { className: 'bt-board-tool-dot', 'aria-hidden': true }),
-          h('span', { className: 'bt-board-tool-text' }, step.text ?? workPhrase(step)))))
+      : h(ToolStep, { key: index, step, open })))
 }
 
 // A kept trace sits folded above the answer it led to, as the chat folds its thinking.
-function TraceFold({ trace }) {
+function TraceFold({ trace, open }) {
   const steps = Array.isArray(trace?.steps) ? trace.steps : []
   if (steps.length === 0) return null
   return h('details', { className: 'bt-board-fold' },
     h('summary', null, t('Thought it through'),
       typeof trace.ms === 'number' ? h('span', { className: 'bt-board-age' }, `· ${elapsedLabel(Math.max(1000, trace.ms))}`) : null),
-    h(Trace, { steps }))
+    h(Trace, { steps, open }))
 }
 
 // The card's conversation: the user's notes on the right, the Bots' replies on the left
@@ -145,6 +158,7 @@ function TraceFold({ trace }) {
 function Thread({ notes, roster, awaiting, live }) {
   const waiter = awaiting?.botId === undefined ? undefined : roster.byId?.[awaiting.botId]
   const working = Array.isArray(live?.steps) && live.steps.length > 0 ? live.steps : undefined
+  const open = roster.board?.trace === 'all'
   return h('ol', { className: 'bt-board-thread' },
     notes.map((note, index) => {
       const bot = note.by === undefined || note.by === USER ? undefined : roster.byId?.[note.by]
@@ -152,14 +166,14 @@ function Thread({ notes, roster, awaiting, live }) {
       return h('li', { key: index, className: 'bt-board-msg', 'data-by': fromBot ? 'bot' : 'user' },
         fromBot ? (bot ? h(BotMark, { bot, size: 24 }) : h('span', { className: 'bt-board-msg-mark', 'aria-hidden': true })) : null,
         h('div', { className: 'bt-board-msg-body' },
-          fromBot ? h(TraceFold, { trace: note.trace }) : null,
+          fromBot ? h(TraceFold, { trace: note.trace, open }) : null,
           h('span', { className: 'bt-board-msg-text' }, nameCards(note.text, roster.board?.cards ?? {})),
           h('span', { className: 'bt-board-age' }, clockLabel(note.at ?? 0))))
     }),
     waiter ? h('li', { key: 'waiting', className: 'bt-board-msg bt-board-waiting', 'data-by': 'bot', 'aria-busy': true },
       h(BotMark, { bot: waiter, size: 24 }),
       h('div', { className: 'bt-board-msg-body' },
-        working ? h(Trace, { steps: working, live: true }) : null,
+        working ? h(Trace, { steps: working, live: true, open }) : null,
         h('span', { className: 'bt-board-msg-text bt-board-dots', 'aria-hidden': true }, h('i'), h('i'), h('i')))) : null)
 }
 
@@ -247,6 +261,15 @@ export function CardDetail({ card, roster, actions, live }) {
       h('button', { type: 'button', className: 'bt-send', disabled: text.trim() === '' || busy, onClick: send }, t('Send'))) : null)
 }
 
+// How much of a Bot's work a waiting card shows and an answer keeps.
+const LEVELS = [['off', 'Off'], ['tools', 'Tool calls'], ['thinking', 'Thinking'], ['all', 'All']]
+function LevelPick({ level, pick }) {
+  return h('label', { className: 'bt-board-level', title: t('Show thinking') },
+    h(StepsIcon),
+    h('select', { className: 'bt-select', 'aria-label': t('Show thinking'), value: level, onChange: event => { void Promise.resolve(pick(event.target.value)).catch(() => {}) } },
+      LEVELS.map(([id, name]) => h('option', { key: id, value: id }, t(name)))))
+}
+
 export function BoardScreen({ roster, actions, paneLeft = 0, leaving = false, focus = null }) {
   const { columns, history } = boardColumns(roster.board?.cards)
   const [shown, setShown] = useState(null)
@@ -285,6 +308,7 @@ export function BoardScreen({ roster, actions, paneLeft = 0, leaving = false, fo
       h('div', { className: 'bt-board-head' },
         alone ? h('button', { type: 'button', className: 'bt-icon-btn bt-board-back', 'aria-label': t('Back'), onClick: close }, h(ChevronLeftIcon)) : null,
         h('h2', null, t('Board')),
+        actions.boardTrace ? h(LevelPick, { level: roster.board?.trace ?? 'thinking', pick: actions.boardTrace }) : null,
         h('button', { type: 'button', className: 'bt-send bt-board-add', onClick: addCard }, h(PlusIcon), h('span', null, t('Add card')))),
       h('div', { className: 'bt-board-tabs', role: 'tablist', 'aria-label': t('Board') },
         COLUMNS.map(([status, name]) => h('button', {
@@ -423,11 +447,19 @@ a.bt-board-key:hover{color:var(--bt-ink)}
 .bt-board-trace[data-live] .bt-board-thought:not(:last-child){display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
 .bt-board-tool{display:flex;align-items:baseline;gap:8px;color:var(--bt-ink)}
 .bt-board-tool-dot{flex:none;width:6px;height:6px;border-radius:50%;background:var(--bt-ink-3);translate:0 -1px}
-.bt-board-tool[data-state=running] .bt-board-tool-dot{background:var(--bt-accent);animation:bt-board-pulse 1.2s ease-in-out infinite}
-.bt-board-tool[data-state=failed] .bt-board-tool-dot{background:var(--bt-danger)}
+.bt-board-trace [data-state=running] .bt-board-tool-dot{background:var(--bt-accent);animation:bt-board-pulse 1.2s ease-in-out infinite}
+.bt-board-trace [data-state=failed] .bt-board-tool-dot{background:var(--bt-danger)}
 .bt-board-tool-text{min-width:0}
+.bt-board-tool-fold summary{cursor:pointer;list-style:none}
+.bt-board-tool-fold summary::-webkit-details-marker{display:none}
+.bt-board-tool-fold summary:hover .bt-board-tool-text{text-decoration:underline;text-decoration-color:var(--bt-line-2);text-underline-offset:3px}
+.bt-board-io{margin:6px 0 0 14px;padding:6px 8px;border-radius:6px;background:var(--bt-hover);font:12px/17px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--bt-ink-2);white-space:pre-wrap;overflow-wrap:anywhere;max-height:180px;overflow:auto;scrollbar-width:thin}
+.bt-board-output{color:var(--bt-ink)}
+[data-state=failed] > .bt-board-tool-fold .bt-board-output{color:var(--bt-danger)}
+.bt-board-level{display:inline-flex;align-items:center;gap:6px;color:var(--bt-ink-2)}
+.bt-board-level .bt-select{min-width:0;height:30px}
 @keyframes bt-board-pulse{50%{opacity:.35}}
-@media (prefers-reduced-motion:reduce){.bt-board-tool[data-state=running] .bt-board-tool-dot{animation:none}}
+@media (prefers-reduced-motion:reduce){.bt-board-trace [data-state=running] .bt-board-tool-dot{animation:none}}
 .bt-board-fold{align-self:stretch;font-size:13px;line-height:18px;color:var(--bt-ink-2)}
 .bt-board-fold summary{cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:6px;padding:0 4px}
 .bt-board-fold summary::-webkit-details-marker{display:none}

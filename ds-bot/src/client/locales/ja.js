@@ -848,6 +848,7 @@ export const JA = {
   "Message actions": "メッセージの操作",
   "Download": "ダウンロード",
   "Thought it through": "思考プロセス",
+  "Tool calls": "ツール呼び出し",
   "Earlier messages": "以前のメッセージ",
   "Loading earlier messages…": "以前のメッセージを読み込み中…",
   "Couldn’t load earlier messages · Retry": "以前のメッセージを読み込めませんでした · 再試行",

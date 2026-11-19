@@ -7,9 +7,23 @@
 // A live trace keeps the newest steps, and the tail of a long thought.
 export const LIVE_STEPS = 60
 export const LIVE_THINK_MAX = 4000
-// What stays on the card with an answer: the newest steps, and at most this much thought.
-export const KEPT_STEPS = 24
-export const KEPT_THINK_MAX = 2000
+// A tool call's input and output, as an opened tool line shows them while it runs.
+const LIVE_INPUT_MAX = 600
+const LIVE_OUTPUT_MAX = 1200
+// How much the page shows (the board's `trace` setting): nothing, the tool calls, the
+// tool calls and the reasoning, or all of it, longer and with the tool lines open.
+export const LEVELS = ['off', 'tools', 'thinking', 'all']
+export const DEFAULT_LEVEL = 'thinking'
+export const levelOf = value => (LEVELS.includes(value) ? value : DEFAULT_LEVEL)
+// What stays on the card with an answer, by level: the newest steps, at most this much
+// thought in all, and each call's input and output cut to these lengths.
+const KEPT = {
+  tools: { steps: 24, think: 0, input: 300, output: 600 },
+  thinking: { steps: 24, think: 2000, input: 300, output: 600 },
+  all: { steps: 60, think: 8000, input: LIVE_INPUT_MAX, output: LIVE_OUTPUT_MAX },
+}
+export const KEPT_STEPS = KEPT.thinking.steps
+export const KEPT_THINK_MAX = KEPT.thinking.think
 // Sessions whose last turn is kept; the oldest finished one goes first.
 const SESSIONS_MAX = 64
 // A reply names its turn by when it began; DS Bot and this tracker read the same event.
@@ -18,6 +32,29 @@ const SAME_TURN_MS = 2000
 const ACTIVITY = '▸ '
 
 const tail = (text, max) => (text.length <= max ? text : `…${text.slice(text.length - max + 1)}`)
+const head = (text, max) => (text.length <= max ? text : `${text.slice(0, max - 1)}…`)
+const parse = (argumentsText) => {
+  try { return typeof argumentsText === 'string' ? JSON.parse(argumentsText || '{}') : argumentsText ?? {} } catch { return argumentsText }
+}
+
+// A call's input as the reader takes it in: one `key: value` line per argument.
+export function inputText(argumentsText) {
+  const args = parse(argumentsText)
+  if (typeof args === 'string') return args.trim()
+  if (args === null || typeof args !== 'object') return ''
+  return Object.entries(args).map(([key, value]) => `${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`).join('\n')
+}
+
+// What a call gave back: a tool message's text parts, else the result or error it carries.
+export function outputText(data) {
+  const content = data?.message?.content ?? data?.result ?? data?.output
+  let text = ''
+  if (typeof content === 'string') text = content
+  else if (Array.isArray(content)) text = content.map(part => (typeof part === 'string' ? part : part?.type === 'text' ? part.text ?? '' : '')).join('')
+  else if (content !== undefined && content !== null) text = JSON.stringify(content)
+  const error = typeof data?.error === 'string' ? data.error : data?.error?.message
+  return (text.trim() === '' && typeof error === 'string' ? error : text).trim()
+}
 
 // Reasoning can open with a `<signature>` block meant for the model, not the reader.
 export function visibleThought(text) {
@@ -31,8 +68,7 @@ export function visibleThought(text) {
 // What a call works on, in its own words: its description, else the file, search,
 // site or command it acts on.
 export function callAbout(argumentsText) {
-  let args
-  try { args = typeof argumentsText === 'string' ? JSON.parse(argumentsText || '{}') : argumentsText ?? {} } catch { args = {} }
+  const args = parse(argumentsText)
   if (args === null || typeof args !== 'object') return {}
   const first = keys => keys.map(key => args[key]).find(value => typeof value === 'string' && value.trim() !== '')?.replace(/\s+/g, ' ').trim()
   const note = first(['description', 'justification'])
@@ -50,7 +86,8 @@ export function stepsOf(trace) {
   const out = []
   for (const step of trace.steps) {
     if (step.kind !== 'think') {
-      out.push({ kind: 'tool', tool: step.tool, ...(step.note ? { note: step.note } : {}), ...(step.target ? { target: step.target } : {}), state: step.state })
+      const { kind, tool, note, target, input, output, state } = step
+      out.push({ kind, tool, ...(note ? { note } : {}), ...(target ? { target } : {}), ...(input ? { input } : {}), ...(output ? { output } : {}), state })
       continue
     }
     let thought = []
@@ -73,14 +110,28 @@ export function stepsOf(trace) {
   return out
 }
 
-// The trace a card keeps with its answer: the newest steps, the thought trimmed from
-// the oldest end to KEPT_THINK_MAX in all.
-export function keep(trace) {
-  const steps = stepsOf(trace).slice(-KEPT_STEPS)
-  let budget = KEPT_THINK_MAX
+// The steps a level shows: none, the tool calls, or all of them.
+export const shownAt = (steps, level) => (level === 'off' ? [] : level === 'tools' ? steps.filter(step => step.kind === 'tool') : steps)
+
+// The trace a card keeps with its answer, at the board's level: the newest steps, the
+// thought trimmed from the oldest end, each call's input and output cut short.
+export function keep(trace, level = DEFAULT_LEVEL) {
+  const limits = KEPT[levelOf(level)]
+  if (limits === undefined) return undefined
+  const steps = shownAt(stepsOf(trace), level).slice(-limits.steps)
+  let budget = limits.think
   const kept = []
   for (const step of steps.reverse()) {
-    if (step.kind !== 'think') { kept.push({ ...step, state: step.state === 'failed' ? 'failed' : 'done' }); continue }
+    if (step.kind !== 'think') {
+      const { input, output, ...line } = step
+      kept.push({
+        ...line,
+        ...(input ? { input: head(input, limits.input) } : {}),
+        ...(output ? { output: head(output, limits.output) } : {}),
+        state: step.state === 'failed' ? 'failed' : 'done',
+      })
+      continue
+    }
     if (budget <= 0) continue
     const text = tail(step.text, budget)
     budget -= text.length
@@ -137,7 +188,8 @@ export function createLive({ identity, now = Date.now }) {
         const id = event.type === 'tool/call' ? data.callId : data.subCallId
         const name = String(data.name ?? '')
         if (name === '') break
-        push(traceOf(sessionId), { kind: 'tool', id, tool: name, ...callAbout(data.arguments), state: 'running' })
+        const input = head(inputText(data.arguments), LIVE_INPUT_MAX)
+        push(traceOf(sessionId), { kind: 'tool', id, tool: name, ...callAbout(data.arguments), ...(input ? { input } : {}), state: 'running' })
         break
       }
       case 'tool/result':
@@ -145,7 +197,10 @@ export function createLive({ identity, now = Date.now }) {
         const trace = traces.get(sessionId)
         const id = event.type === 'tool/result' ? data.message?.toolCallId : data.subCallId
         const step = trace === undefined ? undefined : toolStep(trace, id)
-        if (step !== undefined) step.state = data.message?.isError === true || data.error !== undefined ? 'failed' : 'done'
+        if (step === undefined) break
+        step.state = data.message?.isError === true || data.error !== undefined ? 'failed' : 'done'
+        const output = head(outputText(data), LIVE_OUTPUT_MAX)
+        if (output) step.output = output
         break
       }
     }
@@ -185,20 +240,23 @@ export function createLive({ identity, now = Date.now }) {
   return {
     onEvent,
     onFrame,
-    // The newest turn of the Bot there that began at or after `since`, as the page shows it.
-    current({ botId, roomId, since }) {
+    // The newest turn of the Bot there that began at or after `since`, as the page shows
+    // it at the board's level.
+    current({ botId, roomId, since }, level = DEFAULT_LEVEL) {
+      if (level === 'off') return undefined
       const found = sessionsOf(botId, roomId).map(([, trace]) => trace).filter(trace => trace.since >= since)
         .sort((a, b) => b.since - a.since)[0]
       if (found === undefined) return undefined
-      const steps = stepsOf(found)
+      const steps = shownAt(stepsOf(found), level)
       return steps.length === 0 ? undefined : { since: found.since, ...(found.endedAt === undefined ? {} : { endedAt: found.endedAt }), steps }
     },
     // The turn a reply came from (dsBotNotes onReply), trimmed to what a card keeps.
-    kept({ botId, roomId, since }) {
+    kept({ botId, roomId, since }, level = DEFAULT_LEVEL) {
+      if (level === 'off') return undefined
       const found = sessionsOf(botId, roomId).map(([, trace]) => trace)
         .filter(trace => Math.abs(trace.since - since) <= SAME_TURN_MS)
         .sort((a, b) => Math.abs(a.since - since) - Math.abs(b.since - since))[0]
-      return found === undefined ? undefined : keep(found)
+      return found === undefined ? undefined : keep(found, level)
     },
   }
 }

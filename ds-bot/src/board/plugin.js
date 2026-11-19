@@ -10,7 +10,7 @@ import { join } from 'node:path'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { dshHomeOf } from '../host/folders.js'
 import { ACTIONS, BOT_STATUSES, createBoard, isOpen } from './cards.js'
-import { createLive } from './live.js'
+import { LEVELS, createLive, levelOf } from './live.js'
 import { openBoardStore } from './store.js'
 
 export const ROUTE = '/api/ds-bot-board'
@@ -52,17 +52,20 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
     },
   })
 
-  // What the Board page reads: every card, who is on the team, and what each Bot a
-  // card waits for is doing about it (`live`, by card id).
+  // How much of a Bot's work the page shows and an answer keeps (live.js LEVELS).
+  const level = () => levelOf(store.read().settings?.trace)
+  // What the Board page reads: every card, who is on the team, what each Bot a card
+  // waits for is doing about it (`live`, by card id), and the level (`trace`).
   const view = () => {
-    const cards = store.read().cards
+    const { cards } = store.read()
+    const trace = level()
     const working = {}
     for (const card of Object.values(cards)) {
       if (card.awaiting === undefined || !isOpen(card)) continue
-      const trace = live.current(card.awaiting)
-      if (trace !== undefined) working[card.id] = trace
+      const now = live.current(card.awaiting, trace)
+      if (now !== undefined) working[card.id] = now
     }
-    return { cards, bots: roster.bots(), readOnly: store.readOnly(), live: working }
+    return { cards, bots: roster.bots(), readOnly: store.readOnly(), live: working, trace }
   }
   async function handle(endpoint, payload) {
     const body = payload !== null && typeof payload === 'object' ? payload : {}
@@ -74,6 +77,11 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
         return store.change(data => board.user.add(data.cards, { title: body.title, key: body.key, url: body.url, assignee: body.assignee, status: body.status }))
       case 'move':
         return store.change(data => board.user.move(data.cards, String(body.id ?? ''), String(body.status ?? '')))
+      case 'trace': {
+        const trace = String(body.trace ?? '')
+        if (!LEVELS.includes(trace)) return { error: 'Unknown level.', code: 'board/refused' }
+        return store.change((data) => { data.settings = { ...data.settings, trace }; return {} })
+      }
       case 'seen':
         return store.change(data => board.user.seen(data.cards, String(body.id ?? '')))
       case 'cancel':
@@ -107,7 +115,7 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
   const disposers = [
     // The Bot answers a note in its chat, where the user reads it; the card gets a copy.
     notes.onReply?.(reply => {
-      const trace = live.kept(reply)
+      const trace = live.kept(reply, level())
       void store.change(data => board.mirror(data.cards, { ...reply, ...(trace === undefined ? {} : { trace }) }))
         .catch(error => ctx.logger?.warn?.('ds-bot-board: copying an answer failed: %s', error))
     }),
