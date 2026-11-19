@@ -3,7 +3,7 @@
 // board is read from the group's own overview and never guessed from the chat. Tasks
 // live on the room beside its goal, memory and folder, so they go when the group goes.
 import { randomBytes } from 'node:crypto'
-import { defineTool } from '@deepseek-ai/dsh-tools'
+import { defineTool } from './tool-schema.js'
 import { output } from './tools.js'
 
 export const TASK_STATUSES = ['active', 'review', 'blocked', 'done', 'cancelled']

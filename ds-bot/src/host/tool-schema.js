@@ -3,6 +3,7 @@
 // (Moonshot/KIMI validates a subset of JSON Schema) refuses the whole request for that,
 // while others accept it. Every connector schema is handed on plain instead, so the same
 // tool list works on every provider.
+import { defineTool as dshDefineTool } from '@deepseek-ai/dsh-tools'
 
 const scalarType = type => typeof type === 'string' || (Array.isArray(type) && type.every(part => typeof part === 'string'))
 
@@ -51,4 +52,62 @@ function typed(node) {
 // The input is never changed.
 export function plainToolSchema(parameters) {
   return typed(parameters ?? {})
+}
+
+// A model sometimes writes a boolean or a number as a string ("always": "true"), and
+// DSH's strict check then refuses the whole call. DS Bot's own tools read such a
+// string as the value it spells, where the schema allows no string; anything else is
+// left for the check to refuse. The input is never changed.
+const NUMERIC = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i
+export function lenientArgs(schema, value) {
+  if (schema === null || typeof schema !== 'object') return value
+  if (typeof value === 'string') {
+    const types = Array.isArray(schema.type) ? schema.type : [schema.type]
+    if (types.includes('string')) return value
+    const text = value.trim().toLowerCase()
+    if (types.includes('boolean') && (text === 'true' || text === 'false')) return text === 'true'
+    if ((types.includes('number') || types.includes('integer')) && NUMERIC.test(text)) {
+      const number = Number(text)
+      if (Number.isFinite(number) && (types.includes('number') || Number.isInteger(number))) return number
+    }
+    return value
+  }
+  if (Array.isArray(value)) {
+    if (schema.items === undefined) return value
+    const items = value.map(item => lenientArgs(schema.items, item))
+    return items.some((item, at) => item !== value[at]) ? items : value
+  }
+  if (value !== null && typeof value === 'object' && schema.properties !== undefined) {
+    let out = value
+    for (const [name, inner] of Object.entries(schema.properties)) {
+      if (!Object.hasOwn(value, name)) continue
+      const next = lenientArgs(inner, value[name])
+      if (next !== value[name]) {
+        if (out === value) out = { ...value }
+        out[name] = next
+      }
+    }
+    return out
+  }
+  return value
+}
+
+// DSH's defineTool, with lenient arguments: every place the tool reads them sees the
+// values lenientArgs gives.
+export function defineTool(options) {
+  const tool = dshDefineTool(options)
+  const loose = args => lenientArgs(tool.parameters, args)
+  const execute = tool.execute
+  tool.execute = (args, exec) => execute(loose(args), exec)
+  for (const key of ['presentCall', 'presentResult', 'isConcurrencySafe']) {
+    const inner = tool[key]
+    if (inner !== undefined) tool[key] = (args, ...rest) => inner(loose(args), ...rest)
+  }
+  const { render, presentationMeta } = tool.output
+  tool.output = {
+    ...tool.output,
+    render: (args, value) => render(loose(args), value),
+    ...(presentationMeta === undefined ? {} : { presentationMeta: (args, value) => presentationMeta(loose(args), value) }),
+  }
+  return tool
 }

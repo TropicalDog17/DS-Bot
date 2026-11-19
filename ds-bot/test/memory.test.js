@@ -872,6 +872,15 @@ test('a mixed word keeps its Latin part in recall', async (t) => {
   assert.match(await tool('recall', { query: 'AI中文' }, 'b2'), /^Entries with "AI中文" in your memory and the team memory:\n\[yours · MEMORY\.md\] AI中文教程在书架上 \[id: [0-9a-f]{4}; source: /)
 })
 
+test('remember reads "always": "true" written as a string as true', async (t) => {
+  const { tool, read, stop } = start()
+  t.after(() => stop())
+  assert.match(await tool('remember', { text: 'Ship on Friday', scope: 'team', always: 'true', pin: 'false' }, 'm1'), /^Saved to the team memory/)
+  // It went in what every Bot reads, not in the topic that waits for recall.
+  assert.match(read('team', 'MEMORY.md'), /- Ship on Friday \[id: /)
+  assert.doesNotMatch(read('team', 'MEMORY.md'), /pinned/)
+})
+
 test('Main Bots and group admins write the team memory; only Main Bots touch another Bot\'s', async (t) => {
   const { tool, read, stop } = start()
   t.after(() => stop())
