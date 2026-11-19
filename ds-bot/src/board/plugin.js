@@ -2,7 +2,8 @@
 // POST api/ds-bot-board route the Board page uses. It knows the team only through
 // DS Bot's public services: botSessionIdentity (which Bot and group a Session speaks
 // for), dsBotRoster (names, marks, Main Bots, group admins) and dsBotNotes (a note
-// to a Bot as the user's own message, and the Bot's answer to copy onto the card).
+// to a Bot as the user's own message, and the Bot's answer to copy onto the card) and
+// dsBotBridge (so a Bot on a local agent CLI gets the tool through DS Bot's MCP bridge).
 import { join } from 'node:path'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { dshHomeOf } from '../host/folders.js'
@@ -14,7 +15,7 @@ const output = { schema: { type: 'string' }, render: (_args, value) => [{ type: 
 
 export const boardFileOf = (config = {}, env = process.env) => config.file ?? join(dshHomeOf(env.DSH_HOME), 'bot-board', 'board.json')
 
-export function install(ctx, config, { identity, roster, notes, tools, connection, store = openBoardStore(boardFileOf(config), { warn: (...args) => ctx.logger?.warn?.(...args) }), now = Date.now }) {
+export function install(ctx, config, { identity, roster, notes, bridge, tools, connection, store = openBoardStore(boardFileOf(config), { warn: (...args) => ctx.logger?.warn?.(...args) }), now = Date.now }) {
   const board = createBoard({ roster, now })
 
   const tool = defineTool({
@@ -95,6 +96,7 @@ export function install(ctx, config, { identity, roster, notes, tools, connectio
         .catch(error => ctx.logger?.warn?.('ds-bot-board: copying an answer failed: %s', error))
     }),
     tools.register(tool),
+    bridge.share(tool.name),
     connection.fetch.register({
       path: ROUTE,
       methods: ['POST'],

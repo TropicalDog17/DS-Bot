@@ -262,6 +262,7 @@ A separate DSH plugin can build on the team without reaching into its state. The
 | `botSessionIdentity` | `ownerOfSession(sessionId)`: the Bot (and group) a Session speaks for, or `undefined`; `subscribe(listener)` after ownership changes |
 | `dsBotRoster` | `bots()`, `groups()`, `bot(id)`, `group(id)`, `findBot(idOrName)`: frozen copies (id, name, role, color, avatar, main; id, name, members, admin); `ready()` awaits the saved team; `subscribe(listener)` after every save |
 | `dsBotNotes` | `deliver({ botId, text, roomId? })`: a note from the user, as the user's own message: `@Bot` in that group when the Bot is a member, else in the Bot's own chat. `onReply(listener)`: hears `{ botId, roomId?, text, since }` each time a Bot's turn ends with an answer the user reads (its own chat when the user opened the turn, any turn in a group); the board copies the answer to a note onto its card |
+| `dsBotBridge` | `share(toolName)`: a Bot that runs on a local agent CLI (Claude Code, Codex, ACP) reaches tools only through DS Bot's MCP bridge, which carries the team tools; a tool a companion registers with `tools` crosses it only once shared. Returns a disposer |
 
 The browser half provides `dsBotPages`: `register({ id, title, icon, Page, order? })` puts one icon button in the sidebar's head and the collapsed rail, and opens `Page` over the main area with `{ paneLeft, leaving, close }`. It returns a disposer. Nothing shows for a plugin that does not register.
 

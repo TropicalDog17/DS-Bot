@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { install, rosterService, notesService } from '../src/host/companions.js'
+import { bridgeService, install, rosterService, notesService } from '../src/host/companions.js'
+import { bridgedTools } from '../src/host/local-agents/index.js'
 
 const fixture = () => {
   const sent = []
@@ -82,15 +83,34 @@ test('reply listeners hear each answer a Bot writes, a failing listener does not
   assert.equal(warned.length, 2)
 })
 
-test('install provides both services under a real host, and stays quiet without one', () => {
+test('install provides the services under a real host, and stays quiet without one', () => {
   const { rt } = fixture()
   install(rt)
-  assert.ok(rt.companions.roster && rt.companions.notes)
+  assert.ok(rt.companions.roster && rt.companions.notes && rt.companions.bridge)
   const provided = {}
   const hosted = fixture().rt
   hosted.ctx.provide = (name, value) => { provided[name] = value }
   install(hosted)
-  assert.deepEqual(Object.keys(provided).sort(), ['dsBotNotes', 'dsBotRoster'])
+  assert.deepEqual(Object.keys(provided).sort(), ['dsBotBridge', 'dsBotNotes', 'dsBotRoster'])
   assert.equal(typeof provided.dsBotRoster.bots, 'function')
   assert.equal(typeof provided.dsBotNotes.deliver, 'function')
+})
+
+test('a shared tool crosses the MCP bridge to a CLI Bot until its last share is disposed', () => {
+  const rt = { teamTools: [{ name: 'message_bot' }] }
+  const bridge = bridgeService(rt)
+  const offered = [{ name: 'message_bot' }, { name: 'board' }, { name: 'read_file' }, { name: 'approve_agent_action' }]
+  const crossing = () => bridgedTools(rt, offered).map(tool => tool.name)
+  assert.deepEqual(crossing(), ['message_bot', 'approve_agent_action'])
+  // A plugin reloaded before its old copy disposes shares the same name twice.
+  const first = bridge.share('board')
+  const second = bridge.share('board')
+  assert.deepEqual(crossing(), ['message_bot', 'board', 'approve_agent_action'])
+  first()
+  first()
+  assert.deepEqual(crossing(), ['message_bot', 'board', 'approve_agent_action'])
+  second()
+  assert.deepEqual(crossing(), ['message_bot', 'approve_agent_action'])
+  assert.throws(() => bridge.share(''), TypeError)
+  assert.deepEqual(bridgedTools({ teamTools: [] }, offered).map(tool => tool.name), ['approve_agent_action'])
 })

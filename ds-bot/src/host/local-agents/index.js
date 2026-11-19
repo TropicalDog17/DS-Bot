@@ -22,6 +22,13 @@ const spawnEngine = (kind, route, spec) => (kind === 'acp' ? new AcpEngine(route
   : kind === 'codex' ? new CodexEngine(route, spec, { findExecutable })
     : new ClaudeEngine(route, spec, { findExecutable }))
 
+// Only DS Bot's own team tools, and those a companion plugin shared through
+// dsBotBridge, cross the MCP bridge; the CLI keeps its own.
+export function bridgedTools(rt, tools = []) {
+  const names = new Set([...rt.teamTools.map(def => def.name), 'approve_agent_action', ...(rt.bridgedTools?.() ?? [])])
+  return tools.filter(tool => names.has(tool.name))
+}
+
 export function install(rt) {
   const { ctx, state } = rt
   // state.localAgents is replaced by the state load after install; read it
@@ -106,11 +113,7 @@ export function install(rt) {
       }
     },
     probeCwd: () => mkdtempSync(join(tmpdir(), 'dsb-probe-')),
-    toolsFor: (options) => {
-      // Only DS Bot's own team tools cross the bridge; the CLI keeps its own.
-      const names = new Set([...rt.teamTools.map(def => def.name), 'approve_agent_action'])
-      return (options.tools ?? []).filter(tool => names.has(tool.name))
-    },
+    toolsFor: options => bridgedTools(rt, options.tools),
   })
 
   let registration
