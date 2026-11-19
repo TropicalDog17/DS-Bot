@@ -43,7 +43,8 @@
 | [群聊 Goal](2026-11-01-group-goal.md) | 管理员先对齐再写 Goal；分阶段派给成员、每阶段带证据验收；每轮带 Goal 账本防跑偏；空闲时自动推进；暂停、纠偏、终止；会话头胶囊和吊舱显示进度与分工 |
 | [Bot 聊天和群聊的 `/` 菜单](2026-11-13-bot-slash-commands.md) | `/` 菜单里 DSH 命令行的执行被按 agent 作用域遮蔽（菜单行仍在）；DS Bot 动作进菜单：`/scheduled-task`、群里 bare `/goal` 打开群 Goal；技能不受影响 |
 | [iOS 出包与 TestFlight](2026-11-13-ios-release.md) | 用户要办的 Apple 账号、App ID、App Store Connect API Key；拿到后的签名、archive、上传 TestFlight 和排查；真机配对等账号和设备 |
-| [群聊任务面板](2026-11-12-group-task-board.md) | Bot 用 `group_task` 显式登记群里的任务：负责人、目标、状态、最新进展、结果摘要、历史；面板上补备注以 `@负责人` 的用户消息下发；数据随群保存 |
+| [工作看板](2026-11-19-work-board.md) | 团队一份五列看板（Todo / In progress / Review / Blocked / Done）：Bot 在任何会话用 `board` 开卡、更新、完成、取消；用户加卡、拖动或点按钮移动、加备注送到负责的 Bot；旧群任务迁移进来 |
+| [群聊任务面板](2026-11-12-group-task-board.md) | Bot 用 `group_task` 显式登记群里的任务：负责人、目标、状态、最新进展、结果摘要、历史；面板上补备注以 `@负责人` 的用户消息下发；数据随群保存（2026-11-19 起并入工作看板） |
 | [群聊共享待办](2026-11-10-group-todos.md) | 每个群一份清单：成员用 `group_todo` 加、勾、删、清空已完成、看，用户在群详情里看、勾、删；随群保存和删除；上限 100 条，满了删一条或清空已完成后再加 |
 | [浏览器、搜索、密钥和连接器](2026-10-08-browser-and-secrets.md) | 每个 Bot 的浏览器和 `read_browser`、`auto` 联网搜索、密钥卡和替换规则、GitHub 连接器(已被 2026-11-04 通用连接器取代) |
 | [密钥的静态加密](2026-11-12-encrypted-secrets.md) | 可选的 `secrets.json` 口令加密：同一文件原子切换成 scrypt + AES-256-GCM 信封；无人值守用环境变量或口令文件解锁；锁定时的行为和回滚 |

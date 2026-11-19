@@ -4,7 +4,7 @@ import { FishLogo } from './dsh-primitives.js'
 import { inkFill } from './inks.js'
 import { isMainOf } from './sources.js'
 import { currentPart, previewOf, relativeShort } from './text.js'
-import { PlusIcon, SearchIcon, SidebarIcon, GaugeIcon, ClockIcon, GearIcon, PinMarkIcon, ConnectorIcon, PlugIcon, SwitchIcon, CloudDownloadIcon, SignInIcon, SignOutIcon, SlidersIcon, ChevronRightIcon, DotsIcon, FolderIcon } from './icons.js'
+import { PlusIcon, SearchIcon, SidebarIcon, GaugeIcon, ClockIcon, GearIcon, PinMarkIcon, ConnectorIcon, PlugIcon, SwitchIcon, CloudDownloadIcon, SignInIcon, SignOutIcon, SlidersIcon, ChevronRightIcon, DotsIcon, FolderIcon, BoardIcon } from './icons.js'
 import { lookOf, MAIN_LOOK } from './characters.js'
 import { botState, BotMark, BotAvatar, RoomAvatar } from './mark.js'
 import { AgentBadge } from './agent-badge.js'
@@ -797,12 +797,14 @@ export function TeamSidebar(props) {
         h('span', { className: 'bt-brand' }, h(BrandName)),
         h(UpdateButton, { useUpdate: props.useUpdate, actions }),
         h('button', { type: 'button', className: 'bt-round', 'aria-label': t('New section'), title: t('New section'), onClick: createNewSection }, h(FolderIcon)),
+        h('button', { type: 'button', className: 'bt-round', 'aria-label': t('Board'), title: t('Board'), onClick: () => actions.openBoard() }, h(BoardIcon)),
         h('button', { type: 'button', className: 'bt-round', 'aria-label': t('Search'), title: t('Search'), onClick: () => actions.openPalette() }, h(SearchIcon)),
         h('button', { type: 'button', className: 'bt-round', 'aria-label': t('New…'), title: t('New…'), onClick: () => actions.openNewChat('new') }, h(PlusIcon)),
         h('button', { type: 'button', className: 'bt-round bt-side-collapse', 'aria-label': t('Collapse sidebar'), title: t('Collapse sidebar'), onClick: onToggle }, h(SidebarIcon)))
     : h('div', { className: 'bt-rail-top' },
         h(UpdateButton, { useUpdate: props.useUpdate, actions }),
         h('button', { type: 'button', className: 'bt-round bt-side-collapse', 'aria-label': t('Collapse sidebar'), title: t('Collapse sidebar'), onClick: onToggle }, h(SidebarIcon)),
+        h('button', { type: 'button', className: 'bt-round', 'aria-label': t('Board'), title: t('Board'), onClick: () => actions.openBoard() }, h(BoardIcon)),
         main ? h(BotRow, { ...rowProps, bot: main, marked: markedUnread[main.id] === true }) : roster.ready ? null : bootFailed ? h(BootFailed, { actions }) : h('div', { className: 'bt-hint' }, t('Setting up your Main Bot…')),
         h('span', { className: 'bt-rail-sep', 'aria-hidden': true }))
   // The foot stands in for the shell's hidden footer: the account avatar, and on

@@ -7,6 +7,7 @@ import { join } from 'node:path'
 import { LEGACY_THEMES, MAX_EXCHANGES, ROOM_MODES, SECTION_COLORS, SECTION_NAME_MAX, TEXT_KEPT } from './constants.js'
 import { replaceFile } from './files.js'
 import { homeLock } from './home-lock.js'
+import { migrateRoomTasks } from './board-data.js'
 import { currentColor, headOf, normalize, unquote } from './text.js'
 import { AMBIGUOUS_OLD_ROUTES, legacyRoute } from './local-agents/engines.js'
 
@@ -167,6 +168,7 @@ export function install(rt) {
       if (!Array.isArray(room.members)) room.members = []
     }
     if (migrateLocalRoutes(state)) migrated = true
+    if (migrateRoomTasks(state)) migrated = true
     // A team from before several Main Bots were allowed names a single one.
     if (!Array.isArray(state.mainBotIds)) state.mainBotIds = []
     if ('mainBotId' in state) {

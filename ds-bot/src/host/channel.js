@@ -110,6 +110,8 @@ export function install(rt) {
     agents: Object.values(state.agents),
     // Sidebar sections that group Bots, group chats and the DSH Agent by workflow.
     sections: state.sections ?? [],
+    // The user's work board: every card, open and finished (board.js).
+    board: { cards: state.board?.cards ?? {} },
     // Key names and who may use them; values never leave the host.
     secrets: rt.secretsView(),
     // How the secrets file is stored and whether this process can read it now.
@@ -547,27 +549,35 @@ export function install(rt) {
           const result = await rt.goalControl(String(body.roomId ?? ''), body)
           return result.error !== undefined ? fail(result.error, result.code ?? 'bot/refused') : ok(view())
         }
-        // The task board's two panel actions. A note the user adds is kept on the task
-        // and posted into the group as the user's own message that calls its owner, so
-        // the Bot acts on it where the work runs, as if the user had typed it there.
-        case 'task-note': {
+        // The Board page. A note the user adds is kept on the card and reaches its Bot
+        // as the user's own message, where the work runs (see board.js noteTarget).
+        case 'board-add': {
           await rt.load()
-          const roomId = String(body.roomId ?? '')
-          const result = rt.taskNote(roomId, String(body.id ?? ''), body.text)
+          const result = rt.boardAdd({ title: body.title, key: body.key, url: body.url, assignee: body.assignee, status: body.status })
           if (result.error !== undefined) return fail(result.error, 'bot/refused')
-          const bot = rt.botOf(result.task.botId)
           await rt.save()
-          if (bot !== undefined) {
-            await rt.sendUser({
-              sessionId: roomId,
-              content: [{ type: 'text', text: `@${bot.name} ${result.task.notes.at(-1).text}` }],
-            })
+          return ok(view())
+        }
+        case 'board-move': {
+          await rt.load()
+          const result = rt.boardMove(String(body.id ?? ''), String(body.status ?? ''))
+          if (result.error !== undefined) return fail(result.error, 'bot/refused')
+          await rt.save()
+          return ok(view())
+        }
+        case 'board-note': {
+          await rt.load()
+          const result = rt.boardNote(String(body.id ?? ''), body.text)
+          if (result.error !== undefined) return fail(result.error, 'bot/refused')
+          await rt.save()
+          if (result.deliver !== undefined) {
+            await rt.sendUser({ sessionId: result.deliver.sessionId, content: [{ type: 'text', text: result.deliver.text }] })
           }
           return ok(view())
         }
-        case 'task-cancel': {
+        case 'board-cancel': {
           await rt.load()
-          const result = rt.taskCancel(String(body.roomId ?? ''), String(body.id ?? ''))
+          const result = rt.boardCancel(String(body.id ?? ''), body.reason)
           if (result.error !== undefined) return fail(result.error, 'bot/refused')
           await rt.save()
           return ok(view())

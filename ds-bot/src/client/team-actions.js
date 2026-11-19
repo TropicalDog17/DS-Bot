@@ -62,6 +62,8 @@ export function teamActions({ call, after, partFor, roster, ui, live, cards, hel
     openSettings,
     // DS Bot's own Models page: the providers DSH serves, their keys and models.
     openModels: () => openSettings('models'),
+    openBoard: () => { ui.set(state => ({ ...state, board: true, menu: null, palette: null, newChat: null, leftDrawer: false })) },
+    closeBoard: () => { ui.set(state => (state.board ? { ...state, board: false } : state)) },
     closeSettings: () => { ui.set(state => (state.settings ? { ...state, settings: null } : state)) },
     openMemory: (id) => { ui.set(state => ({ ...state, memory: id, menu: null, palette: null })) },
     closeMemory: () => { ui.set(state => (state.memory ? { ...state, memory: null } : state)) },
@@ -200,8 +202,10 @@ export function teamActions({ call, after, partFor, roster, ui, live, cards, hel
     goalControl: (roomId, goalId, action, stopWork) => after(call('goal-control', { roomId, goalId, action, ...(stopWork ? { stopWork: true } : {}) })),
     // The group task board: the user's note is kept on the task and posted to the
     // group as a user message that calls its owner; cancelling is the panel's own.
-    taskNote: (roomId, id, text) => after(call('task-note', { roomId, id, text })),
-    taskCancel: (roomId, id) => after(call('task-cancel', { roomId, id })),
+    boardAdd: card => after(call('board-add', card)),
+    boardMove: (id, status) => after(call('board-move', { id, status })),
+    boardNote: (id, text) => after(call('board-note', { id, text })),
+    boardCancel: (id, reason) => after(call('board-cancel', { id, reason })),
     // The goal island: `goalCompose` holds the room whose draft form is open,
     // `goalOpen` the room whose panel is open.
     composeGoal: roomId => ui.set(state => ({ ...state, goalCompose: roomId, goalOpen: roomId })),

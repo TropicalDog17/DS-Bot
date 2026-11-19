@@ -1,17 +1,17 @@
-// The group task board in the group's details panel: what each member is working on,
-// the latest line of progress, and the history of finished and cancelled work. The
-// tasks are registered by the Bots themselves with the group_task tool; the panel only
-// reads them and lets the user add a note, which the host posts into the group as the
-// user's message that calls the task's owner.
+// The group's slice of the user's work board, in the group's details panel: the cards
+// opened from this group, what each member is working on, the latest line of progress,
+// and the history of finished and cancelled work. Bots put them there with the board
+// tool; the panel lets the user add a note, which the host posts into the group as the
+// user's message that calls the card's Bot.
 import { createElement as h, useEffect, useState } from 'react'
 import { BotMark } from './mark.js'
 import { clockLabel } from './text.js'
 import { t } from './i18n.js'
 
-const OPEN = ['active', 'review', 'blocked']
-const STATUS_KEY = { active: 'In progress', review: 'Awaiting review', blocked: 'Blocked', done: 'Done', cancelled: 'Cancelled' }
+const OPEN = ['todo', 'active', 'review', 'blocked']
+const STATUS_KEY = { todo: 'Todo', active: 'In progress', review: 'Awaiting review', blocked: 'Blocked', done: 'Done', cancelled: 'Cancelled' }
 
-function TaskRow({ task, bot, room, actions }) {
+function TaskRow({ task, bot, actions }) {
   const [writing, setWriting] = useState(false)
   const [text, setText] = useState('')
   const [confirming, setConfirming] = useState(false)
@@ -29,7 +29,7 @@ function TaskRow({ task, bot, room, actions }) {
     const line = text.trim()
     if (line === '' || busy) return
     setBusy(true)
-    Promise.resolve(actions.taskNote(room.id, task.id, line)).then(
+    Promise.resolve(actions.boardNote(task.id, line)).then(
       () => { setText(''); setWriting(false); setBusy(false) },
       failed,
     )
@@ -38,15 +38,15 @@ function TaskRow({ task, bot, room, actions }) {
     if (!confirming) { setConfirming(true); return }
     setConfirming(false)
     setBusy(true)
-    Promise.resolve(actions.taskCancel(room.id, task.id)).then(() => setBusy(false), failed)
+    Promise.resolve(actions.boardCancel(task.id)).then(() => setBusy(false), failed)
   }
   return h('div', { className: 'bt-task', 'data-status': task.status, 'data-busy': busy || undefined },
     h('div', { className: 'bt-task-head' },
       bot ? h(BotMark, { bot, size: 22, state: open ? 'work' : 'idle' }) : null,
       h('span', { className: 'bt-task-name' }, bot?.name ?? t('a Bot')),
       h('span', { className: 'bt-task-status' }, t(STATUS_KEY[task.status] ?? task.status)),
-      h('span', { className: 'bt-task-time' }, clockLabel(task.startedAt))),
-    h('div', { className: 'bt-task-goal' }, task.goal),
+      h('span', { className: 'bt-task-time' }, clockLabel(task.createdAt ?? 0))),
+    h('div', { className: 'bt-task-goal' }, task.title),
     open && task.progress ? h('div', { className: 'bt-task-progress' }, task.progress) : null,
     !open && task.result ? h('div', { className: 'bt-task-result' }, task.result) : null,
     !open && task.reason ? h('div', { className: 'bt-task-reason' }, task.reason) : null,
@@ -71,10 +71,10 @@ function TaskRow({ task, bot, room, actions }) {
 
 export function TaskBoard({ room, roster, actions }) {
   const [historyOpen, setHistoryOpen] = useState(false)
-  const all = Object.values(room.tasks ?? {}).sort((a, b) => a.startedAt - b.startedAt)
+  const all = Object.values(roster.board?.cards ?? {}).filter(card => card?.roomId === room.id).sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0))
   const open = all.filter(task => OPEN.includes(task.status))
   const past = all.filter(task => !OPEN.includes(task.status)).reverse()
-  const row = task => h(TaskRow, { key: task.id, task, bot: roster.byId?.[task.botId], room, actions })
+  const row = task => h(TaskRow, { key: task.id, task, bot: roster.byId?.[task.assignee], actions })
   return h('div', { className: 'bt-tasks' },
     h('div', { className: 'bt-tasks-head' },
       h('div', { className: 'bt-section-title' }, t('Tasks')),

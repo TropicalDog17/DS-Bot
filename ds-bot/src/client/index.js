@@ -58,6 +58,7 @@ import { ErrorToast, FEEDBACK_CSS } from './feedback.js'
 import { ABOUT_CSS } from './about.js'
 import { MEMBER_CSS, MemberDock } from './member-status.js'
 import { TASK_CSS } from './task-board.js'
+import { BOARD_CSS } from './board.js'
 import { IM_CSS } from './im-page.js'
 import { GOAL_CSS } from './goal.js'
 import { BotMention, USER_MESSAGE_CSS, UserMessageCell, canDrawUserMessages, installUserBubble } from './user-message.js'
@@ -1182,6 +1183,7 @@ export function apply(ctx) {
     [ABOUT_CSS, 'about'],
     [MEMBER_CSS, 'members'],
     [TASK_CSS, 'tasks'],
+    [BOARD_CSS, 'board'],
     [PASTE_CSS, 'paste'],
     [OPENING_CSS, 'opening'],
     [IM_CSS, 'im'],
