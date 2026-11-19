@@ -1,0 +1,52 @@
+name: Fork check
+
+# The fork deploys only the ds-bot plugin to a Linux dsh web, so it checks what a merge into
+# main can break there: the unit tests, client.js against src/client, the linter and the leak
+# scan. Upstream's Test workflow (Windows, macOS, iOS, Docker) stays off on the fork.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fork-check-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  plugin:
+    name: Plugin
+    if: github.repository != 'Fei2411/DS-Bot'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+        working-directory: ds-bot
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --no-fund --no-audit
+      # The tests rebuild link.js from ../link, which has its own packages.
+      - run: npm ci --no-fund --no-audit --prefix ../link
+      - run: npm run harness
+      - run: npm test
+      - run: node scripts/build-client.mjs --check
+      - run: npm run lint
+
+  scan:
+    name: Leak scan
+    if: github.repository != 'Fei2411/DS-Bot'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: mkdir -p "$RUNNER_TEMP/tree" && git archive HEAD | tar -x -C "$RUNNER_TEMP/tree"
+      - run: node scripts/scan.mjs "$RUNNER_TEMP/tree"
