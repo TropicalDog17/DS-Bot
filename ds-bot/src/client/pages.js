@@ -1,6 +1,6 @@
 // The seat a companion plugin takes in DS Bot's interface: one icon button in the
-// sidebar's head (and in the collapsed rail), and a full page over the main area while
-// it is open. A companion's client injects `dsBotPages` and registers its page:
+// sidebar's head (and in the collapsed rail), and a screen in the main area while it is
+// open. Opening any chat leaves it, as it leaves any other screen. A companion's client injects `dsBotPages` and registers its page:
 //
 //   const off = ctx.dsBotPages.register({ id: 'board', title: 'Board', icon: BoardIcon, Page })
 //
@@ -34,11 +34,12 @@ export function createPages() {
   return { source, service: Object.freeze({ register, list: () => source.getSnapshot() }) }
 }
 
-// The head's buttons, one per registered page.
-export function PageButtons({ pages, actions }) {
+// The head's buttons, one per registered page; the open page's button is the current place.
+export function PageButtons({ pages, open = null, actions }) {
   return (pages ?? []).map(page => h('button', {
     key: `page:${page.id}`, type: 'button', className: 'bt-round bt-page-button', 'data-page': page.id,
-    'aria-label': page.title, title: page.title, onClick: () => actions.openPage(page.id),
+    'aria-label': page.title, title: page.title, 'aria-current': page.id === open ? 'page' : undefined,
+    onClick: () => actions.openPage(page.id),
   }, h(page.icon)))
 }
 

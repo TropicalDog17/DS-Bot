@@ -2,7 +2,7 @@ import { call } from './api.js'
 import { isHex, inkText, paintCss } from './inks.js'
 import { DEFAULT_MASK, SHAPES, markupCache, maskOf } from './characters.js'
 import { createSource, EMPTY_ROSTER, indexRoster, isAgentSession } from './sources.js'
-import { teamActions } from './team-actions.js'
+import { clearFront, teamActions } from './team-actions.js'
 import { themeCss, shellTokens, registry, registerShape, registerTheme, allThemes, layoutOf, effectsOf, widthOf, flatWidthOf } from './themes.js'
 import { readSkinSurfaceVars, writeSkinSurfaceVars } from './skin.js'
 import { MENTION_ORIGIN, currentPart } from './text.js'
@@ -609,13 +609,11 @@ export function apply(ctx) {
       openChangesReview(changes)
     },
     learningAnswer: (id, approve) => after(call('learning-answer', { id, approve })),
-    // The full-pane overlays sit above the conversation, so opening one must dismiss them
-    // or the click appears to do nothing.
     isAgentSession: id => isAgentSessionId(id),
     openSession: (id) => {
       // A DSH Agent Session id lands on the plain surface, not the Bot skin.
       if (isAgentSessionId(id)) return actions.openAgentSession(id)
-      ui.set(state => (state.newChat || state.exchange || state.menu || state.palette || state.groupSearch ? { ...state, newChat: null, exchange: null, menu: null, palette: null, groupSearch: null } : state))
+      ui.set(clearFront)
       setPlain(false)
       const target = partFor(id)
       show(target)
@@ -623,7 +621,7 @@ export function apply(ctx) {
     // The conversation replacements withdraw for a plain Session; set the surface
     // before the navigation so the Bot skin never flashes.
     openAgentSession: (sessionId) => {
-      ui.set(state => ({ ...state, newChat: null, exchange: null, menu: null, palette: null, groupSearch: null, details: null, view: 'details', renaming: false, tab: null }))
+      ui.set(state => ({ ...clearFront(state), details: null, view: 'details', renaming: false, tab: null }))
       setPlain(true)
       show(sessionId)
     },

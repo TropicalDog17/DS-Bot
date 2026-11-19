@@ -27,7 +27,7 @@ const bundled = async (entry) => {
   runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports, require, setTimeout, clearTimeout, URL, URLSearchParams, Promise })
   return module.exports
 }
-const { BoardDialog, CardDetail, boardColumns, leadColumn, COLUMNS } = await bundled('board/client/board.js')
+const { BoardScreen, CardDetail, boardColumns, leadColumn, COLUMNS } = await bundled('board/client/board.js')
 const { installBoardPage, boardCall, BOARD_ROUTE } = await bundled('board/client/index.js')
 const plain = value => JSON.parse(JSON.stringify(value))
 
@@ -83,7 +83,7 @@ test('the Board page shows each card with its ticket key and Vietnamese text int
     byId: {}, bots: [],
     board: { cards: { k: card('k', 'active', { title: 'Sửa lỗi đăng nhập', key: 'LIFE-782', progress: 'Đang viết test' }), b: card('b', 'blocked', { title: 'Chờ duyệt' }) } },
   }
-  const tree = { type: BoardDialog, props: { roster, actions: { closeBoard() {} } }, children: [] }
+  const tree = { type: BoardScreen, props: { roster, actions: { closeBoard() {} } }, children: [] }
   const cards = all(tree, 'bt-board-card')
   assert.equal(cards.length, 2)
   assert.match(text(find(tree, 'bt-board-cols')), /LIFE-782Sửa lỗi đăng nhậpĐang viết test/)
@@ -97,7 +97,26 @@ test('the Board page shows each card with its ticket key and Vietnamese text int
   assert.equal(all(tree, 'bt-board-fab').length, 1)
   // A card with a link says so.
   const linked = { ...roster, board: { cards: { k: card('k', 'review', { title: 'PR', links: [{ url: 'https://github.com/x/y/pull/1' }] }) } } }
-  assert.equal(all({ type: BoardDialog, props: { roster: linked, actions: { closeBoard() {} } }, children: [] }, 'bt-board-has-link').length, 1)
+  assert.equal(all({ type: BoardScreen, props: { roster: linked, actions: { closeBoard() {} } }, children: [] }, 'bt-board-has-link').length, 1)
+})
+
+test('the Board is a screen, not a dialog: no close button, and a back arrow only with no sidebar beside it', () => {
+  const roster = { byId: {}, bots: [], board: { cards: {} } }
+  let closed = 0
+  const screen = paneLeft => ({ type: BoardScreen, props: { roster, paneLeft, actions: { closeBoard: () => { closed += 1 } } }, children: [] })
+  // Beside the sidebar: any chat there leads away, so the screen has no way out of its own.
+  const wide = screen(280)
+  const root = find(wide, 'bt-board-page')
+  assert.equal(root.props.role, 'region')
+  assert.equal(root.props['aria-modal'], undefined)
+  assert.equal(all(wide, 'bt-board-close').length, 0)
+  assert.equal(all(wide, 'bt-board-back').length, 0)
+  // Alone in the window (a phone): one back arrow returns to the chat.
+  const back = all(screen(0), 'bt-board-back')
+  assert.equal(back.length, 1)
+  assert.equal(back[0].props['aria-label'], 'Back')
+  back[0].props.onClick()
+  assert.equal(closed, 1)
 })
 
 test('an open card is a conversation: the user on the right, the Bot\'s replies under its mark, one Message box', () => {
