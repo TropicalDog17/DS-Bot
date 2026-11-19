@@ -127,9 +127,9 @@ export function createBoard({ roster, now = Date.now }) {
   const touch = (card) => { card.updatedAt = now() }
   // The card's conversation: the user's notes and the Bots' replies, oldest first, the
   // last THREAD_MAX kept.
-  const say = (card, by, text) => {
+  const say = (card, by, text, extra = {}) => {
     const thread = (card.notes ??= [])
-    thread.push({ at: now(), by, text })
+    thread.push({ at: now(), by, text, ...extra })
     if (thread.length > THREAD_MAX) thread.splice(0, thread.length - THREAD_MAX)
     touch(card)
   }
@@ -320,8 +320,9 @@ export function createBoard({ roster, now = Date.now }) {
   // whose note it read (`heard`). A card with no request ids to match (a group note)
   // gets the answer only by waiting longest for that Bot there, from a turn that began
   // after the note. A card waiting on request ids is never matched by order: an answer
-  // to another card would land on it.
-  const mirror = (cards, { botId, roomId, text, since, heard } = {}) => {
+  // to another card would land on it. `trace` is how the Bot got there (live.js keep):
+  // its reasoning and tool calls.
+  const mirror = (cards, { botId, roomId, text, since, heard, trace } = {}) => {
     const said = replyText(text, REPLY_MAX)
     if (said === '') return { error: 'Nothing to copy.' }
     const there = list(cards).filter(card => card.awaiting?.botId === botId && card.awaiting.roomId === roomId)
@@ -336,7 +337,7 @@ export function createBoard({ roster, now = Date.now }) {
     if (answered.length === 0) return { error: 'No card waits for this answer.' }
     for (const card of answered) {
       delete card.awaiting
-      say(card, botId, said)
+      say(card, botId, said, trace === undefined ? {} : { trace })
       // New to the user until they open the card.
       card.unread = true
     }

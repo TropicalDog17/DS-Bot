@@ -7,6 +7,7 @@ import { apply, inject, name } from '../src/board/entry.js'
 import { ROUTE, boardFileOf, install } from '../src/board/plugin.js'
 import { READ_ONLY, openBoardStore } from '../src/board/store.js'
 import { ACTIONS, ticketKey } from '../src/board/cards.js'
+import { KEPT_THINK_MAX, callAbout, keep, visibleThought } from '../src/board/live.js'
 import { bridgeService, notesService, rosterService } from '../src/host/companions.js'
 import { homeLock } from '../src/host/home-lock.js'
 
@@ -50,7 +51,11 @@ function host(t, { file, notes, now = Date.now } = {}) {
   const tools = { register: (tool) => { registered.tools.push(tool); return () => { registered.tools.splice(registered.tools.indexOf(tool), 1) } } }
   const connection = { fetch: { register: (route) => { registered.routes.push(route); return () => { registered.routes.splice(registered.routes.indexOf(route), 1) } } } }
   const boardFile = file ?? join(dir, 'bot-board', 'board.json')
-  const handle = install({}, { file: boardFile }, { ...team, ...(notes ? { notes } : {}), tools, connection, store: openBoardStore(boardFile), now })
+  // DSH's own events, as a host would emit them to the plugin.
+  const listeners = {}
+  const ctx = { on: (name, listener) => { listeners[name] = listener; return () => { delete listeners[name] } } }
+  const emit = (name, ...args) => listeners[name]?.(...args)
+  const handle = install(ctx, { file: boardFile }, { ...team, ...(notes ? { notes } : {}), tools, connection, store: openBoardStore(boardFile), now })
   t.after(() => handle.dispose())
   const tool = (args, sessionId = 'b') => registered.tools.find(entry => entry.name === 'board').execute(args, { agent: { id: sessionId } })
   const cards = () => Object.values(JSON.parse(readFileSync(boardFile, 'utf8')).cards)
@@ -61,7 +66,7 @@ function host(t, { file, notes, now = Date.now } = {}) {
   }
   // A copied answer is written after the event; the next change waits for it.
   const settle = () => handle.store.change(() => ({ error: 'settled' }))
-  return { dir, team, handle, registered, tool, cards, post, boardFile, settle }
+  return { dir, team, handle, registered, tool, cards, post, boardFile, settle, emit, listeners }
 }
 
 test('the entry is a separate plugin that needs only public services', () => {
@@ -300,6 +305,91 @@ test('a chat card that waited before request ids still gets the next answer ther
   h.team.reply({ botId: 'b', text: 'answer', since: 2000, heard: ['unknown'] })
   await h.settle()
   assert.deepEqual(h.cards()[0].notes.map(note => note.text), ['answer'])
+})
+
+test('a waiting card shows what its Bot is doing: reasoning as it streams and each tool call', async (t) => {
+  let clock = 1000
+  const h = host(t, { now: () => clock })
+  const added = await h.post('add', { title: 'Sửa lỗi đăng nhập', assignee: 'b' })
+  const id = Object.keys(added.value.cards)[0]
+  await h.post('note', { id, text: 'xem giúp log nhé' })
+  const session = { id: 'b' }
+  const event = (type, data, time = clock) => h.emit('session/event', session, { type, data, time })
+  const frame = (frame) => h.emit('agent/assistant-stream', { agent: session, frame })
+  const think = (attemptId, text) => frame({ type: 'chunk', attemptId, chunk: { type: 'reasoning-delta', index: 0, text } })
+
+  // A turn that began before the note is other work: the card only waits.
+  event('turn/start', { turn: 1 }, 900)
+  frame({ type: 'start', attemptId: 'a0' })
+  think('a0', 'older work')
+  assert.deepEqual((await h.post('state')).value.live, {})
+
+  clock = 1100
+  event('turn/start', { turn: 2 })
+  frame({ type: 'start', attemptId: 'a1' })
+  think('a1', '<signature>xyz</signature>\nThe user wants ')
+  think('a1', 'the login log.')
+  frame({ type: 'end', attemptId: 'a1', outcome: { kind: 'committed', eventType: 'assistant/message', seq: 3 } })
+  event('tool/call', { callId: 'k1', name: 'read_file', arguments: JSON.stringify({ path: '/var/log/app/login.log' }) })
+  let live = (await h.post('state')).value.live[id]
+  assert.equal(live.since, 1100)
+  assert.deepEqual(live.steps, [
+    { kind: 'think', text: 'The user wants the login log.' },
+    { kind: 'tool', tool: 'read_file', target: 'login.log', state: 'running' },
+  ])
+  event('tool/result', { message: { toolCallId: 'k1', isError: true } })
+  event('tool/call', { callId: 'k2', name: 'bash', arguments: JSON.stringify({ command: 'tail -n 50 login.log', description: 'Read the last lines' }) })
+  event('tool/result', { message: { toolCallId: 'k2' } })
+  // An attempt that failed and was retried leaves nothing behind.
+  frame({ type: 'start', attemptId: 'a2' })
+  think('a2', 'half a thought')
+  frame({ type: 'end', attemptId: 'a2', outcome: { kind: 'committed', eventType: 'assistant/attempt', seq: 6 } })
+  frame({ type: 'start', attemptId: 'a3' })
+  think('a3', 'Found it.')
+  live = (await h.post('state')).value.live[id]
+  assert.deepEqual(live.steps.map(step => [step.kind, step.text ?? step.tool, step.state]), [
+    ['think', 'The user wants the login log.', undefined],
+    ['tool', 'read_file', 'failed'],
+    ['tool', 'bash', 'done'],
+    ['think', 'Found it.', undefined],
+  ])
+  assert.deepEqual(live.steps[2], { kind: 'tool', tool: 'bash', note: 'Read the last lines', target: 'tail -n 50 login.log', state: 'done' })
+
+  // The answer lands on the card with how the Bot got there; the card stops waiting.
+  clock = 4100
+  event('turn/end', { turn: 2 })
+  h.team.reply({ botId: 'b', text: 'Lỗi do token hết hạn.', since: 1100 })
+  await h.settle()
+  const state = (await h.post('state')).value
+  assert.deepEqual(state.live, {})
+  const answer = state.cards[id].notes.at(-1)
+  assert.equal(answer.text, 'Lỗi do token hết hạn.')
+  assert.equal(answer.trace.ms, 3000)
+  assert.deepEqual(answer.trace.steps.map(step => step.kind), ['think', 'tool', 'tool', 'think'])
+  // Another Bot's Session, or a Session that is no Bot's, is not traced.
+  h.emit('session/event', { id: 'nobody' }, { type: 'turn/start', data: {}, time: 5000 })
+  h.handle.dispose()
+  assert.deepEqual(Object.keys(h.listeners), [])
+})
+
+test('a Bot on a local agent CLI shows its own tool lines; a kept trace is short', () => {
+  const trace = { since: 0, steps: [{ kind: 'think', text: 'Plan it.\n▸ Read src/app.js\nLooks fine.\n▸ Ran npm test' }] }
+  assert.deepEqual(keep({ ...trace, endedAt: 500 }).steps, [
+    { kind: 'think', text: 'Plan it.' },
+    { kind: 'tool', text: 'Read src/app.js', state: 'done' },
+    { kind: 'think', text: 'Looks fine.' },
+    { kind: 'tool', text: 'Ran npm test', state: 'done' },
+  ])
+  assert.equal(keep({ ...trace, endedAt: 500 }).ms, 500)
+  const long = keep({ since: 0, endedAt: 1, steps: [{ kind: 'think', text: 'a'.repeat(5000) }, { kind: 'tool', tool: 'bash', state: 'running' }, { kind: 'think', text: 'b'.repeat(5000) }] })
+  assert.deepEqual(long.steps.map(step => step.kind), ['tool', 'think'])
+  assert.equal(long.steps[1].text.length, KEPT_THINK_MAX)
+  assert.equal(long.steps[0].state, 'done')
+  assert.equal(keep({ since: 0, steps: [] }), undefined)
+  assert.equal(visibleThought('<signature>abc'), '')
+  assert.equal(visibleThought('<b>bold</b>'), '<b>bold</b>')
+  assert.deepEqual(callAbout('{"url":"https://example.com/a","query":"login"}'), { target: 'login' })
+  assert.deepEqual(callAbout('not json'), {})
 })
 
 test('a card keeps the last 200 messages of its conversation', async (t) => {

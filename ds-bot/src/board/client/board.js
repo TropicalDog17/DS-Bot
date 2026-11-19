@@ -6,13 +6,15 @@
 // fills the screen, the columns become a segmented control, and Add card sits under the
 // thumb.
 //
-// `roster` here is the board's own view (page.js): { bots, byId, board: { cards } },
-// read from the plugin's route; `actions` call that route.
+// `roster` here is the board's own view (page.js): { bots, byId, board: { cards, live } },
+// read from the plugin's route; `actions` call that route. `live` is, per waiting card,
+// what its Bot is doing about it: reasoning and tool calls as they come.
 import { createElement as h, useCallback, useEffect, useRef, useState } from 'react'
 import { BotMark } from '../../client/mark.js'
 import { ChevronLeftIcon, PlusIcon } from '../../client/icons.js'
 import { useEscape } from '../../client/overlay-hooks.js'
-import { clockLabel, relativeShort } from '../../client/text.js'
+import { clockLabel, elapsedLabel, relativeShort } from '../../client/text.js'
+import { workPhrase } from '../../client/cells.js'
 import { t } from '../../client/i18n.js'
 import { LinkIcon } from './icons.js'
 import { nameCards } from './card-tag.js'
@@ -108,11 +110,41 @@ function AddCard({ roster, actions, onDone }) {
       h('button', { type: 'button', className: 'bt-send bt-board-go', disabled: title.trim() === '' || busy, onClick: add }, t('Add card'))))
 }
 
+// How a Bot got to its answer, step by step: its reasoning as it streamed and each tool
+// call, named the way the chat's activity row names it. Live, it follows the newest step.
+export function Trace({ steps, live = false }) {
+  const box = useRef(null)
+  const last = steps.at(-1)
+  const size = `${steps.length}:${last?.kind === 'think' ? last.text.length : last?.state}`
+  useEffect(() => {
+    const node = box.current
+    if (live && node) node.scrollTop = node.scrollHeight
+  }, [live, size])
+  return h('ol', { className: 'bt-board-trace', ref: box, 'data-live': live || undefined },
+    steps.map((step, index) => step.kind === 'think'
+      ? h('li', { key: index, className: 'bt-board-step bt-board-thought' }, step.text)
+      : h('li', { key: index, className: 'bt-board-step bt-board-tool', 'data-state': step.state },
+          h('span', { className: 'bt-board-tool-dot', 'aria-hidden': true }),
+          h('span', { className: 'bt-board-tool-text' }, step.text ?? workPhrase(step)))))
+}
+
+// A kept trace sits folded above the answer it led to, as the chat folds its thinking.
+function TraceFold({ trace }) {
+  const steps = Array.isArray(trace?.steps) ? trace.steps : []
+  if (steps.length === 0) return null
+  return h('details', { className: 'bt-board-fold' },
+    h('summary', null, t('Thought it through'),
+      typeof trace.ms === 'number' ? h('span', { className: 'bt-board-age' }, `· ${elapsedLabel(Math.max(1000, trace.ms))}`) : null),
+    h(Trace, { steps }))
+}
+
 // The card's conversation: the user's notes on the right, the Bots' replies on the left
 // under their mark, oldest first. While the Bot owes an answer to the last note, its
-// mark waits with three dots; the answer it writes in its chat lands here.
-function Thread({ notes, roster, awaiting }) {
+// mark waits with three dots under what it is doing (`live`); the answer it writes in
+// its chat lands here.
+function Thread({ notes, roster, awaiting, live }) {
   const waiter = awaiting?.botId === undefined ? undefined : roster.byId?.[awaiting.botId]
+  const working = Array.isArray(live?.steps) && live.steps.length > 0 ? live.steps : undefined
   return h('ol', { className: 'bt-board-thread' },
     notes.map((note, index) => {
       const bot = note.by === undefined || note.by === USER ? undefined : roster.byId?.[note.by]
@@ -120,26 +152,37 @@ function Thread({ notes, roster, awaiting }) {
       return h('li', { key: index, className: 'bt-board-msg', 'data-by': fromBot ? 'bot' : 'user' },
         fromBot ? (bot ? h(BotMark, { bot, size: 24 }) : h('span', { className: 'bt-board-msg-mark', 'aria-hidden': true })) : null,
         h('div', { className: 'bt-board-msg-body' },
+          fromBot ? h(TraceFold, { trace: note.trace }) : null,
           h('span', { className: 'bt-board-msg-text' }, nameCards(note.text, roster.board?.cards ?? {})),
           h('span', { className: 'bt-board-age' }, clockLabel(note.at ?? 0))))
     }),
-    waiter ? h('li', { key: 'waiting', className: 'bt-board-msg bt-board-waiting', 'data-by': 'bot', 'aria-hidden': true },
+    waiter ? h('li', { key: 'waiting', className: 'bt-board-msg bt-board-waiting', 'data-by': 'bot', 'aria-busy': true },
       h(BotMark, { bot: waiter, size: 24 }),
-      h('div', { className: 'bt-board-msg-body' }, h('span', { className: 'bt-board-msg-text bt-board-dots' }, h('i'), h('i'), h('i')))) : null)
+      h('div', { className: 'bt-board-msg-body' },
+        working ? h(Trace, { steps: working, live: true }) : null,
+        h('span', { className: 'bt-board-msg-text bt-board-dots', 'aria-hidden': true }, h('i'), h('i'), h('i')))) : null)
 }
 
-export function CardDetail({ card, roster, actions }) {
+export function CardDetail({ card, roster, actions, live }) {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const [error, setError] = useState('')
   const scroller = useRef(null)
   const said = (card.notes ?? []).length
+  const waiting = card.awaiting !== undefined
+  const steps = waiting ? live?.steps?.length ?? 0 : 0
   // A new message, the user's or a Bot's reply, scrolls into view.
   useEffect(() => {
     const node = scroller.current
     if (node && typeof node.scrollTo === 'function') node.scrollTo({ top: node.scrollHeight })
-  }, [card.id, said, card.awaiting !== undefined])
+  }, [card.id, said, waiting])
+  // A new step of the Bot's work follows it, unless the reader scrolled up.
+  useEffect(() => {
+    const node = scroller.current
+    if (!node || typeof node.scrollTo !== 'function' || steps === 0) return
+    if (node.scrollHeight - node.scrollTop - node.clientHeight < 120) node.scrollTo({ top: node.scrollHeight })
+  }, [steps])
   useEffect(() => {
     if (!confirming) return undefined
     const timer = setTimeout(() => setConfirming(false), 3000)
@@ -193,7 +236,7 @@ export function CardDetail({ card, roster, actions }) {
         type: 'button', className: 'bt-board-cancel', 'data-confirm': confirming || undefined, disabled: busy,
         'aria-label': confirming ? t('Click again to cancel') : t('Cancel card'), onClick: cancel,
       }, t('Cancel card')) : null,
-      notes.length > 0 ? h(Thread, { notes, roster, awaiting: open ? card.awaiting : undefined }) : null,
+      notes.length > 0 ? h(Thread, { notes, roster, awaiting: open ? card.awaiting : undefined, live: open ? live : undefined }) : null,
       error ? h('div', { className: 'bt-error', role: 'alert' }, error) : null),
     open ? h('div', { className: 'bt-board-sheet-foot bt-board-write' },
       h('input', {
@@ -272,7 +315,7 @@ export function BoardScreen({ roster, actions, paneLeft = 0, leaving = false, fo
         sheet.add ? h('h3', null, t('Add card')) : null),
       sheet.add
         ? h(AddCard, { roster, actions, onDone: back })
-        : card !== undefined ? h(CardDetail, { key: card.id, card, roster, actions }) : null) : null)
+        : card !== undefined ? h(CardDetail, { key: card.id, card, roster, actions, live: roster.board?.live?.[card.id] }) : null) : null)
 }
 
 // One 8px step scale, one 12px card radius; colour only in the status dots.
@@ -361,6 +404,7 @@ a.bt-board-key:hover{color:var(--bt-ink)}
 .bt-board-msg>.bt-board-msg-mark{flex:none;width:24px;height:24px}
 .bt-board-msg-body{display:flex;flex-direction:column;gap:4px;min-width:0;max-width:85%}
 .bt-board-msg[data-by=user] .bt-board-msg-body{align-items:flex-end}
+.bt-board-msg[data-by=bot] .bt-board-msg-body{align-items:flex-start}
 .bt-board-msg-text{padding:7px 12px;border-radius:18px;font-size:14px;line-height:20px;white-space:pre-wrap;overflow-wrap:anywhere;text-wrap:pretty}
 .bt-board-msg[data-by=user] .bt-board-msg-text{background:var(--bt-user);color:var(--bt-user-ink)}
 .bt-board-msg[data-by=bot] .bt-board-msg-text{background:var(--bt-hover);color:var(--bt-ink)}
@@ -371,6 +415,24 @@ a.bt-board-key:hover{color:var(--bt-ink)}
 .bt-board-dots>i:nth-child(3){animation-delay:.3s}
 @keyframes bt-board-dot{30%{opacity:1;translate:0 -2px}}
 @media (prefers-reduced-motion:reduce){.bt-board-dots>i{animation:none}}
+.bt-board-waiting .bt-board-msg-body{flex:1;gap:8px}
+.bt-board-trace{list-style:none;margin:0;padding:0 0 0 10px;border-left:2px solid var(--bt-line-2);display:flex;flex-direction:column;gap:6px;font-size:13px;line-height:18px;color:var(--bt-ink-2)}
+.bt-board-trace[data-live]{max-height:240px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.bt-board-step{min-width:0;overflow-wrap:anywhere}
+.bt-board-thought{white-space:pre-wrap}
+.bt-board-trace[data-live] .bt-board-thought:not(:last-child){display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.bt-board-tool{display:flex;align-items:baseline;gap:8px;color:var(--bt-ink)}
+.bt-board-tool-dot{flex:none;width:6px;height:6px;border-radius:50%;background:var(--bt-ink-3);translate:0 -1px}
+.bt-board-tool[data-state=running] .bt-board-tool-dot{background:var(--bt-accent);animation:bt-board-pulse 1.2s ease-in-out infinite}
+.bt-board-tool[data-state=failed] .bt-board-tool-dot{background:var(--bt-danger)}
+.bt-board-tool-text{min-width:0}
+@keyframes bt-board-pulse{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.bt-board-tool[data-state=running] .bt-board-tool-dot{animation:none}}
+.bt-board-fold{align-self:stretch;font-size:13px;line-height:18px;color:var(--bt-ink-2)}
+.bt-board-fold summary{cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:6px;padding:0 4px}
+.bt-board-fold summary::-webkit-details-marker{display:none}
+.bt-board-fold[open] summary{margin-bottom:6px}
+.bt-board-fold .bt-board-trace{max-height:240px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
 .bt-board-cancel{align-self:flex-start;margin-top:8px;height:32px;padding:0;border:0;background:none;color:var(--bt-ink-3);font:inherit;font-size:13px;cursor:pointer}
 .bt-board-cancel:hover,.bt-board-cancel[data-confirm]{color:var(--bt-danger)}
 .bt-board-cancel[data-confirm]{font-weight:600}

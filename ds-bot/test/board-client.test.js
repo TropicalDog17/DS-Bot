@@ -155,6 +155,36 @@ test('an open card is a conversation: the user on the right, the Bot\'s replies 
   assert.equal(all(tree, 'bt-board-waiting').length, 0)
 })
 
+test('a waiting card shows its Bot at work, and an answer keeps how it got there, folded', () => {
+  const bot = { id: 'b', name: 'Writer', color: '#3b82f6' }
+  const roster = { byId: { b: bot }, bots: [bot] }
+  const asked = card('k', 'active', { assignee: 'b', awaiting: { botId: 'b', since: now }, notes: [{ at: now, by: 'user', text: 'xem log nhé' }] })
+  const live = { since: now, steps: [
+    { kind: 'think', text: 'Đọc log trước.' },
+    { kind: 'tool', tool: 'read_file', target: 'login.log', state: 'done' },
+    { kind: 'tool', text: 'Ran npm test', state: 'running' },
+  ] }
+  const tree = { type: CardDetail, props: { card: asked, roster, actions: {}, live }, children: [] }
+  const waiting = find(tree, 'bt-board-waiting')
+  assert.deepEqual(plain(all(waiting, 'bt-board-step').map(text)), ['Đọc log trước.', 'Opening a file · login.log', 'Ran npm test'])
+  assert.deepEqual(plain(all(waiting, 'bt-board-tool').map(step => step.props['data-state'])), ['done', 'running'])
+  assert.equal(all(waiting, 'bt-board-dots').length, 1)
+  // No steps yet: the mark waits with its dots alone.
+  assert.equal(all({ type: CardDetail, props: { card: asked, roster, actions: {} }, children: [] }, 'bt-board-trace').length, 0)
+  // The answer carries its trace closed above the text; a reply without one has none.
+  const answered = { ...asked, awaiting: undefined, notes: [...asked.notes,
+    { at: now, by: 'b', text: 'Token hết hạn.', trace: { ms: 4000, steps: live.steps.map(step => ({ ...step, state: 'done' })) } },
+    { at: now, by: 'b', text: 'Thêm nữa.' }] }
+  const done = { type: CardDetail, props: { card: answered, roster, actions: {} }, children: [] }
+  const folds = all(done, 'bt-board-fold')
+  assert.equal(folds.length, 1)
+  assert.equal(folds[0].type, 'details')
+  assert.equal(folds[0].props.open, undefined)
+  assert.match(text(folds[0].children[0]), /Thought it through/)
+  assert.equal(all(folds[0], 'bt-board-step').length, 3)
+  assert.equal(all(done, 'bt-board-waiting').length, 0)
+})
+
 // A fake `dsBotPages` seat: what the page registered, and whether it was taken back.
 const seat = () => {
   const list = []
