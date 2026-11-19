@@ -11,6 +11,8 @@
 //   dsBotBridge  the tools a Bot on a local agent CLI (Claude Code, Codex, ACP) may call
 //                through DS Bot's MCP bridge. Only the team tools cross by default; a
 //                companion names the tools it registers so those Bots get them too.
+import { randomUUID } from 'node:crypto'
+
 export const NOTE_MAX = 2000
 
 const oneLine = (text, max) => String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, max)
@@ -55,8 +57,10 @@ export function notesService(rt) {
     }
   }
   return Object.freeze({
-    // { botId, text, roomId? } -> { sessionId, where: 'group' | 'chat' } | { error }.
+    // { botId, text, roomId? } -> { sessionId, where: 'group' | 'chat', requestId } | { error }.
     // A roomId the Bot is not (or no longer) a member of falls back to its own chat.
+    // requestId is the note's id as a user message: an answer in the Bot's own chat
+    // lists it in `heard` once a turn read the note.
     async deliver({ botId, roomId, text } = {}) {
       await rt.load()
       const bot = typeof botId === 'string' ? rt.botOf(botId) : undefined
@@ -66,11 +70,13 @@ export function notesService(rt) {
       const room = typeof roomId === 'string' ? rt.roomOf(roomId) : undefined
       const inGroup = room !== undefined && (room.members ?? []).includes(bot.id)
       const target = inGroup ? { sessionId: room.id, text: `@${bot.name} ${line}`, where: 'group' } : { sessionId: bot.id, text: line, where: 'chat' }
-      await rt.sendUser({ sessionId: target.sessionId, content: [{ type: 'text', text: target.text }] })
-      return { sessionId: target.sessionId, where: target.where }
+      const requestId = randomUUID()
+      await rt.sendUser({ sessionId: target.sessionId, content: [{ type: 'text', text: target.text }], requestId })
+      return { sessionId: target.sessionId, where: target.where, requestId }
     },
-    // listener({ botId, roomId?, text, since }) once per finished answer; since is when
-    // its turn started. Returns the unsubscribe.
+    // listener({ botId, roomId?, text, since, heard? }) once per finished answer; since is
+    // when its turn started, heard the request ids of the user's messages it answers.
+    // Returns the unsubscribe.
     onReply(listener) {
       listeners.add(listener)
       return () => { listeners.delete(listener) }

@@ -15,6 +15,8 @@ export const REPLY_MAX = 2000
 export const THREAD_MAX = 200
 // A note's answer is copied from the Bot's chat only while it is this fresh.
 export const AWAIT_MAX_MS = 12 * 60 * 60 * 1000
+// Request ids a card keeps for one wait: a note each, so a few is plenty.
+export const REQUESTS_MAX = 20
 export const REASON_MAX = 500
 export const KEY_MAX = 32
 export const URL_MAX = 2000
@@ -285,11 +287,14 @@ export function createBoard({ roster, now = Date.now }) {
     },
     // The note reached the Bot (`where` from dsBotNotes): the card waits for its answer
     // there. A wait already running keeps its start, so the first answer still lands.
-    sent(cards, id, { botId, roomId, since }) {
+    // A note to the Bot's own chat also keeps its request id: the answer that read it
+    // names it, so it lands here even when the Bot answers other cards in between.
+    sent(cards, id, { botId, roomId, since, requestId }) {
       const { card, error } = found(cards, id)
       if (error !== undefined) return { error }
       const same = card.awaiting?.botId === botId && card.awaiting?.roomId === roomId
       if (!same) card.awaiting = { botId, ...(roomId === undefined ? {} : { roomId }), since }
+      if (typeof requestId === 'string') card.awaiting.requests = [...(card.awaiting.requests ?? []), requestId].slice(-REQUESTS_MAX)
       return { card }
     },
     cancel(cards, id, reason) {
@@ -304,19 +309,29 @@ export function createBoard({ roster, now = Date.now }) {
     },
   }
 
-  // A Bot's answer in its chat, or in a group (dsBotNotes onReply), joins the card
-  // that waited longest for that Bot there, from a turn that began after the note.
-  const mirror = (cards, { botId, roomId, text, since } = {}) => {
+  // A Bot's answer in its chat, or in a group (dsBotNotes onReply), joins every card
+  // whose note it read (`heard`). A card with no request ids to match (a group note)
+  // gets the answer only by waiting longest for that Bot there, from a turn that began
+  // after the note. A card waiting on request ids is never matched by order: an answer
+  // to another card would land on it.
+  const mirror = (cards, { botId, roomId, text, since, heard } = {}) => {
     const said = replyText(text, REPLY_MAX)
     if (said === '') return { error: 'Nothing to copy.' }
-    const waiting = list(cards).filter(card => card.awaiting?.botId === botId && card.awaiting.roomId === roomId
-      && card.awaiting.since <= since && since - card.awaiting.since <= AWAIT_MAX_MS)
-      .sort((a, b) => a.awaiting.since - b.awaiting.since)
-    const card = waiting[0]
-    if (card === undefined) return { error: 'No card waits for this answer.' }
-    delete card.awaiting
-    say(card, botId, said)
-    return { card }
+    const there = list(cards).filter(card => card.awaiting?.botId === botId && card.awaiting.roomId === roomId)
+    const read = new Set(Array.isArray(heard) ? heard : [])
+    let answered = there.filter(card => (card.awaiting.requests ?? []).some(requestId => read.has(requestId)))
+    if (answered.length === 0) {
+      answered = there.filter(card => card.awaiting.requests === undefined
+        && card.awaiting.since <= since && since - card.awaiting.since <= AWAIT_MAX_MS)
+        .sort((a, b) => a.awaiting.since - b.awaiting.since)
+        .slice(0, 1)
+    }
+    if (answered.length === 0) return { error: 'No card waits for this answer.' }
+    for (const card of answered) {
+      delete card.awaiting
+      say(card, botId, said)
+    }
+    return { card: answered[0] }
   }
 
   return { show, line, label, bot: (cards, action, self, roomId, args) => botActions[action](cards, self, roomId, args), user, mirror }

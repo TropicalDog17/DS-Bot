@@ -76,7 +76,10 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
           if (sent?.error !== undefined) return { error: `Saved on the card, but not sent: ${sent.error}` }
           // The Bot answers where the note went; that answer is copied onto the card.
           const roomId = sent?.where === 'group' ? result.deliver.roomId : undefined
-          return store.change(data => board.user.sent(data.cards, id, { botId: result.deliver.botId, roomId, since }))
+          // A group passes the note on to the Bot as its own message, so only the Bot's
+          // chat names the note in its answer.
+          const requestId = sent?.where === 'chat' ? sent.requestId : undefined
+          return store.change(data => board.user.sent(data.cards, id, { botId: result.deliver.botId, roomId, since, requestId }))
         }
         return result
       }

@@ -243,6 +243,24 @@ export function install(rt) {
   // Exchanges whose promise-only opening the group already got before the retry: the
   // retried turn counts it as shown, so a [PASS] there still hands the result back.
   const promisedOpenings = new Set()
+  // Per Bot and place (its own chat, or a group), the request ids of the user's messages
+  // its turns have read since its last answer to the user. That answer carries them,
+  // so a companion knows which messages it answers: one turn can read several (a
+  // message steered into it), and a turn that answers no one leaves them for the next.
+  const unanswered = new Map()
+  const HEARD_KEPT = 50
+  const replyPlace = id => `${rt.selfOf(id)}\u0000${rt.groupOwners.get(id)?.roomId ?? ''}`
+  const noteHeard = (id, requestId) => {
+    if (rt.selfOf(id) === undefined) return
+    const key = replyPlace(id)
+    unanswered.set(key, [...(unanswered.get(key) ?? []), requestId].slice(-HEARD_KEPT))
+  }
+  const takeHeard = (id) => {
+    const key = replyPlace(id)
+    const heard = unanswered.get(key) ?? []
+    unanswered.delete(key)
+    return heard
+  }
 
   const STOPPED_KEPT = 200
   const rememberStopped = (set, value) => {
@@ -918,6 +936,7 @@ export function install(rt) {
         break
       case 'user/message': {
         const source = event.data?.source
+        if (source?.kind === 'user' && typeof source.rpcId === 'string') noteHeard(id, source.rpcId)
         if (source?.kind === 'subagent-settled' || source?.kind === 'agent-message') {
           const childId = typeof source.senderSessionId === 'string' ? source.senderSessionId : undefined
           // Only settlement ends a child's turn; an intermediate `agent-message` keeps the
@@ -1244,7 +1263,10 @@ export function install(rt) {
           const roomId = rt.groupOwners.get(id)?.roomId
           const toUser = roomId !== undefined || (owner !== undefined && (info === undefined || info.role === 'continue'))
           const text = (wroteCall ? said.map(stripWrittenCalls) : said).join('\n\n').trim()
-          if (toUser && text !== '') rt.botReplied?.({ botId: rt.selfOf(id), ...(roomId === undefined ? {} : { roomId }), text, since: began ?? Date.now() })
+          if (toUser && text !== '') {
+            const heard = takeHeard(id)
+            rt.botReplied?.({ botId: rt.selfOf(id), ...(roomId === undefined ? {} : { roomId }), text, since: began ?? Date.now(), ...(heard.length > 0 ? { heard } : {}) })
+          }
         }
         const replyText = () => {
           const reply = (wroteCall ? texts.map(stripWrittenCalls) : texts).join('\n\n').trim()

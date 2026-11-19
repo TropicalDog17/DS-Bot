@@ -58,10 +58,16 @@ test('roster subscribers hear every save and can unsubscribe', () => {
 test('a note goes to the group the Bot is in, else to its own chat', async () => {
   const { rt, sent } = fixture()
   const notes = notesService(rt)
-  assert.deepEqual(await notes.deliver({ botId: 'a', roomId: 'r', text: ' ship\n it ' }), { sessionId: 'r', where: 'group' })
-  assert.deepEqual(await notes.deliver({ botId: 'b', roomId: 'r', text: 'hello' }), { sessionId: 'b', where: 'chat' })
-  assert.deepEqual(await notes.deliver({ botId: 'a', text: 'solo' }), { sessionId: 'a', where: 'chat' })
+  const withoutId = ({ requestId, ...rest }) => rest
+  assert.deepEqual(withoutId(await notes.deliver({ botId: 'a', roomId: 'r', text: ' ship\n it ' })), { sessionId: 'r', where: 'group' })
+  assert.deepEqual(withoutId(await notes.deliver({ botId: 'b', roomId: 'r', text: 'hello' })), { sessionId: 'b', where: 'chat' })
+  const solo = await notes.deliver({ botId: 'a', text: 'solo' })
+  assert.deepEqual(withoutId(solo), { sessionId: 'a', where: 'chat' })
   assert.deepEqual(sent.map(entry => [entry.sessionId, entry.content[0].text]), [['r', '@Ada ship it'], ['b', 'hello'], ['a', 'solo']])
+  // Each note is its own user message: the id it went with comes back to the caller.
+  assert.equal(typeof solo.requestId, 'string')
+  assert.equal(sent[2].requestId, solo.requestId)
+  assert.equal(new Set(sent.map(entry => entry.requestId)).size, 3)
   assert.deepEqual(await notes.deliver({ botId: 'x', text: 'hi' }), { error: 'No such Bot.' })
   assert.deepEqual(await notes.deliver({ botId: 'a', text: '  ' }), { error: 'Write a note first.' })
   assert.equal(sent.length, 3)
