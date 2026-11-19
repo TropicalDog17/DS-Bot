@@ -161,3 +161,24 @@ test('a checkpoint the route cannot write still fails outside a switch', async (
     undefined,
   )
 })
+
+test('a checkpoint reply that calls a tool is not taken as the summary', async (t) => {
+  // A route that carries on with the work answers the summary request with a progress
+  // line and a tool call. That line once became the checkpoint, and with no line at all
+  // the condense failed as "empty"; either way it is no summary.
+  const { bench, compaction, adoptFor, agentOf, stop } = start({
+    outlet: true,
+    stream: () => [
+      { type: 'text-delta', index: 0, text: 'Identity tests pass. Next I will run lint.' },
+      { type: 'tool-call-delta', index: 1, id: 'call-1', name: 'bash', argumentsDelta: '{"command":"npm run lint"}' },
+      { type: 'finish', reason: { kind: 'tool-calls' } },
+    ],
+  })
+  t.after(stop)
+  adoptFor('b2')
+  await compaction.compactRegion(3, 9, agentOf('b2'), new AbortController().signal)
+  assert.equal(bench.checkpoints.length, 1)
+  const text = bench.checkpoints[0].summary[0].text
+  assert.match(text, /No summary was written/)
+  assert.doesNotMatch(text, /Next I will run lint/)
+})

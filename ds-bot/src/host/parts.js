@@ -495,6 +495,7 @@ export function install(rt) {
   const HANDOFF_PROMPT = handoffPrompt('Your conversation is long')
   const FOLDER_PROMPT = handoffPrompt('Your working folder changed')
   const NOTE_RETRY_SHORTER = 'Your last note was cut off at the output limit, so it was not used. Write the whole note again, shorter: at most about 1,000 words. Keep every heading; drop detail before you drop facts.'
+  const NOTE_RETRY_NO_TOOLS = 'Your last reply called a tool instead of writing the note, so it was not used. Do not call any tool and do not continue the work: write the whole note now, as text, with every heading exactly as given.'
   const noteRetryMissing = missing => `Your last note lacked these headings, so it was not used: ${missing.map(name => `"## ${name}"`).join(', ')}. Write the whole note again with every heading exactly as given, in English.`
   const missingSections = note => NOTE_SECTIONS.map(([name]) => name)
     .filter(name => !new RegExp(`^#{1,4}\\s*${escapeRegExp(name)}\\s*:?\\s*$`, 'mi').test(note))
@@ -539,8 +540,8 @@ export function install(rt) {
     })
   }
 
-  // The attempts at a note, each asked through `request`: a cut-off note, or one
-  // without every section, is asked for again once.
+  // The attempts at a note, each asked through `request`: a cut-off note, one without
+  // every section, or a reply that called a tool instead, is asked for again once.
   async function noteAttempts(session, route, base, request) {
     let retry
     let problem
@@ -552,6 +553,9 @@ export function install(rt) {
       if (finish === 'max-tokens') {
         problem = 'it was cut off at the output limit'
         retry = NOTE_RETRY_SHORTER
+      } else if (missing.length > 0 && finish === 'tool-calls') {
+        problem = 'it called a tool instead of writing the note'
+        retry = NOTE_RETRY_NO_TOOLS
       } else if (note === '') {
         problem = 'it was empty'
         retry = undefined
@@ -687,6 +691,9 @@ export function install(rt) {
         const finish = assembler.finish
         if (finish.kind === 'error' || finish.kind === 'aborted') throw new Error(finish.failure?.message ?? finish.kind)
         if (finish.kind === 'max-tokens') throw new Error('the checkpoint was cut off at the output limit')
+        // A reply that ends in a tool call carried on with the work instead: its text is a
+        // progress line, not a summary, and its calls never run.
+        if (finish.kind === 'tool-calls') throw new Error('the checkpoint called a tool instead of writing a summary')
         const rawOutput = assembler.blocks()
         const summary = rawOutput.filter(block => block.type === 'text').map(block => block.text).join('\n').trim()
         if (summary === '') throw new Error('the checkpoint was empty')
