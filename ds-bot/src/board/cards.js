@@ -297,6 +297,13 @@ export function createBoard({ roster, now = Date.now }) {
       if (typeof requestId === 'string') card.awaiting.requests = [...(card.awaiting.requests ?? []), requestId].slice(-REQUESTS_MAX)
       return { card }
     },
+    // The user opened the card: its answer is read.
+    seen(cards, id) {
+      const { card, error } = found(cards, id)
+      if (error !== undefined) return { error }
+      delete card.unread
+      return { card }
+    },
     cancel(cards, id, reason) {
       const { card, error } = found(cards, id)
       if (error !== undefined) return { error }
@@ -330,6 +337,8 @@ export function createBoard({ roster, now = Date.now }) {
     for (const card of answered) {
       delete card.awaiting
       say(card, botId, said)
+      // New to the user until they open the card.
+      card.unread = true
     }
     return { card: answered[0] }
   }

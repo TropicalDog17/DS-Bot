@@ -82,3 +82,27 @@ test('the open page gets the main area edge, its exit flag and a close', () => {
   view.props.close()
   assert.equal(closed, 1)
 })
+
+test('a page asks for the user: a dot on its button, and a notice whose Open leads to it', () => {
+  const alerts = []
+  const { service } = createPages({ alert: notice => alerts.push(notice) })
+  // Nothing for a page that is not there.
+  service.alert('board', 'Coder replied on LIFE-782')
+  service.mark('board', true)
+  assert.equal(alerts.length, 0)
+  service.register({ id: 'board', title: 'Board', icon: Icon, Page })
+  service.mark('board', true)
+  const marked = PageButtons({ pages: service.list(), actions: {} })[0]
+  assert.equal(marked.props['data-marked'], true)
+  assert.equal(marked.children.filter(child => child?.props?.className === 'bt-page-dot').length, 1)
+  service.mark('board', false)
+  assert.equal(PageButtons({ pages: service.list(), actions: {} })[0].props['data-marked'], undefined)
+  let opened = 0
+  service.alert('board', '  Coder replied on LIFE-782 ', () => { opened += 1 })
+  service.alert('board', '   ')
+  assert.equal(alerts.length, 1)
+  assert.equal(alerts[0].page, 'board')
+  assert.equal(alerts[0].text, 'Coder replied on LIFE-782')
+  alerts[0].onOpen()
+  assert.equal(opened, 1)
+})

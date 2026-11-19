@@ -237,6 +237,26 @@ test('notes on three cards to one Bot: each answer lands on the cards whose note
   assert.equal([honey, preset, gateway].some(id => byId[id].awaiting !== undefined), false)
 })
 
+test('a Bot\'s answer copied onto a card is unread until the user opens the card', async (t) => {
+  const clock = 1000
+  const h = host(t, { now: () => clock })
+  const added = await h.post('add', { title: 'Fix login', key: 'LIFE-782', assignee: 'b' })
+  const id = Object.keys(added.value.cards)[0]
+  await h.post('note', { id, text: 'có cần log không?' })
+  // The user's own note is not news to them.
+  assert.equal(h.cards()[0].unread, undefined)
+  h.team.reply({ botId: 'b', text: 'Có, thêm log ở redirect.', since: 1100, heard: h.team.requests })
+  await h.settle()
+  assert.equal(h.cards()[0].unread, true)
+  const updated = h.cards()[0].updatedAt
+  const seen = await h.post('seen', { id })
+  assert.equal(seen.ok, true)
+  assert.equal(seen.value.cards[id].unread, undefined)
+  // Reading a card is not a change to it.
+  assert.equal(h.cards()[0].updatedAt, updated)
+  assert.equal((await h.post('seen', { id: 'c_missing' })).ok, false)
+})
+
 test('a group card waits for the answer in its group; two notes wait from the first; stale waits lapse', async (t) => {
   let clock = 1000
   const h = host(t, { now: () => clock })

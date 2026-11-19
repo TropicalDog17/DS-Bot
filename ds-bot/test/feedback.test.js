@@ -82,3 +82,29 @@ test('in a browser that blocks the window, the page offers the link instead', as
   assert.ok(notes.includes('The browser blocked the new window.'))
   assert.ok(notes.some(note => note.startsWith(`${ISSUES}?template=bug.yml`)))
 })
+
+test('a page\'s notice offers Open, which leads to that page; a failure still offers Details', () => {
+  const react = {
+    createContext: initial => ({ value: initial, Provider: ({ children }) => children }), useContext: ctx => ctx.value,
+    useMemo: make => make(), useCallback: fn => fn, useId: () => 'id', useSyncExternalStore: (s, get) => get(),
+    createElement: (type, props, ...children) => ({ type, props: props ?? {}, children: children.flat(Infinity) }),
+    Fragment: 'fragment', useState: initial => [initial, () => {}], useEffect: () => {}, useRef: current => ({ current }), useLayoutEffect: () => {},
+  }
+  const module = { exports: {} }
+  runInNewContext(bundle.outputFiles[0].text, {
+    module, exports: module.exports, window: {}, URL, URLSearchParams, setTimeout, clearTimeout,
+    require: name => (name === 'react' ? react : {}),
+  })
+  const calls = []
+  const actions = { dismissToast: token => calls.push(['dismiss', token]), openPage: id => calls.push(['page', id]), openSettings: id => calls.push(['settings', id]) }
+  const toast = value => module.exports.ErrorToast({ useUi: pick => pick({ toast: value }), actions })
+  const links = node => node.children.filter(child => child?.props?.className === 'bt-toast-link')
+  const notice = toast({ text: 'Coder replied on LIFE-782', token: 7, page: 'board', onOpen: () => calls.push(['focus']) })
+  assert.equal(notice.props['data-kind'], 'page')
+  assert.equal(links(notice)[0].children.join(''), 'Open')
+  links(notice)[0].props.onClick()
+  assert.deepEqual(calls, [['dismiss', 7], ['focus'], ['page', 'board']])
+  const failure = toast({ text: 'Request failed', token: 8 })
+  assert.equal(failure.props['data-kind'], undefined)
+  assert.equal(links(failure)[0].children.join(''), 'Details')
+})

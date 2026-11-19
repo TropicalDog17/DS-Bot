@@ -95,7 +95,10 @@ export function apply(ctx) {
   // subject Bot's browser inside it.
   const ui = createSource({ details: null, view: 'details', readOnlyPart: null, renaming: false, tab: null, side: null, newChat: null, exchange: null, menu: null, voice: null, palette: null, quote: null, paste: {}, pendingOpen: null, settings: null, memory: null, toast: null, signIn: null, renameAgent: null, unread: unreadStore.read(), reactions: reactionStore.read(), visits: {}, panelYield: false, leftDrawer: false, bootFailed: false, goalCompose: null, goalOpen: null, page: null })
   // The seat companion plugins take: a sidebar icon and a full page (pages.js).
-  const pages = createPages()
+  const pages = createPages({
+    // A companion's notice is a toast whose Open leads to its page.
+    alert: ({ page, text, onOpen }) => ui.set(state => ({ ...state, toast: { text, token: Date.now(), page, onOpen } })),
+  })
   if (typeof ctx.provide === 'function') ctx.provide('dsBotPages', pages.service)
   // ds-bot/board's page rides in this bundle (DSH loads one per package) and shows
   // only when that plugin's route answers.

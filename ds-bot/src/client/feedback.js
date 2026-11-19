@@ -134,9 +134,13 @@ export function ErrorToast({ useUi, actions }) {
     return () => { clearTimeout(fade); clearTimeout(gone) }
   }, [toast?.token])
   if (!toast) return null
-  return h('div', { className: 'bt-toast', role: 'alert', 'data-leaving': leaving || undefined },
+  // A companion page's notice opens that page; a failure opens its details.
+  const follow = toast.page
+    ? h('button', { type: 'button', className: 'bt-toast-link', onClick: () => { actions.dismissToast(toast.token); toast.onOpen?.(); actions.openPage(toast.page) } }, t('Open'))
+    : h('button', { type: 'button', className: 'bt-toast-link', onClick: () => { actions.dismissToast(toast.token); actions.openSettings('feedback') } }, t('Details'))
+  return h('div', { className: 'bt-toast', role: 'alert', 'data-kind': toast.page ? 'page' : undefined, 'data-leaving': leaving || undefined },
     h('span', { className: 'bt-toast-text' }, toast.text),
-    h('button', { type: 'button', className: 'bt-toast-link', onClick: () => { actions.dismissToast(toast.token); actions.openSettings('feedback') } }, t('Details')),
+    follow,
     h('button', { type: 'button', className: 'bt-icon-btn bt-toast-close', 'aria-label': t('Dismiss'), onClick: () => actions.dismissToast(toast.token) }, h(CloseIcon)))
 }
 
@@ -161,6 +165,8 @@ export const FEEDBACK_CSS = `
 .bt-toast[data-leaving]{opacity:0;transform:translate(-50%,6px) scale(.98);filter:blur(3px);transition:opacity .18s ease-in,transform .18s ease-in,filter .18s ease-in}
 .bt-toast-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
 .bt-toast-text::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--bt-danger,#e02135);margin:0 8px 1px 0}
+.bt-toast[data-kind=page] .bt-toast-text::before{background:var(--bt-accent)}
+.bt-toast[data-kind=page] .bt-toast-link{color:var(--bt-accent);font-weight:600}
 .bt-toast-link{flex:none;border:0;background:none;color:var(--bt-ink-2);font:inherit;font-size:12px;cursor:pointer;padding:4px 6px;border-radius:6px}
 .bt-toast-link:hover{background:var(--bt-hover);color:var(--bt-ink)}
 .bt-toast-close{flex:none}
