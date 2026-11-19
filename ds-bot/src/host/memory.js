@@ -29,7 +29,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, truncateS
 import { appendFile, mkdir, rename, unlink, writeFile } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { HarnessError, createUserMessage } from '@deepseek-ai/dsh-llm'
-import { defineTool } from '@deepseek-ai/dsh-tools'
+import { defineTool } from './tool-schema.js'
 import { openSessions } from './threads.js'
 import { replaceFile } from './files.js'
 import { assembleLlmStream } from './models.js'

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { plainToolSchema } from '../src/host/tool-schema.js'
+import { defineTool, lenientArgs, plainToolSchema } from '../src/host/tool-schema.js'
 
 // The schema public#1508 reported from an MCP connector: a union with no type of its
 // own, and an enum that lists null. Moonshot/KIMI refused the whole request for it.
@@ -101,4 +101,50 @@ test('schema keywords used as property names and metadata remain data', () => {
     options: { type: 'object', default: { items: [1], const: 'keep' } },
   } }
   assert.deepEqual(plainToolSchema(input), input)
+})
+
+const ARGS = {
+  type: 'object',
+  properties: {
+    always: { type: 'boolean' },
+    limit: { type: 'integer' },
+    ratio: { type: 'number' },
+    text: { type: 'string' },
+    flags: { type: 'array', items: { type: 'boolean' } },
+    nested: { type: 'object', properties: { on: { type: 'boolean' } } },
+  },
+}
+
+test('a boolean or a number written as a string reads as the value it spells', () => {
+  const args = { always: 'true', limit: '20', ratio: ' 0.5 ', text: 'true', flags: ['false', true], nested: { on: 'FALSE' } }
+  assert.deepEqual(lenientArgs(ARGS, args), { always: true, limit: 20, ratio: 0.5, text: 'true', flags: [false, true], nested: { on: false } })
+  // The model's arguments are left as they were.
+  assert.equal(args.always, 'true')
+})
+
+test('a string that spells no value of the type is left for the check to refuse', () => {
+  const args = { always: 'yes', limit: '2.5', ratio: '1e400', nested: 'x' }
+  assert.deepEqual(lenientArgs(ARGS, args), args)
+  assert.deepEqual(lenientArgs(ARGS, { limit: '' }), { limit: '' })
+  // Arguments that need nothing come back as they are.
+  const plain = { always: true, text: 'hi' }
+  assert.equal(lenientArgs(ARGS, plain), plain)
+})
+
+test('a DS Bot tool takes "true" and "20" for a boolean and an integer', async () => {
+  const seen = []
+  const tool = defineTool({
+    name: 'probe',
+    description: 'probe',
+    parameters: { always: { type: 'boolean' }, limit: { type: 'integer' } },
+    output: { schema: { type: 'string' }, render: (args, value) => [{ type: 'text', text: `${typeof args.always} ${value}` }] },
+    execute: async (args) => {
+      seen.push(args)
+      return 'ok'
+    },
+  })
+  assert.equal(await tool.execute({ always: 'true', limit: '20' }, {}), 'ok')
+  assert.deepEqual(seen, [{ always: true, limit: 20 }])
+  assert.deepEqual(tool.output.render({ always: 'false' }, 'ok'), [{ type: 'text', text: 'boolean ok' }])
+  await assert.rejects(tool.execute({ always: 'maybe' }, {}), /"always" must be a boolean/)
 })
