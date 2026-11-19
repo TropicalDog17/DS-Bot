@@ -21,6 +21,11 @@ export const REASON_MAX = 500
 export const KEY_MAX = 32
 export const URL_MAX = 2000
 export const LINKS_MAX = 20
+// A question a Bot asks on a card, and the choices it shows as buttons there.
+export const QUESTION_MAX = 1000
+export const OPTION_MAX = 80
+export const OPTIONS_MIN = 2
+export const OPTIONS_MAX = 6
 
 export const oneLine = (text, max) => String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, max)
 // A Bot's reply keeps its lines; runs of blank lines become one.
@@ -47,7 +52,7 @@ export function webUrl(text) {
 }
 
 
-export const ACTIONS = ['open', 'update', 'complete', 'cancel', 'show']
+export const ACTIONS = ['open', 'update', 'ask', 'complete', 'cancel', 'show']
 export const BOT_STATUSES = ['todo', 'active', 'review', 'blocked']
 // The user may also drag a card into Done, or back out of it.
 export const USER_STATUSES = [...OPEN_STATUSES, 'done']
@@ -80,7 +85,7 @@ export function createBoard({ roster, now = Date.now }) {
     const rows = [`- ${label(card)} · ${nameOf(card.assignee)} · ${card.title}${mine}`]
     if (card.progress) rows.push(`  progress: ${card.progress}`)
     const note = (card.notes ?? []).at(-1)
-    if (note !== undefined) rows.push(`  latest note from ${note.by === USER ? 'the user' : nameOf(note.by)}: ${note.text}`)
+    if (note !== undefined) rows.push(`  latest note from ${note.by === USER ? 'the user' : nameOf(note.by)}: ${note.text}${note.options ? ` (options: ${note.options.join(' / ')})` : ''}`)
     return rows.join('\n')
   }
   const show = (cards, self) => {
@@ -197,6 +202,23 @@ export function createBoard({ roster, now = Date.now }) {
       apply(card, ticket.fields)
       touch(card)
       return { card, said: `Updated ${label(card)} (${COLUMN[card.status]}).` }
+    },
+    // A question for the user with the choices to pick from. It joins the card's
+    // conversation, the card moves to Review, and the user's pick comes back as a note.
+    ask(cards, self, _roomId, args) {
+      const card = pick(cards, args.id, self)
+      if (card === undefined) return { error: 'No open card of yours. Name one with its id or ticket key.' }
+      if (!isOpen(card)) return { error: `${label(card)} is already finished.` }
+      // The pick reaches the card's assignee, so only the assignee asks.
+      if (card.assignee !== self) return { error: `${label(card)} belongs to ${nameOf(card.assignee)}; only its assignee asks on it.` }
+      const question = replyText(args.question, QUESTION_MAX)
+      if (question === '') return { error: 'ask needs a question.' }
+      const options = [...new Set((Array.isArray(args.options) ? args.options : []).map(option => oneLine(option, OPTION_MAX)).filter(option => option !== ''))]
+      if (options.length < OPTIONS_MIN || options.length > OPTIONS_MAX) return { error: `ask needs ${OPTIONS_MIN} to ${OPTIONS_MAX} different options.` }
+      card.status = 'review'
+      say(card, self, question, { options })
+      card.unread = true
+      return { card, said: `Asked on ${label(card)}: ${options.join(' / ')}. The user's pick reaches you as a note on the card.` }
     },
     complete(cards, self, _roomId, args) {
       const card = pick(cards, args.id, self)

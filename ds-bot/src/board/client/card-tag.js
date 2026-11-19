@@ -85,7 +85,7 @@ export function linkCards(text, cards) {
 export const nameCards = (text, cards) => (typeof text === 'string' && text.includes('c_') ? swap(text, cards, nameOf) : text)
 
 const BOARD_MASK = `url("data:image/svg+xml,${encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.6' stroke-linejoin='round'><path d='M3.5 4.5h3.5v11H3.5zM8.25 4.5h3.5v7h-3.5zM13 4.5h3.5v9H13z'/></svg>")}")`
-const BOT_TAG = `.bt-bubble a[href^="${CARD_LINK_ORIGIN}"]`
+const BOT_TAG = `:is(.bt-bubble,.bt-board-md) a[href^="${CARD_LINK_ORIGIN}"]`
 
 export const CARD_TAG_CSS = `
 .bt-card-tag{display:inline-flex;align-items:center;gap:4px;max-width:100%;margin:0 6px 2px 0;padding:1px 7px 1px 5px;vertical-align:1px;border:1px solid color-mix(in srgb,currentColor 22%,transparent);border-radius:6px;background:color-mix(in srgb,currentColor 7%,transparent);color:inherit;font:inherit;font-size:.86em;font-weight:600;line-height:1.5;cursor:pointer;white-space:nowrap}

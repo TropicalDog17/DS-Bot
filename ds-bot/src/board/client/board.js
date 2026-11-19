@@ -15,9 +15,10 @@ import { ChevronLeftIcon, PlusIcon } from '../../client/icons.js'
 import { useEscape } from '../../client/overlay-hooks.js'
 import { clockLabel, elapsedLabel, relativeShort } from '../../client/text.js'
 import { workPhrase } from '../../client/cells.js'
-import { t } from '../../client/i18n.js'
+import { mdLabels, t } from '../../client/i18n.js'
+import { MarkdownText } from '../../client/dsh-primitives.js'
 import { LinkIcon, StepsIcon } from './icons.js'
-import { nameCards } from './card-tag.js'
+import { CARD_LINK_ORIGIN, linkCards, nameCards } from './card-tag.js'
 
 export const COLUMNS = [['todo', 'Todo'], ['active', 'In progress'], ['review', 'Review'], ['blocked', 'Blocked'], ['done', 'Done']]
 const OPEN = ['todo', 'active', 'review', 'blocked']
@@ -47,6 +48,65 @@ export function leadColumn(columns) {
     ?? order.find(status => columns[status]?.length > 0) ?? 'todo'
 }
 
+// A card shows one line of a Bot's answer: its Markdown marks read as plain text.
+export function plainLine(text) {
+  if (typeof text !== 'string') return text
+  return text
+    .replace(/```[^\n]*\n?/g, '')
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/^[ \t]*(?:#{1,6}[ \t]+|>[ \t]?|[-*+][ \t]+(?:\[[ xX]\][ \t]+)?|\d+[.)][ \t]+)/gm, '')
+    .replace(/(\*\*|__|~~|`)(.+?)\1/g, '$2')
+    .replace(/(^|[^\w*])\*(\S(?:[^*\n]*\S)?)\*(?!\w)/g, '$1$2')
+    .replace(/\s*\n+\s*/g, ' ')
+    .trim()
+}
+
+// What a Bot wrote, drawn as the chat draws it: Markdown, a card it names as a tag.
+function BotText({ text, cards, className }) {
+  return h('div', { className: `bt-board-md ${className}` },
+    h(MarkdownText, { text: linkCards(text ?? '', cards), labels: mdLabels(), variant: 'compact' }))
+}
+
+// A link's short name, as a person would say it: a GitHub pull request or issue as
+// owner/repo#12, a commit as owner/repo@abc1234, a repository as owner/repo; any
+// other address by its host and path.
+export function linkLabel(href) {
+  let url
+  try { url = new URL(href) } catch { return href }
+  const parts = url.pathname.split('/').filter(Boolean)
+  if (url.hostname === 'github.com' && parts.length >= 2) {
+    const repo = `${parts[0]}/${parts[1]}`
+    if (/^(pull|issues)$/.test(parts[2] ?? '') && /^\d+$/.test(parts[3] ?? '')) return `${repo}#${parts[3]}`
+    if (parts[2] === 'commit' && /^[0-9a-f]{7,}$/i.test(parts[3] ?? '')) return `${repo}@${parts[3].slice(0, 7)}`
+    if (parts.length === 2) return repo
+  }
+  return `${url.hostname.replace(/^www\./, '')}${url.pathname === '/' ? '' : url.pathname.replace(/\/$/, '')}`
+}
+
+// A card's link, drawn by the host's Markdown as the chat draws one: the site's mark
+// and its short name.
+const markdownLink = href => `[${linkLabel(href).replace(/[[\]\\]/g, '\\$&')}](<${href}>)`
+
+// A Bot's question with its choices under it. Until the user answers, a tap sends
+// the choice as their note; after, the choice they made stays marked.
+function Options({ options, picked, pick, busy }) {
+  return h('div', { className: 'bt-board-options' },
+    options.map(option => h('button', {
+      key: option, type: 'button', className: 'bt-board-option',
+      disabled: pick === undefined || busy, 'data-picked': option === picked || undefined,
+      onClick: () => pick?.(option),
+    }, option)))
+}
+
+// A tap on a card a Bot named opens that card here.
+const cardLinkTap = openCard => (event) => {
+  const anchor = typeof event.target?.closest === 'function' ? event.target.closest(`a[href^="${CARD_LINK_ORIGIN}"]`) : null
+  if (anchor === null) return
+  event.preventDefault()
+  event.stopPropagation()
+  openCard?.(anchor.getAttribute('href').slice(CARD_LINK_ORIGIN.length))
+}
+
 const Dot = ({ status }) => h('span', { className: 'bt-board-dot', 'data-status': status, 'aria-hidden': true })
 
 // A Bot by its mark, the user by an initial: the same shape and size either way.
@@ -72,7 +132,7 @@ function Card({ card, roster, onOpen, onDrag }) {
   },
   card.key ? h('span', { className: 'bt-board-key' }, card.key) : null,
   h('span', { className: 'bt-board-title' }, card.title),
-  line ? h('span', { className: 'bt-board-progress' }, nameCards(line, roster.board?.cards ?? {})) : null,
+  line ? h('span', { className: 'bt-board-progress' }, plainLine(nameCards(line, roster.board?.cards ?? {}))) : null,
   h('span', { className: 'bt-board-card-foot' },
     h(Who, { id: card.assignee, roster }),
     links > 0 || card.url ? h('span', { className: 'bt-board-has-link', 'aria-label': t('Link') }, h(LinkIcon)) : null,
@@ -155,7 +215,11 @@ function TraceFold({ trace, open }) {
 // under their mark, oldest first. While the Bot owes an answer to the last note, its
 // mark waits with three dots under what it is doing (`live`); the answer it writes in
 // its chat lands here.
-function Thread({ notes, roster, awaiting, live }) {
+function Thread({ notes, roster, awaiting, live, pick, busy }) {
+  const cards = roster.board?.cards ?? {}
+  // The latest question asked with options, and the user's answer after it, if any.
+  const asked = notes.findLastIndex(note => Array.isArray(note.options) && note.options.length > 0)
+  const answer = asked < 0 ? undefined : notes.slice(asked + 1).find(note => note.by === undefined || note.by === USER)
   const waiter = awaiting?.botId === undefined ? undefined : roster.byId?.[awaiting.botId]
   const working = Array.isArray(live?.steps) && live.steps.length > 0 ? live.steps : undefined
   const open = roster.board?.trace === 'all'
@@ -167,7 +231,10 @@ function Thread({ notes, roster, awaiting, live }) {
         fromBot ? (bot ? h(BotMark, { bot, size: 24 }) : h('span', { className: 'bt-board-msg-mark', 'aria-hidden': true })) : null,
         h('div', { className: 'bt-board-msg-body' },
           fromBot ? h(TraceFold, { trace: note.trace, open }) : null,
-          h('span', { className: 'bt-board-msg-text' }, nameCards(note.text, roster.board?.cards ?? {})),
+          fromBot
+            ? h(BotText, { text: note.text, cards, className: 'bt-board-msg-text' })
+            : h('span', { className: 'bt-board-msg-text' }, nameCards(note.text, cards)),
+          index === asked ? h(Options, { options: note.options, picked: answer?.text, pick: answer === undefined ? pick : undefined, busy }) : null,
           h('span', { className: 'bt-board-age' }, clockLabel(note.at ?? 0))))
     }),
     waiter ? h('li', { key: 'waiting', className: 'bt-board-msg bt-board-waiting', 'data-by': 'bot', 'aria-busy': true },
@@ -177,7 +244,7 @@ function Thread({ notes, roster, awaiting, live }) {
         h('span', { className: 'bt-board-msg-text bt-board-dots', 'aria-hidden': true }, h('i'), h('i'), h('i')))) : null)
 }
 
-export function CardDetail({ card, roster, actions, live }) {
+export function CardDetail({ card, roster, actions, live, onOpenCard }) {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [confirming, setConfirming] = useState(false)
@@ -224,7 +291,7 @@ export function CardDetail({ card, roster, actions, live }) {
   const notes = card.notes ?? []
   const links = [...(card.url && !card.key ? [{ url: card.url }] : []), ...(card.links ?? [])]
   return h('div', { className: 'bt-board-sheet-body', 'data-status': card.status },
-    h('div', { className: 'bt-board-detail', ref: scroller },
+    h('div', { className: 'bt-board-detail', ref: scroller, onClick: cardLinkTap(onOpenCard) },
       card.key ? (card.url
         ? h('a', { className: 'bt-board-key', href: card.url, target: '_blank', rel: 'noreferrer noopener' }, card.key)
         : h('span', { className: 'bt-board-key' }, card.key)) : null,
@@ -240,17 +307,20 @@ export function CardDetail({ card, roster, actions, live }) {
               value: card.status, disabled: busy, 'aria-label': t('Move to'),
               onChange: (event) => { if (event.target.value !== card.status) run(actions.boardMove(card.id, event.target.value)) },
             }, COLUMNS.map(([status, name]) => h('option', { key: status, value: status }, t(name))))),
-      card.progress ? h('p', { className: 'bt-board-line' }, card.progress) : null,
-      card.result ? h('p', { className: 'bt-board-line bt-board-strong' }, card.result) : null,
-      card.reason ? h('p', { className: 'bt-board-line' }, card.reason) : null,
+      card.progress ? h(BotText, { text: card.progress, cards: roster.board?.cards ?? {}, className: 'bt-board-line' }) : null,
+      card.result ? h(BotText, { text: card.result, cards: roster.board?.cards ?? {}, className: 'bt-board-line bt-board-strong' }) : null,
+      card.reason ? h(BotText, { text: card.reason, cards: roster.board?.cards ?? {}, className: 'bt-board-line' }) : null,
       links.length > 0 ? h('div', { className: 'bt-board-links' },
-        links.map(link => h('a', { key: link.url, className: 'bt-board-link', href: link.url, target: '_blank', rel: 'noreferrer noopener' },
-          h(LinkIcon), h('span', null, link.url.replace(/^https?:\/\//, ''))))) : null,
+        links.map(link => h('div', { key: link.url, className: 'bt-board-md bt-board-link', title: link.url },
+          h(MarkdownText, { text: markdownLink(link.url), labels: mdLabels(), variant: 'compact' })))) : null,
       open ? h('button', {
         type: 'button', className: 'bt-board-cancel', 'data-confirm': confirming || undefined, disabled: busy,
         'aria-label': confirming ? t('Click again to cancel') : t('Cancel card'), onClick: cancel,
       }, t('Cancel card')) : null,
-      notes.length > 0 ? h(Thread, { notes, roster, awaiting: open ? card.awaiting : undefined, live: open ? live : undefined }) : null,
+      notes.length > 0 ? h(Thread, {
+        notes, roster, awaiting: open ? card.awaiting : undefined, live: open ? live : undefined, busy,
+        pick: open ? option => run(actions.boardNote(card.id, option)) : undefined,
+      }) : null,
       error ? h('div', { className: 'bt-error', role: 'alert' }, error) : null),
     open ? h('div', { className: 'bt-board-sheet-foot bt-board-write' },
       h('input', {
@@ -339,7 +409,7 @@ export function BoardScreen({ roster, actions, paneLeft = 0, leaving = false, fo
         sheet.add ? h('h3', null, t('Add card')) : null),
       sheet.add
         ? h(AddCard, { roster, actions, onDone: back })
-        : card !== undefined ? h(CardDetail, { key: card.id, card, roster, actions, live: roster.board?.live?.[card.id] }) : null) : null)
+        : card !== undefined ? h(CardDetail, { key: card.id, card, roster, actions, live: roster.board?.live?.[card.id], onOpenCard: openCard }) : null) : null)
 }
 
 // One 8px step scale, one 12px card radius; colour only in the status dots.
@@ -415,13 +485,17 @@ a.bt-board-key:hover{color:var(--bt-ink)}
 .bt-board-move:focus-within{box-shadow:0 0 0 2px var(--bt-accent-soft)}
 .bt-board-move select option{color:var(--bt-ink);background:var(--bt-card)}
 .bt-board-move::before{content:'';position:absolute;inset:0;border-radius:inherit}
-.bt-board-line{margin:0;font-size:14px;line-height:21px;color:var(--bt-ink-2);white-space:pre-wrap;overflow-wrap:anywhere}
+.bt-board-line{margin:0;font-size:14px;line-height:21px;color:var(--bt-ink-2);overflow-wrap:anywhere}
 .bt-board-strong{color:var(--bt-ink)}
 .bt-board-links{display:flex;flex-direction:column;gap:4px}
-.bt-board-link{display:flex;align-items:center;gap:8px;min-height:32px;font-size:13px;line-height:18px;color:var(--bt-accent);text-decoration:none}
-.bt-board-link:hover>span{text-decoration:underline}
-.bt-board-link svg{flex:none;width:14px;height:14px}
-.bt-board-link>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-board-link{min-width:0;min-height:28px;font-size:13px;line-height:28px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-board-link p{display:inline}
+.bt-board-options{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.bt-board-option{min-height:32px;max-width:100%;padding:5px 12px;border:1px solid var(--bt-line-2);border-radius:999px;background:var(--bt-card);color:var(--bt-ink);font:inherit;font-size:13px;line-height:20px;text-align:left;overflow-wrap:anywhere;cursor:pointer;transition:border-color .14s ease,background-color .14s ease}
+.bt-board-option:not(:disabled):hover{border-color:var(--bt-accent);background:var(--bt-accent-soft)}
+.bt-board-option:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
+.bt-board-option:disabled{cursor:default;opacity:.55}
+.bt-board-option[data-picked]{opacity:1;border-color:var(--bt-accent);background:var(--bt-accent-soft);font-weight:500}
 .bt-board-thread{list-style:none;margin:8px 0 0;padding:16px 0 0;border-top:.5px solid var(--bt-line);display:flex;flex-direction:column;gap:12px}
 .bt-board-msg{display:flex;align-items:flex-end;gap:8px;max-width:100%}
 .bt-board-msg[data-by=user]{justify-content:flex-end}
@@ -431,7 +505,18 @@ a.bt-board-key:hover{color:var(--bt-ink)}
 .bt-board-msg[data-by=bot] .bt-board-msg-body{align-items:flex-start}
 .bt-board-msg-text{padding:7px 12px;border-radius:18px;font-size:14px;line-height:20px;white-space:pre-wrap;overflow-wrap:anywhere;text-wrap:pretty}
 .bt-board-msg[data-by=user] .bt-board-msg-text{background:var(--bt-user);color:var(--bt-user-ink)}
-.bt-board-msg[data-by=bot] .bt-board-msg-text{background:var(--bt-hover);color:var(--bt-ink)}
+.bt-board-msg[data-by=bot] .bt-board-msg-text{background:var(--bt-hover);color:var(--bt-ink);white-space:normal;min-width:0;max-width:100%;box-sizing:border-box}
+.bt-board-md [class*="_markdown"]{color:inherit!important;font-size:inherit!important;line-height:inherit!important}
+.bt-board-md [class*="_markdown"]>*+*{margin-top:8px}
+.bt-board-md p{margin:0}
+.bt-board-md :is(h1,h2,h3,h4,h5,h6){margin:0;font-size:1em;line-height:inherit;font-weight:600}
+.bt-board-md ul,.bt-board-md ol{margin:4px 0;padding-left:20px}
+.bt-board-md li+li{margin-top:4px}
+.bt-board-md li::marker{color:var(--bt-ink-2)}
+.bt-board-md :not(pre)>code{line-height:1;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.bt-board-md pre{max-width:100%;overflow-x:auto}
+.bt-board-md table{display:block;max-width:100%;overflow-x:auto}
+.bt-board-md :is(img,video){max-width:100%;height:auto}
 .bt-board-msg .bt-board-age{padding:0 4px}
 .bt-board-dots{display:flex;gap:4px;align-items:center;height:34px;padding:0 14px}
 .bt-board-dots>i{width:6px;height:6px;border-radius:50%;background:var(--bt-ink-3,currentColor);opacity:.4;animation:bt-board-dot 1.2s ease-in-out infinite}

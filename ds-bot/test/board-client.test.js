@@ -13,7 +13,7 @@ const react = {
   useLayoutEffect: () => {}, useMemo: make => make(), useCallback: fn => fn, Fragment: 'fragment',
 }
 const require = (name) => {
-  const platform = { react, 'react-dom': { createPortal: node => node }, '@deepseek-ai/dsh-client-ui-primitives': { MarkdownText: () => null } }
+  const platform = { react, 'react-dom': { createPortal: node => node }, '@deepseek-ai/dsh-client-ui-primitives': { MarkdownText: ({ text }) => text } }
   if (!(name in platform)) throw new Error(`no platform module ${name}`)
   return platform[name]
 }
@@ -27,7 +27,7 @@ const bundled = async (entry) => {
   runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports, require, setTimeout, clearTimeout, setInterval, clearInterval, URL, URLSearchParams, Promise })
   return module.exports
 }
-const { BoardScreen, CardDetail, boardColumns, leadColumn, COLUMNS } = await bundled('board/client/board.js')
+const { BoardScreen, CardDetail, boardColumns, leadColumn, linkLabel, plainLine, COLUMNS } = await bundled('board/client/board.js')
 const { installBoardPage, boardCall, boardWatch, replyNotice, BOARD_ROUTE } = await bundled('board/client/index.js')
 const { cardTagRule, cardTagNode, CARD_TAG_ID, linkCards, nameCards, CARD_LINK_ORIGIN } = await bundled('board/client/card-tag.js')
 const plain = value => JSON.parse(JSON.stringify(value))
@@ -135,6 +135,9 @@ test('an open card is a conversation: the user on the right, the Bot\'s replies 
   const messages = all(tree, 'bt-board-msg')
   assert.deepEqual(plain(messages.map(message => message.props['data-by'])), ['user', 'bot', 'user'])
   assert.deepEqual(plain(all(tree, 'bt-board-msg-text').map(text)), ['Gọi trước 5h nhé', 'Ok, mình gọi lúc 4h.\nXong sẽ báo.', 'an older note without by'])
+  // The Bot's reply is Markdown, as in the chat; the user's own message stays as typed.
+  assert.equal(all(tree, 'bt-board-md').length, 1)
+  assert.equal(all(tree, 'bt-board-md')[0].props.className.split(' ').includes('bt-board-msg-text'), true)
   // The Bot's reply sits under its mark; the user's own messages carry no mark.
   assert.equal(messages[1].children.some(child => child?.props?.bot?.id === 'b'), true)
   assert.equal(messages[0].children.some(child => child?.props?.bot !== undefined), false)
@@ -447,4 +450,70 @@ test('a Bot\'s card links follow the board: a tap opens the Board on the card, a
   stop()
   const focus = typeof page.props.focus === 'function' ? page.props.focus() : page.props.focus
   assert.equal(focus, 'c_bcd80b5f')
+})
+
+test('a Bot\'s answer reads as Markdown in the card and as one plain line on the board', () => {
+  const bot = { id: 'b', name: 'Writer', color: '#3b82f6' }
+  const cards = { c_bcd80b5f: card('c_bcd80b5f', 'active', { key: 'LIFE-782', title: 'Fix login' }) }
+  const talk = card('k', 'review', {
+    assignee: 'b', result: '**Done** — see `log.txt`',
+    notes: [{ at: now, by: 'b', text: '## Kết quả\n- **Fixed** c_bcd80b5f\n- see [the PR](https://x.test/1)' }],
+  })
+  let opened
+  const tree = { type: CardDetail, props: { card: talk, roster: { byId: { b: bot }, bots: [bot], board: { cards } }, actions: {}, onOpenCard: id => { opened = id } }, children: [] }
+  const md = all(tree, 'bt-board-md')
+  // The result and the reply both go to the host's Markdown; a named card becomes its link.
+  assert.deepEqual(plain(md.map(text)), ['**Done** — see `log.txt`', `## Kết quả\n- **Fixed** [LIFE-782](${CARD_LINK_ORIGIN}c_bcd80b5f)\n- see [the PR](https://x.test/1)`])
+  // A tap on that link opens the card on the board.
+  const detail = find(tree, 'bt-board-detail')
+  let stopped = 0
+  const anchor = { getAttribute: () => `${CARD_LINK_ORIGIN}c_bcd80b5f` }
+  detail.props.onClick({ target: { closest: selector => (selector.includes(CARD_LINK_ORIGIN) ? anchor : null) }, preventDefault: () => { stopped += 1 }, stopPropagation: () => {} })
+  assert.equal(opened, 'c_bcd80b5f')
+  assert.equal(stopped, 1)
+  detail.props.onClick({ target: { closest: () => null }, preventDefault: () => { stopped += 1 } })
+  assert.equal(stopped, 1)
+  // The card's one line drops the marks.
+  assert.equal(plainLine('## Kết quả\n- **Fixed** the `login` bug\n- see [the PR](https://x.test/1) *now*'), 'Kết quả Fixed the login bug see the PR now')
+  assert.equal(plainLine('```js\nrun()\n```'), 'run()')
+  assert.equal(plainLine('snake_case and 2 * 3 * 4'), 'snake_case and 2 * 3 * 4')
+  assert.equal(plainLine(undefined), undefined)
+})
+
+test('a Bot\'s question shows its options as buttons; a tap sends the pick, which stays marked', () => {
+  const bot = { id: 'b', name: 'Writer', color: '#3b82f6' }
+  const roster = { byId: { b: bot }, bots: [bot], board: { cards: {} } }
+  const asking = card('k', 'review', { assignee: 'b', notes: [
+    { at: now - 2000, by: 'user', text: 'deploy?' },
+    { at: now - 1000, by: 'b', text: 'Which **environment**?', options: ['Staging', 'Production'] },
+    { at: now - 500, by: 'b', text: 'Waiting for your pick.' },
+  ] })
+  const sent = []
+  const actions = { boardNote: (id, text) => { sent.push([id, text]); return Promise.resolve() } }
+  const tree = { type: CardDetail, props: { card: asking, roster, actions }, children: [] }
+  const buttons = all(tree, 'bt-board-option')
+  assert.deepEqual(plain(buttons.map(text)), ['Staging', 'Production'])
+  assert.equal(buttons.some(button => button.props.disabled), false)
+  buttons[1].props.onClick()
+  assert.deepEqual(sent, [['k', 'Production']])
+  // Answered: the options stay, the pick marked, none to tap.
+  const answered = { ...asking, notes: [...asking.notes, { at: now, by: 'user', text: 'Production' }] }
+  const after = all({ type: CardDetail, props: { card: answered, roster, actions }, children: [] }, 'bt-board-option')
+  assert.deepEqual(plain(after.map(button => [button.props.disabled, button.props['data-picked'] ?? false])), [[true, false], [true, true]])
+  // A finished card takes no pick.
+  const done = all({ type: CardDetail, props: { card: { ...asking, status: 'done' }, roster, actions }, children: [] }, 'bt-board-option')
+  assert.equal(done.every(button => button.props.disabled), true)
+})
+
+test('a card\'s links are drawn as the chat draws them, by a short name', () => {
+  assert.equal(linkLabel('https://github.com/o/r/pull/7'), 'o/r#7')
+  assert.equal(linkLabel('https://github.com/o/r/issues/12#issuecomment-1'), 'o/r#12')
+  assert.equal(linkLabel('https://github.com/o/r/commit/abcdef1234567'), 'o/r@abcdef1')
+  assert.equal(linkLabel('https://github.com/o/r'), 'o/r')
+  assert.equal(linkLabel('https://github.com/o/r/tree/main/src'), 'github.com/o/r/tree/main/src')
+  assert.equal(linkLabel('https://www.example.com/'), 'example.com')
+  assert.equal(linkLabel('not a url'), 'not a url')
+  const linked = card('k', 'active', { links: [{ url: 'https://github.com/o/r/pull/7' }] })
+  const tree = { type: CardDetail, props: { card: linked, roster: { byId: {}, bots: [], board: { cards: {} } }, actions: {} }, children: [] }
+  assert.deepEqual(plain(all(tree, 'bt-board-link').map(text)), ['[o/r#7](<https://github.com/o/r/pull/7>)'])
 })

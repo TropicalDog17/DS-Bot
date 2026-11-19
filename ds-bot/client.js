@@ -43524,7 +43524,7 @@ function linkCards(text, cards) {
 }
 var nameCards = (text, cards) => typeof text === "string" && text.includes("c_") ? swap(text, cards, nameOf2) : text;
 var BOARD_MASK = `url("data:image/svg+xml,${encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.6' stroke-linejoin='round'><path d='M3.5 4.5h3.5v11H3.5zM8.25 4.5h3.5v7h-3.5zM13 4.5h3.5v9H13z'/></svg>")}")`;
-var BOT_TAG = `.bt-bubble a[href^="${CARD_LINK_ORIGIN}"]`;
+var BOT_TAG = `:is(.bt-bubble,.bt-board-md) a[href^="${CARD_LINK_ORIGIN}"]`;
 var CARD_TAG_CSS = `
 .bt-card-tag{display:inline-flex;align-items:center;gap:4px;max-width:100%;margin:0 6px 2px 0;padding:1px 7px 1px 5px;vertical-align:1px;border:1px solid color-mix(in srgb,currentColor 22%,transparent);border-radius:6px;background:color-mix(in srgb,currentColor 7%,transparent);color:inherit;font:inherit;font-size:.86em;font-weight:600;line-height:1.5;cursor:pointer;white-space:nowrap}
 .bt-card-tag>svg{flex:none;opacity:.7}
@@ -43558,6 +43558,55 @@ function leadColumn(columns2) {
   const order = ["review", "blocked", "active", "todo"];
   return order.find((status) => columns2[status]?.some((card) => card.unread === true)) ?? order.find((status) => columns2[status]?.length > 0) ?? "todo";
 }
+function plainLine(text) {
+  if (typeof text !== "string") return text;
+  return text.replace(/```[^\n]*\n?/g, "").replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/^[ \t]*(?:#{1,6}[ \t]+|>[ \t]?|[-*+][ \t]+(?:\[[ xX]\][ \t]+)?|\d+[.)][ \t]+)/gm, "").replace(/(\*\*|__|~~|`)(.+?)\1/g, "$2").replace(/(^|[^\w*])\*(\S(?:[^*\n]*\S)?)\*(?!\w)/g, "$1$2").replace(/\s*\n+\s*/g, " ").trim();
+}
+function BotText({ text, cards, className }) {
+  return (0, import_react75.createElement)(
+    "div",
+    { className: `bt-board-md ${className}` },
+    (0, import_react75.createElement)(import_dsh_client_ui_primitives.MarkdownText, { text: linkCards(text ?? "", cards), labels: mdLabels(), variant: "compact" })
+  );
+}
+function linkLabel(href) {
+  let url;
+  try {
+    url = new URL(href);
+  } catch {
+    return href;
+  }
+  const parts = url.pathname.split("/").filter(Boolean);
+  if (url.hostname === "github.com" && parts.length >= 2) {
+    const repo = `${parts[0]}/${parts[1]}`;
+    if (/^(pull|issues)$/.test(parts[2] ?? "") && /^\d+$/.test(parts[3] ?? "")) return `${repo}#${parts[3]}`;
+    if (parts[2] === "commit" && /^[0-9a-f]{7,}$/i.test(parts[3] ?? "")) return `${repo}@${parts[3].slice(0, 7)}`;
+    if (parts.length === 2) return repo;
+  }
+  return `${url.hostname.replace(/^www\./, "")}${url.pathname === "/" ? "" : url.pathname.replace(/\/$/, "")}`;
+}
+var markdownLink = (href) => `[${linkLabel(href).replace(/[[\]\\]/g, "\\$&")}](<${href}>)`;
+function Options({ options, picked, pick: pick2, busy }) {
+  return (0, import_react75.createElement)(
+    "div",
+    { className: "bt-board-options" },
+    options.map((option) => (0, import_react75.createElement)("button", {
+      key: option,
+      type: "button",
+      className: "bt-board-option",
+      disabled: pick2 === void 0 || busy,
+      "data-picked": option === picked || void 0,
+      onClick: () => pick2?.(option)
+    }, option))
+  );
+}
+var cardLinkTap = (openCard) => (event) => {
+  const anchor = typeof event.target?.closest === "function" ? event.target.closest(`a[href^="${CARD_LINK_ORIGIN}"]`) : null;
+  if (anchor === null) return;
+  event.preventDefault();
+  event.stopPropagation();
+  openCard?.(anchor.getAttribute("href").slice(CARD_LINK_ORIGIN.length));
+};
 var Dot2 = ({ status }) => (0, import_react75.createElement)("span", { className: "bt-board-dot", "data-status": status, "aria-hidden": true });
 function Who({ id, roster, size = 20 }) {
   const bot = id === USER ? void 0 : roster.byId?.[id];
@@ -43592,7 +43641,7 @@ function Card3({ card, roster, onOpen, onDrag }) {
     },
     card.key ? (0, import_react75.createElement)("span", { className: "bt-board-key" }, card.key) : null,
     (0, import_react75.createElement)("span", { className: "bt-board-title" }, card.title),
-    line ? (0, import_react75.createElement)("span", { className: "bt-board-progress" }, nameCards(line, roster.board?.cards ?? {})) : null,
+    line ? (0, import_react75.createElement)("span", { className: "bt-board-progress" }, plainLine(nameCards(line, roster.board?.cards ?? {}))) : null,
     (0, import_react75.createElement)(
       "span",
       { className: "bt-board-card-foot" },
@@ -43705,7 +43754,10 @@ function TraceFold({ trace, open }) {
     (0, import_react75.createElement)(Trace, { steps, open })
   );
 }
-function Thread({ notes, roster, awaiting, live }) {
+function Thread({ notes, roster, awaiting, live, pick: pick2, busy }) {
+  const cards = roster.board?.cards ?? {};
+  const asked = notes.findLastIndex((note) => Array.isArray(note.options) && note.options.length > 0);
+  const answer = asked < 0 ? void 0 : notes.slice(asked + 1).find((note) => note.by === void 0 || note.by === USER);
   const waiter = awaiting?.botId === void 0 ? void 0 : roster.byId?.[awaiting.botId];
   const working = Array.isArray(live?.steps) && live.steps.length > 0 ? live.steps : void 0;
   const open = roster.board?.trace === "all";
@@ -43723,7 +43775,8 @@ function Thread({ notes, roster, awaiting, live }) {
           "div",
           { className: "bt-board-msg-body" },
           fromBot ? (0, import_react75.createElement)(TraceFold, { trace: note.trace, open }) : null,
-          (0, import_react75.createElement)("span", { className: "bt-board-msg-text" }, nameCards(note.text, roster.board?.cards ?? {})),
+          fromBot ? (0, import_react75.createElement)(BotText, { text: note.text, cards, className: "bt-board-msg-text" }) : (0, import_react75.createElement)("span", { className: "bt-board-msg-text" }, nameCards(note.text, cards)),
+          index === asked ? (0, import_react75.createElement)(Options, { options: note.options, picked: answer?.text, pick: answer === void 0 ? pick2 : void 0, busy }) : null,
           (0, import_react75.createElement)("span", { className: "bt-board-age" }, clockLabel(note.at ?? 0))
         )
       );
@@ -43741,7 +43794,7 @@ function Thread({ notes, roster, awaiting, live }) {
     ) : null
   );
 }
-function CardDetail({ card, roster, actions, live }) {
+function CardDetail({ card, roster, actions, live, onOpenCard }) {
   const [text, setText] = (0, import_react75.useState)("");
   const [busy, setBusy] = (0, import_react75.useState)(false);
   const [confirming, setConfirming] = (0, import_react75.useState)(false);
@@ -43799,7 +43852,7 @@ function CardDetail({ card, roster, actions, live }) {
     { className: "bt-board-sheet-body", "data-status": card.status },
     (0, import_react75.createElement)(
       "div",
-      { className: "bt-board-detail", ref: scroller },
+      { className: "bt-board-detail", ref: scroller, onClick: cardLinkTap(onOpenCard) },
       card.key ? card.url ? (0, import_react75.createElement)("a", { className: "bt-board-key", href: card.url, target: "_blank", rel: "noreferrer noopener" }, card.key) : (0, import_react75.createElement)("span", { className: "bt-board-key" }, card.key) : null,
       (0, import_react75.createElement)("h3", { className: "bt-board-detail-title" }, card.title),
       (0, import_react75.createElement)(
@@ -43821,17 +43874,16 @@ function CardDetail({ card, roster, actions, live }) {
           }
         }, COLUMNS.map(([status, name]) => (0, import_react75.createElement)("option", { key: status, value: status }, t(name))))
       ),
-      card.progress ? (0, import_react75.createElement)("p", { className: "bt-board-line" }, card.progress) : null,
-      card.result ? (0, import_react75.createElement)("p", { className: "bt-board-line bt-board-strong" }, card.result) : null,
-      card.reason ? (0, import_react75.createElement)("p", { className: "bt-board-line" }, card.reason) : null,
+      card.progress ? (0, import_react75.createElement)(BotText, { text: card.progress, cards: roster.board?.cards ?? {}, className: "bt-board-line" }) : null,
+      card.result ? (0, import_react75.createElement)(BotText, { text: card.result, cards: roster.board?.cards ?? {}, className: "bt-board-line bt-board-strong" }) : null,
+      card.reason ? (0, import_react75.createElement)(BotText, { text: card.reason, cards: roster.board?.cards ?? {}, className: "bt-board-line" }) : null,
       links.length > 0 ? (0, import_react75.createElement)(
         "div",
         { className: "bt-board-links" },
         links.map((link) => (0, import_react75.createElement)(
-          "a",
-          { key: link.url, className: "bt-board-link", href: link.url, target: "_blank", rel: "noreferrer noopener" },
-          (0, import_react75.createElement)(LinkIcon2),
-          (0, import_react75.createElement)("span", null, link.url.replace(/^https?:\/\//, ""))
+          "div",
+          { key: link.url, className: "bt-board-md bt-board-link", title: link.url },
+          (0, import_react75.createElement)(import_dsh_client_ui_primitives.MarkdownText, { text: markdownLink(link.url), labels: mdLabels(), variant: "compact" })
         ))
       ) : null,
       open ? (0, import_react75.createElement)("button", {
@@ -43842,7 +43894,14 @@ function CardDetail({ card, roster, actions, live }) {
         "aria-label": confirming ? t("Click again to cancel") : t("Cancel card"),
         onClick: cancel
       }, t("Cancel card")) : null,
-      notes.length > 0 ? (0, import_react75.createElement)(Thread, { notes, roster, awaiting: open ? card.awaiting : void 0, live: open ? live : void 0 }) : null,
+      notes.length > 0 ? (0, import_react75.createElement)(Thread, {
+        notes,
+        roster,
+        awaiting: open ? card.awaiting : void 0,
+        live: open ? live : void 0,
+        busy,
+        pick: open ? (option) => run2(actions.boardNote(card.id, option)) : void 0
+      }) : null,
       error ? (0, import_react75.createElement)("div", { className: "bt-error", role: "alert" }, error) : null
     ),
     open ? (0, import_react75.createElement)(
@@ -43987,7 +44046,7 @@ function BoardScreen({ roster, actions, paneLeft = 0, leaving = false, focus = n
         (0, import_react75.createElement)("button", { type: "button", className: "bt-icon-btn", "aria-label": t("Back"), onClick: back }, (0, import_react75.createElement)(ChevronLeftIcon)),
         sheet.add ? (0, import_react75.createElement)("h3", null, t("Add card")) : null
       ),
-      sheet.add ? (0, import_react75.createElement)(AddCard, { roster, actions, onDone: back }) : card !== void 0 ? (0, import_react75.createElement)(CardDetail, { key: card.id, card, roster, actions, live: roster.board?.live?.[card.id] }) : null
+      sheet.add ? (0, import_react75.createElement)(AddCard, { roster, actions, onDone: back }) : card !== void 0 ? (0, import_react75.createElement)(CardDetail, { key: card.id, card, roster, actions, live: roster.board?.live?.[card.id], onOpenCard: openCard }) : null
     ) : null
   );
 }
@@ -44063,13 +44122,17 @@ a.bt-board-key:hover{color:var(--bt-ink)}
 .bt-board-move:focus-within{box-shadow:0 0 0 2px var(--bt-accent-soft)}
 .bt-board-move select option{color:var(--bt-ink);background:var(--bt-card)}
 .bt-board-move::before{content:'';position:absolute;inset:0;border-radius:inherit}
-.bt-board-line{margin:0;font-size:14px;line-height:21px;color:var(--bt-ink-2);white-space:pre-wrap;overflow-wrap:anywhere}
+.bt-board-line{margin:0;font-size:14px;line-height:21px;color:var(--bt-ink-2);overflow-wrap:anywhere}
 .bt-board-strong{color:var(--bt-ink)}
 .bt-board-links{display:flex;flex-direction:column;gap:4px}
-.bt-board-link{display:flex;align-items:center;gap:8px;min-height:32px;font-size:13px;line-height:18px;color:var(--bt-accent);text-decoration:none}
-.bt-board-link:hover>span{text-decoration:underline}
-.bt-board-link svg{flex:none;width:14px;height:14px}
-.bt-board-link>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-board-link{min-width:0;min-height:28px;font-size:13px;line-height:28px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-board-link p{display:inline}
+.bt-board-options{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.bt-board-option{min-height:32px;max-width:100%;padding:5px 12px;border:1px solid var(--bt-line-2);border-radius:999px;background:var(--bt-card);color:var(--bt-ink);font:inherit;font-size:13px;line-height:20px;text-align:left;overflow-wrap:anywhere;cursor:pointer;transition:border-color .14s ease,background-color .14s ease}
+.bt-board-option:not(:disabled):hover{border-color:var(--bt-accent);background:var(--bt-accent-soft)}
+.bt-board-option:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
+.bt-board-option:disabled{cursor:default;opacity:.55}
+.bt-board-option[data-picked]{opacity:1;border-color:var(--bt-accent);background:var(--bt-accent-soft);font-weight:500}
 .bt-board-thread{list-style:none;margin:8px 0 0;padding:16px 0 0;border-top:.5px solid var(--bt-line);display:flex;flex-direction:column;gap:12px}
 .bt-board-msg{display:flex;align-items:flex-end;gap:8px;max-width:100%}
 .bt-board-msg[data-by=user]{justify-content:flex-end}
@@ -44079,7 +44142,18 @@ a.bt-board-key:hover{color:var(--bt-ink)}
 .bt-board-msg[data-by=bot] .bt-board-msg-body{align-items:flex-start}
 .bt-board-msg-text{padding:7px 12px;border-radius:18px;font-size:14px;line-height:20px;white-space:pre-wrap;overflow-wrap:anywhere;text-wrap:pretty}
 .bt-board-msg[data-by=user] .bt-board-msg-text{background:var(--bt-user);color:var(--bt-user-ink)}
-.bt-board-msg[data-by=bot] .bt-board-msg-text{background:var(--bt-hover);color:var(--bt-ink)}
+.bt-board-msg[data-by=bot] .bt-board-msg-text{background:var(--bt-hover);color:var(--bt-ink);white-space:normal;min-width:0;max-width:100%;box-sizing:border-box}
+.bt-board-md [class*="_markdown"]{color:inherit!important;font-size:inherit!important;line-height:inherit!important}
+.bt-board-md [class*="_markdown"]>*+*{margin-top:8px}
+.bt-board-md p{margin:0}
+.bt-board-md :is(h1,h2,h3,h4,h5,h6){margin:0;font-size:1em;line-height:inherit;font-weight:600}
+.bt-board-md ul,.bt-board-md ol{margin:4px 0;padding-left:20px}
+.bt-board-md li+li{margin-top:4px}
+.bt-board-md li::marker{color:var(--bt-ink-2)}
+.bt-board-md :not(pre)>code{line-height:1;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.bt-board-md pre{max-width:100%;overflow-x:auto}
+.bt-board-md table{display:block;max-width:100%;overflow-x:auto}
+.bt-board-md :is(img,video){max-width:100%;height:auto}
 .bt-board-msg .bt-board-age{padding:0 4px}
 .bt-board-dots{display:flex;gap:4px;align-items:center;height:34px;padding:0 14px}
 .bt-board-dots>i{width:6px;height:6px;border-radius:50%;background:var(--bt-ink-3,currentColor);opacity:.4;animation:bt-board-dot 1.2s ease-in-out infinite}
