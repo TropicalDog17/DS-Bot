@@ -261,7 +261,7 @@ A separate DSH plugin can build on the team without reaching into its state. The
 |---|---|
 | `botSessionIdentity` | `ownerOfSession(sessionId)`: the Bot (and group) a Session speaks for, or `undefined`; `subscribe(listener)` after ownership changes |
 | `dsBotRoster` | `bots()`, `groups()`, `bot(id)`, `group(id)`, `findBot(idOrName)`: frozen copies (id, name, role, color, avatar, main; id, name, members, admin); `ready()` awaits the saved team; `subscribe(listener)` after every save |
-| `dsBotNotes` | `deliver({ botId, text, roomId? })`: a note from the user, as the user's own message: `@Bot` in that group when the Bot is a member, else in the Bot's own chat |
+| `dsBotNotes` | `deliver({ botId, text, roomId? })`: a note from the user, as the user's own message: `@Bot` in that group when the Bot is a member, else in the Bot's own chat. `onReply(listener)`: hears `{ botId, roomId?, text, since }` each time a Bot's turn ends with an answer the user reads (its own chat when the user opened the turn, any turn in a group); the board copies the answer to a note onto its card |
 
 The browser half provides `dsBotPages`: `register({ id, title, icon, Page, order? })` puts one icon button in the sidebar's head and the collapsed rail, and opens `Page` over the main area with `{ paneLeft, leaving, close }`. It returns a disposer. Nothing shows for a plugin that does not register.
 
@@ -273,7 +273,7 @@ The browser half provides `dsBotPages`: `register({ id, title, icon, Page, order
       name: ds-bot/board
 ```
 
-Its cards live in `$DSH_HOME/bot-board/board.json` (`config.file` moves them). See `docs/plans/2026-11-19-board-plugin.md`.
+A card is a conversation: a note from the Board page reaches the Bot as your message in its chat (or the card's group), the Bot answers there as usual, and that answer is copied onto the card. Its cards live in `$DSH_HOME/bot-board/board.json` (`config.file` moves them). See `docs/plans/2026-11-19-board-plugin.md`.
 
 ## Layout
 

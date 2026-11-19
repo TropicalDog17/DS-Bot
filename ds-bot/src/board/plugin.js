@@ -2,7 +2,7 @@
 // POST api/ds-bot-board route the Board page uses. It knows the team only through
 // DS Bot's public services: botSessionIdentity (which Bot and group a Session speaks
 // for), dsBotRoster (names, marks, Main Bots, group admins) and dsBotNotes (a note
-// to a Bot as the user's own message).
+// to a Bot as the user's own message, and the Bot's answer to copy onto the card).
 import { join } from 'node:path'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { dshHomeOf } from '../host/folders.js'
@@ -66,11 +66,16 @@ export function install(ctx, config, { identity, roster, notes, tools, connectio
       case 'cancel':
         return store.change(data => board.user.cancel(data.cards, String(body.id ?? ''), body.reason))
       case 'note': {
-        const result = await store.change(data => board.user.note(data.cards, String(body.id ?? ''), body.text))
+        const id = String(body.id ?? '')
+        const result = await store.change(data => board.user.note(data.cards, id, body.text))
         if (result.error === undefined && result.deliver !== undefined) {
           // The note is saved either way; a delivery that fails says so on the page.
+          const since = now()
           const sent = await notes.deliver(result.deliver).catch(error => ({ error: error?.message ?? String(error) }))
           if (sent?.error !== undefined) return { error: `Saved on the card, but not sent: ${sent.error}` }
+          // The Bot answers where the note went; that answer is copied onto the card.
+          const roomId = sent?.where === 'group' ? result.deliver.roomId : undefined
+          return store.change(data => board.user.sent(data.cards, id, { botId: result.deliver.botId, roomId, since }))
         }
         return result
       }
@@ -84,6 +89,11 @@ export function install(ctx, config, { identity, roster, notes, tools, connectio
   }
 
   const disposers = [
+    // The Bot answers a note in its chat, where the user reads it; the card gets a copy.
+    notes.onReply?.(reply => {
+      void store.change(data => board.mirror(data.cards, reply))
+        .catch(error => ctx.logger?.warn?.('ds-bot-board: copying an answer failed: %s', error))
+    }),
     tools.register(tool),
     connection.fetch.register({
       path: ROUTE,

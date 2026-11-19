@@ -27,7 +27,7 @@ const bundled = async (entry) => {
   runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports, require, setTimeout, clearTimeout, URL, URLSearchParams, Promise })
   return module.exports
 }
-const { BoardDialog, boardColumns, leadColumn, COLUMNS } = await bundled('board/client/board.js')
+const { BoardDialog, CardDetail, boardColumns, leadColumn, COLUMNS } = await bundled('board/client/board.js')
 const { installBoardPage, boardCall, BOARD_ROUTE } = await bundled('board/client/index.js')
 const plain = value => JSON.parse(JSON.stringify(value))
 
@@ -98,6 +98,41 @@ test('the Board page shows each card with its ticket key and Vietnamese text int
   // A card with a link says so.
   const linked = { ...roster, board: { cards: { k: card('k', 'review', { title: 'PR', links: [{ url: 'https://github.com/x/y/pull/1' }] }) } } }
   assert.equal(all({ type: BoardDialog, props: { roster: linked, actions: { closeBoard() {} } }, children: [] }, 'bt-board-has-link').length, 1)
+})
+
+test('an open card is a conversation: the user on the right, the Bot\'s replies under its mark, one Message box', () => {
+  const bot = { id: 'b', name: 'Writer', color: '#3b82f6' }
+  const roster = { byId: { b: bot }, bots: [bot] }
+  const talk = card('k', 'active', {
+    assignee: 'b',
+    notes: [
+      { at: now - 3000, by: 'user', text: 'Gọi trước 5h nhé' },
+      { at: now - 2000, by: 'b', text: 'Ok, mình gọi lúc 4h.\nXong sẽ báo.' },
+      { at: now - 1000, text: 'an older note without by' },
+    ],
+  })
+  const tree = { type: CardDetail, props: { card: talk, roster, actions: {} }, children: [] }
+  const messages = all(tree, 'bt-board-msg')
+  assert.deepEqual(plain(messages.map(message => message.props['data-by'])), ['user', 'bot', 'user'])
+  assert.deepEqual(plain(all(tree, 'bt-board-msg-text').map(text)), ['Gọi trước 5h nhé', 'Ok, mình gọi lúc 4h.\nXong sẽ báo.', 'an older note without by'])
+  // The Bot's reply sits under its mark; the user's own messages carry no mark.
+  assert.equal(messages[1].children.some(child => child?.props?.bot?.id === 'b'), true)
+  assert.equal(messages[0].children.some(child => child?.props?.bot !== undefined), false)
+  const box = find(tree, 'bt-board-write')
+  assert.equal(box.children[0].props.placeholder, 'Message')
+  // A finished card shows the conversation and takes no new message.
+  const done = { type: CardDetail, props: { card: { ...talk, status: 'done', result: 'Đã gọi' }, roster, actions: {} }, children: [] }
+  assert.equal(all(done, 'bt-board-msg').length, 3)
+  assert.equal(find(done, 'bt-board-write'), null)
+  // No messages yet, no thread.
+  assert.equal(find({ type: CardDetail, props: { card: card('e', 'todo'), roster, actions: {} }, children: [] }, 'bt-board-thread'), null)
+  // While the Bot owes an answer, its mark waits under the last message; a finished card shows no wait.
+  const asked = { ...talk, awaiting: { botId: 'b', since: now } }
+  const waiting = all({ type: CardDetail, props: { card: asked, roster, actions: {} }, children: [] }, 'bt-board-waiting')
+  assert.equal(waiting.length, 1)
+  assert.equal(waiting[0].children.some(child => child?.props?.bot?.id === 'b'), true)
+  assert.equal(all({ type: CardDetail, props: { card: { ...asked, status: 'done' }, roster, actions: {} }, children: [] }, 'bt-board-waiting').length, 0)
+  assert.equal(all(tree, 'bt-board-waiting').length, 0)
 })
 
 // A fake `dsBotPages` seat: what the page registered, and whether it was taken back.

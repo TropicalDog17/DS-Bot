@@ -66,6 +66,22 @@ test('a note goes to the group the Bot is in, else to its own chat', async () =>
   assert.equal(sent.length, 3)
 })
 
+test('reply listeners hear each answer a Bot writes, a failing listener does not stop the rest', () => {
+  const { rt } = fixture()
+  const warned = []
+  rt.warn = (...args) => warned.push(args)
+  const notes = notesService(rt)
+  const heard = []
+  notes.onReply(() => { throw new Error('boom') })
+  const off = notes.onReply(reply => heard.push(reply))
+  rt.botReplied({ botId: 'a', roomId: 'r', text: 'done', since: 5 })
+  off()
+  rt.botReplied({ botId: 'a', text: 'again', since: 6 })
+  assert.deepEqual(heard, [{ botId: 'a', roomId: 'r', text: 'done', since: 5 }])
+  assert.equal(Object.isFrozen(heard[0]), true)
+  assert.equal(warned.length, 2)
+})
+
 test('install provides both services under a real host, and stays quiet without one', () => {
   const { rt } = fixture()
   install(rt)

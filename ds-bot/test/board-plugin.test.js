@@ -6,7 +6,7 @@ import { test } from 'node:test'
 import { apply, inject, name } from '../src/board/entry.js'
 import { ROUTE, boardFileOf, install } from '../src/board/plugin.js'
 import { READ_ONLY, openBoardStore } from '../src/board/store.js'
-import { ticketKey } from '../src/board/cards.js'
+import { ACTIONS, ticketKey } from '../src/board/cards.js'
 import { notesService, rosterService } from '../src/host/companions.js'
 import { homeLock } from '../src/host/home-lock.js'
 
@@ -33,10 +33,13 @@ function fakeTeam() {
   // Own chats a, b, c; group Sessions ga, gb; a talk between Writer and Coder, xb.
   const owners = { a: { botId: 'a' }, b: { botId: 'b' }, c: { botId: 'c' }, ga: { botId: 'a', roomId: 'r1' }, gb: { botId: 'b', roomId: 'r1' }, xb: { botId: 'b' } }
   const identity = { ownerOfSession: id => (hasOwn(owners, id) ? owners[id] : undefined), subscribe: () => () => {} }
-  return { state, sent, identity, roster: rosterService(rt), notes: notesService(rt) }
+  const notes = notesService(rt)
+  // What turns.js does when a Bot's turn ends with an answer the user reads.
+  const reply = heard => rt.botReplied(heard)
+  return { state, sent, identity, roster: rosterService(rt), notes, reply }
 }
 
-function host(t, { file, notes } = {}) {
+function host(t, { file, notes, now = Date.now } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'ds-bot-board-plugin-'))
   t.after(() => rmSync(dir, { recursive: true, force: true }))
   const team = fakeTeam()
@@ -44,7 +47,7 @@ function host(t, { file, notes } = {}) {
   const tools = { register: (tool) => { registered.tools.push(tool); return () => { registered.tools.splice(registered.tools.indexOf(tool), 1) } } }
   const connection = { fetch: { register: (route) => { registered.routes.push(route); return () => { registered.routes.splice(registered.routes.indexOf(route), 1) } } } }
   const boardFile = file ?? join(dir, 'bot-board', 'board.json')
-  const handle = install({}, { file: boardFile }, { ...team, ...(notes ? { notes } : {}), tools, connection, store: openBoardStore(boardFile) })
+  const handle = install({}, { file: boardFile }, { ...team, ...(notes ? { notes } : {}), tools, connection, store: openBoardStore(boardFile), now })
   t.after(() => handle.dispose())
   const tool = (args, sessionId = 'b') => registered.tools.find(entry => entry.name === 'board').execute(args, { agent: { id: sessionId } })
   const cards = () => Object.values(JSON.parse(readFileSync(boardFile, 'utf8')).cards)
@@ -53,7 +56,9 @@ function host(t, { file, notes } = {}) {
     const response = await route.fetch(new Request('http://dsh/api/ds-bot-board', { method: 'POST', body: JSON.stringify({ endpoint, payload }) }))
     return response.json()
   }
-  return { dir, team, handle, registered, tool, cards, post, boardFile }
+  // A copied answer is written after the event; the next change waits for it.
+  const settle = () => handle.store.change(() => ({ error: 'settled' }))
+  return { dir, team, handle, registered, tool, cards, post, boardFile, settle }
 }
 
 test('the entry is a separate plugin that needs only public services', () => {
@@ -153,8 +158,8 @@ test('the Board page adds, moves, notes and cancels; notes reach the Bot through
   const mineId = Object.values(mine.cards).find(entry => entry.title === 'Mine').id
   await h.post('note', { id: mineId, text: 'remember' })
   assert.deepEqual(h.team.sent, [
-    ['b', `Note on board card ${card.id} "Đặt lịch khám răng": gọi trước 5h`],
-    ['r1', `@Writer Note on board card ${group.id} "Group work": add tests`],
+    ['b', `Note on card ${card.id} "Đặt lịch khám răng": gọi trước 5h`],
+    ['r1', `@Writer Note on card ${group.id} "Group work": add tests`],
   ])
   assert.deepEqual(h.cards().find(entry => entry.id === mineId).notes.map(note => note.text), ['remember'])
 
@@ -165,6 +170,85 @@ test('the Board page adds, moves, notes and cancels; notes reach the Bot through
   assert.equal((await h.post('wat')).error.code, 'board/unknown')
 })
 
+test('chat is where the Bot answers: its next answer there after a note is copied onto the card', async (t) => {
+  let clock = 1000
+  const h = host(t, { now: () => clock })
+  const added = await h.post('add', { title: 'Đặt lịch khám răng', assignee: 'b' })
+  const id = Object.keys(added.value.cards)[0]
+  await h.post('note', { id, text: 'gọi trước 5h nhé' })
+  assert.deepEqual(h.cards()[0].awaiting, { botId: 'b', since: 1000 })
+
+  // A turn that began before the note, another Bot, or the Bot in a group is not the answer.
+  h.team.reply({ botId: 'b', text: 'older work', since: 900 })
+  h.team.reply({ botId: 'c', text: 'not mine', since: 1100 })
+  h.team.reply({ botId: 'b', roomId: 'r1', text: 'in Ops', since: 1100 })
+  await h.settle()
+  assert.equal(h.cards()[0].notes.length, 1)
+
+  h.team.reply({ botId: 'b', text: '  Ok, mình gọi lúc 4h.\r\n\n\n\nXong sẽ báo.  ', since: 1200 })
+  await h.settle()
+  // One answer per note: the Bot's next turn stays in its chat.
+  h.team.reply({ botId: 'b', text: 'something else', since: 1300 })
+  await h.settle()
+  clock = 2000
+  await h.post('note', { id, text: 'cảm ơn' })
+  h.team.reply({ botId: 'b', text: 'Không có gì', since: 2100 })
+  await h.settle()
+  const card = (await h.post('state')).value.cards[id]
+  assert.deepEqual(card.notes.map(note => [note.by, note.text]), [
+    ['user', 'gọi trước 5h nhé'],
+    ['b', 'Ok, mình gọi lúc 4h.\n\nXong sẽ báo.'],
+    ['user', 'cảm ơn'],
+    ['b', 'Không có gì'],
+  ])
+  assert.equal(card.notes.every(note => typeof note.at === 'number'), true)
+  assert.equal(card.awaiting, undefined)
+  // The Bot answers in chat only; the board tool has no reply action.
+  assert.equal(ACTIONS.includes('reply'), false)
+})
+
+test('a group card waits for the answer in its group; two notes wait from the first; stale waits lapse', async (t) => {
+  let clock = 1000
+  const h = host(t, { now: () => clock })
+  await h.tool({ action: 'open', title: 'Group work' }, 'gb')
+  const group = h.cards()[0].id
+  await h.post('note', { id: group, text: 'add tests' })
+  clock = 1500
+  await h.post('note', { id: group, text: 'and docs' })
+  assert.deepEqual(h.cards()[0].awaiting, { botId: 'b', roomId: 'r1', since: 1000 })
+  h.team.reply({ botId: 'b', text: 'in my own chat', since: 1200 })
+  h.team.reply({ botId: 'b', roomId: 'r1', text: 'On it: tests first.', since: 1200 })
+  await h.settle()
+  assert.deepEqual(h.cards()[0].notes.map(note => note.text), ['add tests', 'and docs', 'On it: tests first.'])
+
+  // Two cards wait on Writer's chat: the one asked first gets the first answer.
+  clock = 5000
+  const first = Object.values((await h.post('add', { title: 'One', assignee: 'b' })).value.cards).find(card => card.title === 'One').id
+  const second = Object.values((await h.post('add', { title: 'Two', assignee: 'b' })).value.cards).find(card => card.title === 'Two').id
+  await h.post('note', { id: second, text: 'two?' })
+  clock = 4000
+  await h.post('note', { id: first, text: 'one?' })
+  h.team.reply({ botId: 'b', text: 'answer one', since: 6000 })
+  await h.settle()
+  const byId = (await h.post('state')).value.cards
+  assert.deepEqual(byId[first].notes.map(note => note.text), ['one?', 'answer one'])
+  assert.deepEqual(byId[second].notes.map(note => note.text), ['two?'])
+  // Half a day later the wait is over: a chat answer then is about something else.
+  h.team.reply({ botId: 'b', text: 'much later', since: 5000 + 12 * 60 * 60 * 1000 + 1 })
+  await h.settle()
+  assert.deepEqual(h.cards().find(card => card.id === second).notes.map(note => note.text), ['two?'])
+})
+
+test('a card keeps the last 200 messages of its conversation', async (t) => {
+  const h = host(t)
+  const added = await h.post('add', { title: 'Long talk', assignee: 'b' })
+  const id = Object.keys(added.value.cards)[0]
+  for (let n = 1; n <= 205; n += 1) await h.post('note', { id, text: `m${n}` })
+  const thread = h.cards()[0].notes
+  assert.equal(thread.length, 200)
+  assert.deepEqual([thread[0].text, thread.at(-1).text], ['m6', 'm205'])
+})
+
 test('a note whose delivery fails is kept on the card and says it was not sent', async (t) => {
   const h = host(t, { notes: { deliver: async () => { throw new Error('host busy') } } })
   const added = await h.post('add', { title: 'Ship', assignee: 'b' })
@@ -172,6 +256,8 @@ test('a note whose delivery fails is kept on the card and says it was not sent',
   const result = await h.post('note', { id, text: 'still there?' })
   assert.deepEqual(result.error, { code: 'board/refused', message: 'Saved on the card, but not sent: host busy' })
   assert.deepEqual(h.cards()[0].notes.map(note => note.text), ['still there?'])
+  // Nothing reached the Bot, so the card waits for no answer.
+  assert.equal(h.cards()[0].awaiting, undefined)
 })
 
 test('disposing the plugin takes back its tool and route', async (t) => {

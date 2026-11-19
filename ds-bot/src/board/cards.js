@@ -11,12 +11,18 @@ export const TITLE_MAX = 200
 export const PROGRESS_MAX = 300
 export const RESULT_MAX = 2000
 export const NOTE_MAX = 500
+export const REPLY_MAX = 2000
+export const THREAD_MAX = 200
+// A note's answer is copied from the Bot's chat only while it is this fresh.
+export const AWAIT_MAX_MS = 12 * 60 * 60 * 1000
 export const REASON_MAX = 500
 export const KEY_MAX = 32
 export const URL_MAX = 2000
 export const LINKS_MAX = 20
 
 export const oneLine = (text, max) => String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, max)
+// A Bot's reply keeps its lines; runs of blank lines become one.
+export const replyText = (text, max) => String(text ?? '').replace(/\r\n?/g, '\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, max)
 export const newCardId = () => `c_${randomBytes(4).toString('hex')}`
 export const isOpen = card => OPEN_STATUSES.includes(card?.status)
 
@@ -117,6 +123,14 @@ export function createBoard({ roster, now = Date.now }) {
     }
   }
   const touch = (card) => { card.updatedAt = now() }
+  // The card's conversation: the user's notes and the Bots' replies, oldest first, the
+  // last THREAD_MAX kept.
+  const say = (card, by, text) => {
+    const thread = (card.notes ??= [])
+    thread.push({ at: now(), by, text })
+    if (thread.length > THREAD_MAX) thread.splice(0, thread.length - THREAD_MAX)
+    touch(card)
+  }
   const addLink = (card, link) => {
     if (!(card.links ??= []).some(entry => entry.url === link)) card.links.push({ url: link, at: now() })
   }
@@ -253,7 +267,7 @@ export function createBoard({ roster, now = Date.now }) {
       touch(card)
       return { card }
     },
-    // A note stays on the card; `deliver` says where it goes as the user's message
+    // A note joins the card's conversation; `deliver` says where it goes as the user's message
     // (dsBotNotes): the card's group when it came from one, else the Bot's own chat.
     // A card the user holds takes the note and nothing is sent.
     note(cards, id, text) {
@@ -262,13 +276,21 @@ export function createBoard({ roster, now = Date.now }) {
       if (!isOpen(card)) return { error: 'That card is already finished.' }
       const said = oneLine(text, NOTE_MAX)
       if (said === '') return { error: 'Write a note first.' }
-      ;(card.notes ??= []).push({ at: now(), by: USER, text: said })
-      touch(card)
+      say(card, USER, said)
       const bot = card.assignee === USER ? undefined : roster.bot(card.assignee)
       return {
         card,
-        ...(bot === undefined ? {} : { deliver: { botId: bot.id, ...(card.roomId === undefined ? {} : { roomId: card.roomId }), text: `Note on board card ${label(card)} "${card.title}": ${said}` } }),
+        ...(bot === undefined ? {} : { deliver: { botId: bot.id, ...(card.roomId === undefined ? {} : { roomId: card.roomId }), text: `Note on card ${label(card)} "${card.title}": ${said}` } }),
       }
+    },
+    // The note reached the Bot (`where` from dsBotNotes): the card waits for its answer
+    // there. A wait already running keeps its start, so the first answer still lands.
+    sent(cards, id, { botId, roomId, since }) {
+      const { card, error } = found(cards, id)
+      if (error !== undefined) return { error }
+      const same = card.awaiting?.botId === botId && card.awaiting?.roomId === roomId
+      if (!same) card.awaiting = { botId, ...(roomId === undefined ? {} : { roomId }), since }
+      return { card }
     },
     cancel(cards, id, reason) {
       const { card, error } = found(cards, id)
@@ -282,5 +304,20 @@ export function createBoard({ roster, now = Date.now }) {
     },
   }
 
-  return { show, line, label, bot: (cards, action, self, roomId, args) => botActions[action](cards, self, roomId, args), user }
+  // A Bot's answer in its chat, or in a group (dsBotNotes onReply), joins the card
+  // that waited longest for that Bot there, from a turn that began after the note.
+  const mirror = (cards, { botId, roomId, text, since } = {}) => {
+    const said = replyText(text, REPLY_MAX)
+    if (said === '') return { error: 'Nothing to copy.' }
+    const waiting = list(cards).filter(card => card.awaiting?.botId === botId && card.awaiting.roomId === roomId
+      && card.awaiting.since <= since && since - card.awaiting.since <= AWAIT_MAX_MS)
+      .sort((a, b) => a.awaiting.since - b.awaiting.since)
+    const card = waiting[0]
+    if (card === undefined) return { error: 'No card waits for this answer.' }
+    delete card.awaiting
+    say(card, botId, said)
+    return { card }
+  }
+
+  return { show, line, label, bot: (cards, action, self, roomId, args) => botActions[action](cards, self, roomId, args), user, mirror }
 }

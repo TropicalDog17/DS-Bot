@@ -43503,11 +43503,45 @@ function AddCard({ roster, actions, onDone }) {
     )
   );
 }
+function Thread({ notes, roster, awaiting }) {
+  const waiter = awaiting?.botId === void 0 ? void 0 : roster.byId?.[awaiting.botId];
+  return (0, import_react74.createElement)(
+    "ol",
+    { className: "bt-board-thread" },
+    notes.map((note, index) => {
+      const bot = note.by === void 0 || note.by === USER ? void 0 : roster.byId?.[note.by];
+      const fromBot = note.by !== void 0 && note.by !== USER;
+      return (0, import_react74.createElement)(
+        "li",
+        { key: index, className: "bt-board-msg", "data-by": fromBot ? "bot" : "user" },
+        fromBot ? bot ? (0, import_react74.createElement)(BotMark, { bot, size: 24 }) : (0, import_react74.createElement)("span", { className: "bt-board-msg-mark", "aria-hidden": true }) : null,
+        (0, import_react74.createElement)(
+          "div",
+          { className: "bt-board-msg-body" },
+          (0, import_react74.createElement)("span", { className: "bt-board-msg-text" }, note.text),
+          (0, import_react74.createElement)("span", { className: "bt-board-age" }, clockLabel(note.at ?? 0))
+        )
+      );
+    }),
+    waiter ? (0, import_react74.createElement)(
+      "li",
+      { key: "waiting", className: "bt-board-msg bt-board-waiting", "data-by": "bot", "aria-hidden": true },
+      (0, import_react74.createElement)(BotMark, { bot: waiter, size: 24 }),
+      (0, import_react74.createElement)("div", { className: "bt-board-msg-body" }, (0, import_react74.createElement)("span", { className: "bt-board-msg-text bt-board-dots" }, (0, import_react74.createElement)("i"), (0, import_react74.createElement)("i"), (0, import_react74.createElement)("i")))
+    ) : null
+  );
+}
 function CardDetail({ card, roster, actions }) {
   const [text, setText] = (0, import_react74.useState)("");
   const [busy, setBusy] = (0, import_react74.useState)(false);
   const [confirming, setConfirming] = (0, import_react74.useState)(false);
   const [error, setError] = (0, import_react74.useState)("");
+  const scroller = (0, import_react74.useRef)(null);
+  const said = (card.notes ?? []).length;
+  (0, import_react74.useEffect)(() => {
+    const node = scroller.current;
+    if (node && typeof node.scrollTo === "function") node.scrollTo({ top: node.scrollHeight });
+  }, [card.id, said, card.awaiting !== void 0]);
   (0, import_react74.useEffect)(() => {
     if (!confirming) return void 0;
     const timer = setTimeout(() => setConfirming(false), 3e3);
@@ -43548,7 +43582,7 @@ function CardDetail({ card, roster, actions }) {
     { className: "bt-board-sheet-body", "data-status": card.status },
     (0, import_react74.createElement)(
       "div",
-      { className: "bt-board-detail" },
+      { className: "bt-board-detail", ref: scroller },
       card.key ? card.url ? (0, import_react74.createElement)("a", { className: "bt-board-key", href: card.url, target: "_blank", rel: "noreferrer noopener" }, card.key) : (0, import_react74.createElement)("span", { className: "bt-board-key" }, card.key) : null,
       (0, import_react74.createElement)("h3", { className: "bt-board-detail-title" }, card.title),
       (0, import_react74.createElement)(
@@ -43583,17 +43617,6 @@ function CardDetail({ card, roster, actions }) {
           (0, import_react74.createElement)("span", null, link.url.replace(/^https?:\/\//, ""))
         ))
       ) : null,
-      notes.length > 0 ? (0, import_react74.createElement)(
-        "ol",
-        { className: "bt-board-notes" },
-        notes.map((note, index) => (0, import_react74.createElement)(
-          "li",
-          { key: index, className: "bt-board-note" },
-          (0, import_react74.createElement)("span", { className: "bt-board-note-text" }, note.text),
-          (0, import_react74.createElement)("span", { className: "bt-board-age" }, clockLabel(note.at ?? 0))
-        ))
-      ) : null,
-      error ? (0, import_react74.createElement)("div", { className: "bt-error", role: "alert" }, error) : null,
       open ? (0, import_react74.createElement)("button", {
         type: "button",
         className: "bt-board-cancel",
@@ -43601,7 +43624,9 @@ function CardDetail({ card, roster, actions }) {
         disabled: busy,
         "aria-label": confirming ? t("Click again to cancel") : t("Cancel card"),
         onClick: cancel
-      }, t("Cancel card")) : null
+      }, t("Cancel card")) : null,
+      notes.length > 0 ? (0, import_react74.createElement)(Thread, { notes, roster, awaiting: open ? card.awaiting : void 0 }) : null,
+      error ? (0, import_react74.createElement)("div", { className: "bt-error", role: "alert" }, error) : null
     ),
     open ? (0, import_react74.createElement)(
       "div",
@@ -43609,8 +43634,8 @@ function CardDetail({ card, roster, actions }) {
       (0, import_react74.createElement)("input", {
         className: "bt-input",
         value: text,
-        placeholder: t("Add a note"),
-        "aria-label": t("Add a note"),
+        placeholder: t("Message"),
+        "aria-label": t("Message"),
         maxLength: 500,
         onChange: (event) => setText(event.target.value),
         onKeyDown: (event) => {
@@ -43802,13 +43827,22 @@ a.bt-board-key:hover{color:var(--bt-ink)}
 .bt-board-link:hover>span{text-decoration:underline}
 .bt-board-link svg{flex:none;width:14px;height:14px}
 .bt-board-link>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.bt-board-notes{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
-.bt-board-note{position:relative;display:flex;flex-direction:column;gap:4px;padding:0 0 16px 20px;font-size:14px;line-height:20px}
-.bt-board-note::before{content:'';position:absolute;left:3px;top:7px;width:7px;height:7px;border-radius:50%;background:var(--bt-ink-3)}
-.bt-board-note::after{content:'';position:absolute;left:6px;top:18px;bottom:2px;width:1px;background:var(--bt-line-2)}
-.bt-board-note:last-child{padding-bottom:0}
-.bt-board-note:last-child::after{display:none}
-.bt-board-note-text{overflow-wrap:anywhere}
+.bt-board-thread{list-style:none;margin:8px 0 0;padding:16px 0 0;border-top:.5px solid var(--bt-line);display:flex;flex-direction:column;gap:12px}
+.bt-board-msg{display:flex;align-items:flex-end;gap:8px;max-width:100%}
+.bt-board-msg[data-by=user]{justify-content:flex-end}
+.bt-board-msg>.bt-board-msg-mark{flex:none;width:24px;height:24px}
+.bt-board-msg-body{display:flex;flex-direction:column;gap:4px;min-width:0;max-width:85%}
+.bt-board-msg[data-by=user] .bt-board-msg-body{align-items:flex-end}
+.bt-board-msg-text{padding:7px 12px;border-radius:18px;font-size:14px;line-height:20px;white-space:pre-wrap;overflow-wrap:anywhere;text-wrap:pretty}
+.bt-board-msg[data-by=user] .bt-board-msg-text{background:var(--bt-user);color:var(--bt-user-ink)}
+.bt-board-msg[data-by=bot] .bt-board-msg-text{background:var(--bt-hover);color:var(--bt-ink)}
+.bt-board-msg .bt-board-age{padding:0 4px}
+.bt-board-dots{display:flex;gap:4px;align-items:center;height:34px;padding:0 14px}
+.bt-board-dots>i{width:6px;height:6px;border-radius:50%;background:var(--bt-ink-3,currentColor);opacity:.4;animation:bt-board-dot 1.2s ease-in-out infinite}
+.bt-board-dots>i:nth-child(2){animation-delay:.15s}
+.bt-board-dots>i:nth-child(3){animation-delay:.3s}
+@keyframes bt-board-dot{30%{opacity:1;translate:0 -2px}}
+@media (prefers-reduced-motion:reduce){.bt-board-dots>i{animation:none}}
 .bt-board-cancel{align-self:flex-start;margin-top:8px;height:32px;padding:0;border:0;background:none;color:var(--bt-ink-3);font:inherit;font-size:13px;cursor:pointer}
 .bt-board-cancel:hover,.bt-board-cancel[data-confirm]{color:var(--bt-danger)}
 .bt-board-cancel[data-confirm]{font-weight:600}
