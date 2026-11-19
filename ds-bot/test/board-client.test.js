@@ -183,6 +183,29 @@ test('a waiting card shows its Bot at work, and an answer keeps how it got there
   assert.match(text(folds[0].children[0]), /Thought it through/)
   assert.equal(all(folds[0], 'bt-board-step').length, 3)
   assert.equal(all(done, 'bt-board-waiting').length, 0)
+  // A call with its input and output opens on them; closed at first, open at the `all` level.
+  const called = { since: now, steps: [{ kind: 'tool', tool: 'bash', target: 'ls', input: 'command: ls', output: 'a.txt', state: 'done' }] }
+  const opened = level => find({ type: CardDetail, props: { card: asked, roster: { ...roster, board: { trace: level } }, actions: {}, live: called }, children: [] }, 'bt-board-tool-fold')
+  const fold = opened('thinking')
+  assert.equal(fold.type, 'details')
+  assert.equal(fold.props.open, undefined)
+  assert.equal(text(find(fold, 'bt-board-tool')), 'Running shell commands · ls')
+  assert.deepEqual(plain(all(fold, 'bt-board-io').map(text)), ['command: ls', 'a.txt'])
+  assert.equal(opened('all').props.open, true)
+})
+
+test('the board header picks how much of a Bot\'s work shows', () => {
+  const picked = []
+  const screen = level => ({ type: BoardScreen, props: { roster: { byId: {}, bots: [], board: { cards: {}, trace: level } }, actions: { boardTrace: value => { picked.push(value) } } }, children: [] })
+  const label = find(screen('tools'), 'bt-board-level')
+  const select = label.children.find(child => child?.type === 'select')
+  assert.equal(select.props.value, 'tools')
+  assert.deepEqual(plain(select.children.map(option => option.props.value)), ['off', 'tools', 'thinking', 'all'])
+  assert.deepEqual(plain(select.children.map(text)), ['Off', 'Tool calls', 'Thinking', 'All'])
+  select.props.onChange({ target: { value: 'all' } })
+  assert.deepEqual(picked, ['all'])
+  // A page without the action (an older plugin) shows no picker.
+  assert.equal(find({ type: BoardScreen, props: { roster: { byId: {}, bots: [], board: { cards: {} } }, actions: {} }, children: [] }, 'bt-board-level'), null)
 })
 
 // A fake `dsBotPages` seat: what the page registered, and whether it was taken back.
@@ -286,6 +309,15 @@ test('the watch marks the Board button and shows one notice per new answer while
   state = { cards: { k: answered(3) }, bots }
   await live.refresh()
   assert.equal(on.alerts.length, 1)
+  // A card waiting for its Bot: the open page follows the Bot's work every second, then
+  // slows down once the answer lands.
+  const open = timers.at(-1)
+  state = { cards: { k: answered(3, { awaiting: { botId: 'b', since: 3 } }) }, bots }
+  await live.refresh()
+  assert.equal(timers.at(-1), 1000)
+  state = { cards: { k: answered(3) }, bots }
+  await live.refresh()
+  assert.equal(timers.at(-1), open)
   off()
   // Read: the dot goes.
   state = { cards: { k: answered(3, { unread: undefined }) }, bots }

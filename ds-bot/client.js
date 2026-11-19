@@ -971,6 +971,7 @@ var JA = {
   "Message actions": "メッセージの操作",
   "Download": "ダウンロード",
   "Thought it through": "思考プロセス",
+  "Tool calls": "ツール呼び出し",
   "Earlier messages": "以前のメッセージ",
   "Loading earlier messages…": "以前のメッセージを読み込み中…",
   "Couldn’t load earlier messages · Retry": "以前のメッセージを読み込めませんでした · 再試行",
@@ -3424,6 +3425,7 @@ var KO = {
   "Message actions": "메시지 작업",
   Download: "다운로드",
   "Thought it through": "사고 과정",
+  "Tool calls": "도구 호출",
   "Earlier messages": "이전 메시지",
   "Loading earlier messages…": "이전 메시지 불러오는 중…",
   "Couldn’t load earlier messages · Retry": "이전 메시지를 불러오지 못했습니다 · 재시도",
@@ -5893,6 +5895,7 @@ var ES = {
   "Message actions": "Acciones del mensaje",
   Download: "Descargar",
   "Thought it through": "Razonamiento",
+  "Tool calls": "Llamadas a herramientas",
   "Earlier messages": "Mensajes anteriores",
   "Loading earlier messages…": "Cargando mensajes anteriores…",
   "Couldn’t load earlier messages · Retry": "No se pudieron cargar los mensajes anteriores · Reintentar",
@@ -8333,6 +8336,7 @@ var FR = {
   "Message actions": "Actions sur le message",
   "Download": "Télécharger",
   "Thought it through": "Réflexion",
+  "Tool calls": "Appels d'outils",
   "Earlier messages": "Messages précédents",
   "Loading earlier messages…": "Chargement des messages précédents…",
   "Couldn’t load earlier messages · Retry": "Impossible de charger les messages précédents · Réessayer",
@@ -10786,6 +10790,7 @@ var DE = {
   "Message actions": "Nachrichtenaktionen",
   Download: "Herunterladen",
   "Thought it through": "Gedankengang",
+  "Tool calls": "Tool-Aufrufe",
   "Earlier messages": "Frühere Nachrichten",
   "Loading earlier messages…": "Frühere Nachrichten werden geladen…",
   "Couldn’t load earlier messages · Retry": "Frühere Nachrichten konnten nicht geladen werden · Erneut versuchen",
@@ -13250,6 +13255,7 @@ var ZH = {
   "Message actions": "消息操作",
   Download: "下载",
   "Thought it through": "思考过程",
+  "Tool calls": "工具调用",
   "Earlier messages": "更早的消息",
   "Loading earlier messages…": "正在加载更早的消息…",
   "Couldn’t load earlier messages · Retry": "更早的消息没加载出来 · 重试",
@@ -43448,6 +43454,7 @@ var lineIcon3 = (paths) => function LineIcon() {
   );
 };
 var LinkIcon2 = lineIcon3(["M8.5 11.5l3-3", "M9.5 6.5l1.2-1.2a2.8 2.8 0 0 1 4 4l-1.2 1.2", "M10.5 13.5l-1.2 1.2a2.8 2.8 0 0 1-4-4l1.2-1.2"]);
+var StepsIcon = lineIcon3(["M4.5 5.5h.01", "M8 5.5h7.5", "M4.5 10h.01", "M8 10h7.5", "M4.5 14.5h.01", "M8 14.5h5"]);
 var BoardIcon = lineIcon3(["M3.5 4.5h3.5v11H3.5z", "M8.25 4.5h3.5v7h-3.5z", "M13 4.5h3.5v9H13z"]);
 
 // src/board/client/card-tag.js
@@ -43651,8 +43658,57 @@ function AddCard({ roster, actions, onDone }) {
     )
   );
 }
-function Thread({ notes, roster, awaiting }) {
+function ToolStep({ step, open }) {
+  const line = [
+    (0, import_react75.createElement)("span", { key: "dot", className: "bt-board-tool-dot", "aria-hidden": true }),
+    (0, import_react75.createElement)("span", { key: "text", className: "bt-board-tool-text" }, step.text ?? workPhrase(step))
+  ];
+  if (!step.input && !step.output) return (0, import_react75.createElement)("li", { className: "bt-board-step bt-board-tool", "data-state": step.state }, line);
+  return (0, import_react75.createElement)(
+    "li",
+    { className: "bt-board-step", "data-state": step.state },
+    (0, import_react75.createElement)(
+      "details",
+      { className: "bt-board-tool-fold", open: open || void 0 },
+      (0, import_react75.createElement)("summary", { className: "bt-board-tool" }, line),
+      step.input ? (0, import_react75.createElement)("pre", { className: "bt-board-io bt-board-input" }, step.input) : null,
+      step.output ? (0, import_react75.createElement)("pre", { className: "bt-board-io bt-board-output" }, step.output) : null
+    )
+  );
+}
+function Trace({ steps, live = false, open = false }) {
+  const box = (0, import_react75.useRef)(null);
+  const last = steps.at(-1);
+  const size = `${steps.length}:${last?.kind === "think" ? last.text.length : `${last?.state}${last?.output ? "+" : ""}`}`;
+  (0, import_react75.useEffect)(() => {
+    const node = box.current;
+    if (live && node) node.scrollTop = node.scrollHeight;
+  }, [live, size]);
+  return (0, import_react75.createElement)(
+    "ol",
+    { className: "bt-board-trace", ref: box, "data-live": live || void 0 },
+    steps.map((step, index) => step.kind === "think" ? (0, import_react75.createElement)("li", { key: index, className: "bt-board-step bt-board-thought" }, step.text) : (0, import_react75.createElement)(ToolStep, { key: index, step, open }))
+  );
+}
+function TraceFold({ trace, open }) {
+  const steps = Array.isArray(trace?.steps) ? trace.steps : [];
+  if (steps.length === 0) return null;
+  return (0, import_react75.createElement)(
+    "details",
+    { className: "bt-board-fold" },
+    (0, import_react75.createElement)(
+      "summary",
+      null,
+      t("Thought it through"),
+      typeof trace.ms === "number" ? (0, import_react75.createElement)("span", { className: "bt-board-age" }, `· ${elapsedLabel(Math.max(1e3, trace.ms))}`) : null
+    ),
+    (0, import_react75.createElement)(Trace, { steps, open })
+  );
+}
+function Thread({ notes, roster, awaiting, live }) {
   const waiter = awaiting?.botId === void 0 ? void 0 : roster.byId?.[awaiting.botId];
+  const working = Array.isArray(live?.steps) && live.steps.length > 0 ? live.steps : void 0;
+  const open = roster.board?.trace === "all";
   return (0, import_react75.createElement)(
     "ol",
     { className: "bt-board-thread" },
@@ -43666,6 +43722,7 @@ function Thread({ notes, roster, awaiting }) {
         (0, import_react75.createElement)(
           "div",
           { className: "bt-board-msg-body" },
+          fromBot ? (0, import_react75.createElement)(TraceFold, { trace: note.trace, open }) : null,
           (0, import_react75.createElement)("span", { className: "bt-board-msg-text" }, nameCards(note.text, roster.board?.cards ?? {})),
           (0, import_react75.createElement)("span", { className: "bt-board-age" }, clockLabel(note.at ?? 0))
         )
@@ -43673,23 +43730,35 @@ function Thread({ notes, roster, awaiting }) {
     }),
     waiter ? (0, import_react75.createElement)(
       "li",
-      { key: "waiting", className: "bt-board-msg bt-board-waiting", "data-by": "bot", "aria-hidden": true },
+      { key: "waiting", className: "bt-board-msg bt-board-waiting", "data-by": "bot", "aria-busy": true },
       (0, import_react75.createElement)(BotMark, { bot: waiter, size: 24 }),
-      (0, import_react75.createElement)("div", { className: "bt-board-msg-body" }, (0, import_react75.createElement)("span", { className: "bt-board-msg-text bt-board-dots" }, (0, import_react75.createElement)("i"), (0, import_react75.createElement)("i"), (0, import_react75.createElement)("i")))
+      (0, import_react75.createElement)(
+        "div",
+        { className: "bt-board-msg-body" },
+        working ? (0, import_react75.createElement)(Trace, { steps: working, live: true, open }) : null,
+        (0, import_react75.createElement)("span", { className: "bt-board-msg-text bt-board-dots", "aria-hidden": true }, (0, import_react75.createElement)("i"), (0, import_react75.createElement)("i"), (0, import_react75.createElement)("i"))
+      )
     ) : null
   );
 }
-function CardDetail({ card, roster, actions }) {
+function CardDetail({ card, roster, actions, live }) {
   const [text, setText] = (0, import_react75.useState)("");
   const [busy, setBusy] = (0, import_react75.useState)(false);
   const [confirming, setConfirming] = (0, import_react75.useState)(false);
   const [error, setError] = (0, import_react75.useState)("");
   const scroller = (0, import_react75.useRef)(null);
   const said = (card.notes ?? []).length;
+  const waiting = card.awaiting !== void 0;
+  const steps = waiting ? live?.steps?.length ?? 0 : 0;
   (0, import_react75.useEffect)(() => {
     const node = scroller.current;
     if (node && typeof node.scrollTo === "function") node.scrollTo({ top: node.scrollHeight });
-  }, [card.id, said, card.awaiting !== void 0]);
+  }, [card.id, said, waiting]);
+  (0, import_react75.useEffect)(() => {
+    const node = scroller.current;
+    if (!node || typeof node.scrollTo !== "function" || steps === 0) return;
+    if (node.scrollHeight - node.scrollTop - node.clientHeight < 120) node.scrollTo({ top: node.scrollHeight });
+  }, [steps]);
   (0, import_react75.useEffect)(() => {
     if (!confirming) return void 0;
     const timer = setTimeout(() => setConfirming(false), 3e3);
@@ -43773,7 +43842,7 @@ function CardDetail({ card, roster, actions }) {
         "aria-label": confirming ? t("Click again to cancel") : t("Cancel card"),
         onClick: cancel
       }, t("Cancel card")) : null,
-      notes.length > 0 ? (0, import_react75.createElement)(Thread, { notes, roster, awaiting: open ? card.awaiting : void 0 }) : null,
+      notes.length > 0 ? (0, import_react75.createElement)(Thread, { notes, roster, awaiting: open ? card.awaiting : void 0, live: open ? live : void 0 }) : null,
       error ? (0, import_react75.createElement)("div", { className: "bt-error", role: "alert" }, error) : null
     ),
     open ? (0, import_react75.createElement)(
@@ -43795,6 +43864,22 @@ function CardDetail({ card, roster, actions }) {
       }),
       (0, import_react75.createElement)("button", { type: "button", className: "bt-send", disabled: text.trim() === "" || busy, onClick: send }, t("Send"))
     ) : null
+  );
+}
+var LEVELS2 = [["off", "Off"], ["tools", "Tool calls"], ["thinking", "Thinking"], ["all", "All"]];
+function LevelPick({ level, pick: pick2 }) {
+  return (0, import_react75.createElement)(
+    "label",
+    { className: "bt-board-level", title: t("Show thinking") },
+    (0, import_react75.createElement)(StepsIcon),
+    (0, import_react75.createElement)(
+      "select",
+      { className: "bt-select", "aria-label": t("Show thinking"), value: level, onChange: (event) => {
+        void Promise.resolve(pick2(event.target.value)).catch(() => {
+        });
+      } },
+      LEVELS2.map(([id, name]) => (0, import_react75.createElement)("option", { key: id, value: id }, t(name)))
+    )
   );
 }
 function BoardScreen({ roster, actions, paneLeft = 0, leaving = false, focus = null }) {
@@ -43838,6 +43923,7 @@ function BoardScreen({ roster, actions, paneLeft = 0, leaving = false, focus = n
         { className: "bt-board-head" },
         alone ? (0, import_react75.createElement)("button", { type: "button", className: "bt-icon-btn bt-board-back", "aria-label": t("Back"), onClick: close }, (0, import_react75.createElement)(ChevronLeftIcon)) : null,
         (0, import_react75.createElement)("h2", null, t("Board")),
+        actions.boardTrace ? (0, import_react75.createElement)(LevelPick, { level: roster.board?.trace ?? "thinking", pick: actions.boardTrace }) : null,
         (0, import_react75.createElement)("button", { type: "button", className: "bt-send bt-board-add", onClick: addCard }, (0, import_react75.createElement)(PlusIcon), (0, import_react75.createElement)("span", null, t("Add card")))
       ),
       (0, import_react75.createElement)(
@@ -43901,7 +43987,7 @@ function BoardScreen({ roster, actions, paneLeft = 0, leaving = false, focus = n
         (0, import_react75.createElement)("button", { type: "button", className: "bt-icon-btn", "aria-label": t("Back"), onClick: back }, (0, import_react75.createElement)(ChevronLeftIcon)),
         sheet.add ? (0, import_react75.createElement)("h3", null, t("Add card")) : null
       ),
-      sheet.add ? (0, import_react75.createElement)(AddCard, { roster, actions, onDone: back }) : card !== void 0 ? (0, import_react75.createElement)(CardDetail, { key: card.id, card, roster, actions }) : null
+      sheet.add ? (0, import_react75.createElement)(AddCard, { roster, actions, onDone: back }) : card !== void 0 ? (0, import_react75.createElement)(CardDetail, { key: card.id, card, roster, actions, live: roster.board?.live?.[card.id] }) : null
     ) : null
   );
 }
@@ -43990,6 +44076,7 @@ a.bt-board-key:hover{color:var(--bt-ink)}
 .bt-board-msg>.bt-board-msg-mark{flex:none;width:24px;height:24px}
 .bt-board-msg-body{display:flex;flex-direction:column;gap:4px;min-width:0;max-width:85%}
 .bt-board-msg[data-by=user] .bt-board-msg-body{align-items:flex-end}
+.bt-board-msg[data-by=bot] .bt-board-msg-body{align-items:flex-start}
 .bt-board-msg-text{padding:7px 12px;border-radius:18px;font-size:14px;line-height:20px;white-space:pre-wrap;overflow-wrap:anywhere;text-wrap:pretty}
 .bt-board-msg[data-by=user] .bt-board-msg-text{background:var(--bt-user);color:var(--bt-user-ink)}
 .bt-board-msg[data-by=bot] .bt-board-msg-text{background:var(--bt-hover);color:var(--bt-ink)}
@@ -44000,6 +44087,32 @@ a.bt-board-key:hover{color:var(--bt-ink)}
 .bt-board-dots>i:nth-child(3){animation-delay:.3s}
 @keyframes bt-board-dot{30%{opacity:1;translate:0 -2px}}
 @media (prefers-reduced-motion:reduce){.bt-board-dots>i{animation:none}}
+.bt-board-waiting .bt-board-msg-body{flex:1;gap:8px}
+.bt-board-trace{list-style:none;margin:0;padding:0 0 0 10px;border-left:2px solid var(--bt-line-2);display:flex;flex-direction:column;gap:6px;font-size:13px;line-height:18px;color:var(--bt-ink-2)}
+.bt-board-trace[data-live]{max-height:240px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.bt-board-step{min-width:0;overflow-wrap:anywhere}
+.bt-board-thought{white-space:pre-wrap}
+.bt-board-trace[data-live] .bt-board-thought:not(:last-child){display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.bt-board-tool{display:flex;align-items:baseline;gap:8px;color:var(--bt-ink)}
+.bt-board-tool-dot{flex:none;width:6px;height:6px;border-radius:50%;background:var(--bt-ink-3);translate:0 -1px}
+.bt-board-trace [data-state=running] .bt-board-tool-dot{background:var(--bt-accent);animation:bt-board-pulse 1.2s ease-in-out infinite}
+.bt-board-trace [data-state=failed] .bt-board-tool-dot{background:var(--bt-danger)}
+.bt-board-tool-text{min-width:0}
+.bt-board-tool-fold summary{cursor:pointer;list-style:none}
+.bt-board-tool-fold summary::-webkit-details-marker{display:none}
+.bt-board-tool-fold summary:hover .bt-board-tool-text{text-decoration:underline;text-decoration-color:var(--bt-line-2);text-underline-offset:3px}
+.bt-board-io{margin:6px 0 0 14px;padding:6px 8px;border-radius:6px;background:var(--bt-hover);font:12px/17px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--bt-ink-2);white-space:pre-wrap;overflow-wrap:anywhere;max-height:180px;overflow:auto;scrollbar-width:thin}
+.bt-board-output{color:var(--bt-ink)}
+[data-state=failed] > .bt-board-tool-fold .bt-board-output{color:var(--bt-danger)}
+.bt-board-level{display:inline-flex;align-items:center;gap:6px;color:var(--bt-ink-2)}
+.bt-board-level .bt-select{min-width:0;height:30px}
+@keyframes bt-board-pulse{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.bt-board-trace [data-state=running] .bt-board-tool-dot{animation:none}}
+.bt-board-fold{align-self:stretch;font-size:13px;line-height:18px;color:var(--bt-ink-2)}
+.bt-board-fold summary{cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:6px;padding:0 4px}
+.bt-board-fold summary::-webkit-details-marker{display:none}
+.bt-board-fold[open] summary{margin-bottom:6px}
+.bt-board-fold .bt-board-trace{max-height:240px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
 .bt-board-cancel{align-self:flex-start;margin-top:8px;height:32px;padding:0;border:0;background:none;color:var(--bt-ink-3);font:inherit;font-size:13px;cursor:pointer}
 .bt-board-cancel:hover,.bt-board-cancel[data-confirm]{color:var(--bt-danger)}
 .bt-board-cancel[data-confirm]{font-weight:600}
@@ -44037,6 +44150,7 @@ var import_react76 = require("react");
 var BOARD_ROUTE = "api/ds-bot-board";
 var POLL_MS3 = 4e3;
 var WATCH_MS = 8e3;
+var LIVE_MS = 1e3;
 async function boardCall(endpoint, payload, { fetchImpl = globalThis.fetch } = {}) {
   const response = await fetchImpl(BOARD_ROUTE, {
     method: "POST",
@@ -44060,7 +44174,7 @@ function BoardPage({ live, focus, call: call2, close, paneLeft, leaving }) {
   (0, import_react76.useEffect)(() => live.opened(), [live]);
   const roster = (0, import_react76.useMemo)(() => {
     const bots = view?.bots ?? [];
-    return { bots, byId: Object.fromEntries(bots.map((bot) => [bot.id, bot])), board: { cards: view?.cards ?? {} } };
+    return { bots, byId: Object.fromEntries(bots.map((bot) => [bot.id, bot])), board: { cards: view?.cards ?? {}, live: view?.live ?? {}, trace: view?.trace } };
   }, [view]);
   const act = (0, import_react76.useCallback)((endpoint, payload) => call2(endpoint, payload).then(
     (value) => {
@@ -44077,6 +44191,7 @@ function BoardPage({ live, focus, call: call2, close, paneLeft, leaving }) {
     boardNote: (id, text) => act("note", { id, text }),
     boardCancel: (id, reason) => act("cancel", { id, reason }),
     boardSeen: (id) => act("seen", { id }),
+    boardTrace: (trace) => act("trace", { trace }),
     closeBoard: close,
     reportError: () => live.refresh()
   }), [act, close, live]);
@@ -44088,10 +44203,12 @@ function replyNotice(card, bots) {
   const name = bots.find((bot) => bot.id === note?.by)?.name ?? bots.find((bot) => bot.id === card.assignee)?.name ?? t("A Bot");
   return t("{name} replied on {card}", { name, card: card.key ?? card.title });
 }
-function boardWatch(pages, { first, call: call2, openMs = POLL_MS3, closedMs = WATCH_MS, setTimer = setInterval, clearTimer = clearInterval }) {
+function boardWatch(pages, { first, call: call2, openMs = POLL_MS3, liveMs = LIVE_MS, closedMs = WATCH_MS, setTimer = setInterval, clearTimer = clearInterval }) {
   const source = createSource(first);
   let open = 0;
   let focus = null;
+  const waits = (view) => Object.values(view?.cards ?? {}).some((card) => card?.awaiting !== void 0);
+  let waiting = waits(first);
   const told = new Set(unreadOf(first).map((entry) => entry.key));
   const take = (view) => {
     const fresh = unreadOf(view);
@@ -44106,6 +44223,10 @@ function boardWatch(pages, { first, call: call2, openMs = POLL_MS3, closedMs = W
     }
     for (const { key } of fresh) told.add(key);
     source.set(view);
+    if (waits(view) !== waiting) {
+      waiting = !waiting;
+      pace();
+    }
   };
   const refresh = () => Promise.resolve().then(() => call2("state")).then((value) => {
     if (value) take(value);
@@ -44114,9 +44235,10 @@ function boardWatch(pages, { first, call: call2, openMs = POLL_MS3, closedMs = W
   let timer;
   const pace = () => {
     clearTimer(timer);
+    const ms = open === 0 ? closedMs : waiting ? liveMs : openMs;
     timer = setTimer(() => {
       if (globalThis.document?.visibilityState !== "hidden") refresh();
-    }, open > 0 ? openMs : closedMs);
+    }, ms);
   };
   pages.mark("board", unreadOf(first).length > 0);
   pace();

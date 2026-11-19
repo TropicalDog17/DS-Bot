@@ -38,7 +38,7 @@ function BoardPage({ live, focus, call, close, paneLeft, leaving }) {
   useEffect(() => live.opened(), [live])
   const roster = useMemo(() => {
     const bots = view?.bots ?? []
-    return { bots, byId: Object.fromEntries(bots.map(bot => [bot.id, bot])), board: { cards: view?.cards ?? {}, live: view?.live ?? {} } }
+    return { bots, byId: Object.fromEntries(bots.map(bot => [bot.id, bot])), board: { cards: view?.cards ?? {}, live: view?.live ?? {}, trace: view?.trace } }
   }, [view])
   const act = useCallback((endpoint, payload) => call(endpoint, payload).then(
     (value) => { if (value) live.take(value) },
@@ -50,6 +50,7 @@ function BoardPage({ live, focus, call, close, paneLeft, leaving }) {
     boardNote: (id, text) => act('note', { id, text }),
     boardCancel: (id, reason) => act('cancel', { id, reason }),
     boardSeen: id => act('seen', { id }),
+    boardTrace: trace => act('trace', { trace }),
     closeBoard: close,
     reportError: () => live.refresh(),
   }), [act, close, live])

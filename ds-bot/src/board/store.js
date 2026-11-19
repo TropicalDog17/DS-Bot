@@ -19,6 +19,8 @@ const clean = (parsed) => {
       if (card !== null && typeof card === 'object' && card.id === id) data.cards[id] = card
     }
   }
+  const settings = parsed?.settings
+  if (settings !== null && typeof settings === 'object' && !Array.isArray(settings)) data.settings = settings
   return data
 }
 
