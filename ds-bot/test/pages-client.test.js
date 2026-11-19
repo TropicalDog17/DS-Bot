@@ -63,6 +63,14 @@ test('each page gets one labelled button that opens it', () => {
   assert.equal(PageButtons({ pages: [], actions: {} }).length, 0)
 })
 
+test('the open page\'s button marks the current place', () => {
+  const { service } = createPages()
+  service.register({ id: 'board', title: 'Board', icon: Icon, Page })
+  assert.equal(PageButtons({ pages: service.list(), actions: {} })[0].props['aria-current'], undefined)
+  assert.equal(PageButtons({ pages: service.list(), open: 'board', actions: {} })[0].props['aria-current'], 'page')
+  assert.equal(PageButtons({ pages: service.list(), open: 'other', actions: {} })[0].props['aria-current'], undefined)
+})
+
 test('the open page gets the main area edge, its exit flag and a close', () => {
   const { service } = createPages()
   service.register({ id: 'board', title: 'Board', icon: Icon, Page })

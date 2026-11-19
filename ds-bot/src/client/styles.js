@@ -143,6 +143,9 @@ body[data-bt-motion=quiet] .bt-mark[data-poke]{cursor:default}
 /* Inset: the .bt-list scroll box clips anything drawn outside the row. */
 .bt-row:focus-visible{outline:2px solid var(--bt-accent);outline-offset:-2px}
 .bt-row[aria-current=page] .bt-row-name{font-weight:500}
+.bt-side[data-page] :is(.bt-tile,.bt-row,.bt-agent-sub-row)[aria-current=page]{background:none}
+.bt-side[data-page] .bt-row[aria-current=page] .bt-row-name{font-weight:inherit}
+.bt-page-button[aria-current=page]{background:var(--bt-active)}
 .bt-row-body{display:flex;flex-direction:column;min-width:0;flex:1 1 auto}
 .bt-row-name{display:flex;align-items:center;gap:6px;min-width:0;font-size:14px;line-height:20px;font-weight:400}
 .bt-row-title{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

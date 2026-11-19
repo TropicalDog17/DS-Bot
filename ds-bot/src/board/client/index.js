@@ -3,7 +3,7 @@
 // route for the board, and registers the page through DS Bot's `dsBotPages` seat only
 // when that route answers. With ds-bot/board off, nothing shows and nothing changes.
 import { createElement as h, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BoardDialog } from './board.js'
+import { BoardScreen } from './board.js'
 import { BoardIcon } from './icons.js'
 import { hostText, t } from '../../client/i18n.js'
 
@@ -54,7 +54,7 @@ function BoardPage({ first, call, close, paneLeft, leaving }) {
     closeBoard: close,
     reportError: () => refresh(),
   }), [act, close, refresh])
-  return h(BoardDialog, { roster, actions, paneLeft, leaving })
+  return h(BoardScreen, { roster, actions, paneLeft, leaving })
 }
 
 // Asks the route once (and once more after a network failure); registers the page when

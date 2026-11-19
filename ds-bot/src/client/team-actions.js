@@ -1,6 +1,14 @@
 import { countCards, heldCardKey } from './sources.js'
 import { noteClientError } from './diagnostics.js'
 
+// What stands in front of the conversation: the full-pane overlays and a companion's page.
+// Opening a chat clears them, or the click appears to do nothing.
+const FRONT = ['newChat', 'exchange', 'menu', 'palette', 'groupSearch', 'page']
+export function clearFront(state) {
+  if (!FRONT.some(key => state[key])) return state
+  return { ...state, ...Object.fromEntries(FRONT.map(key => [key, null])) }
+}
+
 // The actions every window that draws the Bot views shares: dialogs and panels (the `ui`
 // source), requests to the host, and the notes the transcript keeps. The shell around the
 // views adds navigation and its own panels. `after` reads the team again once a request

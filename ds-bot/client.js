@@ -14690,6 +14690,11 @@ function countCards(state, sessionId, callIds, delta) {
 }
 
 // src/client/team-actions.js
+var FRONT = ["newChat", "exchange", "menu", "palette", "groupSearch", "page"];
+function clearFront(state) {
+  if (!FRONT.some((key) => state[key])) return state;
+  return { ...state, ...Object.fromEntries(FRONT.map((key) => [key, null])) };
+}
 function teamActions({ call: call2, after, partFor, roster, ui: ui2, live, cards, heldCards, turnClock, panelFolded }) {
   const memoryOf = (id) => roster.getSnapshot().roomsById[id] ? { roomId: id } : { botId: id };
   let pastes = 0;
@@ -16073,6 +16078,9 @@ body[data-bt-motion=quiet] .bt-mark[data-poke]{cursor:default}
 /* Inset: the .bt-list scroll box clips anything drawn outside the row. */
 .bt-row:focus-visible{outline:2px solid var(--bt-accent);outline-offset:-2px}
 .bt-row[aria-current=page] .bt-row-name{font-weight:500}
+.bt-side[data-page] :is(.bt-tile,.bt-row,.bt-agent-sub-row)[aria-current=page]{background:none}
+.bt-side[data-page] .bt-row[aria-current=page] .bt-row-name{font-weight:inherit}
+.bt-page-button[aria-current=page]{background:var(--bt-active)}
 .bt-row-body{display:flex;flex-direction:column;min-width:0;flex:1 1 auto}
 .bt-row-name{display:flex;align-items:center;gap:6px;min-width:0;font-size:14px;line-height:20px;font-weight:400}
 .bt-row-title{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -18093,7 +18101,7 @@ function createPages() {
   };
   return { source, service: Object.freeze({ register, list: () => source.getSnapshot() }) };
 }
-function PageButtons({ pages, actions }) {
+function PageButtons({ pages, open = null, actions }) {
   return (pages ?? []).map((page) => (0, import_react5.createElement)("button", {
     key: `page:${page.id}`,
     type: "button",
@@ -18101,6 +18109,7 @@ function PageButtons({ pages, actions }) {
     "data-page": page.id,
     "aria-label": page.title,
     title: page.title,
+    "aria-current": page.id === open ? "page" : void 0,
     onClick: () => actions.openPage(page.id)
   }, (0, import_react5.createElement)(page.icon)));
 }
@@ -30243,6 +30252,7 @@ function TeamSidebar(props) {
   const renameSection = useUi((value) => value.renameSection);
   props.useRegistry((value) => value);
   const companionPages = props.usePages ? props.usePages((value) => value) : [];
+  const openPage2 = useUi((value) => typeof value.page === "string" ? value.page : null);
   const frameSnap = props.useFrame ? props.useFrame((value) => value) : { viewport: typeof window === "undefined" ? 0 : window.innerWidth, sidebarWidth: FALLBACK_SIDEBAR_WIDTH, collapsedWidth: 0 };
   const pref = props.useSidebarPref ? props.useSidebarPref((value) => value) : "open";
   const layout = frameLayout({
@@ -30520,7 +30530,7 @@ function TeamSidebar(props) {
     (0, import_react37.createElement)("span", { className: "bt-brand" }, (0, import_react37.createElement)(BrandName)),
     (0, import_react37.createElement)(UpdateButton, { useUpdate: props.useUpdate, actions }),
     (0, import_react37.createElement)("button", { type: "button", className: "bt-round", "aria-label": t("New section"), title: t("New section"), onClick: createNewSection }, (0, import_react37.createElement)(FolderIcon)),
-    (0, import_react37.createElement)(PageButtons, { pages: companionPages, actions }),
+    (0, import_react37.createElement)(PageButtons, { pages: companionPages, open: openPage2, actions }),
     (0, import_react37.createElement)("button", { type: "button", className: "bt-round", "aria-label": t("Search"), title: t("Search"), onClick: () => actions.openPalette() }, (0, import_react37.createElement)(SearchIcon)),
     (0, import_react37.createElement)("button", { type: "button", className: "bt-round", "aria-label": t("New…"), title: t("New…"), onClick: () => actions.openNewChat("new") }, (0, import_react37.createElement)(PlusIcon)),
     (0, import_react37.createElement)("button", { type: "button", className: "bt-round bt-side-collapse", "aria-label": t("Collapse sidebar"), title: t("Collapse sidebar"), onClick: onToggle }, (0, import_react37.createElement)(SidebarIcon))
@@ -30529,7 +30539,7 @@ function TeamSidebar(props) {
     { className: "bt-rail-top" },
     (0, import_react37.createElement)(UpdateButton, { useUpdate: props.useUpdate, actions }),
     (0, import_react37.createElement)("button", { type: "button", className: "bt-round bt-side-collapse", "aria-label": t("Collapse sidebar"), title: t("Collapse sidebar"), onClick: onToggle }, (0, import_react37.createElement)(SidebarIcon)),
-    (0, import_react37.createElement)(PageButtons, { pages: companionPages, actions }),
+    (0, import_react37.createElement)(PageButtons, { pages: companionPages, open: openPage2, actions }),
     main ? (0, import_react37.createElement)(BotRow, { ...rowProps, bot: main, marked: markedUnread[main.id] === true }) : roster.ready ? null : bootFailed ? (0, import_react37.createElement)(BootFailed, { actions }) : (0, import_react37.createElement)("div", { className: "bt-hint" }, t("Setting up your Main Bot…")),
     (0, import_react37.createElement)("span", { className: "bt-rail-sep", "aria-hidden": true })
   );
@@ -30542,7 +30552,7 @@ function TeamSidebar(props) {
   );
   const content = (0, import_react37.createElement)(
     "div",
-    { className: wideContent ? "bt-side" : "bt-side bt-rail", onKeyDown: typeToSearch },
+    { className: wideContent ? "bt-side" : "bt-side bt-rail", "data-page": openPage2 ?? void 0, onKeyDown: typeToSearch },
     top,
     wideContent && roster.readOnly ? (0, import_react37.createElement)("div", { className: "bt-hint bt-read-only", role: "status" }, hostText(roster.readOnly)) : null,
     (0, import_react37.createElement)(
@@ -43649,7 +43659,7 @@ function CardDetail({ card, roster, actions }) {
     ) : null
   );
 }
-function BoardDialog({ roster, actions, paneLeft = 0, leaving = false }) {
+function BoardScreen({ roster, actions, paneLeft = 0, leaving = false }) {
   const { columns: columns2, history } = boardColumns(roster.board?.cards);
   const [shown, setShown] = (0, import_react74.useState)(null);
   const [sheet, setSheet] = (0, import_react74.useState)(null);
@@ -43673,18 +43683,19 @@ function BoardDialog({ roster, actions, paneLeft = 0, leaving = false }) {
     Promise.resolve(actions.boardMove(id, status)).catch((error) => actions.reportError?.(error, "board"));
   };
   const cardOf = (item) => (0, import_react74.createElement)(Card3, { key: item.id, card: item, roster, onOpen: openCard, onDrag: setDragging });
+  const alone = paneLeft === 0;
   return (0, import_react74.createElement)(
     "div",
-    { className: "bt-pane bt-board-page", style: { left: paneLeft }, role: "dialog", "aria-modal": true, "aria-label": t("Board"), "data-leaving": leaving || void 0, "data-sheet": sheet !== null || void 0 },
+    { className: "bt-pane bt-board-page", style: { left: paneLeft }, role: "region", "aria-label": t("Board"), "data-leaving": leaving || void 0, "data-sheet": sheet !== null || void 0 },
     (0, import_react74.createElement)(
       "div",
       { className: "bt-board" },
       (0, import_react74.createElement)(
         "div",
         { className: "bt-board-head" },
+        alone ? (0, import_react74.createElement)("button", { type: "button", className: "bt-icon-btn bt-board-back", "aria-label": t("Back"), onClick: close }, (0, import_react74.createElement)(ChevronLeftIcon)) : null,
         (0, import_react74.createElement)("h2", null, t("Board")),
-        (0, import_react74.createElement)("button", { type: "button", className: "bt-send bt-board-add", onClick: addCard }, (0, import_react74.createElement)(PlusIcon), (0, import_react74.createElement)("span", null, t("Add card"))),
-        (0, import_react74.createElement)("button", { type: "button", className: "bt-icon-btn bt-board-close", "aria-label": t("Close"), onClick: close }, (0, import_react74.createElement)(CloseIcon))
+        (0, import_react74.createElement)("button", { type: "button", className: "bt-send bt-board-add", onClick: addCard }, (0, import_react74.createElement)(PlusIcon), (0, import_react74.createElement)("span", null, t("Add card")))
       ),
       (0, import_react74.createElement)(
         "div",
@@ -43759,8 +43770,8 @@ var BOARD_CSS = `
 .bt-board-head h2{margin:0;flex:1;font-size:20px;line-height:28px;font-weight:600;letter-spacing:-.02em}
 .bt-board-add{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 16px 0 12px;font-weight:500}
 .bt-board-add svg{width:16px;height:16px}
-.bt-board-close svg,.bt-board-sheet-head .bt-icon-btn svg{width:16px;height:16px}
-.bt-board-close{width:36px;height:36px}
+.bt-board-back svg,.bt-board-sheet-head .bt-icon-btn svg{width:16px;height:16px}
+.bt-board-back{width:44px;height:44px;margin-left:-12px}
 .bt-board-tabs,.bt-board-fab{display:none}
 .bt-board-dot{flex:none;width:8px;height:8px;border-radius:50%;corner-shape:round;background:var(--bt-ink-3)}
 .bt-board-dot[data-status=active]{background:var(--bt-accent)}
@@ -43848,7 +43859,7 @@ a.bt-board-key:hover{color:var(--bt-ink)}
 .bt-board-cancel[data-confirm]{font-weight:600}
 .bt-board-write>.bt-input{flex:1;min-width:0;height:40px;font-size:14px}
 @media (max-width:640px){
-  .bt-board-page{left:0 !important;top:0}
+  .bt-board-page{top:0}
   .bt-board-head{padding:12px 8px 8px 16px}
   .bt-board-add{display:none}
   .bt-board-tabs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:2px;margin:0 16px;padding:2px;border-radius:12px;background:var(--bt-hover);flex:none}
@@ -43936,7 +43947,7 @@ function BoardPage({ first, call: call2, close, paneLeft, leaving }) {
     closeBoard: close,
     reportError: () => refresh()
   }), [act, close, refresh]);
-  return (0, import_react75.createElement)(BoardDialog, { roster, actions, paneLeft, leaving });
+  return (0, import_react75.createElement)(BoardScreen, { roster, actions, paneLeft, leaving });
 }
 function installBoardPage(pages, { call: call2 = boardCall, retryMs = 3e3 } = {}) {
   let disposed = false;
@@ -46606,12 +46617,10 @@ function apply(ctx) {
       openChangesReview(changes);
     },
     learningAnswer: (id, approve) => after(call("learning-answer", { id, approve })),
-    // The full-pane overlays sit above the conversation, so opening one must dismiss them
-    // or the click appears to do nothing.
     isAgentSession: (id) => isAgentSessionId(id),
     openSession: (id) => {
       if (isAgentSessionId(id)) return actions.openAgentSession(id);
-      ui2.set((state) => state.newChat || state.exchange || state.menu || state.palette || state.groupSearch ? { ...state, newChat: null, exchange: null, menu: null, palette: null, groupSearch: null } : state);
+      ui2.set(clearFront);
       setPlain(false);
       const target = partFor(id);
       show2(target);
@@ -46619,7 +46628,7 @@ function apply(ctx) {
     // The conversation replacements withdraw for a plain Session; set the surface
     // before the navigation so the Bot skin never flashes.
     openAgentSession: (sessionId) => {
-      ui2.set((state) => ({ ...state, newChat: null, exchange: null, menu: null, palette: null, groupSearch: null, details: null, view: "details", renaming: false, tab: null }));
+      ui2.set((state) => ({ ...clearFront(state), details: null, view: "details", renaming: false, tab: null }));
       setPlain(true);
       show2(sessionId);
     },

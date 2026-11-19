@@ -10,7 +10,7 @@
 // read from the plugin's route; `actions` call that route.
 import { createElement as h, useCallback, useEffect, useRef, useState } from 'react'
 import { BotMark } from '../../client/mark.js'
-import { CloseIcon, ChevronLeftIcon, PlusIcon } from '../../client/icons.js'
+import { ChevronLeftIcon, PlusIcon } from '../../client/icons.js'
 import { useEscape } from '../../client/overlay-hooks.js'
 import { clockLabel, relativeShort } from '../../client/text.js'
 import { t } from '../../client/i18n.js'
@@ -196,7 +196,7 @@ export function CardDetail({ card, roster, actions }) {
       h('button', { type: 'button', className: 'bt-send', disabled: text.trim() === '' || busy, onClick: send }, t('Send'))) : null)
 }
 
-export function BoardDialog({ roster, actions, paneLeft = 0, leaving = false }) {
+export function BoardScreen({ roster, actions, paneLeft = 0, leaving = false }) {
   const { columns, history } = boardColumns(roster.board?.cards)
   const [shown, setShown] = useState(null)
   const [sheet, setSheet] = useState(null)
@@ -220,12 +220,15 @@ export function BoardDialog({ roster, actions, paneLeft = 0, leaving = false }) 
     Promise.resolve(actions.boardMove(id, status)).catch(error => actions.reportError?.(error, 'board'))
   }
   const cardOf = item => h(Card, { key: item.id, card: item, roster, onOpen: openCard, onDrag: setDragging })
-  return h('div', { className: 'bt-pane bt-board-page', style: { left: paneLeft }, role: 'dialog', 'aria-modal': true, 'aria-label': t('Board'), 'data-leaving': leaving || undefined, 'data-sheet': sheet !== null || undefined },
+  // A screen in the main area, not a dialog: the sidebar beside it leads back to any chat.
+  // With no column beside it (a phone, a hidden sidebar) a back arrow returns to the chat.
+  const alone = paneLeft === 0
+  return h('div', { className: 'bt-pane bt-board-page', style: { left: paneLeft }, role: 'region', 'aria-label': t('Board'), 'data-leaving': leaving || undefined, 'data-sheet': sheet !== null || undefined },
     h('div', { className: 'bt-board' },
       h('div', { className: 'bt-board-head' },
+        alone ? h('button', { type: 'button', className: 'bt-icon-btn bt-board-back', 'aria-label': t('Back'), onClick: close }, h(ChevronLeftIcon)) : null,
         h('h2', null, t('Board')),
-        h('button', { type: 'button', className: 'bt-send bt-board-add', onClick: addCard }, h(PlusIcon), h('span', null, t('Add card'))),
-        h('button', { type: 'button', className: 'bt-icon-btn bt-board-close', 'aria-label': t('Close'), onClick: close }, h(CloseIcon))),
+        h('button', { type: 'button', className: 'bt-send bt-board-add', onClick: addCard }, h(PlusIcon), h('span', null, t('Add card')))),
       h('div', { className: 'bt-board-tabs', role: 'tablist', 'aria-label': t('Board') },
         COLUMNS.map(([status, name]) => h('button', {
           key: status, type: 'button', role: 'tab', className: 'bt-board-tab', 'data-status': status, 'aria-selected': column === status,
@@ -267,8 +270,8 @@ export const BOARD_CSS = `
 .bt-board-head h2{margin:0;flex:1;font-size:20px;line-height:28px;font-weight:600;letter-spacing:-.02em}
 .bt-board-add{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 16px 0 12px;font-weight:500}
 .bt-board-add svg{width:16px;height:16px}
-.bt-board-close svg,.bt-board-sheet-head .bt-icon-btn svg{width:16px;height:16px}
-.bt-board-close{width:36px;height:36px}
+.bt-board-back svg,.bt-board-sheet-head .bt-icon-btn svg{width:16px;height:16px}
+.bt-board-back{width:44px;height:44px;margin-left:-12px}
 .bt-board-tabs,.bt-board-fab{display:none}
 .bt-board-dot{flex:none;width:8px;height:8px;border-radius:50%;corner-shape:round;background:var(--bt-ink-3)}
 .bt-board-dot[data-status=active]{background:var(--bt-accent)}
@@ -356,7 +359,7 @@ a.bt-board-key:hover{color:var(--bt-ink)}
 .bt-board-cancel[data-confirm]{font-weight:600}
 .bt-board-write>.bt-input{flex:1;min-width:0;height:40px;font-size:14px}
 @media (max-width:640px){
-  .bt-board-page{left:0 !important;top:0}
+  .bt-board-page{top:0}
   .bt-board-head{padding:12px 8px 8px 16px}
   .bt-board-add{display:none}
   .bt-board-tabs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:2px;margin:0 16px;padding:2px;border-radius:12px;background:var(--bt-hover);flex:none}
