@@ -6,8 +6,8 @@
 // before its review starts is read in one go.
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { GONE, REVIEW_MEMORY_MAX, ROUTED, TEAM_SHARED, bodySize, cleanDay, cleanEntry, cleanTopic, isPinned, parseReview, reviewEntries } from './memory-entries.js'
-import { REVIEW_CHANGES_MAX, reviewRequest, reviewSystem, writtenIn } from './memory-copy.js'
+import { GONE, MEMORY_LIMITS, REVIEW_MEMORY_MAX, ROUTED, TEAM_SHARED, bodySize, cleanDay, cleanEntry, cleanTopic, isPinned, parseReview, parseShortened, reviewEntries, splitEntry } from './memory-entries.js'
+import { REVIEW_CHANGES_MAX, reviewRequest, reviewSystem, shortenRequest, shortenSystem, writtenIn } from './memory-copy.js'
 import { speakerOf } from '../shared/mentions.js'
 
 // The memory review reads at most this much of what is new, newest kept first.
@@ -134,12 +134,52 @@ export function installReview(rt, memory) {
   }
   const roomsOf = keeper => Object.values(rt.state.rooms).filter(room => room.members.includes(keeper.id))
 
+  // An add or edit too long for one entry is not lost: the keeper's model is asked
+  // once to shorten it, or split it into entries that each make sense alone, and what
+  // is still too long is cut at sentence ends. The pieces after the first of an edit
+  // go in beside the entry it changes. Pieces are no part of the change limit.
+  async function fitLong({ keeper, name, numbered, changes, tag, teamWrites }) {
+    const max = MEMORY_LIMITS.entry
+    const fits = (change) => {
+      if (change.op !== 'add' && change.op !== 'edit') return true
+      const text = cleanEntry(change.text)
+      if (text.length <= max || secretEntry(text)) return true
+      if (change.op === 'add') return false
+      // An edit memory refuses for its target is said for that, not shortened.
+      const target = numbered[Number(change.entry) - 1]
+      return target === undefined || isPinned(target) || (target.scope === 'team' && (target.file.topic === undefined || !teamWrites()))
+    }
+    const long = changes.filter(change => !fits(change))
+    if (long.length === 0) return changes
+    let answers = []
+    try {
+      answers = parseShortened(await botShot(keeper, shortenSystem(max), shortenRequest(long.map(change => cleanEntry(change.text))), tag), long.length)
+    } catch (error) {
+      rt.warn('ds-bot: memory review of %s could not shorten %d long entries: %s', name, long.length, error?.message ?? error)
+    }
+    return changes.flatMap((change) => {
+      const at = long.indexOf(change)
+      if (at === -1) return [change]
+      const texts = (answers[at] ?? [change.text]).map(cleanEntry).filter(text => text !== '')
+      const pieces = texts.flatMap(text => splitEntry(text, max))
+      if (pieces.length === 0) return [change]
+      if (pieces.length > texts.length) rt.warn('ds-bot: memory review of %s cut a long entry into %d at sentence ends: "%s"', name, pieces.length, clip(cleanEntry(change.text), 160))
+      const [first, ...rest] = pieces
+      if (change.op === 'add') return [{ ...change, text: first }, ...rest.map(text => ({ ...change, text, piece: true }))]
+      const target = numbered[Number(change.entry) - 1]
+      const into = { scope: target.scope === 'team' ? TEAM : undefined, topic: target.file.topic }
+      return [{ ...change, text: first }, ...rest.map(text => ({ op: 'add', text, into, piece: true, ...(change.until === undefined ? {} : { until: change.until }) }))]
+    })
+  }
+
   // `home` is the memory the review keeps what it finds in: the keeper's own, or its
   // group's. `teamWrites` says whether the keeper may also write the team's.
-  async function applyReview({ keeper, name, home, numbered, changes, source, teamWrites }) {
+  async function applyReview({ keeper, name, home, numbered, changes: asked, source, teamWrites, tag }) {
     const actor = { id: keeper.id, name: keeper.name, auto: true }
+    const changes = await fitLong({ keeper, name, numbered, changes: asked, tag, teamWrites })
     const done = []
-    const counts = () => ({ kept: done.length, changed: done.filter(result => result.changed).length })
+    let pieces = 0
+    const counts = () => ({ kept: done.length - pieces, changed: done.filter(result => result.changed).length })
     let failed
     // A removal frees room and an edit names an entry as it reads now, so both go
     // before what is new.
@@ -151,10 +191,11 @@ export function installReview(rt, memory) {
       const team = teamWrites()
       const op = String(change?.op ?? '')
       const target = numbered[Number(change?.entry) - 1]
-      const route = op === 'add' ? routeOf(change, keeper, home, team) : undefined
-      const scope = op === 'add' ? route.scope : target?.scope === 'team' ? TEAM : home
+      const into = change.into
+      const route = op === 'add' && into === undefined ? routeOf(change, keeper, home, team) : undefined
+      const scope = into !== undefined ? into.scope ?? home : op === 'add' ? route.scope : target?.scope === 'team' ? TEAM : home
       // What the review keeps for the team waits in a topic: it does not get in front of every Bot by itself.
-      const topic = op === 'add' && scope.kind === 'team' ? cleanTopic(String(change?.topic ?? TEAM_SHARED)) : op === 'add' && change?.topic !== undefined ? cleanTopic(String(change.topic)) : undefined
+      const topic = into !== undefined ? into.topic : op === 'add' && scope.kind === 'team' ? cleanTopic(String(change?.topic ?? TEAM_SHARED)) : op === 'add' && change?.topic !== undefined ? cleanTopic(String(change.topic)) : undefined
       const label = labelOf(scope, keeper.id)
       const text = cleanEntry(change?.text)
       const until = cleanDay(change?.until)
@@ -179,7 +220,10 @@ export function installReview(rt, memory) {
         continue
       }
       try {
-        if (op === 'add') done.push(await addEntry({ scope, topic, text, meta, actor, label }))
+        if (op === 'add') {
+          done.push(await addEntry({ scope, topic, text, meta, actor, label }))
+          if (change.piece === true) pieces += 1
+        }
         else if (op === 'edit') done.push(await replaceEntry({ scope, topic: target.file.topic, match: target.text, text, meta, actor, label }))
         else if (op === 'remove') done.push(await removeEntry({ scope, topic: target.file.topic, match: target.text, actor, label }))
       } catch (failure) {
@@ -311,7 +355,7 @@ export function installReview(rt, memory) {
         }
         // The limit is what one answer may hold, not a cut of the one the model
         // gave: every change in it is kept or set aside, none is dropped.
-        const { kept, changed } = await applyReview({ keeper, name, home, numbered, changes, source: batch.source(read), teamWrites })
+        const { kept, changed } = await applyReview({ keeper, name, home, numbered, changes, source: batch.source(read), teamWrites, tag })
         if (!alive()) return
         // An answer that kept all one answer may hold may have left some out, so
         // the same lines are read again, a few times at most, while each pass

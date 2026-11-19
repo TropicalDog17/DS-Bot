@@ -267,6 +267,48 @@ export function reviewEntries(home, team, budget = REVIEW_MEMORY_MAX, about = ''
   return { numbered: [...main, ...topics.filter(entry => shown.has(entry))], left: topics.length - shown.size }
 }
 
+// An entry too long to keep, cut into pieces that fit: after the last sentence end
+// that leaves a fair share in the piece, else after the last space, else at the limit.
+// Every word is kept; only a model can make the pieces say whom they are about.
+const SENTENCE_END = /[.!?;:](?=\s)|[。！？；：]/g
+export function splitEntry(text, max) {
+  const pieces = []
+  let rest = text.trim()
+  while (rest.length > max) {
+    const window = rest.slice(0, max + 1)
+    const ends = [...window.matchAll(SENTENCE_END)].map(match => match.index + 1).filter(at => at <= max)
+    const space = window.lastIndexOf(' ', max)
+    const floor = Math.floor(max / 3)
+    let cut = ends.findLast(at => at >= floor) ?? (space >= floor ? space : max)
+    // A cut between the two halves of a surrogate pair would break the character.
+    if (cut === max && /[\uD800-\uDBFF]/.test(rest[cut - 1])) cut -= 1
+    pieces.push(rest.slice(0, cut).trim())
+    rest = rest.slice(cut).trim()
+  }
+  if (rest !== '') pieces.push(rest)
+  return pieces
+}
+
+// The model's shortened entries: {"entries": [["…"], ["…", "…"]]}, one list per long
+// entry in the order asked. A list that is not one of strings is no answer for that
+// entry, which is then cut by splitEntry.
+export function parseShortened(text, count) {
+  const start = text.indexOf('{')
+  const end = text.lastIndexOf('}')
+  let value
+  try {
+    value = start === -1 || end <= start ? undefined : JSON.parse(text.slice(start, end + 1))
+  } catch {
+    value = undefined
+  }
+  const lists = Array.isArray(value?.entries) ? value.entries : []
+  return Array.from({ length: count }, (_, at) => {
+    const list = lists[at]
+    if (!Array.isArray(list) || list.length === 0 || !list.every(item => typeof item === 'string' && item.trim() !== '')) return undefined
+    return list
+  })
+}
+
 // The memory review's answer: {"changes": […]}, perhaps in a code fence. `changes`
 // are the well-formed ones; `leftOut` the rest, so a malformed change does not
 // take the whole answer down — it is set aside and said, and the well-formed ones
