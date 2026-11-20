@@ -6,13 +6,15 @@
 // characters, so Chinese needs no word splitting; shorter words fall back to LIKE.
 // The index is derived from the Session logs: a part catches up when it is read, an
 // ended part is sealed once it is complete, and deleting the file only costs a
-// rebuild. Without SQLite, read_own_chat scans the logs as before.
+// rebuild. Without SQLite, read_own_chat scans the logs as before. An imported earlier
+// chat (imported-chat.js) is indexed whole as part 0, again whenever its file changes.
 import { mkdir, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { ANCHOR_LINE_MAX, HISTORY_PAGE, HISTORY_PAGES_MAX, HISTORY_TIMEOUT_MS, OWN_CHAT_BRIEF, OWN_CHAT_LINE_MAX, OWN_CHAT_READ, OWN_CHAT_SEARCH } from './constants.js'
+import { importedChatReader } from './imported-chat.js'
 import { excerpt } from './text.js'
 
-const INDEX_VERSION = 3
+const INDEX_VERSION = 4
 const AROUND_LINES = 6
 const SEARCH_TERMS_MAX = 6
 const ANY_TERM_HITS = 50
@@ -107,8 +109,10 @@ export function install(rt) {
         db.exec(`
           DROP TABLE IF EXISTS lines;
           DROP TABLE IF EXISTS marks;
+          DROP TABLE IF EXISTS imports;
           CREATE VIRTUAL TABLE lines USING fts5(text, session UNINDEXED, seq UNINDEXED, time UNINDEXED, who UNINDEXED, tokenize = 'trigram');
           CREATE TABLE marks (session TEXT PRIMARY KEY, through INTEGER NOT NULL, keep INTEGER NOT NULL, sealed INTEGER NOT NULL, turn INTEGER NOT NULL);
+          CREATE TABLE imports (session TEXT PRIMARY KEY, stamp TEXT NOT NULL);
           PRAGMA user_version = ${INDEX_VERSION};`)
       }
       return {
@@ -116,6 +120,9 @@ export function install(rt) {
         mark: db.prepare('SELECT through, keep, sealed, turn FROM marks WHERE session = ?'),
         setMark: db.prepare('INSERT OR REPLACE INTO marks (session, through, keep, sealed, turn) VALUES (?, ?, ?, ?, ?)'),
         insert: db.prepare('INSERT INTO lines (text, session, seq, time, who) VALUES (?, ?, ?, ?, ?)'),
+        importStamp: db.prepare('SELECT stamp FROM imports WHERE session = ?'),
+        setImportStamp: db.prepare('INSERT OR REPLACE INTO imports (session, stamp) VALUES (?, ?)'),
+        dropLines: db.prepare('DELETE FROM lines WHERE session = ?'),
         before: db.prepare('SELECT text, session, seq, time, who FROM lines WHERE session = ? AND seq < ? ORDER BY seq DESC LIMIT ?'),
         from: db.prepare('SELECT text, session, seq, time, who FROM lines WHERE session = ? AND seq >= ? ORDER BY seq LIMIT ?'),
       }
@@ -177,6 +184,22 @@ export function install(rt) {
     return job
   }
 
+  const importedChat = importedChatReader(rt)
+  function catchUpImported(index, chat) {
+    const session = chat.part.sessionId
+    if (index.importStamp.get(session)?.stamp === chat.stamp) return
+    index.db.exec('BEGIN')
+    try {
+      index.dropLines.run(session)
+      for (const row of chat.rows) index.insert.run(row.text, session, row.seq, row.time, row.who)
+      index.setImportStamp.run(session, chat.stamp)
+      index.db.exec('COMMIT')
+    } catch (error) {
+      index.db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
   // A message's anchor: its part (once there are several) and its seq in that part.
   const anchorOf = (parts, row) => {
     const part = parts.find(item => item.sessionId === row.session)
@@ -198,7 +221,15 @@ export function install(rt) {
     // A part that cannot be read now is searched as far as it was indexed.
     for (const part of parts) await catchUp(index, part).catch(error => rt.warn('ds-bot: indexing %s failed: %s', part.sessionId, error))
     const turn = askingId !== undefined && askingId === parts.at(-1)?.sessionId ? index.mark.get(askingId)?.turn : undefined
-    return { index, parts, hidden: turn === undefined || turn < 0 ? undefined : { session: askingId, from: turn } }
+    const chat = importedChat(botId)
+    let imported = chat !== undefined
+    if (imported) {
+      try { catchUpImported(index, chat) } catch (error) {
+        imported = false
+        rt.warn('ds-bot: indexing the imported chat of %s failed: %s', botId, error)
+      }
+    }
+    return { index, parts: imported ? [chat.part, ...parts] : parts, hidden: turn === undefined || turn < 0 ? undefined : { session: askingId, from: turn } }
   }
 
   // Messages with all the words, best first; with none of them having all, those with
@@ -250,8 +281,8 @@ export function install(rt) {
     if (index === null) return { error: 'Anchors need the chat index, which is unavailable here. Search with words instead.' }
     const found = /(?:part\s*)?(\d+)?\s*#\s*(\d+)/i.exec(anchor)
     if (found === null) return { error: `"${anchor}" is not an anchor. Anchors look like "part 2 #1234", or "#1234" in the current part.` }
-    const number = found[1] === undefined ? parts.length : Number(found[1])
-    const part = parts[number - 1]
+    const number = found[1] === undefined ? parts.at(-1)?.number : Number(found[1])
+    const part = parts.find(item => item.number === number)
     if (part === undefined) return { error: `Your own chat has no part ${number}.` }
     const seq = Number(found[2])
     const rows = [...index.before.all(part.sessionId, seq, AROUND_LINES).reverse(), ...index.from.all(part.sessionId, seq, AROUND_LINES + 1)]
@@ -262,11 +293,13 @@ export function install(rt) {
   // parts, oldest first, by reading the logs.
   async function scanOwnChat(botId, query, limit, askingId) {
     const wanted = query.toLowerCase()
-    const parts = askingId === undefined ? rt.partsOf(botId) : rt.partsOfThread(botId, askingId)
+    const chat = importedChat(botId)
+    const parts = [...(chat === undefined ? [] : [chat.part]), ...(askingId === undefined ? rt.partsOf(botId) : rt.partsOfThread(botId, askingId))]
     const signal = AbortSignal.timeout(HISTORY_TIMEOUT_MS)
     const lines = []
     for (const part of [...parts].reverse()) {
-      for await (const line of rt.partLines(part.sessionId, signal)) {
+      const said = part.imported ? [...chat.rows].reverse() : rt.partLines(part.sessionId, signal)
+      for await (const line of said) {
         if (wanted !== '' && !line.text.toLowerCase().includes(wanted)) continue
         lines.push(`[${parts.length > 1 ? `part ${part.number} · ` : ''}${rt.clock(line.time)}] ${excerpt(line.text, wanted)}`)
         if (lines.length >= limit) break
@@ -277,7 +310,8 @@ export function install(rt) {
   }
 
   // The parts of a Bot's own chat, for the model: when each ran.
-  const partIndex = parts => parts.map(part => `part ${part.number} (${rt.clock(part.startedAt)} – ${part.endedAt === undefined ? 'now' : rt.clock(part.endedAt)})`).join(', ')
+  const partIndex = parts => parts.map(part => `part ${part.number} (${part.imported ? 'an earlier chat imported from before you existed, ' : ''}${rt.clock(part.startedAt)} – ${part.endedAt === undefined ? 'now' : rt.clock(part.endedAt)})`).join(', ')
+  const importedPart = botId => importedChat(botId)?.part
 
   async function ownChatBrief(member) {
     let lines = []
@@ -289,5 +323,5 @@ export function install(rt) {
     ].join('\n')
   }
 
-  Object.assign(rt, { eventsBackwards, searchOwnChat, latestOwnChat, aroundOwnChat, partIndex, ownChatBrief })
+  Object.assign(rt, { eventsBackwards, searchOwnChat, latestOwnChat, aroundOwnChat, partIndex, importedPart, ownChatBrief })
 }

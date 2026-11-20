@@ -1545,7 +1545,7 @@ export function install(rt) {
   // Private context enters a group only through this tool, and the group sees each use.
   rt.teamTools.push(defineTool({
     name: 'read_own_chat',
-    description: 'Read or search your own chat with the user, across all its parts, including earlier parts that left your working context. Each line starts with its anchor, such as [part 2 #1234 · 10-08 14:22]; long messages are cut. Pass the anchor as around to read that message in full, with what was said just before and after it. In a group chat the group sees that you looked, so share only what the group needs.',
+    description: 'Read or search your own chat with the user, across all its parts, including earlier parts that left your working context and part 0, an earlier chat imported from before you existed, when there is one. Each line starts with its anchor, such as [part 2 #1234 · 10-08 14:22]; long messages are cut. Pass the anchor as around to read that message in full, with what was said just before and after it. In a group chat the group sees that you looked, so share only what the group needs.',
     parameters: {
       query: { type: 'string', description: 'Words to look for in every part, separated by spaces. A message must have all of them; when none has, those with the most are shown. Omit for the latest messages' },
       around: { type: 'string', description: 'An anchor from an earlier result, such as "part 2 #1234": shows that message in full and the messages just before and after it' },
@@ -1569,7 +1569,9 @@ export function install(rt) {
         say(room, { who: member.name, botId: member.id, kind: 'lookup', text })
         void rt.save().catch(() => {})
       }
-      const partsNote = parts.length > 1 ? `\n\nYour own chat has ${parts.length} parts: ${rt.partIndex(parts)}. Call read_own_chat with part N for the note that closed an earlier part, or with words to search all parts.` : ''
+      const imported = rt.importedPart(botId)
+      const listed = imported === undefined ? parts : [imported, ...parts]
+      const partsNote = listed.length > 1 ? `\n\nYour own chat has ${listed.length} parts: ${rt.partIndex(listed)}. Call read_own_chat with part N for the note that closed an earlier part, or with words to search all parts.` : ''
       if (query === '' && around !== '') {
         const found = await rt.aroundOwnChat(botId, around, id)
         if (found.error) return `${found.error}${partsNote}`
@@ -1578,8 +1580,9 @@ export function install(rt) {
         return `Your own chat ${heading} (oldest first):\n${found.lines.join('\n')}${partsNote}`
       }
       if (query === '' && number !== undefined) {
-        const part = parts[number - 1]
+        const part = listed.find(item => item.number === number)
         if (part === undefined) return `Your own chat has no part ${number}.${partsNote}`
+        if (part.imported) return `Part ${number} is an earlier chat imported from before you existed (${rt.clock(part.startedAt)} – ${rt.clock(part.endedAt)}); it has no handoff note. Search it with words, or read around one of its anchors, such as "part ${number} #12".${partsNote}`
         if (part.endedAt === undefined) return `Part ${number} is the current one; it is in your context.${partsNote}`
         return `Part ${number} of your own chat (${rt.clock(part.startedAt)} – ${rt.clock(part.endedAt)}). The handoff note that closed it:\n${rt.noteText(part) ?? '(none: the part ended on a context overflow)'}${partsNote}`
       }
