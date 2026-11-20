@@ -1,71 +1,71 @@
-# 头像库：可复用的自定义头像与批量导入
+# Avatar library: reusable custom avatars and bulk import
 
-- 日期：2026-10-23
-- 相关：#484（保留可复用的自定义头像，支持部分成功的批量导入）
-- 代码：`ds-bot/src/host/avatar-library.js`（存储与导入）、`ds-bot/src/host/avatar.js`（图片校验）、`ds-bot/src/host/channel.js`（接口）、`ds-bot/src/client/avatar-library.js`（界面）、`ds-bot/src/client/bot-settings.js`、`ds-bot/src/client/create-bot.js`
+- Date: 2026-10-23
+- Related: #484 (keep reusable custom avatars, support bulk import with partial success)
+- Code: `ds-bot/src/host/avatar-library.js` (storage and import), `ds-bot/src/host/avatar.js` (image checks), `ds-bot/src/host/channel.js` (interface), `ds-bot/src/client/avatar-library.js` (interface), `ds-bot/src/client/bot-settings.js`, `ds-bot/src/client/create-bot.js`
 
-头像上传是早就有的功能，但照片只跟着 Bot 走：换个 Bot 要再传一次，删掉 Bot 照片就没了。#484 要一个可复用的头像库——照片导入一次，之后能给多个 Bot 用；批量导入时一张坏图不影响别的图。
+Avatar upload has existed for a long time, but a photo only belonged to one Bot: another Bot needed another upload, and removing the Bot lost the photo. #484 asks for a reusable avatar library: a photo is imported once and can then be used for several Bots, and in a bulk import one bad image does not affect the others.
 
-## 为什么
+## Why
 
-照片是用户自己的素材，同一张照片常常要给团队里好几个 Bot 用。现在它存在 Bot 的 `avatar.image` 里（一张 base64 的 data URL），所以：
+Photos are the user's own material, and the same photo is often used for several Bots in the team. Right now it is stored in the Bot's `avatar.image` (a base64 data URL), so:
 
-- 换 Bot 要重新上传；
-- 删掉 Bot，照片跟着没了；
-- 批量导入没有位置放。
+- another Bot needs another upload;
+- removing the Bot loses the photo;
+- a bulk import has nowhere to go.
 
-Bot 自己的 `avatar.image` 存 data URL 是既有约定，工具（`create_bot` / `update_bot`）也一直收图片路径或 data URL。这些都不动：库是加在旁边的一层，不改 Bot 的存法。
+Storing a data URL in a Bot's own `avatar.image` is an existing convention, and the tools (`create_bot` / `update_bot`) have always accepted an image path or a data URL. None of this changes: the library is a layer added alongside, and it does not change how Bots store avatars.
 
-## 已定的行为
+## Decided behavior
 
-### 放在哪
+### Where it lives
 
-- 头像库在 Bot 数据文件夹里：`<DSH_HOME>/bot/avatars/`。
-  - `index.json`：索引，每条是 `{ id, name, mime, bytes, createdAt }`。
-  - `files/<id>.<ext>`：图片本体。
-- `id` 是图片内容的 sha256，所以同一张图片只存一份，索引里也只有一条。重新导入同样的图片不会多出条目。
-- 索引和图片都是整份写入（先写临时文件再改名），所以不会读到写了一半的文件。
-- 库在 Bot 数据文件夹里，不在团队状态（`state.json`）里，所以删 Bot、换形象、改名都不影响它；换主机、重启后还在。
+- The avatar library is in the Bot data folder: `<DSH_HOME>/bot/avatars/`.
+  - `index.json`: the index; each entry is `{ id, name, mime, bytes, createdAt }`.
+  - `files/<id>.<ext>`: the image itself.
+- `id` is the sha256 of the image content, so the same image is stored once and has one entry in the index. Importing the same image again adds no entry.
+- The index and images are written whole (a temporary file first, then a rename), so a half-written file is never read.
+- The library is in the Bot data folder, not in the team state (`state.json`), so removing a Bot, changing its look or renaming it does not affect the library; it is still there after a host change or a restart.
 
-### 导入
+### Import
 
-- 一次可以导入多张。每一张单独走一遍校验：好的留下，坏的单独报出来（哪个文件、为什么），不影响别的图。
-- 浏览器把每张图裁成 160×160 的正方形并转成 webp（和现在的上传完全一样，`avatarImage`），主机再校验一次图片内容、类型和大小上限。
-- 浏览器每 20 张发一批。一批被主机拒了（网络错误、只读窗口等），这一批里的每张都算失败并写明原因，**后面的批次照发**，失败的批次不重发。
-- 同一张图再来一次，算重复，不新增条目；库里那份不动。
-- 库最多放 500 张。
-- 同一个主机里同时来的导入排队做（一次只改一次索引），所以不会互相覆盖；索引和图片的临时文件名也各不相同。
+- Several images can be imported at once. Each one is checked on its own: good ones stay, bad ones are reported one by one (which file and why), and they do not affect the others.
+- The browser crops each image to a 160×160 square and converts it to webp (exactly as the current upload does, `avatarImage`); the host checks the image content, type and size limit again.
+- The browser sends 20 images per batch. When the host refuses a batch (network error, read-only window and so on), every image in that batch counts as failed with the reason, **the later batches are still sent**, and the failed batch is not sent again.
+- The same image again counts as a duplicate and adds no entry; the copy in the library is left as it is.
+- The library holds at most 500 images.
+- Imports that arrive at the same time on the same host are queued (the index changes one at a time), so they do not overwrite each other; the temporary file names of the index and images are all different.
 
-### 看库
+### Browsing the library
 
-- 接口一次最多回 48 张，窗口按页要（库里更多时出现「显示更多照片」）。最新的在前。
+- The interface returns at most 48 images at a time, and the window asks for them by page ("Show more photos" appears when the library has more). Newest first.
 
-### 用
+### Using it
 
-- Bot 的形象编辑器多一个「素材库」页签，新建 Bot 的表单也多一个「素材库」按钮：里面是缩略图网格，选一张就是这个 Bot 的照片。库里图片多的时候按页显示。
-- 选中的照片会存成这个 Bot 自己的 `avatar.image`（还是 data URL），所以：
-  - 旧头像照旧能显示，工具传路径或 data URL 也照旧能用；
-  - 把库里的照片删掉，已经用了这张照片的 Bot 不受影响，它自己那份还在。
-- 新建 Bot 时选了库里的照片，Bot 建好后照片还在。
+- The Bot's look editor gets a "Library" tab, and the new Bot form gets a "Library" button: inside is a grid of thumbnails, and picking one makes it this Bot's photo. When the library has many images, they are shown by page.
+- The picked photo is stored as this Bot's own `avatar.image` (still a data URL), so:
+  - old avatars still show, and tools that pass a path or a data URL still work;
+  - deleting a photo from the library does not affect Bots that already use it; their own copy stays.
+- When a library photo is picked while creating a Bot, the photo is still there after the Bot is created.
 
-### 谁能改
+### Who can change it
 
-- 只有用户能改库：接口在用户的 `/api/bot` 通道上，没有给 Bot 的工具，Bot 碰不到库。
-- 另一个 DSH 打开着同一份数据时，这个窗口能看库，不能改库（和其他写操作一样被拒）。
-- 库里的照片只是图片；路径、类型、大小按现有的头像校验走，Bot 工具传的图片路径仍然不能指向 DSH 的数据目录。
+- Only the user can change the library: the interface is on the user's `/api/bot` channel, there is no tool for Bots, and Bots cannot reach the library.
+- While another DSH has the same data open, this window can view the library but not change it (refused like other writes).
+- Library photos are only images; path, type and size go through the existing avatar checks, and an image path passed by a Bot tool still cannot point into DSH's data directory.
 
-## 不做什么
+## Not done
 
-- 不改 Bot 的头像存法：`avatar.image` 还是 data URL，不引入「头像引用」这种新字段，也不改 `state.json` 的结构。
-- 不给 Bot 加「导入头像库」的工具。
-- 不在主机上裁图：主机没有图片库，裁图仍在浏览器里做，主机只校验和存。
-- 不做图片编辑、命名规则、排序、搜索。
+- No change to how Bots store avatars: `avatar.image` stays a data URL, no new field such as an "avatar reference" is added, and the structure of `state.json` does not change.
+- No tool for Bots to "import into the avatar library".
+- No cropping on the host: the host has no image library, so cropping stays in the browser, and the host only checks and stores.
+- No image editing, naming rules, sorting or search.
 
-## 已知限制
+## Known limits
 
-- 库里的图只在本机存着，不跟着团队同步到别的机器。
-- 一张图存一份：同一张照片裁剪参数不同（现在是固定的 160×160）算同一张。
+- Library images are stored only on this machine and are not synced with the team to other machines.
+- One copy per image: the same photo with different crop settings (currently fixed at 160×160) counts as the same image.
 
-## 变更
+## Changes
 
-- 2026-10-23：新增头像库与批量导入，#484。
+- 2026-10-23: added the avatar library and bulk import, #484.

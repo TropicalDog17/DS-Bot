@@ -1,90 +1,90 @@
-# Bot 运行配置：预设、模型、思考强度、工作文件夹、能力
+# Bot runtime: preset, model, thinking effort, work folder, capabilities
 
-- 日期：2026-10-10 定预设和能力包，之后陆续补充
-- 相关：#99（思考强度）、#159（换模型不生效）、#208、#209（工作文件夹）、#227（新 Bot 默认模型）、#798（Bot 不派子代理）
-- 代码：`ds-bot/src/host/roster.js`、`models.js`、`folders.js`、`capabilities.js`、`permissions.js`，建 Bot 表单在 `src/client/bot-draft.js`
+- Date: 2026-10-10 set the preset and capability packs; more added over time
+- Related: #99 (thinking effort), #159 (model change has no effect), #208, #209 (work folder), #227 (default model for new Bots), #798 (Bots do not dispatch subagents)
+- Code: `ds-bot/src/host/roster.js`, `models.js`, `folders.js`, `capabilities.js`, `permissions.js`; the new Bot form is in `src/client/bot-draft.js`
 
-权限预设（只读 / 工作区内修改 / 完全权限）和群的统一权限见[角色与权限](2026-10-07-roles-and-permissions.md)，这里不重复。
+Permission presets (Read only / Workspace / Full access) and a group's shared permission are in [Roles and permissions](2026-10-07-roles-and-permissions.md) and are not repeated here.
 
-## 为什么
+## Why
 
-每个 Bot 是一个独立工作的身份，它跑在什么 harness 上、用哪个模型、在哪个文件夹干活，都应该属于这个 Bot 自己，不随用户在 DSH 里的其他设置变化。否则用户在 DSH 里换了「新任务默认」或默认模型，整个团队就跟着变了。
+Each Bot is an identity that works on its own. Which harness it runs on, which model it uses and which folder it works in should belong to that Bot, and should not change with the user's other settings in DSH. Otherwise, when the user changes "default for new tasks" or the default model in DSH, the whole team changes with it.
 
-同时 DSH 的标准 harness 已经足够好，没必要预置一堆分工 Bot 或改造 harness。专门的能力（写代码、做调研）做成可以叠加到任何 Bot 上的能力包。
+At the same time, the DSH standard harness is good enough already, so there is no need to ship a set of specialist Bots or rework the harness. Specialized abilities (writing code, doing research) are capability packs that can be added to any Bot.
 
-## 已定的行为
+## Decided behavior
 
-### Agent 预设
+### Agent preset
 
-- 只有一个 Bot 预设：DS Bot 的 Bot 内核加 DSH 的标准 harness（`standard`），不改造。
-- 这个预设归 DS Bot 所有：新建的 Bot 会话、群会话和对话分段都显式用 `standard`，**不跟随**用户在 DSH 里设的「新任务默认」。DSH 里没有可用的 `standard` 时，才交给 DSH 决定。
-- Bot 的工具只挂在 Bot 的作用域里，不出现在普通 DSH 会话中。
-- Bot 的私聊和群会话里拿掉三类 DSH 工具，以及 DSH 为它们写进系统提示的用法说明：提问工具 `ask_user_question`（Bot 用自己的 `ask_user`）；goal 工具（Bot 不跑 goal）；委派工具（`subagent`、`subagent_fork`、`workflow` 等）、子代理控制工具（`send_message`、`interrupt_agent`、`list_agents`）和 Agent Teams 的队友工具（`spawn_teammate`、`wait_agent`、`team_task_*`，连同它的 `team:policy` 说明）。DSH 注册在 Agent 自身作用域里的工具（`subagent` 和 Agent Teams 的工具）拿不掉：DSH 0.2.2 起仍会出现在工具列表里，只靠拒绝挡住调用。万一仍有调用进来，会被拒绝，并提示 Bot 自己做，或把活交给别的 Bot。不是 Bot 的 DSH 会话照旧。
-- 要并行，就让几个 Bot 同时干：`message_bot` 派活，群里 `@` 点名（见 [Bot 之间派活](2026-10-16-bot-handoffs.md)、[群聊](2026-10-07-group-chat.md)）。Bot 不派 DSH 子代理：子代理跑起来用户看不到、停不到，换段时会被连带取消，结论丢失（#463、#788）。
-- 以前在 PTC 预设下建的群会话只能调用 `run_code`，DS Bot 为它们单独处理群的接力；新的群会话都用标准预设（#37、#168）。
+- There is only one Bot preset: DS Bot's Bot core plus the DSH standard harness (`standard`), unchanged.
+- DS Bot owns this preset: new Bot Sessions, group Sessions and conversation parts explicitly use `standard` and **do not follow** the "default for new tasks" the user set in DSH. Only when DSH has no usable `standard` does DSH decide.
+- Bot tools are attached only in the Bot scope; they do not appear in ordinary DSH Sessions.
+- A Bot's own chat and group Sessions drop three kinds of DSH tools, along with the usage notes DSH writes into the system prompt for them: the question tool `ask_user_question` (Bots use their own `ask_user`); the goal tools (Bots do not run goals); the delegation tools (`subagent`, `subagent_fork`, `workflow` and others), the subagent control tools (`send_message`, `interrupt_agent`, `list_agents`) and the Agent Teams teammate tools (`spawn_teammate`, `wait_agent`, `team_task_*`, together with its `team:policy` note). Tools that DSH registers in the Agent's own scope (`subagent` and the Agent Teams tools) cannot be dropped: since DSH 0.2.2 they still appear in the tool list, and only refusal stops the calls. If a call still comes in, it is refused, with a hint that the Bot should do the work itself or hand it to another Bot. DSH Sessions that are not Bots are unchanged.
+- For parallel work, several Bots work at once: `message_bot` hands out work, and `@` calls on members in a group (see [Handoffs between Bots](2026-10-16-bot-handoffs.md), [Group chat](2026-10-07-group-chat.md)). Bots do not dispatch DSH subagents: a running subagent cannot be seen or stopped by the user, it is cancelled along with the Session when the conversation moves to a new part, and its conclusions are lost (#463, #788).
+- Group Sessions created earlier under the PTC preset can only call `run_code`, so DS Bot handles group relays for them separately; new group Sessions all use the standard preset (#37, #168).
 
-### 模型
+### Model
 
-- 每个 Bot 有**自己的一个模型**，建 Bot 时确定，之后只在 Bot 设置里改，或者由 Main Bot 改。DSH 默认模型以后再变，已有的 Bot 不受影响。
-- 选择保存在 Bot 的 Session 上。DSH 的 `selectModel` 会顺手把选择写成 profile 的默认模型，所以 DS Bot 每次选完都把用户原来的默认写回去。选择一次只做一个，并等写回完成。
-- 「能用的模型」：模型列表里提供商还缺 key 的（`needsKey`）不算能用。DS Bot 自己选模型时只从能用的里选；一个也没有时不选，让用户选。用户自己给 Bot 选的模型照样保留，哪怕它缺 key。
-- 新 Bot 的模型从哪里来：
-  - 设置 → 通用 → 新 Bot →「默认模型」可以给团队设一个新 Bot 的默认模型（`defaultBotModel`）。已有 Bot 不受影响。
-  - 建 Bot 表单：预选团队设的新 Bot 默认模型（还在服务中且能用时），否则选 DSH 的默认模型（还在服务中且能用时），再否则选第一个能用的模型。用户可以改。
-  - Main Bot 用 `create_bot` 且没有指定模型：优先用团队的新 Bot 默认模型（还在服务中且能用时），没设或不能用时用创建者自己的模型（还在服务中且能用时），否则同上（#227）。
-  - 团队的**第一个 Main Bot** 没有模型，等用户在它的聊天里选好再打招呼。用户在选模型之前就发了消息，开场白不丢：选好模型后，它先回答这条消息，再用一句话说明自己管团队。
-- 一个 Bot 的回合因为缺 key、key 不对、余额不足或账号登录失效而失败时，记在这个 Bot 上（`blocked`：失败代码、HTTP 状态码、request id、提供商，不存原文），直到它的下一个回合完成、key 或提供商变了、或者它换了模型。聊天里的修复卡读它；卡上的「重试」让 Bot 接着回答用户上一条消息，不再发一遍。开场白因为这些原因失败时重新留着，修好后再发。
-- 一个 Bot 的模型不再被服务时：先回到它上次实际用过的模型，再回到 DSH 默认（这两个都只在能用时），再回到第一个能用的模型；一个能用的都没有就不选。
-- 后注册的提供方：等它注册后再给对应的 Bot 选模型，打招呼也等模型可用，不会报「no adapter registered」。
-- 模型列表可能在 DSH 设置里悄悄变化，所以选择器打开前会重新取一次。
+- Each Bot has **its own model**, set when the Bot is created and changed later only in the Bot settings or by a Main Bot. Later changes to the DSH default model do not affect existing Bots.
+- The choice is saved on the Bot's Session. DSH's `selectModel` also writes the choice as the profile's default model, so after each choice DS Bot writes the user's original default back. Only one choice runs at a time, and it waits for the write-back to finish.
+- "Usable models": a model in the list whose provider still lacks a key (`needsKey`) is not usable. When DS Bot picks a model itself, it picks only from usable ones; when none is usable, it does not pick and leaves the choice to the user. A model the user picked for a Bot is kept even if it lacks a key.
+- Where a new Bot's model comes from:
+  - Settings → General → New Bots → "Default model" sets the team's default model for new Bots (`defaultBotModel`). Existing Bots are not affected.
+  - New Bot form: preselects the team's default model for new Bots (if it is still served and usable), otherwise the DSH default model (if it is still served and usable), otherwise the first usable model. The user can change it.
+  - A Main Bot calls `create_bot` without a model: it uses the team's default model for new Bots first (if it is still served and usable); when that is not set or not usable, the creator's own model (if it is still served and usable); otherwise as above (#227).
+  - The team's **first Main Bot** has no model and waits for the user to pick one in its chat before it greets. If the user sends a message before picking a model, the opening is not lost: once the model is picked, the Bot first answers that message, then says in one sentence that it manages the team.
+- When a Bot's turn fails because of a missing key, a wrong key, an empty balance or an expired account login, the failure is recorded on the Bot (`blocked`: failure code, HTTP status, request id, provider; the raw text is not stored) until its next turn completes, the key or provider changes, or it changes model. The fix card in the chat reads it; the card's "Retry" makes the Bot answer the user's last message again without sending it again. An opening that fails for these reasons is kept and sent again after the fix.
+- When a Bot's model is no longer served: it goes back to the model it last actually used, then to the DSH default (both only when usable), then to the first usable model; when none is usable, it picks nothing.
+- Providers that register later: DS Bot waits for the provider to register before it picks a model for the matching Bot, and the greeting also waits for the model to be available, so it never reports "no adapter registered".
+- The model list can change quietly in DSH settings, so the picker fetches it again before it opens.
 
-### 思考强度
+### Thinking effort
 
-- 每个 Bot 可以设一个思考强度，在建 Bot 表单、Bot 详情和 `create_bot` / `update_bot` 里设。
-- 只有当前模型提供的强度才会发出去；模型没有这一档就用模型自己的默认。提供方不认识的强度会被直接拒绝，所以绝不硬发。
-- 换模型、新开一段都保留这个设置。
+- Each Bot can set a thinking effort, in the new Bot form, the Bot details, and `create_bot` / `update_bot`.
+- Only an effort level the current model offers is sent; when the model lacks that level, the model's own default applies. A provider refuses a level it does not know, so a level is never forced.
+- The setting is kept when the model changes and when a new part starts.
 
-### 工作文件夹
+### Work folder
 
-- 一个 Bot 在哪里干活：群设了文件夹，群里的成员都用群的；否则用 Bot 自己的；都没设就用总工作区。
-- 用户在 DS Bot 设置 → 通用 →「位置」里换总工作区。用总工作区的 Bot 和群在下一个回合换到新的一段；旧文件夹和里面的文件不动。总工作区同样不能在 DSH 或团队的数据里，也不能包含它们；插件自带的默认位置在 DSH 的数据里，换走以后还能换回来。
-- Session 的文件夹在创建时就固定了，所以改文件夹会让对话换到新的一段（见[上下文与记忆](2026-10-09-context-and-memory.md)）。
-- 不能设成 DSH 或团队存数据的文件夹，也不能设成包含它们的文件夹：能写那里的 Bot 就能改自己的权限或整个团队。
-- 设到总工作区以外，等于扩大了 Bot 能写的范围。所以如果 Bot 要给「写入受文件夹限制」的 Bot 设这样的文件夹，要先请用户批准。
-- 保存的是真实路径，和 Session 的 cwd 显示一致。
-- Bot 可以按用户的一句话给自己设文件夹（`update_bot`），规则同上。
-- DSH 的 `working_directory` 工具（DSH 0.2.1 起）：Bot 进工作文件夹里面的文件夹，只是这段对话换个地方，不存、不换段，下一段回到工作文件夹。进工作文件夹以外的文件夹，等于给自己设新的工作文件夹：规则和 `update_bot` 一样，存进 Bot 的设置，下一步换到新的一段。群设了文件夹时，成员只能在群的文件夹里面换。
-- 工作文件夹被外部删除或改名时：总工作区不在了会自动重建；Bot 或群自己的文件夹不在了，在组装提示词前先切到回退文件夹，再换到那里的新一段，不会吞掉消息（#209）。
+- Where a Bot works: when a group has a folder, its members use the group's folder; otherwise the Bot's own; when neither is set, the team workspace.
+- The user changes the team workspace in DS Bot Settings → General → "Locations". Bots and groups that use the team workspace move to a new part on their next turn; the old folder and its files are left as they are. The team workspace also cannot be inside DSH's or the team's data, or contain it; the plugin's built-in default location is inside DSH's data, and the user can switch back to it after moving away.
+- A Session's folder is fixed when it is created, so changing the folder moves the conversation to a new part (see [Context and memory](2026-10-09-context-and-memory.md)).
+- It cannot be set to the folder where DSH or the team keeps its data, or to a folder that contains it: a Bot that can write there can change its own permissions or the whole team.
+- Setting it outside the team workspace widens what the Bot can write. So when a Bot wants to give such a folder to a Bot whose "writes are limited to the folder", it asks the user for approval first.
+- The real path is saved, matching the Session's cwd display.
+- A Bot can set its own folder on one sentence from the user (`update_bot`), under the same rules.
+- DSH's `working_directory` tool (since DSH 0.2.1): when a Bot moves into a folder inside its work folder, only this conversation changes place; nothing is saved, no new part starts, and the next part goes back to the work folder. Moving into a folder outside the work folder means setting a new work folder for itself: the same rules as `update_bot` apply, it is saved in the Bot's settings, and the next step moves to a new part. When the group has a folder, members can only move inside the group's folder.
+- When a work folder is removed or renamed from outside: a missing team workspace is rebuilt automatically; when a Bot's or group's own folder is missing, DS Bot switches to the fallback folder before building the prompt, then moves to a new part there, so no message is lost (#209).
 
-### 能力
+### Capabilities
 
-- 设置 → Capabilities 是团队共享的列表，有三种：MCP 服务、技能、能力包（若干 MCP 和技能的组合）。
-- 能力只能**做加法**：加工具、技能、MCP、提示词段。只能有一个取值的设置（工具的呈现方式、persona、压缩引擎）不放进能力包，它们属于 Bot 级设置。
-- 给一个 Bot 启用后，从它下一条消息开始生效，也适用于它参与的群聊。
-- Bot 添加的本地 MCP 命令要用户批准后才能运行。有其他 Bot 在用的能力，只有用户或 Main Bot 能改、能删；不是 Main Bot 的创建者不能改写 Main Bot 在用的能力。
-- MCP 配置里需要的密钥写成 `$DSH_SECRET_<名字>`，值从密钥库取，不写进配置。
-- 名字只用小写字母、数字和单个连字符，最长 32 个字符；`github` 留给内置的 GitHub 连接器。
+- Settings → Capabilities is a list shared by the team, with three kinds: MCP servers, skills, and capability packs (a set of MCP servers and skills).
+- Capabilities only **add**: tools, skills, MCP servers, prompt sections. Settings that can only have one value (how tools are presented, persona, compaction engine) do not go into capability packs; they are Bot-level settings.
+- Once enabled for a Bot, a capability takes effect from its next message, and also in the group chats it is in.
+- A local MCP command that a Bot adds runs only after the user approves it. A capability that other Bots use can only be changed or removed by the user or a Main Bot; a creator that is not a Main Bot cannot rewrite a capability a Main Bot uses.
+- A secret needed in an MCP config is written as `$DSH_SECRET_<name>`; the value comes from the secret store and is not written into the config.
+- Names use only lowercase letters, digits and single hyphens, up to 32 characters; `github` is reserved for the built-in GitHub connector.
 
-## 不做什么
+## Not done
 
-- 不预置分工 Bot（写手、程序员……）。只有一个默认 Bot，分工由用户和 Main Bot 来建。
-- 不改造 DSH 的标准 harness：只拿掉上面说的、Bot 不用的工具。
-- 不让 Bot 跟随用户在 DSH 里的「新任务默认」预设或默认模型。
+- No preset specialist Bots (writer, programmer, ...). There is only one default Bot; the user and Main Bots create the specialists.
+- No rework of the DSH standard harness: only the tools above, which Bots do not use, are dropped.
+- Bots do not follow the "default for new tasks" preset or the default model the user set in DSH.
 
-## 已知限制
+## Known limits
 
-- **「能用」只看 key 有没有配**：`needsKey` 只覆盖 profile 写了 `apiKeyEnv` 的提供商。key 配了但不对、余额为零，或者是 DeepSeek 账号这类登录式的提供商没登录，都还算能用，要到第一轮失败才知道（失败后有修复卡）。保存 key 时检查、确认能用再打招呼，见 [Windows 上手流程](2026-10-26-windows-onboarding.md) 的 M2。
-- 能力包「coding」「research」的具体组成还没定。
-- 委派工具按 DSH 的默认名字认；profile 里改了名（`toolName`）的认不出来。
+- **"Usable" only checks whether a key is set**: `needsKey` only covers providers whose profile entry has `apiKeyEnv`. A key that is set but wrong, a zero balance, or a login-based provider such as a DeepSeek account that is not logged in all still count as usable, and this only shows when the first turn fails (a fix card follows the failure). Checking the key when it is saved and greeting only after it works is M2 in [Windows onboarding](2026-10-26-windows-onboarding.md).
+- The contents of the "coding" and "research" capability packs are not decided yet.
+- Delegation tools are recognized by their DSH default names; one renamed in the profile (`toolName`) is not recognized.
 
-## 变更
+## Changes
 
-- 2026-10-10：Bot 预设归 DS Bot 所有；不预置分工 Bot；能力包只做加法。
-- 2026-10-14：新的 Bot 会话、群会话和分段显式用 `standard`，修好 PTC 预设下群聊不接力（#37）。
-- 2026-10-16：工作文件夹被删除或改名时自动重建总工作区或切到回退文件夹并换段，不再吞消息（#209，PR #250）。
-- 2026-10-19：Bot 用 DSH 的 `working_directory` 换到工作文件夹以外时，当作给自己设工作文件夹（同样的检查和批准），换到新的一段；在工作文件夹里面换只是走进去（#345）。
-- 2026-10-20：用户能在设置里换总工作区；中文名「团队工作区」改叫「总工作区」（#364）。
-- 2026-10-26：DS Bot 自己选模型时只选能用的（缺 key 的不选）；先打字不再丢掉第一个 Main Bot 的开场白；凭据类失败记在 Bot 上，供修复卡和「重试」用（[Windows 上手流程](2026-10-26-windows-onboarding.md) M1）。
-- 2026-10-30：`create_bot` 和 `update_bot` 已经能设思考强度，删掉「只能在界面上设」这条过时的限制（#99）。
-- 2026-11-01：Bot 不再派 DSH 子代理：委派工具和子代理控制工具不出现在 Bot 会话里，goal、workflow 的用法说明也从 Bot 的系统提示里去掉（#798）。
-- 2026-11-02：设置 → 通用里可以给新 Bot 指定团队默认模型，建 Bot 表单和未指定模型的 `create_bot` 优先用它（#227，PR #823）。
+- 2026-10-10: DS Bot owns the Bot preset; no preset specialist Bots; capability packs only add.
+- 2026-10-14: new Bot Sessions, group Sessions and parts explicitly use `standard`, which fixes group chats not relaying under the PTC preset (#37).
+- 2026-10-16: when a work folder is removed or renamed, the team workspace is rebuilt automatically or DS Bot switches to the fallback folder and moves to a new part, so messages are no longer lost (#209, PR #250).
+- 2026-10-19: when a Bot uses DSH's `working_directory` to move outside its work folder, this counts as setting its own work folder (with the same checks and approval) and moves to a new part; moving inside the work folder only steps in (#345).
+- 2026-10-20: the user can change the team workspace in Settings; the Chinese label `团队工作区` was renamed `总工作区` (both "team workspace" in English) (#364).
+- 2026-10-26: when DS Bot picks a model itself, it picks only usable ones (not those lacking a key); typing first no longer loses the first Main Bot's opening; credential failures are recorded on the Bot for the fix card and "Retry" ([Windows onboarding](2026-10-26-windows-onboarding.md) M1).
+- 2026-10-30: `create_bot` and `update_bot` can already set thinking effort, so the outdated limit "can only be set in the interface" was removed (#99).
+- 2026-11-01: Bots no longer dispatch DSH subagents: the delegation tools and subagent control tools do not appear in Bot Sessions, and the goal and workflow usage notes are removed from the Bot system prompt (#798).
+- 2026-11-02: Settings → General can set a team default model for new Bots; the new Bot form and `create_bot` without a model use it first (#227, PR #823).

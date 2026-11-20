@@ -1,108 +1,183 @@
-# 电脑操控：Bot 按用户给的权限用电脑上的应用
+# Computer use: Bots use the apps on the computer, with the rights the user gives
 
-- 日期：2026-11-04
-- 相关：Issue #917；代替旧的 PR #32；前提是升级到 DSH 0.2.2-rc.1（PR #908）
-- 代码：`ds-bot/src/host/computer/`、`ds-bot/src/client/computer-*.js`、`app/src/computer-*.mjs`
+- Date: 2026-11-04
+- Related: issue #917; replaces the old PR #32; needs the upgrade to DSH 0.2.2-rc.1 (PR #908)
+- Code: `ds-bot/src/host/computer/`, `ds-bot/src/client/computer-*.js`, `app/src/computer-*.mjs`
 
-## 为什么
+## Why
 
-Bot 已经能在自己的浏览器里干活，但很多事在用户电脑上的原生应用里：备忘录、邮件、Office、聊天软件。Bot 应该能看、能操作这些应用，但只能做到用户允许的程度，尽量不抢用户的鼠标和键盘，并且用户随时看得见、停得下。
+Bots can already work in their own browser, but a lot of work happens in native apps on the user's
+computer: Notes, Mail, Office, chat apps. A Bot should be able to see and operate these apps, but
+only as far as the user allows. It should take the user's mouse and keyboard as little as possible,
+and the user should always be able to see it and stop it.
 
-驱动用 DSH 的，DS Bot 不自己写。DSH 的电脑操作提供方只负责「看」和「点」，它明确把三件事留给调用方：
+The driver comes from DSH; DS Bot does not write its own. DSH's computer-use provider only does the
+"seeing" and the "clicking". It leaves three things to the caller on purpose:
 
-1. **权限按谁管。** DSH 的应用授权按会话记，Bot 一换段、一进群就要重新问；长期授权对整个 profile 生效，不分 Bot。Windows 上用的 Cua Driver 提供方在同一进程里运行，不经过任何授权。
-2. **共用一个桌面。** 多个会话同时操作同一个桌面，由调用方协调。
-3. **看得见、能接管。** 提供方不画指示器，也没有接管和交还。
+1. **Whom the rights belong to.** DSH records app permissions per Session, so a Bot would be asked
+   again every time it moves to a new part or joins a group. A permanent permission applies to the
+   whole profile, not to one Bot. The Cua Driver provider used on Windows runs in the same process
+   and goes through no permission at all.
+2. **Sharing one desktop.** When several Sessions operate the same desktop at once, the caller
+   coordinates them.
+3. **Being seen and taken over.** The provider draws no indicator and has no take-over or hand-back.
 
-Bot 是长期身份，这三件都按 Bot 来，所以由 DS Bot 接过来。这一层和浏览器操控共用：同一张交接卡，同样的「Bot 在操作 / 你在操作 / 等你处理」，Bot 设置里放在同一个「操控」分组。
+A Bot is a long-lived identity, and all three go by Bot, so DS Bot takes them on. This layer is
+shared with browser control: the same handoff card, the same "Bot operating / you have it / waiting
+for you", and the same "Control" group in the Bot settings.
 
-macOS 的系统权限（辅助功能、屏幕录制）认的是应用的签名。DS Bot 桌面应用是临时签名，每次更新后 macOS 会把它当成新应用，授过的权限静默失效（在 macOS 26 上实测过）。DSH 的 macOS 提供方带一个 DeepSeek 签名并公证过的独立辅助应用 `DSH Computer Use.app`，系统权限授给它，DS Bot 更新不影响。
+The macOS system permissions (Accessibility, Screen Recording) are tied to the app's signature. The
+DS Bot desktop app is ad-hoc signed, so after every update macOS treats it as a new app and the
+permissions it had silently stop working (tested on macOS 26). DSH's macOS provider comes with a
+separate helper app, `DSH Computer Use.app`, signed by DeepSeek and notarized. The system
+permissions are granted to it, and DS Bot updates do not affect them.
 
-## 已定的行为
+## Decided behavior
 
-### 总开关和提供方
+### Main switch and provider
 
-- 设置里新增「电脑操控」页，顶上一个总开关，默认关。
-- 打开后，DS Bot 自己加载 DSH 的提供方，所有 Bot 共用这一个：
-  - macOS：`@deepseek-ai/dsh-experimental-cua-macos`。
-  - Windows、Linux：`@deepseek-ai/dsh-experimental-computer-use-cua-driver-native`。
-- 关掉后卸载提供方，所有 Bot 的电脑工具一起撤下；档位和应用授权保留。
-- 开关和提供方状态都在这一页：
-  - macOS 显示辅助功能和屏幕录制的状态，各有一个「去授权」按钮，由提供方打开系统设置并显示拖放引导。权限缺失时，Bot 的调用失败并说明要用户授权，不重试。
-  - 加载失败（例如缺少系统组件、平台不支持）时显示原因，开关保持打开，用户修好后点「重试」。
-- 插件版（DSH Desktop / Web）同一个开关：DS Bot 在这个 DSH 安装里找到提供方包时自己加载。DSH 自己的「Computer Use」插件只给 PTC 会话用，且同一时间只能加载一个提供方，它开着时这一页说明先在 DSH 的插件页把它关掉；DSH 安装里没有这个包时，说明怎么安装。
+- Settings get a new "Computer use" page with a main switch at the top, off by default.
+- When it is on, DS Bot loads the DSH provider itself, and all Bots share this one provider:
+  - macOS: `@deepseek-ai/dsh-experimental-cua-macos`.
+  - Windows, Linux: `@deepseek-ai/dsh-experimental-computer-use-cua-driver-native`.
+- When it is off, the provider is unloaded and every Bot's computer tools go away together; levels
+  and app permissions are kept.
+- The switch and the provider's state are both on this page:
+  - On macOS it shows the state of Accessibility and Screen Recording, each with a "Grant" button;
+    the provider opens System Settings and shows a drag-and-drop guide. When a permission is
+    missing, the Bot's call fails and says the user must grant it, with no retry.
+  - When loading fails (for example a system component is missing, or the platform is not
+    supported), the page shows why. The switch stays on, and the user clicks "Retry" after fixing it.
+- The plugin (DSH Desktop / Web) has the same switch: DS Bot loads the provider itself when it finds
+  the provider package in this DSH install. DSH's own "Computer Use" plugin is only for PTC Sessions,
+  and only one provider can be loaded at a time. When that plugin is on, this page says to turn it
+  off first on DSH's plugin page. When the DSH install has no provider package, the page says how to
+  install it.
 
-### 每个 Bot 的档位
+### Each Bot's level
 
-- 四档：**关**、**只看**、**后台操作**、**可以动前台**。总开关第一次打开时，所有 Bot（含之后新建的）默认「后台操作」。
-- 只有用户能改：Bot 详情的「操控」卡片，或「电脑操控」页的 Bot 列表。Main Bot 的工具改不了任何 Bot 的档位，也改不了总开关。
-- 每档能做的：
-  - **只看**：列出应用和窗口、读界面结构（辅助功能树）、截图。选中一个没在运行的应用时会在后台启动它。
-  - **后台操作**：再加上点击、输入、粘贴、按键、滚动、拖动、改控件的值、把隐藏或最小化的窗口显示出来；都不把应用调到前台。
-  - **可以动前台**：再加上把应用调到前台、移动看得见的鼠标指针。同一时间只有一个 Bot 能动前台。
-- DS Bot 给提供方的每个工具（Cua Driver 是每个方法）定好属于哪一档。认不出的工具按「可以动前台」算。
-- DS Bot 加载的提供方只给 Bot 用；不是 Bot 的 DSH 会话拿不到。DSH 自己的 Computer Use 插件在不是 Bot 的会话里照常可用，DS Bot 不拦；Bot 不能用它。Bot 在群里用同一个档位，群不能单独设。
-- 「关」的 Bot 看不到电脑工具和它们的说明；超出档位的调用在执行前被拒绝，并告诉 Bot 是哪一档不允许、谁能改。
+- Four levels: **Off**, **View only**, **Background**, **Foreground**. When the main switch is
+  turned on for the first time, all Bots (including ones created later) default to "Background".
+- Only the user can change it: in the "Control" card in the Bot's details, or in the Bot list on the
+  "Computer use" page. A Main Bot's tools cannot change any Bot's level, nor the main switch.
+- What each level can do:
+  - **View only**: list apps and windows, read the interface structure (the accessibility tree), take
+    screenshots. Picking an app that is not running starts it in the background.
+  - **Background**: adds click, type, paste, key presses, scroll, drag, setting a control's value,
+    and showing hidden or minimized windows; none of them bring the app to the front.
+  - **Foreground**: adds bringing an app to the front and moving the visible mouse pointer. Only one
+    Bot at a time can use the foreground.
+- DS Bot assigns each tool of the provider (each method, for Cua Driver) to a level. A tool it does
+  not recognize counts as "Foreground".
+- The provider DS Bot loads is only for Bots; DSH Sessions that are not Bots do not get it. DSH's own
+  Computer Use plugin still works in Sessions that are not Bots, and DS Bot does not block it; Bots
+  cannot use it. A Bot uses the same level in groups; a group cannot set its own.
+- A Bot set to "Off" does not see the computer tools or their descriptions. A call above the Bot's
+  level is refused before it runs, and the Bot is told which level does not allow it and who can
+  change it.
 
-### 应用授权（按 Bot 记）
+### App permissions (per Bot)
 
-- Bot 第一次用某个应用时，Bot 自己的聊天里出现一张卡：「允许 River 使用 备忘录？」，按钮依次是「拒绝」「这一次」「一直允许」。
-  - 「这一次」：只在当前这一段对话里有效。
-  - 「一直允许」：记在这个 Bot 上，换段、进群都不再问。
-  - 「拒绝」：这一段对话里不再问。
-- 卡片总在 Bot 自己的聊天里，即使请求来自群聊；群里显示这个 Bot 在等用户批准。手机和 IM 照常收到这张卡。
-- Bot 详情的「操控」卡片列出这个 Bot「一直允许」的应用，每行可以撤销。撤销后正在进行的操作被取消，Bot 已经选好的这个应用失效，它重新选这个应用时再问。
-- macOS 上，DSH 提供方自己会弹应用授权；对 Bot 的会话，由 DS Bot 按上面的规则代用户回答，DSH 的「对所有会话一直允许」不出现。
+- The first time a Bot uses an app, a card appears in the Bot's own chat: "Allow River to use Notes?",
+  with the buttons "Deny", "This time" and "Always", in that order.
+  - "This time": valid only in the current part of the conversation.
+  - "Always": recorded on this Bot; it is not asked again after a new part or in a group.
+  - "Deny": not asked again in this part of the conversation.
+- The card always appears in the Bot's own chat, even when the request comes from a group; the group
+  shows that this Bot is waiting for the user's approval. The phone and IM get this card as usual.
+- The "Control" card in the Bot's details lists the apps this Bot may "Always" use, and each row can
+  be revoked. Revoking cancels the operation in progress and invalidates the app the Bot has already
+  picked; the Bot is asked again when it picks this app again.
+- On macOS, the DSH provider shows its own app permission prompt. For a Bot's Session, DS Bot answers
+  it for the user by the rules above, and DSH's "always allow for all Sessions" does not appear.
 
-### Bot 不能碰的应用
+### Apps a Bot cannot touch
 
-- DS Bot 自己、DSH Desktop、`DSH Computer Use.app`、系统设置、钥匙串访问和「密码」应用，Windows 的「设置」和凭据管理器。
-- 选中这些应用时直接拒绝，用户也不能授权。这样 Bot 不能点自己的审批卡，也不能给自己加权限。
+- DS Bot itself, DSH Desktop, `DSH Computer Use.app`, System Settings, Keychain Access and the
+  Passwords app; on Windows, Settings and Credential Manager.
+- Picking one of these apps is refused right away, and the user cannot allow it either. So a Bot
+  cannot click its own approval card or give itself more rights.
 
-### 多个 Bot 和用户共用一个桌面
+### Several Bots and the user share one desktop
 
-- **应用租约**：同一个应用同一时间只给一个 Bot。Bot 第一次操作某个应用时拿到租约，它这一轮结束或空闲 60 秒后放开。别的 Bot 这时用这个应用会被拒绝，并告诉它「River 正在用 备忘录」。不同 Bot 用不同应用时，可以在后台同时进行。
-- **前台租约**：「可以动前台」的操作同一时间只给一个 Bot，规则同上。
-- 桌面应用里，用户最近几秒还在用键盘或鼠标时，动前台的操作先被拒绝，指示器上显示「River 等你停手」和「让它继续」；点了之后 60 秒内放行。
-- 只读的调用（列应用、读结构、截图）不要租约。
+- **App lease**: one app goes to one Bot at a time. A Bot gets the lease the first time it operates
+  an app and lets go when its turn ends or after 60 seconds idle. Another Bot that uses this app in
+  the meantime is refused and told "River is using Notes". Bots using different apps can work in the
+  background at the same time.
+- **Foreground lease**: "Foreground" actions go to one Bot at a time, with the same rules.
+- In the desktop app, while the user has used the keyboard or mouse in the last few seconds,
+  foreground actions are refused at first. The indicator shows "River waits for the computer" and
+  "Let it continue"; after a click they are allowed for 60 seconds.
+- Read-only calls (listing apps, reading the structure, screenshots) need no lease.
 
-### 看得见、停得下
+### Seen and stoppable
 
-- **指示器**：只要有 Bot 拿着应用租约，就一直显示：哪个 Bot 在用哪个应用，每个 Bot 一个「停止」，再加「全部停止」。
-  - 桌面应用：屏幕顶上一个浮动的小条，跟随系统的浅色和深色，宽度跟着内容走；它不出现在任何截图里；托盘菜单里也有同样的条目。
-  - 插件版：DS Bot 界面顶上一条。
-- **停止**：和停止按钮一样，停下这个 Bot 当前这一轮，取消进行中的电脑操作，放开它的租约。
-- **Bot 的鼠标**（桌面应用）：Bot 每做一步，在它操作的位置画一个 Bot 颜色的箭头，尾部带 Bot 的头像；点击时有一圈波纹；最后一步之后约 2.5 秒淡出。
-  - 按坐标点、拖动：箭头指在那个点上。
-  - 按界面元素点、输入、按键：箭头停在那个窗口标题栏的中间，不假装指着某个控件。
-  - 只在那个位置真的看得见时才画：窗口在当前桌面上，而且没被别的窗口挡住。被挡住或在后台时不画，只在「电脑」页里显示步骤。
-  - 鼠标不挡用户的点击，也不出现在 Bot 的截图里。
-  - Windows 上关掉 Cua Driver 自己的光标，统一用 DS Bot 画的。插件版不在屏幕上画。
-- **Bot 详情的「电脑」页**：状态（空闲 / Bot 在操作 / 你在操作 / 等你处理）、正在用的应用、最近一张截图、最近的步骤，按钮「停止」「我来操作」「交还」。
-- **聊天里**：每个电脑操作是一行活动，写应用和动作；有截图时带缩略图。
+- **Indicator**: shown as long as any Bot holds an app lease: which Bot uses which app, a "Stop" for
+  each Bot, and a "Stop all".
+  - Desktop app: a small floating bar at the top of the screen that follows the system's light and
+    dark mode and is as wide as its content. It does not appear in any screenshot. The tray menu has
+    the same entries.
+  - Plugin: a bar at the top of the DS Bot interface.
+- **Stop**: like the stop button, it stops this Bot's current turn, cancels the computer operation in
+  progress and releases its leases.
+- **The Bot's mouse** (desktop app): for every step the Bot takes, an arrow in the Bot's color is
+  drawn where it operates, with the Bot's avatar at its tail. A click shows a ripple. The arrow fades
+  about 2.5 seconds after the last step.
+  - Clicking or dragging by coordinates: the arrow points at that spot.
+  - Clicking, typing or pressing keys by interface element: the arrow rests in the middle of that
+    window's title bar and does not pretend to point at a control.
+  - It is drawn only when the spot is really visible: the window is on the current desktop and not
+    covered by another window. When covered or in the background, nothing is drawn, and the steps
+    show only on the "Computer" page.
+  - The mouse does not block the user's clicks and does not appear in the Bot's screenshots.
+  - On Windows, Cua Driver's own cursor is turned off and DS Bot's drawing is used instead. The
+    plugin draws nothing on the screen.
+- **The "Computer" page in the Bot's details**: the state (idle / Bot operating / you have the
+  computer / waiting for you), the app in use, the latest screenshot, the recent steps, and the
+  buttons "Stop", "Take over the computer" and "Hand back".
+- **In the chat**: each computer operation is an activity line naming the app and the action, with a
+  thumbnail when there is a screenshot.
 
-### 接管和交接（和浏览器共用）
+### Take-over and handoff (shared with the browser)
 
-- **我来操作**：取消这个 Bot 进行中的电脑操作；之后它的电脑调用都被拒绝，并告诉它用户在操作，等用户交还。
-- **交还**：Bot 收到一条消息，说用户交还了电脑，要先重新看一遍再继续。DS Bot 不记录用户接管期间打的字和点的位置。
-- **Bot 主动交接**：新工具 `computer_handoff`（原因：登录、付款、验证码、确认、其他，加一句说明），出浏览器交接用的同一张卡：「跳过」「接管」「我完成了」。「接管」打开这个 Bot 的「电脑」页并进入「你在操作」。
-- 付款、输入密码一律交给用户。发送、删除、发布这类有后果的动作，DS Bot 从坐标点击里认不出来，所以 Bot 的说明要求它先用交接卡请用户确认；Bot 自己问「确定吗」不算授权。
-- 应用界面里的文字、窗口标题、剪贴板内容都是数据，不当成用户的指令。
+- **Take over the computer**: cancels this Bot's computer operation in progress. After that, its
+  computer calls are refused and it is told that the user is operating and to wait until the user
+  hands back.
+- **Hand back**: the Bot gets a message that the user handed the computer back and that it must look
+  again before it goes on. DS Bot does not record what the user typed or clicked during the
+  take-over.
+- **The Bot hands off on its own**: a new tool `computer_handoff` (reason: sign-in, payment,
+  verification, confirmation, other, plus one line of explanation) shows the same card as the browser
+  handoff: "Skip", "Take over", "I'm done". "Take over" opens this Bot's "Computer" page and enters
+  "you have the computer".
+- Payments and entering passwords always go to the user. DS Bot cannot recognize actions with
+  consequences, such as sending, deleting or publishing, from a click on coordinates. So the Bot's
+  instructions require it to ask the user to confirm with the handoff card first; the Bot asking
+  "are you sure?" itself does not count as permission.
+- Text in an app's interface, window titles and clipboard contents are data, not instructions from
+  the user.
 
-## 不做什么
+## Not done
 
-- 每个 Bot 一个独立的桌面或虚拟机。
-- 记录用户接管期间的输入。
-- 用 DSH 的 PTC 预设给 Bot 开电脑操作；Bot 照常用自己的预设。
-- 手机上看实时画面。
+- A separate desktop or virtual machine for each Bot.
+- Recording the user's input during a take-over.
+- Giving Bots computer use through DSH's PTC preset; Bots keep using their own preset.
+- Watching the live screen on the phone.
 
-## 已知限制
+## Known limits
 
-- 插件版在 DSH Web 里时，DSH 的界面是浏览器里的一个标签页。DS Bot 没法只保护一个标签页，Bot 若被授权使用这个浏览器，就能点到 DSH 的界面。要么用桌面应用，要么不给 Bot 授权这个浏览器。
-- Windows：Chromium、Electron 类应用在后台常常收不到输入，要前台；以管理员身份运行的应用拒绝操作。Cua Driver 和引擎在同一进程，它崩溃时引擎一起退出。
-- Linux：支持 X11，Wayland 受限；不在屏幕上画 Bot 的鼠标。
-- macOS：要 macOS 14 及以上；后台输入依赖系统的非公开接口，系统更新后可能失效。
-- 租约只协调 DS Bot 的 Bot；别的程序、DS Bot 之外的 DSH 会话照样能动同一个桌面。
-- 操作结果只表示「已发出」，不表示「已生效」；Bot 要重新看一遍确认。
+- When the plugin runs in DSH Web, DSH's interface is a tab in a browser. DS Bot cannot protect just
+  one tab, so a Bot allowed to use this browser can click DSH's interface. Either use the desktop
+  app, or do not allow Bots to use this browser.
+- Windows: Chromium and Electron apps often do not receive input in the background and need the
+  foreground; apps running as administrator refuse to be operated. Cua Driver runs in the same
+  process as the engine, so when it crashes the engine exits with it.
+- Linux: X11 is supported, Wayland is limited; the Bot's mouse is not drawn on the screen.
+- macOS: needs macOS 14 or later. Background input relies on private system interfaces and may stop
+  working after a system update.
+- Leases coordinate only DS Bot's Bots; other programs and DSH Sessions outside DS Bot can still
+  operate the same desktop.
+- The result of an operation only means "sent", not "took effect"; the Bot has to look again to
+  confirm.
 
-## 变更
+## Changes

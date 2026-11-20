@@ -1,153 +1,276 @@
-# Bot 之间派活：状态、合并和派活树
+# Handing work between Bots: status, merging and the handoff tree
 
-- 日期：2026-10-16
-- 相关：#262；取代 #95（PR #136）的未读上限、#129（PR #166）的跳数上限和全团队 40 条上限，以及 Bot 在一个群里最多发起 3 轮的上限；群里的活见 #165（PR #257）
-- 一起改：[群聊](2026-10-07-group-chat.md)「Bot 发起的轮次和上限」
+- Date: 2026-10-16
+- Related: #262; replaces the unread limit of #95 (PR #136), the hop limit and the team-wide limit of 40
+  messages of #129 (PR #166), and the limit of at most 3 rounds a Bot can start in a group; for work in
+  groups see #165 (PR #257)
+- Changed together with: [Group chat](2026-10-07-group-chat.md), "Turns that Bots start, and limits"
 
-## 为什么
+## Why
 
-Bot 之间派活原来按数量拦，不看对方的状态：
+Handing work between Bots used to be limited by counts, without looking at the other Bot's status:
 
-- **Bot 看不到对方在做什么。** DS Bot 为界面记录了每个 Bot 的状态，`list_bots` 却只给名字、角色、模型和文件夹。只有 `message_bot` 发出以后，结果里才有一两句（在忙 / 等批准 / 几条没读）。#95：连发 5 条，5 条「已送达」，0 条回复。
-- **对方没读就拒绝。** 对方积压 10 条未读时，`message_bot` 拒绝发送，发件人不知道对方为什么没读。
-- **刷屏按长度和总量拦。** 消息链 6 跳截断；用户上次发言后，全团队最多 40 条；Bot 在一个群里最多发起 3 轮。按数量拦不分正常和空转：每一步都换人、都有结果的长派活链在第 7 手被截断；A→B→A 的绕圈要转满 6 手才停；忙的团队撞上 40 条。
+- **A Bot cannot see what the other Bot is doing.** DS Bot records each Bot's status for the interface,
+  but `list_bots` only gives name, role, model and folder. Only after `message_bot` has sent does the
+  result say a sentence or two (busy / waiting for approval / some unread). #95: five messages in a row,
+  five "delivered", zero replies.
+- **Refused because the other Bot has not read.** When the other Bot has 10 unread messages,
+  `message_bot` refuses to send, and the sender does not know why they were not read.
+- **Flooding is limited by length and total.** A message chain is cut at 6 hops; after the user last
+  spoke, the whole team can send at most 40 messages; a Bot can start at most 3 rounds in a group.
+  Count limits cannot tell normal work from spinning: a long handoff chain where every step goes to a
+  new Bot and produces a result is cut at hand 7; an A→B→A loop only stops after a full 6 hands; a busy
+  team hits 40 messages.
 
-- **派出去的活，结果交不回来。** B 把一部分活交给 C 后结束回合，B 那句「已交给 C」当场就作为回复交给了 A，这次往来就结束了。C 的结果回到 B 时，B 那一回合说的话不交给任何人；B 只能再发一条新消息给 A。所以 A 拿不到最终结果，或者 Bot 之间一条接一条地补消息。
+- **Results of handed-off work do not come back.** When B hands part of the work to C and ends its turn,
+  B's "handed to C" goes to A as the reply right away, and the exchange is over. When C's result comes
+  back to B, what B says in that turn goes to no one; B can only send A a new message. So A never gets
+  the final result, or Bots send each other one follow-up message after another.
 
-取舍：
+Trade-offs:
 
-- 状态是事实，交给 Bot 自己判断；系统只在结构上不可能正确的地方拦。
-- 派出去的活是一棵树：下面的活没交回，上面的回复就先不交；下面交回来，上面接着做，做完连同下面的结果一起交上去。结果自己会往上走，Bot 就不需要给上游补消息，也就不需要靠跳数、条数防止绕圈。
-- 唯一要拦的是：给正在等这件活结果的 Bot 发消息。那是在绕圈，而且多余，结果本来就会交上去。同一个 Bot 在一件活里出现几次都可以，只要它不是在等这件活。
-- 堆积的根本原因是同一个发件人一条接一条地发给一个读不了的 Bot。把还没读的合成一条，就不会堆积，不需要上限。
-- 不留兜底上限：用户看得到每个 Bot 在做什么，随时可以停下。
-- 参考了 OpenMausBot 和 Hermes Agent 的做法：前者让 `list_bots` 带状态，派活是一棵树，结果自动唤醒派活的 Bot，不许派回上游；后者把活做成看板上的卡片，状态写在卡片上。两家都不按总量或链长拦 Bot 之间的派活。
+- Status is a fact; Bots judge it themselves. The system only blocks where the structure makes a correct
+  result impossible.
+- Handed-off work is a tree: while work below has not come back, the reply above waits; when work below
+  comes back, the Bot above continues, and when it is done it passes its result up together with the
+  results from below. Results travel up on their own, so Bots need not send follow-up messages
+  upstream, and no hop or message counts are needed to prevent loops.
+- The only thing to block: messaging a Bot that is waiting for the result of this work. That is a loop,
+  and it is pointless, since the result goes up anyway. The same Bot may appear several times in one
+  piece of work, as long as it is not waiting for that work.
+- The root cause of piling up is one sender sending message after message to a Bot that cannot read
+  them. Merging the unread ones into one stops the pile-up, so no limit is needed.
+- No fallback limit: the user can see what each Bot is doing and can stop it at any time.
+- Based on how OpenMausBot and Hermes Agent do it: the first gives `list_bots` status, makes handed-off
+  work a tree, wakes the handing Bot automatically with the result, and forbids handing work back
+  upstream; the second makes work cards on a board, with the status on the card. Neither limits handoffs
+  between Bots by total or chain length.
 
-## 已定的行为
+## Decided behavior
 
-### 状态
+### Status
 
-- 每个 Bot 的状态是下面之一，从上往下取第一个符合的：
+- Each Bot's status is one of the following, the first that applies from top to bottom:
 
-  | 状态 | 条件 | 附带的信息 |
+  | Status | Condition | Extra information |
   |---|---|---|
-  | 等用户批准 | 有一条待批准的请求 | 在哪里、等了多久 |
-  | 换新会话中 | 正在写交接、换到新的一段 | 在哪里 |
-  | 在干活 | 私聊或某个群里有在跑的回合 | 在哪里（私聊或哪个群）、做了多久、正在做什么（工具和它在处理的文件、搜索或网站，或者它刚说的话）、为谁做（用户，或者派活的 Bot） |
-  | 在等别的 Bot | 有一件活在等它派出去的活交回 | 在等谁（Bot 或群）、为谁做 |
-  | 空闲 | 都不是 | — |
+  | Waiting for user approval | Has a request waiting for approval | Where, and for how long |
+  | Moving to a new Session | Writing a handoff and moving to a new part | Where |
+  | Working | Has a running turn in its own chat or a group | Where (own chat or which group), for how long, what it is doing (the tool and the file, search or website it is working on, or what it just said), and for whom (the user, or the Bot that handed it the work) |
+  | Waiting for another Bot | Has a piece of work waiting for work it handed off to come back | Whom it waits for (Bot or group), and for whom it works |
+  | Idle | None of these | — |
 
-- 另外两项和状态一起给出：
-  - 有一张没答的问题卡片：在等用户回答。
-  - 收件箱里还没读的 Bot 消息，按发件人列出条数。
-- `list_bots` 每个 Bot 一行，带上状态和这两项。
-- `message_bot` 的结果带上对方发出时的状态。
-- 状态不写进系统提示：系统提示要逐字节稳定，才能复用缓存。Bot 要看状态就调 `list_bots`。
-- 界面上，Bot 的形象动画表示状态（侧栏、聊天标题、详情面板）：
-  - 在干活、等批准、换新会话，和原来一样（按工具分思考、搜索、干活、发消息；等批准跳起来并带「?」）。
-  - 在等别的 Bot：没有回合在跑，但派出去的活还没交回。形象左右摇、眼睛转圈，和协调队友时一样（对齐 Grok Bot：等待和等子任务都用这个动作）；不带「工作中」的绿点，因为没有回合在跑。侧栏这一行写「等 X 交回」。
-  - 有回合在跑时显示回合的状态；等批准或问题卡片优先于在等别的 Bot。
+- Two more items are given with the status:
+  - An unanswered question card: waiting for the user to answer.
+  - Unread Bot messages in the inbox, as a count per sender.
+- `list_bots` gives one line per Bot, with the status and these two items.
+- The result of `message_bot` includes the other Bot's status at send time.
+- Status is not written into the system prompt: the system prompt must stay byte for byte stable to
+  reuse the cache. A Bot that wants to see status calls `list_bots`.
+- In the interface, the Bot's character animation shows its status (sidebar, chat title, details
+  panel):
+  - Working, waiting for approval, moving to a new Session: as before (by tool: thinking, searching,
+    working, messaging; waiting for approval jumps with a "?").
+  - Waiting for another Bot: no turn is running, but handed-off work has not come back. The character
+    sways left and right with circling eyes, as when coordinating teammates (in line with Grok Bot: the
+    same motion for waiting and for waiting on subtasks); no green "working" dot, because no turn is
+    running. The sidebar row says "Waiting for X".
+  - While a turn is running, the turn's status is shown; waiting for approval or a question card comes
+    before waiting for another Bot.
 
-### 没读的消息合成一条
+### Unread messages are merged into one
 
-- X 发给 Y 的消息，Y 还没读时 X 又发一条，而且两条属于 X 的同一件活（或者都不属于哪件活）：两条合成一条，原来的在前，新的在后。还是同一次往来，Y 读到的是一条，一次回复答两条。
-- 两条里有一条是插进当前工作的（`when: "now"`），合成的就插进当前工作，否则排在当前工作之后。
-- 合成的消息按 [长消息](2026-10-16-long-messages.md) 的规则存和送。
-- 结果告诉 X：Y 还没读上一条，已经合在一起，以及 Y 现在的状态。
-- Y 已经读了（消息进了 Y 正在跑的回合），X 再发就是一条新消息，和原来一样。
-- 所以收件箱里每个发件人最多一条没读的消息，不再有未读上限。
+- When X sends Y a message, and X sends another before Y has read the first, and both belong to the same
+  piece of X's work (or neither belongs to any work): the two are merged into one, the original first and
+  the new one after. It is still the same exchange; Y reads one message and answers both with one reply.
+- If one of the two interrupts the current work (`when: "now"`), the merged message interrupts the
+  current work; otherwise it queues after the current work.
+- The merged message is stored and delivered by the rules of
+  [Long messages](2026-10-16-long-messages.md).
+- The result tells X: Y has not read the previous one, they have been merged, and Y's current status.
+- If Y has already read it (the message went into a turn Y is running), X's next message is a new
+  message, as before.
+- So each sender has at most one unread message in an inbox, and there is no unread limit any more.
 
-### 请求身份（request_id）
+### Request identity (request_id)
 
-- `message_bot` 多一个可选参数 `request_id`：发活的人自己给这件活起个名字。同一个名字加同一份内容是同一件活。
-- 名字属于发活的人：范围是「发活的 Bot + 说话的场合（私聊或者哪个群）+ 名字」。别人用同一个名字是另一件活；Bot 换到新的一段对话（`state.json` 里的会话分段）也还是同一个名字；Bot 被删掉又重建，拿到的是新 id，名字也跟着是新的，不和旧活串。
-- 记下来的是这件事本身：收件人（按 id）、正文（去掉首尾空白、换行统一）、`reply_to`、`when` 的一份指纹。
-- 结果：
-  - 同一个名字、同一份内容：不再发一次，把第一次的回执原样给回去。
-  - 同一个名字、别的内容：拒绝，不发。名字是一件活的名字，不是一个模板。
-  - 不给名字：和原来一样，不记、不拦。
-- 回执在消息发出去之前就写进 `state.json`：所以重启之后、或者对方已经读了消息，重试都只是拿回原来的回执，不会再发一次。
-- 结果不确定的时候不重发：发送途中失败，或者消息发出去以后 DS Bot 停了，这一次的结果就是「不知道」。工具告诉发活的人这件事没有再发，让人先看对方收到没有，别拿同一个名字再发。
-- 群里也一样：群里用 `message_bot` 叫人就是往群里发一条 `@名字`，同一个名字不会发两次。合并没有读过的消息也一样：合的是第一次那件活，回执还是各自的那一份。
-- 请求身份和回执随团队保留，不因时间或条数自动淘汰。否则旧请求重试会被当成新活，重复执行。需要再次做同样的工作时，调用方明确换一个 `request_id`；回执归档或清理策略另行设计。
+- `message_bot` gains an optional parameter `request_id`: the sender names its own piece of work. The
+  same name with the same content is the same piece of work.
+- The name belongs to the sender: its scope is "sending Bot + where it speaks (own chat or which group)
+  + name". Someone else using the same name is a different piece of work; a Bot that moves to a new
+  conversation part (the Session parts in `state.json`) keeps the same name; a Bot that is deleted and
+  created again gets a new id, so its names are new too and do not mix with old work.
+- What is recorded is the request itself: a fingerprint of the recipient (by id), the body (outer
+  whitespace trimmed, line breaks normalized), `reply_to` and `when`.
+- Results:
+  - Same name, same content: not sent again; the first receipt is returned as is.
+  - Same name, different content: refused, not sent. A name is the name of one piece of work, not a
+    template.
+  - No name: as before, nothing is recorded or blocked.
+- The receipt is written into `state.json` before the message is sent: so after a restart, or after the
+  other Bot has read the message, a retry only gets the original receipt back and does not send again.
+- No resend when the outcome is uncertain: if sending fails midway, or DS Bot stops after the message
+  went out, the outcome of this attempt is "unknown". The tool tells the sender that it was not sent
+  again, and to check first whether the other Bot received it rather than send again with the same name.
+- The same holds in groups: calling someone with `message_bot` in a group posts an `@name` in the
+  group, and the same name is not posted twice. Merging unread messages works the same way: the merge
+  belongs to the first piece of work, and each keeps its own receipt.
+- Request identities and receipts are kept with the team and are not dropped automatically by age or
+  count. Otherwise a retry of an old request would be taken as new work and done twice. To do the same
+  work again, the caller chooses a new `request_id` explicitly; archiving or cleaning up receipts is a
+  separate design.
 
-### 派活树
+### The handoff tree
 
-- 一件活：一个 Bot 用 `message_bot` 发给另一个 Bot、要对方回复的消息（`reply_to: "user"` 的不算）。B 在回答 A 这件活的回合里，以及之后接着做它的回合里，派出去的活都是这件活下面的活。
-- B 回答这件活的回合结束时：
-  - 下面的活都交回了（或者没有派）：B 这一回合的话交回 A，和原来一样。
-  - 下面还有活没交回：先不交。这时 B 的状态是「在等别的 Bot」。
-- 下面的一件活交回来时，B 接着做上面那件活，收到的消息写明这是为谁做的哪件活。这一回合结束时再看一次：都交回了就交给 A，还有没交回的就接着等。
-- 交给 A 的回复是 B 最后一回合的话，后面附上这件活下面交回来的每个结果（谁交回的、原文），按 [长消息](2026-10-16-long-messages.md) 的规则送。B 最后一回合什么都没说时，用 B 为这件活说过的最后一段话；B 为这件活一句话都没说过，就写明 B 做完了、没有回复。
-- 下面交回的结果被 B 别的回合读到（比如和用户的消息一起读到）：那一回合照常结束，之后这个结果再单独交给 B 一次，B 接着做上面那件活。
-- 下面的活失败（对方的模型调用失败）、被停下或对方被删掉，也算交回，结果里写明。
-- 回答这件活的回合被停下（用户停、`stop_bot`）：马上告诉 A「B 被停下了」，不再等下面的活；下面的活之后交回来，只交给 B，不再往上交。
-- 等待关系存在 `state.json` 里，DSH 重启后接着等。
-- 群：
-  - B 为这件活用 `post_to_group` 发帖并要回报（`report_back`）时，这一轮也是下面的活；群的回报交回时，B 接着做。
-  - 不要回报的发帖不等。
-  - 群里的 `@`、群里调用的 `message_bot`（等同 `@`，见群聊）不进派活树，按群聊的规则。
+- A piece of work: a message one Bot sends another with `message_bot` that asks for a reply (those with
+  `reply_to: "user"` do not count). Work that B hands off in the turn where it answers A's work, and in
+  later turns where it continues that work, is work below this piece of work.
+- When the turn in which B answers this work ends:
+  - All work below has come back (or none was handed off): what B said in this turn goes back to A, as
+    before.
+  - Some work below has not come back: nothing goes back yet. B's status is then "Waiting for another
+    Bot".
+- When a piece of work below comes back, B continues the work above, and the message it receives says
+  which work it is for and for whom. When that turn ends, it checks again: if everything has come back,
+  the result goes to A; if not, it keeps waiting.
+- The reply to A is what B said in its last turn, followed by every result that came back from below for
+  this work (who returned it, and the original text), delivered by the rules of
+  [Long messages](2026-10-16-long-messages.md). If B said nothing in its last turn, the last text B said
+  for this work is used; if B never said anything for this work, the reply says B finished with no reply.
+- If a result from below is read in another of B's turns (for example together with a message from the
+  user): that turn ends as usual, and afterwards the result is delivered to B once more on its own, so B
+  continues the work above.
+- Work below that fails (the other Bot's model call fails), is stopped, or whose Bot is deleted also
+  counts as returned, and the result says so.
+- If the turn answering this work is stopped (by the user, or by `stop_bot`): A is told at once "B was
+  stopped" and no longer waits for the work below; work below that comes back later goes only to B and
+  no further up.
+- Wait relations are stored in `state.json`, so waiting continues after DSH restarts.
+- Groups:
+  - When B posts with `post_to_group` for this work and asks for a report (`report_back`), that round is
+    also work below; when the group's report comes back, B continues.
+  - Posts that do not ask for a report are not waited for.
+  - An `@` in a group, and `message_bot` called in a group (the same as an `@`, see group chat), are not
+    part of the handoff tree and follow the group chat rules.
 
-### 放弃一条等待
+### Giving up a wait
 
-- 一个 Bot 在等派出去的活时，侧栏 Bot 的右键菜单里出现「不再等 <对方>」；它只在这个 Bot 确实在等时出现，等了几方就每一项对应一条分支。放弃入口走客户端现有的 action → 宿主通道，不动账本结构。
-- 放弃只结算被点的那一条子 work：它作为一条明确结果交回上面的 work，结果里写明「对方没有回执、等待被放弃」，上面的 Bot 因此继续做手上的活；同一个 work 下其它未回的分支不动，多层链向上只结算一次。
-- 晚到的真实回执不会生成第二条结果，也不会让 Bot 重新进入等待；它的内容照常交回，并标明这条等待已经被放弃过。
-- DS Bot 重启时对账：目标 Bot、群聊或子代理 Session 已不存在的未回等待，用同一条放弃路径结算；目标仍然存在、只是没有回执的，绝不自动放弃。放弃之后 `state.json` 里不再有这条子 work，上面的 work 带着那条结果，重启不回退。
-- 不做自动超时：没有 TTL，也不改正常 handoff 的时序和交付顺序。
+- While a Bot waits for handed-off work, the right-click menu of the Bot in the sidebar shows
+  "Give up waiting for <name>". It appears only when this Bot really is waiting, with one item per branch
+  when it waits for several. Giving up goes through the client's existing action → host channel and does
+  not change the ledger structure.
+- Giving up settles only the child work that was clicked: it goes back to the work above as an explicit
+  result that says "no receipt from the other side, the wait was given up", so the Bot above continues
+  its work; other unanswered branches of the same work are not touched, and in a multi-level chain it is
+  settled upward only once.
+- A real receipt that arrives late does not create a second result and does not put the Bot back into
+  waiting; its content is delivered as usual, marked as belonging to a wait that was given up.
+- At restart DS Bot reconciles: an unanswered wait whose target Bot, group chat or subagent Session no
+  longer exists is settled through the same give-up path; a wait whose target still exists but has not
+  returned a receipt is never given up automatically. After giving up, the child work is gone from
+  `state.json` and the work above carries that result, so a restart does not roll it back.
+- No automatic timeout: no TTL, and no change to the timing or delivery order of normal handoffs.
 
-### 不许发给在等结果的 Bot
+### No messages to a Bot that waits for the result
 
-- X 在做一件活时，用 `message_bot` 发给正在等这件活结果的 Bot（派活给 X 的 Bot，或者更上游的 Bot）：拒绝。工具告诉 X：这个 Bot 在等这件活的结果；做完结束本回合，结果会自动交回。
-  - 这一回合答的就是这件活、还没写过字，被拒的消息又不是排队的或 `reply_to: "user"` 的：这条消息留作 X 为这件活说过的话（见上面「B 最后一回合什么都没说时」那条），回合不写字就结束时交上去，只留开头 2000 字。同一回合里被拒的几条连起来留；后面回合被拒的，代替之前留下的。拒绝的结果写明留下了什么、交给谁。
-- 其他情况都允许。同一个 Bot 可以在一件活里出现几次，例如：
-  - A 自己调度：A 交给 B，B 交回；A 交给 C 审查，C 交回；A 验收。
-  - 接力：A 交给 B，B 交给 C 审查；C 的意见交回 B，B 连同 C 的意见交回 A；A 验收。
-  - 返工：C 的意见是要改，交回 B；B 改完再交给 C；通过后 B 交回 A。
-- 别的活不受影响：用户在 B 的私聊里另派的活，B 照样可以问 A。
+- When X, while doing a piece of work, uses `message_bot` to message a Bot that is waiting for the result
+  of this work (the Bot that handed X the work, or one further upstream): refused. The tool tells X: this
+  Bot is waiting for the result of this work; finish, end this turn, and the result goes back on its own.
+  - If this turn answers this very work and has not written any text yet, and the refused message is not
+    queued and not `reply_to: "user"`: the message is kept as what X said for this work (see "If B said
+    nothing in its last turn" above), and is delivered if the turn ends without text, keeping only the
+    first 2000 characters. Several refused messages in the same turn are kept joined; one refused in a
+    later turn replaces what was kept before. The refusal says what was kept and to whom it goes.
+- Everything else is allowed. The same Bot can appear several times in one piece of work, for example:
+  - A coordinates itself: A hands to B, B returns; A hands to C for review, C returns; A accepts.
+  - Relay: A hands to B, B hands to C for review; C's comments go back to B, B returns to A together with
+    C's comments; A accepts.
+  - Rework: C asks for changes, back to B; B changes it and hands to C again; once it passes, B returns
+    to A.
+- Other work is not affected: for separate work the user gave B in B's own chat, B can still ask A.
 
-### 等批准的通知
+### Approval notices
 
-- 一个 Bot 在自己的聊天里等用户批准，而它这一回合做的活是另一个 Bot 派的（它回答的请求，或者交回来后接着做的那件活）：马上给派活的 Bot 的私聊送一条通知。通知写明谁在等、要跑的工具、简短的原因，以及在哪里批准；派活的 Bot 用一两句话告诉用户，不给等批准的 Bot 发消息。
-- 群里的批准已经显示在群聊里，不另发。
-- 批准过了 5 分钟（`APPROVAL_REMIND_MS`）还没答：给每个 Main Bot 送一次同样的通知（写明等了多久），已经收到过的 Bot、等批准的 Bot 自己除外。
-- 同一个批准对同一个 Bot 只送一次；批准答了或取消了，就不再送。通知不取消任何东西。
-- 通知不进 Bot 之间的往来记录，不要回复，也不进派活树。
+- When a Bot is waiting for user approval in its own chat, and the work of this turn was handed to it by
+  another Bot (the request it answers, or the work it continues after a return): a notice goes at once
+  to the own chat of the Bot that handed off the work. The notice says who is waiting, the tool to run, a
+  short reason, and where to approve; the handing Bot tells the user in a sentence or two, and does not
+  message the waiting Bot.
+- Approvals in a group are already shown in the group chat and get no extra notice.
+- If an approval is still unanswered after 5 minutes (`APPROVAL_REMIND_MS`): the same notice (with how
+  long it has waited) goes once to each Main Bot, except Bots that already got it and the waiting Bot
+  itself.
+- The same approval goes to the same Bot only once; once the approval is answered or canceled, no more
+  notices go out. A notice cancels nothing.
+- Notices are not part of the exchange record between Bots, need no reply, and are not part of the
+  handoff tree.
 
-### 去掉的上限
+### Limits removed
 
-- 消息链 6 跳、对方 10 条未读、Bot 在一个群里最多发起 3 轮、用户上次发言后全团队 40 条，都去掉，不留兜底。
-- 群里 Bot 之间接力的上限也去掉了（见群聊）。
+- The 6-hop message chain, the 10 unread messages, the 3 rounds a Bot can start in a group, and the 40
+  team-wide messages after the user last spoke are all removed, with no fallback.
+- The limit on relays between Bots in a group is removed too (see group chat).
 
-### 规则文字
+### Rule text
 
-- 团队规则写明：`list_bots` 能看到每个 Bot 现在在做什么；把一部分活交出去以后就结束本回合，结果交回时会接着做，全部交回后你的回复才交给派活的 Bot；不要给在等这件活结果的 Bot 发消息。
-- 原有的规则保留：只在对方必须动手或需要一个事实时才发；不发感谢、确认和进度回声；收到回复，这次往来就结束。
+- The team rules say: `list_bots` shows what each Bot is doing right now; after handing off part of the
+  work, end this turn, you continue when the result comes back, and your reply goes to the Bot that
+  handed you the work only when everything has come back; do not message a Bot that is waiting for the
+  result of this work.
+- The existing rules stay: send only when the other Bot must act or a fact is needed; send no thanks,
+  confirmations or progress echoes; once a reply arrives, the exchange is over.
 
-## 不做什么
+## Not done
 
-- 不把状态写进系统提示（缓存）。
-- 不主动通知派活的 Bot「对方卡住了」：每条通知都会让派活的 Bot 再跑一次模型。派活的 Bot 下次调 `list_bots` 或 `message_bot` 时能看到。唯一的例外是等用户批准：只有用户能解开，而用户可能不在显示批准卡片的那个聊天里（见下面「等批准的通知」）。
-- 不做看板式的任务对象：活仍在 Bot 的会话里，派活仍是消息。任务对象、进度查询和「只提问不动手」留给独立 app。
-- 不设总量、链长或轮数的兜底上限。
-- 不做批量派活的接口，也不给 `request_id` 加别的用法：它只是发活的人给自己那件活起的名字。
+- No status in the system prompt (cache).
+- No proactive notice to the handing Bot that "the other Bot is stuck": every notice makes the handing
+  Bot run the model again. The handing Bot sees it the next time it calls `list_bots` or `message_bot`.
+  The only exception is waiting for user approval: only the user can unblock it, and the user may not be
+  in the chat that shows the approval card (see "Approval notices" above).
+- No board-style task objects: work still lives in the Bots' Sessions, and handing off is still a
+  message. Task objects, progress queries and "ask without acting" are left to a separate app.
+- No fallback limit on total, chain length or rounds.
+- No batch handoff interface, and no other use of `request_id`: it is only the name the sender gives its
+  own piece of work.
 
-## 已知限制
+## Known limits
 
-- Bot 之间不停地互相提问，或者一件活没完没了地返工，会一直跑到用户停下。
-- 下面的活一直不交回（比如对方在等用户批准），上面就一直等；DSH 没有超时。状态里看得到在等谁。
-- 状态只在内存里，DSH 重启后从新的事件重建，和界面上的状态一样；等待关系除外，它存在 `state.json` 里。
-- X 自己把同一件活拆成几条不同的请求、分给不同的 Bot，不算重复。
-- 一个 `request_id` 只对应一份内容：改一个字就是另一件活，会被拒绝。发活的人要改内容，就另起一个名字。
+- Bots that keep asking each other questions, or work that is reworked endlessly, run until the user
+  stops them.
+- If work below never comes back (for example, the other Bot waits for user approval), the work above
+  waits forever; DSH has no timeout. The status shows whom it waits for.
+- Status is kept only in memory and is rebuilt from new events after DSH restarts, the same as the status
+  in the interface; wait relations are the exception, as they are stored in `state.json`.
+- When X itself splits one piece of work into several different requests to different Bots, that is not
+  a duplicate.
+- One `request_id` maps to one content only: changing one character makes it a different piece of work,
+  and it is refused. A sender that wants to change the content uses a new name.
 
-## 变更
+## Changes
 
-- 2026-10-16：定下（#262）。
-- 2026-10-16：Bot 的形象动画表示「在等别的 Bot」（#262）。
-- 2026-10-23：交回的结果全文放在 `bot/handoff-results/` 的一份文件里，`state.json` 只存开头，所以重启不会把已经完成的结果截短（#479）。
-- 2026-10-23：`message_bot` 可以带 `request_id`：同一件活重试只发一次并拿回原来的回执，同名不同内容拒绝，结果不确定时不重发（#480）。
-- 2026-10-23：DS Bot 重启时，DSH 还在跑而 DS Bot 没看见的那个回合，按会话的持久记录（DSH 的 `session/event` 记录）结算一次：回合写出了答案就把答案交给等它的 Bot（不重发原来的请求）；回合停了就说停了；回合被切断就照旧把活捡起来接着做；读不出结果就明说结果未知（写明会话，不当成成功或失败，也不重发请求）。等待关系因此不会一直挂着（#483）。
-- 2026-11-08：发给在等结果的 Bot 而被拒的消息，在回合还没写字时留作为这件活说过的话，回合不写字就结束时交上去；`message_bot` 的说明也写明不要发给在等结果的 Bot（#1140）。
-- 2026-11-08：状态里没答的问题卡片和视图卡片写明等了多久（分钟、小时、天）；`list_bots` 可以用 `bot` 或 `group` 只列一个 Bot 或一个群的成员，每个 Bot 仍是一行，私密 Bot 的规则不变（#1141）。
-- 2026-11-09：漏回执不再让 Bot 永久等待：Bot 右键菜单可以放弃一条等待，作为明确结果交回上面的 work；晚到的回执标明迟到、不重复结算；重启时目标不存在的等待走同一条路径（#919）。
-- 2026-11-19：等用户批准的 Bot 做的是别的 Bot 派的活时，派活的 Bot 马上收到通知；批准 5 分钟没答，Main Bot 收到一次通知（见「等批准的通知」）。
+- 2026-10-16: decided (#262).
+- 2026-10-16: the Bot's character animation shows "Waiting for another Bot" (#262).
+- 2026-10-23: the full text of a returned result is kept in a file in `bot/handoff-results/`, and
+  `state.json` stores only the start, so a restart does not cut short results that are already done
+  (#479).
+- 2026-10-23: `message_bot` can take a `request_id`: a retry of the same work is sent only once and gets
+  the original receipt back, the same name with different content is refused, and nothing is resent
+  when the outcome is uncertain (#480).
+- 2026-10-23: when DS Bot restarts, a turn that DSH was still running but DS Bot did not see is settled
+  once from the Session's persistent record (DSH's `session/event` record): if the turn wrote an answer,
+  the answer goes to the Bot waiting for it (the original request is not resent); if the turn stopped,
+  that is reported; if the turn was cut off, the work is picked up and continued as before; if no result
+  can be read, the result is reported as unknown (naming the Session, counted as neither success nor
+  failure, and the request is not resent). So wait relations do not hang forever (#483).
+- 2026-11-08: a message refused because it went to a Bot waiting for the result is kept as what was said
+  for this work when the turn has not written any text yet, and is delivered if the turn ends without
+  text; the `message_bot` description also says not to message a Bot waiting for the result (#1140).
+- 2026-11-08: unanswered question cards and view cards in the status say how long they have waited
+  (minutes, hours, days); `list_bots` can list only one Bot or one group's members with `bot` or `group`,
+  still one line per Bot, and the rules for private Bots are unchanged (#1141).
+- 2026-11-09: a lost receipt no longer makes a Bot wait forever: the Bot's right-click menu can give up a
+  wait, which goes back to the work above as an explicit result; a late receipt is marked late and not
+  settled twice; at restart, waits whose target no longer exists take the same path (#919).
+- 2026-11-19: when a Bot waiting for user approval is doing work another Bot handed it, the handing Bot
+  gets a notice at once; when an approval is unanswered for 5 minutes, the Main Bots get one notice (see
+  "Approval notices").

@@ -1,16 +1,20 @@
-# Bot 浏览器插件
+# Bot browser plugins
 
-团队只选一个后端，每个 Bot 一份 Chromium profile。不配时，桌面里的 `read_browser` 保持只读。
+The team picks only one backend, with one Chromium profile per Bot. Without one, `read_browser` in the desktop
+stays read-only.
 
-| 目录 | 插件 | Bot 怎么用 |
+| Directory | Plugin | How a Bot uses it |
 |---|---|---|
-| `refs/` | `ds-bot-browser-refs` | 快照、按编号点击和填写、截图 |
-| `script/` | `ds-bot-browser-script` | 一次提交一段脚本 |
-| `task/` | `ds-bot-browser-task` | 一个目标，交回答案和步骤 |
+| `refs/` | `ds-bot-browser-refs` | Snapshot, click and fill by number, screenshot |
+| `script/` | `ds-bot-browser-script` | Submit one script at a time |
+| `task/` | `ds-bot-browser-task` | One goal; returns the answer and the steps |
 
-DS Bot 里设置 `browserPlugin` 为 `refs`、`script` 或 `task`。三个不会一起挂上。profile 在 `bot/browser-profiles/<botId>/`，群会话用同一个 Bot 的那一份。Bot 之间不复制 cookie。
+In DS Bot, set `browserPlugin` to `refs`, `script` or `task`. The three are never loaded together. Profiles live
+in `bot/browser-profiles/<botId>/`; group Sessions use the same Bot's profile. Cookies are not copied between
+Bots.
 
-登录、付款、验证码调用 `browser_handoff`，用户做完再 `browser_resume`。
+For sign-in, payment and CAPTCHA, the Bot calls `browser_handoff`; after the user is done, it calls
+`browser_resume`.
 
 ```sh
 npm install
@@ -20,10 +24,11 @@ node bench/run.mjs
 node bench/render-report.mjs
 ```
 
-`browser_task` 使用调用它的 Bot 在 DSH 中配置的模型。跑基准测试前设置 `BENCH_BASE_URL`、`BENCH_MODEL` 和 `BENCH_API_KEY`。
+`browser_task` uses the model that the calling Bot has configured in DSH. Before running the benchmark, set
+`BENCH_BASE_URL`, `BENCH_MODEL` and `BENCH_API_KEY`.
 
 ```sh
 BENCH_BASE_URL=... BENCH_MODEL=... BENCH_API_KEY=... node bench/run.mjs
 ```
 
-设计说明在 `docs/plans/2026-10-21-browser-plugins.md`。
+The design note is `docs/plans/2026-10-21-browser-plugins.md`.

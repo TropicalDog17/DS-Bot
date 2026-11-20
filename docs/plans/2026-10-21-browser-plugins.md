@@ -1,55 +1,55 @@
-# 浏览器插件：全团队一个后端，每个 Bot 一份 profile
+# Browser plugins: one backend for the whole team, one profile per Bot
 
-- 日期：2026-10-21
-- 相关：改 [浏览器、搜索、密钥和连接器](2026-10-08-browser-and-secrets.md) 里「Bot 不操作浏览器」。维护者确认：那条是等这次做的。
-- 代码：`ds-bot/src/host/browser-plugins.js`、`ds-bot/src/host/browser/`、`browser-plugins/`
+- Date: 2026-10-21
+- Related: changes "Bots do not operate the browser" in [Browser, search, secrets and connectors](2026-10-08-browser-and-secrets.md). The maintainer confirmed that rule was waiting for this work.
+- Code: `ds-bot/src/host/browser-plugins.js`, `ds-bot/src/host/browser/`, `browser-plugins/`
 
-## 为什么
+## Why
 
-Bot 要替用户在网页上做事，只读面板不够。外面已经有很多浏览器后端：browser-use、Playwright、Stagehand、ego lite、Hermes 的 `browser_exec`、OpenCode 的 browser 工具，以及一堆 DSH 插件。DSH 官方的 browser-use 子系统一次只能挂一个 provider，浏览器属于那一个活着的 Session，换段或重开会丢掉登录。
+To do work on web pages for the user, a read-only panel is not enough. Many browser backends already exist: browser-use, Playwright, Stagehand, ego lite, Hermes's `browser_exec`, OpenCode's browser tool, and a number of DSH plugins. DSH's official browser-use subsystem can attach only one provider at a time, and the browser belongs to that one live Session, so moving to a new part or reopening loses the login.
 
-Bot 是长期身份。登录应该跟着 Bot 走，而不是跟着某一段对话走。同时不能这个 Bot 用一套、那个 Bot 用另一套：团队只选一个后端。浏览器本身仍然分开，cookie 不在 Bot 之间串。
+A Bot is a long-lived identity. Logins should follow the Bot, not one part of a conversation. At the same time, one Bot must not use one setup while another Bot uses a different one: the team picks one backend. The browsers themselves stay separate, and cookies do not cross between Bots.
 
-## 已定的行为
+## Decided behavior
 
-- 团队配置 `browserPlugin`，取值 `refs`、`script`、`task` 之一。不配就和以前一样，只有桌面里的只读 `read_browser`。三个值不会同时注册。
-- 选定之后，每个 Bot 用同一套工具。Bot 自己的会话、它在每个群里的会话、以及这些会话换段之前的 id，都解析到同一个 Bot，打开同一份 profile：`bot/browser-profiles/<botId>/`。
-- 不同 Bot 的目录不复制、不共享。用户要两个 Bot 登同一个站，就各自登一次。以后如果要「把这份登录复制给另一个 Bot」，做成显式动作，不自动同步。
-- 群聊各用各的浏览器，也就是各用各的 Bot profile，不设一个群共用的浏览器。
-- 页面正文仍然是数据，不当成用户的指令。
-- 浏览、点击、输入、选择、筛选、登录表单和普通设置默认放行，不按 DSH 权限预设分级。
-- 只有发帖、上传、下载、删除需要用户授权。Bot 在设置的「浏览器」页获得匹配网站和操作类型的预授权时直接执行；否则走 DSH 审批卡片，审批只允许本次操作。预授权可设过期时间。
-- 删除无论有没有预授权，都先返回核对快照；Bot 必须在检查目标后用 `browser_click` 的 `confirm: true` 再点同一个元素，且页面 URL 和标签都必须匹配，才进入正常授权流程。
-- 付款、购买、转账等操作永远不由 Bot 执行；付款详情也不由 Bot 输入。Bot 调用 `browser_handoff`（或脚本里的 `handoff`），由用户完成。登录或验证码也可交给用户；交接后点击、输入、打开页面都会停住，直到 `browser_resume`。不另设域名名单，也不拦截内网地址。
-- Bot 在自己的聊天里交接时，聊天里出现一张卡片：写明原因、要用户做的事和当前页面的站点，按钮依次是「跳过」「接管」「我完成了」。「我完成了」和「跳过」把结果告诉 Bot 并交还浏览器，Bot 接着做或换一条路；「接管」打开浏览器面板，卡片留着，直到用户点另外两个按钮之一。用户用卡片或面板回答后，回复消息在转录里留下标题和结果；Bot 自己调用 `browser_resume` 或应用重启后，旧卡片不显示，也不补这一行。
-- 上传只允许使用 Bot 的工作目录、团队目录或 `browser-downloads/<botId>/` 中的文件，链接目标在校验前解析。
-- 已授权的发帖、上传、下载、删除若结果未知，会按来源记录，要求先用快照核实；页面仍未观察前，不允许重复同来源的操作。下载文件保存到 Bot 的工作目录；没有工作目录时保存到团队目录。
-- 三个插件：
-  - `refs`：打开、快照、按编号点击和填写、截图。每一步留在会话里，可以核对。快照会读进开放的 Shadow DOM 和同源 iframe。
-  - `script`：一次提交一段 JavaScript，帮手已经在作用域里。这是 Hermes `browser_exec` 和 ego heredoc 的形状。
-  - `task`：一个目标进去，插件自己用 `refs` 的工具跑完，交回答案和步骤。
-- 截图作为图片块交给模型。后面的模型按多模态来用，不把 Flash 当成纯文本。
-- 在桌面应用中，Playwright 插件连接到主进程拥有的浏览器页；Bot 和用户看到同一组标签页。DSH Desktop 仍使用独立的 Chromium profile。Bot 的 profile 和下载目录按 Bot 隔离。
+- The team config sets `browserPlugin` to one of `refs`, `script` or `task`. Without it, things stay as before: only the read-only `read_browser` on the desktop. The three values are never registered at the same time.
+- Once one is chosen, every Bot uses the same set of tools. A Bot's own Session, its Session in each group, and the ids those Sessions had before moving to a new part all resolve to the same Bot and open the same profile: `bot/browser-profiles/<botId>/`.
+- Different Bots' directories are not copied or shared. If the user wants two Bots logged in to the same site, each logs in once. If "copy this login to another Bot" is wanted later, it will be an explicit action, not an automatic sync.
+- In group chats each Bot uses its own browser, that is, its own Bot profile; there is no browser shared by a group.
+- Page text is still data, not instructions from the user.
+- Browsing, clicking, typing, selecting, filtering, login forms and ordinary settings are allowed by default, without grading by DSH permission preset.
+- Only posting, uploading, downloading and deleting need the user's authorization. When the Bot has a pre-authorization for the matching site and action type on the "Browser" page in Settings, it acts directly; otherwise it goes through a DSH approval card, and the approval allows only this one action. A pre-authorization can have an expiry time.
+- For a delete, with or without pre-authorization, the tool first returns a snapshot to check; the Bot must check the target and then click the same element again with `browser_click` and `confirm: true`, and both the page URL and the tab must match, before the normal authorization flow starts.
+- Paying, buying, transferring money and similar actions are never done by the Bot, and the Bot does not enter payment details either. The Bot calls `browser_handoff` (or `handoff` in a script), and the user completes it. Logins and captchas can also be handed to the user; after a handoff, clicking, typing and opening pages stay stopped until `browser_resume`. There is no separate list of domains, and local network addresses are not blocked.
+- When a Bot hands off in its own chat, a card appears in the chat: it states the reason, what the user needs to do and the site of the current page, with the buttons "Skip", "Take over" and "I'm done", in that order. "I'm done" and "Skip" tell the Bot the result and hand the browser back, and the Bot continues or takes another route; "Take over" opens the browser panel and the card stays until the user clicks one of the other two buttons. After the user answers with the card or the panel, the reply message leaves a title and the result in the transcript; after the Bot calls `browser_resume` itself or the app restarts, the old card is not shown and this line is not added.
+- Uploads can only use files in the Bot's work directory, the team directory or `browser-downloads/<botId>/`, and link targets are resolved before the check.
+- When the result of an authorized post, upload, download or delete is unknown, it is recorded by source and must first be verified with a snapshot; until the page has been observed again, the same action from the same source is not allowed again. Downloaded files are saved to the Bot's work directory, or to the team directory when the Bot has no work directory.
+- Three plugins:
+  - `refs`: open, snapshot, click and fill by number, screenshot. Each step stays in the Session and can be checked. Snapshots read into open Shadow DOM and same-origin iframes.
+  - `script`: submit one piece of JavaScript at a time, with helpers already in scope. This is the shape of Hermes's `browser_exec` and ego's heredoc.
+  - `task`: a goal goes in, the plugin runs it through with the `refs` tools itself, and returns the answer and the steps.
+- Screenshots go to the model as image blocks. Later models are used as multimodal; Flash is not treated as text only.
+- In the desktop app, the Playwright plugin connects to the browser pages that the main process owns; the Bot and the user see the same set of tabs. DSH Desktop still uses a separate Chromium profile. Each Bot's profile and download directory are isolated per Bot.
 
-## 不做什么
+## Not done
 
-- 不在 Bot 之间同步 cookie。
-- 不把 Chrome DevTools MCP 做成可选后端。它留在调研里，不进这三个插件。
-- 不在这台没有 ego lite 的环境里假装测过 ego。
-- 默认不打开任何一个插件，所以现有的只读行为不变。选定之前不合进 `dev`。
+- No cookie sync between Bots.
+- Chrome DevTools MCP is not an optional backend. It stays in the research and is not one of the three plugins.
+- We do not pretend ego was tested on this machine, which has no ego lite.
+- No plugin is turned on by default, so the existing read-only behavior is unchanged. Not merged into `dev` before one is chosen.
 
-## 已知限制
+## Known limits
 
-- DSH Desktop 的浏览器面板仍由用户操作；桌面应用中的面板页由 Bot 和用户共同使用，接管状态由用户控制。
-- 群聊或子 Agent 里 Bot 发起的交接不出聊天卡，只在浏览器面板顶部的接管条里处理；工具结果会提醒 Bot 在当前对话说明要用户做什么，在面板里点交还不会通知 Bot。
-- 单独把 `browser-plugins/*` 装进一个没有 DS Bot 的 DSH profile 时，profile 按 Session id 分开，换段会像官方 browser-use 一样丢掉登录。跟 Bot 走的那份目录只有 DS Bot 挂载时才有。
-- `task` 在插件内部再调一次模型，步骤在工具结果里，不在 Bot 自己的逐步工具调用里。
-- 这次实测用的是自建多步页面，加上 WebVoyager 里两条 arXiv 任务，不是整套 600 多条。
+- In DSH Desktop the user still operates the browser panel; in the desktop app the panel's pages are shared by the Bot and the user, and the user controls the takeover state.
+- A handoff a Bot starts in a group chat or a sub-Agent does not show a chat card; it is handled only in the takeover bar at the top of the browser panel. The tool result reminds the Bot to say in the current conversation what the user needs to do, and handing back in the panel does not notify the Bot.
+- When `browser-plugins/*` is installed alone into a DSH profile without DS Bot, profiles are separated by Session id, so moving to a new part loses the login as with the official browser-use. The directory that follows the Bot exists only when DS Bot mounts it.
+- `task` calls the model again inside the plugin; the steps are in the tool result, not in the Bot's own step-by-step tool calls.
+- This round of testing used self-built multi-step pages plus two arXiv tasks from WebVoyager, not the whole set of more than 600.
 
-## 变更
+## Changes
 
-- 2026-10-21：维护者定下全团队一个后端、每 Bot 一份 profile、cookie 不同步。三个插件和实测在同一分支，默认关闭。
-- 2026-10-22：`browser_task` 使用调用 Bot 在 DSH 中配置的模型；基准测试模型由 `BENCH_BASE_URL`、`BENCH_MODEL` 和 `BENCH_API_KEY` 配置。
-- 2026-10-23：维护者定下权限规则：默认放行；发帖、上传、下载、删除按预授权或审批；删除强制多核对一轮；付款一律交给用户；预授权可设时限，在设置的浏览器页管理。
-- 2026-10-24：桌面应用中的 Bot 操作浏览器面板里的页面；用户可接管、停止 Bot 或交还控制权。Bot 交接可由 Bot 恢复；用户接管只能由用户交还。
-- 2026-10-27：Bot 在自己的聊天里交接时，聊天里出卡片，按钮为跳过、接管、我完成了；点「我完成了」或「跳过」会通知 Bot，面板里的交还在这种交接下同样通知 Bot，但只说明控制权已交还，不断言步骤已完成。群聊和子 Agent 不出卡，工具结果提示 Bot 在当前对话说明要用户做什么。
+- 2026-10-21: the maintainer decided on one backend for the whole team, one profile per Bot, and no cookie sync. The three plugins and the tests are on the same branch, off by default.
+- 2026-10-22: `browser_task` uses the model the calling Bot has configured in DSH; the benchmark model is configured with `BENCH_BASE_URL`, `BENCH_MODEL` and `BENCH_API_KEY`.
+- 2026-10-23: the maintainer decided the permission rules: allowed by default; posting, uploading, downloading and deleting go by pre-authorization or approval; deleting always adds one more round of checking; payments always go to the user; pre-authorizations can have a time limit and are managed on the Browser page in Settings.
+- 2026-10-24: in the desktop app, Bots operate the pages in the browser panel; the user can take over, stop the Bot or hand control back. A Bot handoff can be resumed by the Bot; a user takeover can only be handed back by the user.
+- 2026-10-27: when a Bot hands off in its own chat, a card appears in the chat with the buttons Skip, Take over and I'm done; clicking "I'm done" or "Skip" notifies the Bot. With this kind of handoff, handing back in the panel also notifies the Bot, but only says that control was handed back, without claiming the step was done. Group chats and sub-Agents show no card; the tool result tells the Bot to say in the current conversation what the user needs to do.

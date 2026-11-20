@@ -1,143 +1,278 @@
-# Bot 视图（widget views）
+# Bot views (widget views)
 
-- 日期：2026-10-20
-- 相关：#386、#468（第三版：图表、输入和公式、沙箱 html）
+- Date: 2026-10-20
+- Related: #386, #468 (third version: charts, inputs and formulas, sandboxed html)
 
-## 为什么
+## Why
 
-Bot 的回答现在只有 Markdown 文本。有些回答天生是结构化的：几张卡片、一张表、一组选项、一个进度。纯文本表达这些东西又长又难读，模型也常写错格式。业界（ChatGPT Apps、MCP Apps、OpenUI）的做法是让模型直接在聊天里给出可交互的界面。
+Bot answers are only Markdown text today. Some answers are structured by nature: a few cards, a table, a
+set of options, a progress bar. Plain text makes these long and hard to read, and models often get the
+format wrong. The industry approach (ChatGPT Apps, MCP Apps, OpenUI) is to let the model put an
+interactive interface directly in the chat.
 
-2026-10-20 的第一版方案「模型写 HTML、iframe 渲染」经外部评审否决，主要理由：
+The first proposal of 2026-10-20, "the model writes HTML, an iframe renders it", was rejected in an
+external review, mainly because:
 
-- 任意 HTML 没有压缩序列化策略：上下文管家和交接包要么塞爆要么丢光，下一段会话的 Bot 不知道用户看过什么。
-- iframe 在聊天虚拟滚动中卸载即丢失内部状态；模型生成的脚本可以自动提交，造成回合劫持死循环。
-- 为 widget 内容开 GET 路由、配 CSP 需要依赖 DSH 未文档化的服务能力，风险由插件承担。
+- Arbitrary HTML has no compact serialization: the context steward and the handoff pack either overflow
+  or lose all of it, and the Bot in the next Session part does not know what the user saw.
+- An iframe loses its internal state when the chat's virtual scrolling unmounts it; scripts written by
+  the model can submit on their own, causing a turn-hijacking endless loop.
+- Opening a GET route for widget content and setting up a CSP depends on undocumented DSH server
+  features, and the plugin carries the risk.
 
-取舍（第二版）：
+Trade-offs (second version):
 
-- 不执行模型生成的代码。模型只从一份固定组件目录里挑组件、填数据，渲染用 ds-bot 自己的 React 组件。安全性来自「没有代码执行」，不靠沙箱。
-- 蓝图是有上限的 JSON，可以被 `parts.js` 压成摘要进交接包；历史回放用同一份蓝图重渲染。
-- 复用提问卡的整条回路：state 登记、ToolCell 内联画卡、隐藏回合浮到输入框上方、回答作为用户消息回注。视图卡是提问卡的泛化，但存储、回复格式各自独立，不与提问卡共用一个 map。
+- No code written by the model is run. The model only picks components from a fixed catalog and fills
+  in data; rendering uses ds-bot's own React components. Safety comes from "no code execution", not from
+  a sandbox.
+- The blueprint is size-limited JSON, which `parts.js` can compress into a summary for the handoff pack;
+  history replay re-renders from the same blueprint.
+- It reuses the whole loop of the question card: state registration, inline drawing in ToolCell, floating
+  above the input box for hidden turns, and the answer fed back as a user message. A view card is a
+  generalization of the question card, but storage and reply format are separate, and it does not share
+  a map with the question card.
 
-第三版（2026-10-23，#468）在第二版上加三样东西，第二版的规则不变：
+The third version (2026-10-23, #468) adds three things on top of the second; the second version's rules
+stay:
 
-- 图表和本地交互：目录加图表、输入控件和公式。用户拖滑块、改数字时，页面按 Bot 写好的公式当场重算，不调模型、不花 token。
-- 目录画不了的内容（自定义图形、小游戏、流程图）可以写成 `html` 组件，放进沙箱 iframe。常用的展示仍走蓝图：省 token、跟主题、有校验，出错时模型能拿到带路径的错误重写。
-- 外框：只展示的视图直接放在回答里，不带框；有输入或回答控件的视图带浅框。去掉「视图」标签，标题改成可选的小标题。
+- Charts and local interaction: the catalog adds charts, input controls and formulas. When the user drags
+  a slider or changes a number, the page recomputes on the spot from formulas the Bot wrote, with no
+  model call and no tokens spent.
+- Content the catalog cannot draw (custom graphics, small games, flow charts) can be written as an `html`
+  component in a sandboxed iframe. Common displays still use the blueprint: it saves tokens, follows the
+  theme, is validated, and on an error the model gets an error with a path and can rewrite it.
+- Frame: a display-only view sits directly in the answer without a frame; a view with input or answer
+  controls has a light frame. The "View" label is gone, and the title becomes an optional small heading.
 
-## 已定的行为
+## Decided behavior
 
-### 工具
+### Tool
 
-- `show_view`：在自己的聊天里给用户看一个视图。参数：`title`（可选，小标题）、`view`（JSON 蓝图，见下）、`await_reply`（可选）。
-- 组合规则：蓝图里含回答组件（options/confirm/form/submit）时必须 `await_reply: true`；输入控件（slider/number/choice/toggle）不算回答组件；纯展示蓝图配 `await_reply: true` 拒绝（回合会空等一张不能提交的卡）。缺省按蓝图中是否含交互组件推断；`exec.concludeTurn()` 按**生效后**的 `await_reply` 调用，在校验通过、state 落盘之后。
-- 群聊会话拒绝使用（和 `ask_user` 同一句提示）。
-- 校验失败原子拒绝：不登记 state、不结束回合，工具结果给出可修复的错误（带路径和允许值，如 `view.children[2].type: unknown component "chart"; allowed: stack, text, …`；超限时带实测值和上限）。
-- 上限：序列化后 8 KiB（UTF-8 字节，含 title）、组件树深 8 层、组件节点 64 个；表格行 ≤ 50、列 ≤ 8；form 字段 ≤ 6；options 选项 ≤ 8。嵌套的 JSON 结构不算深度，只算组件树。
+- `show_view`: shows the user a view in the Bot's own chat. Parameters: `title` (optional, small
+  heading), `view` (JSON blueprint, see below), `await_reply` (optional).
+- Combination rules: a blueprint with answer components (options/confirm/form/submit) must have
+  `await_reply: true`; input controls (slider/number/choice/toggle) are not answer components; a
+  display-only blueprint with `await_reply: true` is refused (the turn would wait for a card that cannot
+  be submitted). By default it is inferred from whether the blueprint has interactive components;
+  `exec.concludeTurn()` is called according to the **effective** `await_reply`, after validation passes
+  and the state is saved to disk.
+- Refused in group chat Sessions (with the same message as `ask_user`).
+- A validation failure is refused atomically: no state is registered, the turn does not end, and the tool
+  result gives a fixable error (with a path and the allowed values, such as
+  `view.children[2].type: unknown component "chart"; allowed: stack, text, …`; when over a limit, with
+  the measured value and the limit).
+- Limits: 8 KiB serialized (UTF-8 bytes, including the title), component tree depth 8, 64 component
+  nodes; tables ≤ 50 rows and ≤ 8 columns; forms ≤ 6 fields; options ≤ 8 choices. Nested JSON structures
+  do not count toward depth; only the component tree does.
 
-### 组件目录
+### Component catalog
 
-蓝图是一个组件节点：`{ type: string, …props, children?: node[] }`。
+A blueprint is one component node: `{ type: string, …props, children?: node[] }`.
 
-排版：
+Layout:
 
-- `stack`：纵向排列子节点。`row`：横向排列，窄时换行。两者 `children` 必填（1–16 个）。最外层的容器可以带 `let: { 名字: "公式" }`。
+- `stack`: arranges children vertically. `row`: arranges them horizontally, wrapping when narrow. Both
+  require `children` (1–16). The outermost container can carry `let: { name: "formula" }`.
 
-展示：
+Display:
 
-- `text`：`{ text, tone?: muted }`，一段 Markdown。不渲染原始 HTML；链接只 http(s)，新窗口打开；不允许模型控制 style、事件、className 等 DOM 属性。
-- `metric`：`{ label, value, tone?: good|warn|bad, caption? }`。
-- `table`：`{ columns: [{ key, label }], rows: [[…]] }`，只读。整列是数字时右对齐。
-- `chart`：`{ kind?: bar|hbar|line|area|donut, categories: [标签], series: [{ name?, values: [数字] }], unit?, caption? }`。每个系列的值和类别一样多；环形图只有一个系列。用 SVG 画在拿到的宽度上，颜色只用主题变量（第一个系列用强调色）。悬停或方向键显示一个类别的数值、其余变淡；多系列有图例，点一下隐藏或显示一个系列；右上角菜单：以表格查看、复制数据（CSV）、下载图片（PNG）。
-- `progress`：`{ label?, percent }` 或 `{ label?, value, max }`，可带 `valueLabel`（右侧文字，如「剩余 ¥10」）和 `tone`。
-- `callout`：`{ text, tone?: info|good|warn|bad }`，一段提示。
-- `sources`：`{ items: [{ label, url }] }`，来源小标签，只收 http(s)，新窗口打开。
-- `html`：`{ html, summary, height? }`，见下面「沙箱 html」。
+- `text`: `{ text, tone?: muted }`, a piece of Markdown. Raw HTML is not rendered; links are http(s)
+  only and open in a new window; the model cannot control style, events, className or other DOM
+  attributes.
+- `metric`: `{ label, value, tone?: good|warn|bad, caption? }`.
+- `table`: `{ columns: [{ key, label }], rows: [[…]] }`, read-only. Columns that are all numbers are
+  right-aligned.
+- `chart`: `{ kind?: bar|hbar|line|area|donut, categories: [label], series: [{ name?, values: [number] }], unit?, caption? }`.
+  Each series has as many values as there are categories; a donut has only one series. Drawn with SVG at
+  the width it gets, using theme variables only for color (the first series uses the accent color).
+  Hover or the arrow keys show one category's values and dim the rest; multiple series get a legend,
+  where a click hides or shows a series; a menu at the top right: view as table, copy data (CSV),
+  download image (PNG).
+- `progress`: `{ label?, percent }` or `{ label?, value, max }`, with optional `valueLabel` (text on the
+  right, such as "¥10 left") and `tone`.
+- `callout`: `{ text, tone?: info|good|warn|bad }`, a notice.
+- `sources`: `{ items: [{ label, url }] }`, small source tags, http(s) only, open in a new window.
+- `html`: `{ html, summary, height? }`, see "Sandboxed html" below.
 
-输入（值只留在页面里，不发给 Bot，不结束回合）：
+Inputs (values stay on the page, are not sent to the Bot, and do not end the turn):
 
-- `slider`：`{ id, label, min, max, step?, value, unit? }`。
-- `number`：`{ id, label, value, min?, max?, step?, unit? }`。
-- `choice`：`{ id, label, options: [{ label, value }], value? }`。四个以内的短选项并排成分段按钮，其余竖排。
-- `toggle`：`{ id, label, value? }`。
+- `slider`: `{ id, label, min, max, step?, value, unit? }`.
+- `number`: `{ id, label, value, min?, max?, step?, unit? }`.
+- `choice`: `{ id, label, options: [{ label, value }], value? }`. Up to four short options sit side by
+  side as segmented buttons; otherwise they are stacked.
+- `toggle`: `{ id, label, value? }`.
 
-回答（结束回合，答案是用户的下一条消息）：
+Answers (end the turn; the answer is the user's next message):
 
-- `options`：`{ id, options: [{ label, description? }], multi? }`。单选按下即提交；多选切换勾选、出 Submit 按钮（和提问卡一致）。
-- `confirm`：`{ id, confirmLabel?, cancelLabel? }`，按下即提交。
-- `form`：`{ id, fields: [{ id, label, placeholder?, value?, multiline?, readOnly? }], submitLabel?, cancelLabel? }`，支持预设初值、单行与多行输入、只读字段，以及可选的取消/丢弃按钮（取消时结算为 `{ canceled: true }`）。说明里禁止用 form 收集密钥——密钥走 `request_secret`。
-- `submit`：`{ id, label? }`，把输入控件当前的值发给 Bot（「发给 Bot」）。
+- `options`: `{ id, options: [{ label, description? }], multi? }`. Single choice submits on press;
+  multiple choice toggles checks and shows a Submit button (the same as the question card).
+- `confirm`: `{ id, confirmLabel?, cancelLabel? }`, submits on press.
+- `form`: `{ id, fields: [{ id, label, placeholder?, value?, multiline?, readOnly? }], submitLabel?, cancelLabel? }`,
+  supports preset initial values, single-line and multi-line input, read-only fields, and an optional
+  cancel/discard button (cancel settles as `{ canceled: true }`). The description forbids using a form to
+  collect secrets; secrets go through `request_secret`.
+- `submit`: `{ id, label? }`, sends the current values of the input controls to the Bot ("Send to Bot").
 
-标识约束：交互组件和输入的 `id` 在整棵树里唯一；输入的 `id` 必须是公式能引用的名字（字母、数字、下划线，不以数字开头）；form 内字段 `id` 在该 form 内唯一；options 的选项以 label 为身份（和提问卡一致）；choice 的选项值唯一。
+Identity constraints: the `id`s of interactive components and inputs are unique in the whole tree; an
+input's `id` must be a name a formula can refer to (letters, digits, underscore, not starting with a
+digit); field `id`s in a form are unique within that form; options are identified by their label (the
+same as the question card); choice values are unique.
 
-### 公式
+### Formulas
 
-- 写法：`{ "=": "表达式" }`。能写公式的属性：metric 的 value、caption、tone；text 的 text；progress 的 percent、value、max、valueLabel、tone；callout 的 text、tone；表格单元格；图表的每个值。
-- 表达式只读输入的 `id` 和 `let` 里的名字：数字、'文字'、`+ - * / %`、比较、`&& || !`、`a ? b : c`，以及 `min max abs floor ceil sqrt pow round clamp fixed format percent`。没有属性访问、赋值、循环，碰不到页面。解析和计算在 `deep-view` 包的 `src/core/formula.js`，主机和界面共用。
-- 主机按 Bot 设的初始值把每个公式算一遍：解析失败、用了不存在的名字、`let` 互相引用、结果类型不对（如 tone 不在允许值里），都原样拒绝并给出路径。
-- 页面上每次输入变化都重算；某个公式在用户的值下算不出来时，这一处显示占位，不影响别处。
+- Written as `{ "=": "expression" }`. Properties that can take a formula: metric value, caption, tone;
+  text text; progress percent, value, max, valueLabel, tone; callout text, tone; table cells; each chart
+  value.
+- An expression reads only input `id`s and names in `let`: numbers, 'text', `+ - * / %`, comparisons,
+  `&& || !`, `a ? b : c`, and `min max abs floor ceil sqrt pow round clamp fixed format percent`. No
+  property access, assignment or loops, and no access to the page. Parsing and evaluation are in
+  `src/core/formula.js` of the `deep-view` package, shared by host and interface.
+- The host evaluates every formula once with the initial values the Bot set: a parse failure, an unknown
+  name, `let` names that refer to each other, or a result of the wrong type (such as a tone outside the
+  allowed values) are all refused as a whole, with a path.
+- On the page every input change recomputes; when a formula cannot be computed with the user's values,
+  that spot shows a placeholder, without affecting the rest.
 
-### 沙箱 html
+### Sandboxed html
 
-- 只在目录画不了时用；`summary` 必填，交接和摘要只用它。
-- 放进 `sandbox="allow-scripts"` 的 iframe（`srcdoc`），不给 same-origin：碰不到应用、存储和接口。文档开头先写禁止联网的 CSP（`default-src 'none'`，只放行内联脚本和样式、`data:` 图片和字体），再放模型的内容。
-- 注入主题变量（`--bt-ink`、`--bt-line`、`--bt-accent` 等）和配色方案；切换明暗时发消息更新。框里的脚本只能报告自己的高度，iframe 跟着变高。
-- iframe 里没有提交通道，不能回答 Bot，也不能结束回合；它的状态不保存。
-- iframe 跳到别的页面时（第二次 load），换成一句提示，不再显示。
+- Used only when the catalog cannot draw it; `summary` is required, and handoffs and summaries use only
+  that.
+- Placed in an iframe with `sandbox="allow-scripts"` (`srcdoc`), without same-origin: it cannot reach the
+  app, storage or interfaces. The document starts with a CSP that forbids network access
+  (`default-src 'none'`, allowing only inline scripts and styles, and `data:` images and fonts), then
+  the model's content.
+- Theme variables (`--bt-ink`, `--bt-line`, `--bt-accent` and others) and the color scheme are injected;
+  switching light and dark sends a message to update them. Scripts in the frame can only report their
+  own height, and the iframe grows with it.
+- The iframe has no submit channel: it cannot answer the Bot or end the turn; its state is not saved.
+- When the iframe navigates to another page (a second load), it is replaced by a notice and no longer
+  shown.
 
-### 外框
+### Frame
 
-- 只展示的视图不带框，直接接在回答里，宽度跟正文一样；有输入或回答控件的视图带浅框；浮到输入框上方的待答视图保持凸起样式。
-- 没有「视图」标签；`title` 有值时显示成一行小标题。
+- A display-only view has no frame and follows the answer directly, as wide as the body text; a view with
+  input or answer controls has a light frame; a pending view floating above the input box keeps its
+  raised style.
+- There is no "View" label; when `title` has a value it shows as one line of small heading.
 
-一张视图可含多个交互组件；**一次提交结算整张卡**：只带触发组件的值 `values`（options：`{ selected: string[] }`；confirm：`{ confirmed: boolean }`；form：`{ fields: { [fieldId]: string } }`；submit：`{}`），其他组件未提交的输入丢弃，已答渲染里它们的控件不再可用。视图有输入控件时，任何一次提交都带上 `inputs: { [inputId]: 值 }`：没发来的按初始值补齐，服务端逐个校验（范围、选项值、布尔）。已答视图按发出时的值显示，控件只读。空提交：options 至少一项、confirm 必有一个按钮值、form 允许全空字段。文本值上限 2,000 字。
+One view can hold several interactive components; **one submission settles the whole card**: it carries
+only the `values` of the triggering component (options: `{ selected: string[] }`; confirm:
+`{ confirmed: boolean }`; form: `{ fields: { [fieldId]: string } }`; submit: `{}`); unsubmitted input of
+the other components is dropped, and their controls are no longer usable in the answered rendering. When a
+view has input controls, every submission carries `inputs: { [inputId]: value }`: missing ones are filled
+from the initial values, and the server checks each one (range, choice value, boolean). An answered view
+shows the values as sent, with read-only controls. Empty submissions: options need at least one choice,
+confirm must have a button value, a form allows all fields empty. Text values are limited to 2,000
+characters.
 
-### 状态与生命周期
+### State and lifecycle
 
-- 待答视图存 `state.views`，按当前聊天会话各存一条（`{ id, callId?, title, view, askedAt }`）。新待答视图覆盖同会话旧视图；用户普通消息或回答到达时撤销；换段时迁移并去掉 `callId`；Bot 删除时随各段清理——与 `state.questions` 的消费者规则一一对应。
-- 两个 store 的关系：同会话的待答提问卡和待答视图可以**共存**，谁也不覆盖谁；普通消息到达时两者都撤销。纯展示 `show_view` 不影响任何待答记录。
-- 纯展示视图不进 `state.views`：从已接受的工具调用参数渲染，可见性不依赖待答记录。
-- 隐藏回合：待答视图浮到 dock（进 `CARDS`，与提问卡同一 `useShownCards` 记账；dock 保留 QuestionDock 的历史加载抑制）；隐藏回合里的纯展示视图不持久展示，只留在回合记录里。
+- A pending view is stored in `state.views`, one per current chat Session
+  (`{ id, callId?, title, view, askedAt }`). A new pending view replaces the old one in the same Session;
+  it is withdrawn when an ordinary user message or an answer arrives; on a part switch it moves over and
+  loses its `callId`; when the Bot is deleted it is cleaned up with each part. This matches the consumer
+  rules of `state.questions` one to one.
+- How the two stores relate: a pending question card and a pending view in the same Session can
+  **coexist**, and neither replaces the other; an ordinary message withdraws both. A display-only
+  `show_view` does not affect any pending record.
+- Display-only views are not in `state.views`: they are rendered from the accepted tool call arguments,
+  and their visibility does not depend on a pending record.
+- Hidden turns: a pending view floats to the dock (it goes into `CARDS`, with the same `useShownCards`
+  bookkeeping as the question card; the dock keeps QuestionDock's suppression during history loading);
+  a display-only view in a hidden turn is not shown persistently and stays only in the turn record.
 
-### 渲染与提交
+### Rendering and submission
 
-- ToolCell 把 `show_view` 画成视图卡（`WidgetCell`），样式跟随 `--bt-*` 变量；明暗主题、窄布局、键盘操作、表格溢出、禁用/提交中/出错态都要过。
-- 提交走 `POST /api/bot` 的新 case `view-reply`：解析会话→核对待答 id→对**服务端持有的蓝图**校验提交值→先认领再入队→`agent.followup` + `flush`→失败恢复记录→保存。拒绝过期和重复提交。
-- 回注的用户消息：`readReply`/`replyText` 的形状按判别字段扩展——`kind: 'answer_to_pending_view'` 时读 `views`/`answers`（`views: [{ id, title, view(校验过的蓝图) }]`，`answers: [{ id, action, values }]`），原 `questions`/`answers` 分支不变，两分支各自校验、互不混读。`parts.js` 的 history 提取、归档，以及回复节点的实时渲染（ AnsweredCell 对应的视图版 `AnsweredView` ）都按判别字段分流。
-- 已答视图画在**回复节点**上，数据来自回复消息本身，只读样式。原待答卡随即收起消失（同 `bt-q-gone`）。
-- 界面文案走 `t()`；模型写的标题和标签按用户语言生成，不当翻译键。
+- ToolCell draws `show_view` as a view card (`WidgetCell`), styled by the `--bt-*` variables; light and
+  dark themes, narrow layout, keyboard use, table overflow, and disabled/submitting/error states must all
+  pass.
+- Submission goes through a new case `view-reply` of `POST /api/bot`: resolve the Session → check the
+  pending id → validate the submitted values against **the blueprint the server holds** → claim first,
+  then queue → `agent.followup` + `flush` → record for recovery on failure → save. Stale and duplicate
+  submissions are refused.
+- The user message fed back: the shape of `readReply`/`replyText` is extended by a discriminator field.
+  With `kind: 'answer_to_pending_view'` it reads `views`/`answers`
+  (`views: [{ id, title, view (validated blueprint) }]`, `answers: [{ id, action, values }]`); the
+  original `questions`/`answers` branch is unchanged, and the two branches validate separately and never
+  read each other's data. The history extraction and archiving in `parts.js`, and the live rendering of
+  the reply node (`AnsweredView`, the view version of AnsweredCell), all branch on the discriminator
+  field.
+- An answered view is drawn on the **reply node**, with data from the reply message itself, in a
+  read-only style. The original pending card then collapses and disappears (the same as `bt-q-gone`).
+- Interface text goes through `t()`; titles and labels written by the model are generated in the user's
+  language and are not used as translation keys.
 
-### 压缩与交接
+### Compaction and handoff
 
-- `viewCardText`（和 `cardText` 同构）：`[View card] 标题`（没有标题时只有 `[View card]`）+ 一行组件清单（带关键数值/选项，如 `metric: 进度=70%; options: A/B/C`，每个组件至多 40 字、至多 8 个）+ 已答时的答案摘要。已答摘要从回复事件取，不从 state 取。
-- 纯展示视图同样压成一行摘要。公式按初始值算出结果再写进摘要；输入写成 `slider: 标签=值`；图表写类别和第一个系列的值；`html` 写它的 `summary`。
-- 答案摘要里，输入写成 `标签=值`（choice 写选项标签）。
+- `viewCardText` (same shape as `cardText`): `[View card] title` (only `[View card]` when there is no
+  title) + one line listing the components (with key values/options, such as
+  `metric: Progress=70%; options: A/B/C`, at most 40 characters per component and at most 8 components)
+  + a summary of the answer when answered. The answer summary is taken from the reply event, not from
+  state.
+- A display-only view is also compressed into a one-line summary. Formulas are evaluated with the initial
+  values and the results written into the summary; inputs are written as `slider: label=value`; charts
+  write the categories and the values of the first series; `html` writes its `summary`.
+- In the answer summary, inputs are written as `label=value` (choice writes the option label).
 
-## 不做什么
+## Not done
 
-- 模型生成的 HTML/JS 只在 `html` 组件的沙箱 iframe 里跑；其余组件不执行模型代码。不嵌入外部页面。
-- 不自建 MCP Apps host；DSH 官方支持 SEP-1865 后再评估把 connectors 的 MCP UI 接进来。
-- 不引入 OpenUI Lang。它（Apache-2.0、渐进解析渲染、比 JSON 省约 2/3 token）的真实优势是蓝图随 token 流式出现；本设计等工具参数完整并校验通过才渲染，接近上限的大蓝图会有可感的首屏延迟。8 个组件的小卡片暂不值这个解析器；实测接近上限的调用后重新评估。
-- 视图不进群聊。群里没有画视图的地方（群页面读的是 DS Bot 自己的群记录，每条只有文字），交互视图还会和「谁来回答、按顺序发言」的群聊规则冲突，要单独设计。
-- 用户拖过的值不保存：卸载后回到 Bot 设的初始值；Bot 默认不知道，用户按 `submit` 才发过去。
+- HTML/JS written by the model runs only in the sandboxed iframe of the `html` component; other
+  components run no model code. No external pages are embedded.
+- No MCP Apps host of our own; once DSH officially supports SEP-1865, we will evaluate bringing in the
+  MCP UI of connectors.
+- No OpenUI Lang. Its real advantage (Apache-2.0, progressive parsing and rendering, about 2/3 fewer
+  tokens than JSON) is that the blueprint appears as tokens stream in; this design renders only once the
+  tool arguments are complete and validated, so a large blueprint near the limit has a noticeable delay
+  before first paint. A small card of 8 components is not worth that parser for now; re-evaluate after
+  measuring calls near the limit.
+- Views are not in group chats. A group has nowhere to draw a view (the group page reads DS Bot's own
+  group record, where each entry is only text), and interactive views would conflict with the group chat
+  rules of "who answers, and speaking in order"; this needs its own design.
+- Values the user dragged are not saved: after unmounting they return to the initial values the Bot set;
+  the Bot does not know them by default, and they are sent only when the user presses `submit`.
 
-## 已知限制
+## Known limits
 
-- 蓝图保得住，**填到一半的表单保不住**：虚拟滚动或换段卸载后，未提交的输入、拖过的值、html 框里的状态都回到初始值。
-- 目录外的展示要写成 `html`：比蓝图费 token，样式靠模型照着主题变量写，脚本出错时模型收不到错误。
-- `html` 框禁止联网，但挡不住它把自己导航到外部地址（数据可以跟着网址出去）；导航发生后框被换成提示，请求本身已经发出。
-- 蓝图质量依赖模型按 schema 输出的能力；校验拒绝消耗一次工具调用。
-- 已答视图在会话压缩后只剩一行摘要，Bot 看不到当时的完整蓝图。
-- 8 KiB 上限是按 DSH 会话日志里 `ask_user_question` 参数的现有形状定的起点，未在真实持久化日志里验证过 DSH/供应商的硬上限；冒烟测试要实测接近上限和超限的调用。
+- The blueprint survives, but **a half-filled form does not**: after unmounting by virtual scrolling or a
+  part switch, unsubmitted input, dragged values and state in the html frame return to their initial
+  values.
+- Displays outside the catalog must be written as `html`: that costs more tokens than a blueprint, the
+  style depends on the model following the theme variables, and the model gets no error when a script
+  fails.
+- The `html` frame forbids network access, but cannot stop it from navigating itself to an outside
+  address (data can leave with the URL); after the navigation the frame is replaced by a notice, but the
+  request has already gone out.
+- Blueprint quality depends on how well the model follows the schema; a validation refusal costs one tool
+  call.
+- After the Session is compacted, an answered view is only a one-line summary, and the Bot cannot see the
+  full blueprint of that time.
+- The 8 KiB limit is a starting point based on the current shape of `ask_user_question` arguments in DSH
+  Session logs; the hard limits of DSH or providers have not been verified against real persisted logs.
+  The smoke test must measure calls near and over the limit.
 
-## 代码位置
+## Code location
 
-蓝图、公式、回复格式和卡片组件的实现收在独立的 `deep-view` 包里，ds-bot 依赖它，不再自带一份。ds-bot 也不再全局注册 `show_view`：每个 Bot 自己的会话和群会话都在自己的 Agent 作用域里注册同名工具（作用域注册压过全局注册），所以另一个插件的全局 `show_view`（比如 Deep View）只管 ds-bot 不管的会话；群里调用照样被 ds-bot 的注册拦下，回「只能在自己的会话里画视图」。
+The implementation of blueprints, formulas, the reply format and the card components lives in the
+separate `deep-view` package; ds-bot depends on it and no longer carries its own copy. ds-bot also no
+longer registers `show_view` globally: each Bot's own Session and group Sessions register a tool of the
+same name in their own Agent scope (a scoped registration takes precedence over a global one), so another
+plugin's global `show_view` (Deep View, for example) only covers Sessions that ds-bot does not manage;
+calls in groups are still caught by ds-bot's registration, which answers that views can only be drawn in
+the Bot's own chat.
 
-## 变更
+## Changes
 
-- 2026-10-20：初稿（声明式目录，第二版）。评审：Antigravity 否决第一版 iframe 方案；Codex 一审（ship with changes）：state.views 独立、已答视图在回复节点、交互组合规则、未提交输入的限制、摘要带关键值。
-- 2026-10-20：Codex 二审（ship with changes）：concludeTurn 绑定生效后的 await_reply；回复格式改判别字段双分支；标识唯一性和 values 形状定死；首次提交结算整张卡；views 与 questions 共存规则写明。
-- 2026-10-20：Codex 三审签字（ship，无需再改）。
-- 2026-10-23：第三版（#468）：图表、输入控件和公式、row/callout/sources、沙箱 html；只展示的视图去掉外框和「视图」标签，标题可选。
-- 2026-10-27：核心代码移入独立的 deep-view 包；show_view 改为按会话在 Agent 作用域注册，在 Bot 会话和群会话里压过别的插件全局注册的同名工具。
+- 2026-10-20: first draft (declarative catalog, second version). Reviews: Antigravity rejected the first
+  version's iframe approach; Codex first review (ship with changes): separate state.views, answered view
+  on the reply node, interaction combination rules, the limit on unsubmitted input, summaries with key
+  values.
+- 2026-10-20: Codex second review (ship with changes): concludeTurn bound to the effective await_reply;
+  the reply format changed to two branches by a discriminator field; identity uniqueness and the shape of
+  values fixed; the first submission settles the whole card; the coexistence rules of views and questions
+  written down.
+- 2026-10-20: Codex third review signed off (ship, no more changes needed).
+- 2026-10-23: third version (#468): charts, input controls and formulas, row/callout/sources, sandboxed
+  html; display-only views lose the frame and the "View" label, and the title is optional.
+- 2026-10-27: the core code moved into the separate deep-view package; show_view is now registered per
+  Session in the Agent scope, taking precedence in Bot Sessions and group Sessions over a tool of the same
+  name registered globally by another plugin.

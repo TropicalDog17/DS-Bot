@@ -1,154 +1,264 @@
-# 上下文与记忆：对话分段、上下文管家、记忆
+# Context and memory: conversation parts, the context steward, memory
 
-- 日期：2026-10-08 定记忆，2026-10-09 定分段和管家，2026-10-17 加群记忆
-- 相关：#122（会话换代）、#151（群内共享记忆）、#214（已保存的记忆在已开着的会话里不生效）
-- 代码：`ds-bot/src/host/steward.js`、`parts.js`、`memory.js`、`chat-index.js`，`read_own_chat` 在 `groups.js`
+- Date: memory decided 2026-10-08, parts and the steward decided 2026-10-09, group memory added 2026-10-17
+- Related: #122 (Session renewal), #151 (shared memory in a group), #214 (saved memory has no effect in Sessions that are already open)
+- Code: `ds-bot/src/host/steward.js`, `parts.js`, `memory.js`, `chat-index.js`, `read_own_chat` in `groups.js`
 
-## 为什么
+## Why
 
-Bot 是长期的：用户和一个 Bot 聊几周、几个月，上下文一定会满。两种常见做法都不对：
+Bots are long-lived: a user chats with one Bot for weeks or months, so the context will fill up. The two
+common approaches are both wrong:
 
-- **一遍遍压缩同一个会话**：摘要的摘要越来越虚，细节丢了找不回来。
-- **到线就硬切新会话**：做到一半的活被切断，Bot 像失忆。
+- **Compact the same Session again and again**: a summary of a summary gets vaguer each time, and lost
+  details cannot be found again.
+- **Cut to a new Session as soon as the line is hit**: work that is half done gets cut off, and the Bot
+  seems to have lost its memory.
 
-所以 DS Bot 的做法是：**一个 Bot 是一个长期不变的身份，它的对话由多段 DSH Session 组成**。快满时由一个轻量的「上下文管家」看最近的消息，判断活是不是告一段落：没做完就原地压缩继续，告一段落就换到新的一段。旧的段整份留着，随时能搜。
+So DS Bot does this: **a Bot is one long-lived identity, and its conversation is made of several DSH
+Session parts**. When the context is nearly full, a light "context steward" looks at the recent messages
+and judges whether the work has reached a natural stop. If the work is not done, the Session is compacted
+in place and goes on. If it has reached a stop, the conversation moves to a new part. Old parts are kept
+whole and can be searched at any time.
 
-对用户来说这一切**无感**：看到的始终是一条连续的聊天，没有「上下文已用 80%」之类的提示，也没有让 Bot 自己切换的工具。唯一的例外是换工作文件夹引起的换段：换段进行中，会话尾部会出现一行「正在切换工作文件夹」，因为聊天会跳到空白的新的一段，不提示就像打字的内容凭空消失。
+For the user all of this is **invisible**: they always see one continuous chat, with no notice such as
+"context 80% used", and the Bot has no tool to switch parts itself. The only exception is a part switch
+caused by a change of working folder: while that switch runs, the end of the chat shows a line
+"Switching working folder", because the chat jumps to a new, empty part, and without a notice it would
+look as if the typed content had vanished.
 
-记忆是另一条线：上下文管的是「这次在做什么」，记忆管的是「跨所有对话都该记住的事」。记忆不能只靠 Bot 想起来调用 `remember`，所以每段对话空闲后还有一次自动的记忆整理。
+Memory is a separate line: context covers "what we are doing this time", memory covers "what should be
+remembered across all conversations". Memory cannot depend only on the Bot remembering to call
+`remember`, so each conversation part also gets an automatic memory review once it is idle.
 
-## 已定的行为
+## Decided behavior
 
-### 段
+### Parts
 
-- 私聊：`bot.sessionId` 是当前段，`bot.segments[]` 是旧段。群里：每个 Bot 在每个群有自己的一段（`room.sessions[botId]`），旧段在 `room.segments[botId][]`。
-- 群里的段和私聊用相同的系统提示词和工具，能共用提供方的前缀缓存，但不读 Bot 的私聊内容。私聊内容只能通过 `read_own_chat` 带进群，而且群里能看到它查过。
-- DSH 自己的自动压缩、`/compact`、溢出压缩对 Bot 的 Session 都不起作用。只有管家说压缩时，DS Bot 才调用 DSH 的压缩引擎，摘要换成 DS Bot 自己的检查点。
+- Own chat: `bot.sessionId` is the current part, `bot.segments[]` are the old parts. In groups: each Bot
+  has its own part in each group (`room.sessions[botId]`), and its old parts are in
+  `room.segments[botId][]`.
+- A group part uses the same system prompt and tools as the own chat, so it can share the provider's
+  prefix cache, but it does not read the Bot's own chat. Own chat content reaches a group only through
+  `read_own_chat`, and the group can see that the Bot looked it up.
+- DSH's own automatic compaction, `/compact` and overflow compaction have no effect on Bot Sessions. DS
+  Bot calls the DSH compaction engine only when the steward says to compact, and replaces the summary
+  with DS Bot's own checkpoint.
 
-### 线：全部跟着模型走
+### Lines: all follow the model
 
-代码里没有固定的 token 数。
+There are no fixed token counts in the code.
 
-| 线 | 怎么算 |
+| Line | How it is computed |
 |---|---|
-| 窗口 W | 模型声明的 `contextWindow`；模型完全没声明时按 500,000 |
-| 可用 U | W 减去回复预留（路由的 `maxTokens`），不少于 W/2 |
-| 硬线 H | 0.95 × U（两次请求之间的 token 数是估算的） |
-| 预判线 C | `checkRatio` × U，不超过 H。`checkRatio` 默认 0.8，在 `cordis.patch.yml` 的 `bot.config` 里改 |
+| Window W | The model's declared `contextWindow`; 500,000 when the model declares nothing at all |
+| Usable U | W minus the reply reserve (the route's `maxTokens`), at least W/2 |
+| Hard line H | 0.95 × U (the token count between two requests is an estimate) |
+| Check line C | `checkRatio` × U, at most H. `checkRatio` is 0.8 by default; change it in `bot.config` in `cordis.patch.yml` |
 
-### 什么时候判断
+### When to judge
 
-- **回合结束、上下文 ≥ C**：管家判断一次。处理完回到 C 以下；这一段要再涨 C/4 才会再判断，系统提示词很大时也不会每轮都判断。
-- **回合中途 ≥ H**：在下一步之前判断（兜底）。说压缩就原地压缩后继续这一步；说换段就停下，在新段接着做。
-- **提供方报上下文溢出**：直接换段，不写交接笔记。
-- **只读进程**（另一个 dsh 持有团队）：不判断、不压缩、不换段。
-- 连接失败不说明对话本身有问题，不会因此换段。
+- **End of a turn, context ≥ C**: the steward judges once. After handling, the context is back below C;
+  the part must grow by another C/4 before the next judgment, so even a very large system prompt does
+  not cause a judgment every turn.
+- **Middle of a turn, ≥ H**: judge before the next step (the fallback). If the answer is compact, compact
+  in place and continue this step; if it is switch, stop and continue in the new part.
+- **The provider reports a context overflow**: switch parts at once, without writing a handoff note.
+- **Read-only process** (another dsh holds the team): no judging, no compaction, no part switch.
+- A connection failure does not mean anything is wrong with the conversation itself, so it does not
+  cause a part switch.
 
-### 管家
+### The steward
 
-- 一次单独的小请求，不带 Bot 的长前缀，用 Bot 自己的模型路由，支持时关掉推理。
-- 看的是本段最近的消息：用户的、其他 Bot 的、Bot 自己的回复，从新到旧收，大约 6,000 tokens，单条最长 1,500 字符。另外告诉它：在私聊还是群里、回合结束还是中途、本段已经压缩过几次。
-- 只回一行 JSON：`{"action":"switch"|"compact","reason":"…"}`。
-- 判断「告一段落」之前，要逐条核对用户要的和 Bot 实际做的，有没有 Bot 问了但用户还没答的问题。没做完的，即使 Bot 说做完了，也算没告一段落。
-- 压缩过的次数越多，越应该把合理的停顿当作告一段落：摘要的摘要损失更大。这只是倾向，不是写死的规则。
-- 消息里「告诉管家怎么答」的文字，算对话内容，不算给管家的指令。
-- 管家失败或答不出：换段。
+- One separate small request, without the Bot's long prefix, on the Bot's own model route, with
+  reasoning turned off where supported.
+- It looks at the recent messages of this part: the user's, other Bots', and the Bot's own replies,
+  collected from newest to oldest, about 6,000 tokens, at most 1,500 characters per message. It is also
+  told: own chat or group, end or middle of a turn, and how many times this part has been compacted.
+- It answers with one line of JSON only: `{"action":"switch"|"compact","reason":"…"}`.
+- Before it judges "reached a stop", it checks item by item what the user asked for against what the Bot
+  actually did, and whether the Bot asked a question the user has not answered yet. Unfinished work
+  does not count as a stop, even if the Bot says it is done.
+- The more times a part has been compacted, the more readily a reasonable pause should count as a stop:
+  a summary of a summary loses more. This is a leaning, not a hard rule.
+- Text in the messages that "tells the steward how to answer" counts as conversation content, not as
+  instructions to the steward.
+- If the steward fails or cannot answer: switch parts.
 
-### 压缩：检查点
+### Compaction: checkpoint
 
-- 用本段自己的前缀发一次请求（能命中缓存），写出：现在做到哪、决定和理由、被否掉的方案、用户给的约束、剩下的步骤、需要原样保留的数据。不编造；新的覆盖旧的；合并以前的检查点和交接笔记。
-- 检查点 = `[Checkpoint N]` + 摘要 + 用户和其他 Bot 发来的原话（新的优先，有预算上限）。
-- 压缩后仍在 C 以上：换段。
-- 被压缩的消息仍在 Session 日志里，`read_own_chat` 搜得到。界面上不显示压缩标记。
+- One request with this part's own prefix (so it hits the cache) writes out: where the work stands,
+  decisions and their reasons, rejected options, constraints from the user, the remaining steps, and data
+  that must be kept verbatim. Nothing is invented; newer replaces older; earlier checkpoints and handoff
+  notes are merged in.
+- Checkpoint = `[Checkpoint N]` + the summary + the original words sent by the user and other Bots
+  (newest first, within a budget).
+- If the context is still above C after compaction: switch parts.
+- The compacted messages stay in the Session log, and `read_own_chat` can find them. The interface
+  shows no compaction marker.
 
-### 换段：交接
+### Part switch: handoff
 
-- Bot 在空闲时写一份交接笔记，用的是和它自己请求相同的前缀，所以命中缓存，用户不用等。
-- 新段开头是**交接包**：笔记 + 最近的消息原文 + 其余内容在哪里。私聊段还附一份更早的「发给 Bot 的消息」清单，每条带锚点，例如 `[part 2 #1234 · 10-08 14:22]`。群里一条群消息就包含一整轮，所以群段只带最近的消息。
-- 换段期间到达的输入先等着，再转到新段。发给旧段的输入在当前段里接着处理。
-- 旧段整份归档，不删。
+- The Bot writes a handoff note while idle, with the same prefix as its own requests, so it hits the
+  cache and the user does not wait.
+- A new part starts with a **handoff pack**: the note + the latest messages verbatim + where the rest
+  is. An own chat part also gets a list of earlier "messages sent to the Bot", each with an anchor such
+  as `[part 2 #1234 · 10-08 14:22]`. In a group one group message holds a whole round, so a group part
+  only carries the latest messages.
+- Input that arrives during a switch waits, then goes to the new part. Input sent to the old part is
+  handled in the current part.
+- The old part is archived whole, not deleted.
 
 ### `read_own_chat`
 
-- 搜索 Bot 私聊的**所有段**，包括已经压缩掉的消息。用 SQLite FTS5，BM25 排序；trigram 分词，中文不用切词，两个字以下的词用 LIKE。
-- 索引从 Session 日志派生：读的时候补齐，段结束后封存；删掉索引文件只会重建。没有 SQLite 时退回到直接扫日志。
-- `around` 传锚点，看那条消息的全文和前后几条；`part` 看某段结束时写的交接笔记。
+- Searches **all parts** of the Bot's own chat, including messages that were compacted away. Uses
+  SQLite FTS5 with BM25 ranking; a trigram tokenizer, so Chinese needs no word splitting, and terms of
+  two characters or fewer use LIKE.
+- The index is derived from the Session logs: it is filled in on read and sealed when a part ends;
+  deleting the index file only causes a rebuild. Without SQLite it falls back to scanning the logs
+  directly.
+- `around` takes an anchor and shows the full text of that message and a few around it; `part` shows the
+  handoff note written when that part ended.
 
-### 记忆
+### Memory
 
-**存放**（都在数据目录的 `bot/memory/` 下）：
+**Storage** (all under `bot/memory/` in the data directory):
 
-| 位置 | 内容 |
+| Location | Content |
 |---|---|
-| `bots/<botId>/` | 每个 Bot 自己的 `MEMORY.md` 和主题文件 |
-| `groups/<群 id>/` | 群记忆：这个群的成员共享，只在这个群里读 |
-| `team/` | 团队记忆，所有 Bot 都读 |
-| `journal.jsonl` | 每一次改动，带改动前后的那一行 |
-| `journal.torn` | 写到一半的日志行：留着当证据，日志本身补好 |
-| `pending.json` | 一次还没写完的改动：先写下它要改哪些文件，写完才去掉 |
-| `snapshots/` | 每个 Session 冻结的记忆段 |
-| `summaries/` | 记忆面板给每个 Bot、每个群的摘要 |
-| `archive/` | 已删除 Bot 和已删除群的记忆，整份 |
+| `bots/<botId>/` | Each Bot's own `MEMORY.md` and topic files |
+| `groups/<group id>/` | Group memory: shared by the members of this group, read only in this group |
+| `team/` | Team memory, read by all Bots |
+| `journal.jsonl` | Every change, with the line before and after |
+| `journal.torn` | A journal line that was half written: kept as evidence, the journal itself is repaired |
+| `pending.json` | A change that is not fully written yet: it first records which files it will change, and is removed only when the writing is done |
+| `snapshots/` | The frozen memory section of each Session |
+| `summaries/` | The memory panel's summary for each Bot and each group |
+| `archive/` | The memory of deleted Bots and deleted groups, whole |
 
-**格式**：沿用 [AgentMemoryRepo](https://github.com/AgentMemoryRepo/agentmemoryrepo) 的 Markdown 格式。一行一条，行尾带 `[source: …; added: …]` 这样的元数据；`MEMORY.md` 的 `## Index` 用 `[[主题]]` 链接主题文件。
+**Format**: the Markdown format of [AgentMemoryRepo](https://github.com/AgentMemoryRepo/agentmemoryrepo).
+One entry per line, with metadata at the end of the line such as `[source: …; added: …]`; the
+`## Index` in `MEMORY.md` links topic files with `[[topic]]`.
 
-**大小**（字符数）：一条 300；每个 `MEMORY.md` 4,000，两个加起来约 8,000，会随每次请求一起发送；一个主题 16,000，一次 `recall` 整份读完；最多 40 个主题。
+**Sizes** (in characters): 300 per entry; 4,000 per `MEMORY.md`, about 8,000 for two together, sent with
+every request; 16,000 per topic, read whole in one `recall`; at most 40 topics.
 
-**谁能做什么**：
+**Who can do what**:
 
-| | 自己的记忆 | 群记忆 | 团队记忆 | 别的 Bot 的记忆 |
+| | Own memory | Group memory | Team memory | Other Bots' memory |
 |---|---|---|---|---|
-| 普通 Bot | 读、写 | 所在群的：在这个群里读、写 | 读 | 用 `recall` 读公开 Bot 的；隐私 Bot 的不能读 |
-| 群管理员 | 读、写 | 同上 | 读、写 | 同普通 Bot |
-| Main Bot | 读、写 | 同上，不在群里就不能读 | 读、写 | 读、写（用户要求时） |
-| 用户（记忆面板） | 全部 | 全部 | 全部 | 全部 |
+| Ordinary Bot | Read, write | For groups it is in: read and write in that group | Read | Read a public Bot's with `recall`; a private Bot's cannot be read |
+| Group admin | Read, write | Same as above | Read, write | Same as an ordinary Bot |
+| Main Bot | Read, write | Same as above; cannot read it when not in the group | Read, write | Read, write (when the user asks) |
+| User (memory panel) | All | All | All | All |
 
-群里说的话留在群里：群记忆只进这个群成员的群会话，不进他们的私聊，也不进别的群和群外的 Bot。成员被移出群后，就读不到、也写不了这个群的记忆。移出是即时生效的：它的群会话当即作废归档、不再跑，`remember`/`forget`/`recall` 在调用时按成员身份拒绝。之后再进群开的是一个新的群会话，按当时的群记忆重新冻结，不是旧会话的旧冻结段。
+What is said in a group stays in the group: group memory goes only into the group Sessions of that
+group's members, not into their own chats, other groups or Bots outside the group. A member removed from
+the group can no longer read or write that group's memory. Removal takes effect at once: its group
+Session is voided and archived on the spot and no longer runs, and `remember`/`forget`/`recall` refuse at
+call time based on membership. If it later joins the group again, it gets a new group Session, frozen
+with the group memory of that moment, not the old frozen section of the old Session.
 
-**怎么写进去**：
+**How memory gets written**:
 
-- Bot 用 `remember` / `forget`。这两个工具检查谁能写哪里、大小限制，并且拒绝看起来像密钥的内容。在私聊里默认写自己的记忆；在群里默认写这个群的记忆，`scope: "own"` 写自己的，`scope: "team"` 写团队的（有权限时）。
-- 没写进去的时候（没权限、没找到要删的条目），`remember` / `forget` 报错，不回一句平常的话：模型看得出没存上。额度不再让写入失败，见 [记忆的四种读法](2026-11-09-memory-layers.md)。
-- **记忆整理**：一段对话空闲后，由模型读这段对话里新增的内容，像人谈完话后那样保留、修改或删除条目。用户说的话保留得最完整。私聊由 Bot 自己的模型整理，写进它自己的记忆；群聊按群整理一次（不是每个成员各整理一次），用群管理员的模型（没有管理员时用第一个成员的），只写进群记忆，不写个人记忆和团队记忆，且只保留任务结束后仍有用的约定、决定和事实，不记一次性任务状态（#797）。整理一次只跑一个。
-- 记忆面板：显示模型写的摘要、所有条目和「更改记录」（按 `journal.jsonl` 列出每次添加、修改、删除，点两次即可撤销单条改动，见 [记忆撤销与更改记录](2026-11-01-memory-restore.md)），用户可以问、可以直接改。Bot 的面板显示它自己的记忆和团队记忆；群的面板（群详情里的「记忆」）只显示群记忆。
-- 删除群时，群记忆整份移到 `archive/`，成员的群会话里冻结的记忆段一起作废。
-- 三条路走同一个写入路径，一次只写一个，由持有团队的那个进程写。
-- 历史不用 git：文件原地修改，`journal.jsonl` 记下每次改动替换了什么。
-- 一次改动会碰几个文件（条目、主题的 `## Index` 链接、`journal.jsonl` 那一行），先写 `pending.json` 记下这次要改什么，再改文件、最后写日志那一行。写一半被打断时，`pending.json` 留着，下次读或写记忆之前（或重启时）接着写完：条目不会没有日志那一行，主题也不会少了链接。同一行不会写两遍。
-- `journal.jsonl` 末尾可能有一行写到一半（写日志时被打断）。半行不算数：它挪到 `journal.torn` 留着当证据，日志本身补好，下一行另起一行。
+- Bots use `remember` / `forget`. These tools check who may write where and the size limits, and they
+  refuse content that looks like a key. In the own chat they write the Bot's own memory by default; in a
+  group they write that group's memory by default, `scope: "own"` writes the Bot's own, and
+  `scope: "team"` writes the team's (with permission).
+- When nothing was written (no permission, the entry to remove was not found), `remember` / `forget`
+  return an error instead of an ordinary sentence: the model can see it was not saved. The quota no
+  longer makes a write fail; see [Four ways to read memory](2026-11-09-memory-layers.md).
+- **Memory review**: once a conversation part is idle, the model reads what is new in it and keeps,
+  changes or removes entries, the way a person does after a talk. What the user said is kept most
+  completely. An own chat is reviewed by the Bot's own model and written into its own memory. A group
+  chat is reviewed once per group (not once per member), with the group admin's model (or the first
+  member's when there is no admin), and is written only into group memory, not into personal or team
+  memory; it keeps only agreements, decisions and facts that stay useful after the task ends, not
+  one-off task state (#797). Only one review runs at a time.
+- Memory panel: shows the summary written by the model, all entries, and "Change history" (every add,
+  change and removal listed from `journal.jsonl`; two clicks undo a single change, see
+  [Restore a memory change](2026-11-01-memory-restore.md)); the user can ask questions and edit
+  directly. A Bot's panel shows its own memory and team memory; a group's panel ("Memory" in the group
+  details) shows only group memory.
+- When a group is deleted, its group memory moves whole to `archive/`, and the frozen memory sections in
+  the members' group Sessions are voided with it.
+- All three paths use the same write path, one write at a time, done by the process that holds the
+  team.
+- History does not use git: files are changed in place, and `journal.jsonl` records what each change
+  replaced.
+- A change touches several files (the entry, the topic link in `## Index`, the line in
+  `journal.jsonl`). It first writes `pending.json` with what it will change, then changes the files, and
+  writes the journal line last. If it is interrupted halfway, `pending.json` stays, and the change is
+  finished before the next memory read or write (or at restart): an entry never lacks its journal line,
+  and a topic never lacks its link. The same line is never written twice.
+- The end of `journal.jsonl` may hold a half-written line (the journal write was interrupted). A half
+  line does not count: it moves to `journal.torn` as evidence, the journal itself is repaired, and the
+  next line starts on a new line.
 
-**怎么用**：
+**How memory is used**:
 
-- 每个 Session 第一次渲染时把记忆段冻结下来，之后提示词保持逐字节不变，提供方的前缀缓存才能命中。换到新段，或者做了检查点（检查点本来就会打破缓存），会重新冻结。
-- 所以一段对话开始之后才保存的条目，不会出现在这段的提示词里。提示词要求 Bot：在回答「不知道」之前先调用 `recall`。`recall` 能查到最新的条目。
-- `recall` 不带参数时，列出各处存了什么；带 `query` 时搜索；带 `topic` 时整份读一个主题。默认查自己的和团队的，在群里再加上这个群的。
-- 群会话的系统提示词和私聊逐字节相同（提供方把工具排在整个系统提示词之后，提示词里有一处不同，后面的工具就都不能共用缓存）。群记忆不进系统提示词：群会话第一步之前作为一条快照消息放进会话，之后跟着会话冻结；检查点把它压缩掉以后，下一步再放一次当时的群记忆。改之前已经把群记忆冻结在提示词里的群会话照旧，不再加这条消息。
+- Each Session freezes its memory section on first render; after that the prompt stays byte for byte the
+  same, so the provider's prefix cache can hit. Moving to a new part, or making a checkpoint (which
+  breaks the cache anyway), freezes it again.
+- So entries saved after a part has started do not appear in that part's prompt. The prompt tells the
+  Bot to call `recall` before it answers "I don't know". `recall` finds the latest entries.
+- `recall` with no arguments lists what is stored where; with `query` it searches; with `topic` it reads
+  a whole topic. By default it searches the Bot's own memory and the team's, plus this group's when in a
+  group.
+- A group Session's system prompt is byte for byte the same as the own chat's (the provider puts tools
+  after the whole system prompt, so one difference in the prompt means none of the tools after it can
+  share the cache). Group memory is not in the system prompt: before the group Session's first step it
+  goes into the Session as a snapshot message, and is then frozen with the Session; after a checkpoint
+  compacts it away, the next step adds the group memory of that moment again. Group Sessions that froze
+  group memory into the prompt before this change stay as they are and do not get this message.
 
-## 不做什么
+## Not done
 
-- 不告诉 Bot 或用户上下文占用了多少，不给 Bot 切换段的工具。
-- 不用固定的 token 线，不为某个模型写死数字。
-- 不每轮都判断，只在过线后判断。
-- 不用 git 管理记忆。
-- 不改 DSH 的模型配置界面。「添加模型时默认填 500k 上下文」做不到，只能在模型完全没声明窗口时按 500k。
+- Neither the Bot nor the user is told how much of the context is used, and the Bot gets no tool to
+  switch parts.
+- No fixed token lines, and no hard-coded numbers for any model.
+- No judgment every turn, only after a line is crossed.
+- No git for memory.
+- No change to DSH's model settings interface. "Fill in 500k context by default when adding a model" is
+  not possible; the plugin can only use 500k when the model declares no window at all.
 
-## 已知限制
+## Known limits
 
-- DSH 的一些适配器会给没写 `contextWindow` 的模型自己填一个默认值，这时插件拿到的是适配器的值，不是 500k。README 里要求用户填 `contextWindow`。
-- 已经开着的会话通过增量消息看到别人改动的 `MEMORY.md` 条目，主题里的内容靠自动召回或 `recall`（#214、#453，见 [记忆的四种读法](2026-11-09-memory-layers.md)）。
-- 和[愿景](../vision.zh.md)第 3 条的差距：
-  - Bot 之间的记忆互相只读：用 `recall` 按需读，不注入；隐私 Bot 的记忆只有它自己和用户能读（见 [隐私 Bot](2026-10-27-private-bots.md)）。
-  - 愿景要求目标驱动地完成工作：群聊已有 DS Bot 自己的 [群聊 Goal](2026-11-01-group-goal.md)（#791），单 Bot 私聊里的 Goal 还没做；Bot 会话里关掉了 DSH 的会话级 goal（见 [DSH 让步总账](2026-10-13-dsh-concessions.md)）。
-- 「Bot 开一个全新的会话、保留身份」（相当于 /new）还没有（#122）。
+- Some DSH adapters fill in their own default for a model with no `contextWindow`; then the plugin gets
+  the adapter's value, not 500k. The README asks users to fill in `contextWindow`.
+- Sessions that are already open see `MEMORY.md` entries changed by others through delta messages;
+  topic content comes through automatic recall or `recall` (#214, #453, see
+  [Four ways to read memory](2026-11-09-memory-layers.md)).
+- Gaps against item 3 of the [vision](../vision.md):
+  - Bots can only read each other's memory: on demand with `recall`, not injected; a private Bot's
+    memory can be read only by itself and the user (see [Private Bots](2026-10-27-private-bots.md)).
+  - The vision asks for goal-driven work: group chats have DS Bot's own
+    [group Goal](2026-11-01-group-goal.md) (#791), a Goal in a single Bot's own chat is not done yet;
+    DSH's Session-level goal is turned off in Bot Sessions (see
+    [DSH concessions](2026-10-13-dsh-concessions.md)).
+- "A Bot opens a brand-new Session and keeps its identity" (like /new) does not exist yet (#122).
 
-## 变更
+## Changes
 
-- 2026-10-08：定记忆的格式、存放和「整理不用 git」。
-- 2026-10-09：分段从「到线就换段」改为「管家判断压缩还是换段」；所有线改为跟着模型走。
-- 2026-10-17：加群记忆（#151）。之前群里学到的东西只能进团队记忆，所有 Bot 都读，群外新建的 Bot 也会带上；现在群聊按群整理，只写群记忆。
-- 2026-10-23：换工作文件夹触发的换段在会话尾部显示一行状态（「正在切换工作文件夹」，#486）。其他原因的换段仍然无感。
-- 2026-10-23：加 `pending.json`，一次改动当成一次来做（#481）。之前文件先写、日志后写，中断会留下没有日志的条目，或没有链接的主题。
-- 2026-10-23：没写进记忆的时候，`remember` / `forget` 报错，对话里显示一行失败提示和记忆面板的入口（#482）。
-- 2026-11-02：群记忆从群会话的系统提示词挪到会话开头的一条快照消息，群会话的系统提示词和工具与私聊相同，首轮能共用私聊的前缀缓存（实测首轮命中从约 2k 到约 13k token，PR #828）。
-- 2026-11-02：群记忆整理不再记一次性任务、只保留任务结束后仍有用的内容（#797，PR #827）；记忆面板 ⋯ 菜单增加「更改记录」，可按记录 id 撤销单条改动（#464，PR #822）。
-- 2026-11-09：记忆分成常驻、增量、自动召回、按需四种读法，额度只算正文，团队常驻层由用户决定（[记忆的四种读法](2026-11-09-memory-layers.md)）。
+- 2026-10-08: decided the memory format, storage, and "review without git".
+- 2026-10-09: parts changed from "switch when the line is hit" to "the steward judges compact or
+  switch"; all lines now follow the model.
+- 2026-10-17: added group memory (#151). Before, what was learned in a group could only go into team
+  memory, which all Bots read, including Bots created outside the group later; now group chats are
+  reviewed per group and write only group memory.
+- 2026-10-23: a part switch caused by a change of working folder shows a status line at the end of the
+  chat ("Switching working folder", #486). Part switches for other reasons stay invisible.
+- 2026-10-23: added `pending.json`, so one change is done as one (#481). Before, the files were written
+  first and the journal after, and an interruption could leave an entry with no journal line or a topic
+  with no link.
+- 2026-10-23: when nothing was written to memory, `remember` / `forget` return an error, and the chat
+  shows a one-line failure notice with a link to the memory panel (#482).
+- 2026-11-02: group memory moved from the group Session's system prompt to a snapshot message at the
+  start of the Session, so a group Session has the same system prompt and tools as the own chat and its
+  first turn can share the own chat's prefix cache (measured first-turn hits went from about 2k to about
+  13k tokens, PR #828).
+- 2026-11-02: group memory review no longer records one-off tasks and keeps only what stays useful after
+  the task ends (#797, PR #827); the memory panel's ⋯ menu gains "Change history", which can undo a
+  single change by its record id (#464, PR #822).
+- 2026-11-09: memory is read in four ways: always loaded, delta, automatic recall and on demand; the
+  quota counts only the entry text, and the user decides the team's always-loaded layer
+  ([Four ways to read memory](2026-11-09-memory-layers.md)).

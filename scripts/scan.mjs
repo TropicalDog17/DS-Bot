@@ -129,7 +129,7 @@ else {
     if (range !== '*') add(KEEP, 'package', 'ds-bot/package.json', 0, `peer ${name} is "${range}", not "*"`)
   }
 }
-for (const name of ['README.md', 'README.zh.md', 'CONTRIBUTING.md', 'CHANGELOG.md', 'AGENTS.md', '.gitignore']) {
+for (const name of ['README.md', 'CONTRIBUTING.md', 'CHANGELOG.md', 'AGENTS.md', '.gitignore']) {
   if (!files.includes(name)) add(MUST, 'root-file', name, 0, 'missing at the root')
 }
 

@@ -1,94 +1,105 @@
 ---
 name: issue-triage
-description: 给 DS Bot 仓库的 Issue 和 PR 分诊：打类型、优先级、领域标签，判断该关闭、追问、转讨论还是留着做，并把结论写回 GitHub。触发词：分诊、整理 Issue、打标签、打优先级、这个该不该关、追问报告人、needs-info 到期。
+description: "Triage issues and pull requests in the DS Bot repository: add type, priority and area labels, decide whether to close, ask for more information, move to Discussions or keep for work, and write the result back to GitHub. Triggers: triage, sort issues, add labels, set priority, should this be closed, ask the reporter, needs-info expired."
 ---
 
-# Issue 分诊
+# Issue triage
 
-目标：每个 Open Issue 都有**一个类型、一个优先级**，需要时有一个领域；每个关闭的 Issue 都有**证据**。
+Goal: every open issue has **one type and one priority**, and an area when needed; every closed issue has
+**evidence**.
 
-标签的含义和流程以 [CONTRIBUTING.zh.md](../../../CONTRIBUTING.zh.md#协作方式) 为准，本文只写怎么做。
+[CONTRIBUTING.md](../../../CONTRIBUTING.md#how-we-work) defines what the labels mean and the workflow. This
+file only says how to do the work.
 
-**边界**：只动 Issue、PR 的标签、评论和关闭状态。不改代码，不改 Issue 正文，不合并 PR。带 `maintainer` 的条目只分诊、不下结论。
+**Limits**: only change labels, comments and the open/closed state of issues and pull requests. Do not change
+code, do not edit issue bodies, do not merge pull requests. Items with the `maintainer` label get triaged, but
+you do not decide them.
 
-## 1. 取快照
+## 1. Take a snapshot
 
-在仓库根目录运行（只读，不写 GitHub）：
+Run in the repository root (read-only, does not write to GitHub):
 
 ```sh
 node .agents/skills/issue-triage/scripts/snapshot.mjs --out /tmp/triage
 ```
 
-先读 `digest.md` 再判断，不要只看标题。digest 把每个 Issue 列成：标签、天数、评论数、正文和别人评论的摘要、`dev`/`main` 上引用它的提交、引用它的 Open PR。最上面是**待处理**：
+Read `digest.md` before you decide; do not judge by the title only. The digest lists each issue with: labels,
+age in days, comment count, a summary of the body and of other people's comments, the commits on `dev`/`main`
+that reference it, and the open pull requests that reference it. At the top is **To do**:
 
-- 没有类型或没有优先级的
-- 有两个优先级的
-- `needs-info` 超过 14 天、报告人没再回复的
+- issues with no type or no priority
+- issues with two priorities
+- `needs-info` older than 14 days with no reply from the reporter
 
-动手之前读一遍 [references/gh-gotchas.md](references/gh-gotchas.md)。
+Read [references/gh-gotchas.md](references/gh-gotchas.md) before you start.
 
-## 2. 分类
+## 2. Classify
 
-每条落三个坐标：
+Give each item three coordinates:
 
-| 坐标 | 取值 | 怎么判 |
+| Coordinate | Values | How to decide |
 |---|---|---|
-| 类型 | `bug` · `enhancement` · `documentation` | 行为和设计不一致才是 `bug`。设计本来就这样、用户想要别的，是 `enhancement`。拿不准时先读 [docs/vision.zh.md](../../../docs/vision.zh.md) 和 [docs/plans/](../../../docs/plans/) |
-| 优先级 | `P0`–`P3` | `P0` 崩溃、丢数据、完全不能用 · `P1` 影响日常使用、刚引入的回归 · `P2` 普通 bug 或功能 · `P3` 建议、窄场景 |
-| 领域 | `area/*` 之一 | 按改动会落在哪个目录判。跨好几个领域或不属于任何领域，就不挂 |
+| Type | `bug` · `enhancement` · `documentation` | It is a `bug` only when the behavior differs from the design. When the design is already like that and the user wants something else, it is an `enhancement`. If you are not sure, read [docs/vision.md](../../../docs/vision.md) and [docs/plans/](../../../docs/plans/) first |
+| Priority | `P0`–`P3` | `P0` crash, data loss, completely unusable · `P1` affects daily use, a newly introduced regression · `P2` normal bug or feature · `P3` suggestion, narrow case |
+| Area | one of `area/*` | Decide by the directory the change would land in. If it spans several areas or belongs to none, add no area |
 
-规则：
+Rules:
 
-- **已有的优先级默认保留**。那是之前的判断，不是噪声。觉得该改，在评论里说理由。
-- **一个 Issue 只有一个 P 标签**。`--add-label` 不会去掉旧的，改优先级要同时 `--remove-label`。
-- PR 不打类型和领域。
+- **Keep an existing priority by default.** It is an earlier decision, not noise. If you think it should change,
+  give the reason in a comment.
+- **An issue has only one P label.** `--add-label` does not remove the old one; to change the priority, also
+  use `--remove-label`.
+- Pull requests get no type and no area.
 
-## 3. 判动作
+## 3. Decide the action
 
-按证据归组。**证据不够就留着做**，不要猜着关。
+Group by evidence. **When the evidence is not enough, keep the issue for work**; do not close on a guess.
 
-| 组 | 判据 | 动作 |
+| Group | Criterion | Action |
 |---|---|---|
-| 已修，未发版 | `dev` 上有提交或已合并的 PR 修了它 | 不关。评论写明 PR 号，等发版时 Release PR 的 `Fixes #N` 自动关 |
-| 已修，已发版 | `main` 上有修复，CHANGELOG 有记录，或能指出守住它的测试 | `completed` 关，评论写具体的 PR、提交或测试名 |
-| 重复 | 和另一个 Issue 是同一个原因 | 加 `duplicate`，链接那一个，`not planned` 关 |
-| 上游 | 原因在 DSH 或别的插件 | 加 `upstream`，链接该去的地方。我们这边无事可做时 `not planned` 关 |
-| 提问 | 怎么装、怎么用 | 在网页上 **Convert to discussion**，转到 Q&A（CLI 做不了，见 gotchas） |
-| 缺信息 | 现象定位不了，没有版本、日志或复现步骤 | 加 `needs-info`，追问一次（模板见下） |
-| `needs-info` 到期 | 追问后 14 天没有新信息 | `not planned` 关，评论写「没有收到补充信息，补充后会重新打开」 |
-| 有 PR 在做 | 有 Open PR 引用它 | 不动 |
-| 需要方向 | 涉及产品方向、已定设计、协作规则、发版、架构 | 加 `maintainer`，等维护者 |
-| 留着做 | 其余 | 打好标签就行。小而清楚的可以加 `good first issue` |
+| Fixed, not released | A commit or a merged pull request on `dev` fixes it | Do not close. Comment with the pull request number; the release pull request's `Fixes #N` closes it at release |
+| Fixed, released | The fix is on `main`, CHANGELOG records it, or you can point to a test that guards it | Close as `completed`; the comment names the exact pull request, commit or test |
+| Duplicate | Same cause as another issue | Add `duplicate`, link the other one, close as `not planned` |
+| Upstream | The cause is in DSH or another plugin | Add `upstream`, link where it belongs. When there is nothing to do on our side, close as `not planned` |
+| Question | How to install, how to use | On the web page, **Convert to discussion** into Q&A (the CLI cannot do this, see gotchas) |
+| Missing information | The problem cannot be located: no version, logs or steps to reproduce | Add `needs-info` and ask once (template below) |
+| `needs-info` expired | No new information 14 days after asking | Close as `not planned`, comment "No further information received; we will reopen this when it arrives" |
+| Pull request in progress | An open pull request references it | Leave it |
+| Needs direction | Touches product direction, a decided design, the workflow rules, releases or architecture | Add `maintainer` and wait for the maintainer |
+| Keep for work | Everything else | Labels are enough. Small, clear ones can get `good first issue` |
 
-## 4. 写评论和关闭
+## 4. Write comments and close
 
-- **用 Issue 自己的语言**：正文是中文就用中文，否则用英文。
-- 关闭的评论必须是「为什么可以关」的证据：PR 号、提交号、文件和测试名、重复的 Issue 号、报告人自己的更正。
-- 一条命令完成关闭和评论：`gh issue close <n> --reason "completed" --comment-file <file>` 或 `--reason "not planned"`。
-- 中文评论先写进 UTF-8 文件，再用 `--body-file` 或 `--comment-file` 发。
+- **Use the issue's own language**: Chinese if the body is in Chinese, English otherwise.
+- A closing comment must be evidence for why the issue can be closed: pull request number, commit hash, file
+  and test name, the duplicate issue number, the reporter's own correction.
+- Close and comment in one command: `gh issue close <n> --reason "completed" --comment-file <file>` or
+  `--reason "not planned"`.
+- Write a Chinese comment into a UTF-8 file first, then send it with `--body-file` or `--comment-file`.
 
-追问模板（按情况删改，写清楚**缺什么**）：
+Template for asking (edit as needed; say clearly **what is missing**):
 
 ```text
-感谢反馈。为了找到原因，请补充：
-1. DS Bot 和 DSH 的版本。
-2. ……（具体缺的东西）
-3. ……
+Thanks for the report. To find the cause, please add:
+1. The DS Bot and DSH versions.
+2. … (the specific thing that is missing)
+3. …
 
-14 天内没有新信息，我们会先关闭这个 Issue；补充后我们会重新打开。
+If there is no new information within 14 days, we will close this issue for now; we will reopen it when you add it.
 ```
 
-## 5. 回读自查
+## 5. Read back and check
 
-写回之后再拉一次，确认：
+After writing back, fetch again and confirm:
 
 ```sh
 gh issue list --state open --limit 300 --json number,labels --jq '.[] | select([.labels[].name | select(test("^P[0-3]$"))] | length != 1) | .number'
 gh issue list --state open --limit 300 --json number,labels --jq '.[] | select([.labels[].name | select(. == "bug" or . == "enhancement" or . == "documentation")] | length == 0) | .number'
 ```
 
-两条都没有输出才算完成。
+You are done only when both print nothing.
 
-## 6. 汇报
+## 6. Report
 
-向提出请求的人汇报一张表：编号、标题、打了什么标签、动作、证据。关闭和追问在执行前先给对方看；对方确认后再发。
+Report a table to the person who asked: number, title, labels added, action, evidence. Show closes and
+follow-up questions to them before you run them; send them after they confirm.

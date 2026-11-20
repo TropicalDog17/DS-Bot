@@ -1,95 +1,119 @@
-# 手机 App
+# Mobile app
 
-- 日期：2026-10-24
-- 相关：[愿景](../vision.zh.md)「独立应用」「数据留在用户自己的电脑上」、[桌面应用](2026-10-16-desktop-app.md)、[角色与权限](2026-10-07-roles-and-permissions.md)
+- Date: 2026-10-24
+- Related: [vision](../vision.md) "A standalone app" and "Data stays on the user's computer",
+  [desktop app](2026-10-16-desktop-app.md), [roles and permissions](2026-10-07-roles-and-permissions.md)
 
-## 为什么
+## Why
 
-用户离开电脑时，Bot 还在干活：要审批、要回答问题、要看结果、要再派活。手机 App 让用户在 iOS 和 Android 上远程操控自己电脑上的 DS Bot 团队。
+When the user is away from the computer, the Bots keep working: there are approvals to give,
+questions to answer, results to look at and more work to hand out. The mobile app lets the user
+control the DS Bot team on their own computer remotely, from iOS and Android.
 
-取舍：
+Trade-offs:
 
-- **手机不跑 Agent。** Bot 的回合、工具、模型、记忆、聊天记录都留在电脑上，和桌面一样。手机只显示和操控。
-- **连接自己做，借鉴 DSH Remote。** DSH Remote（MIT）的连接方式已经很成熟：端到端加密、电脑只往外连、直连失败自动走中转。我们用它的连接代码，改成 DS Bot 自己的协议，以后自己改进，不依赖它的插件、服务器和版本。用到的文件写进 `NOTICE`。
-- **界面全部自己做。** Bot 团队、群聊、卡片的页面按 DS Bot 自己的设计做，不用通用的远程会话界面。
-- **一套代码出两端。** Expo React Native，原生构建。
+- **The phone runs no agent.** Bot turns, tools, models, memory and chat history all stay on the
+  computer, as on the desktop. The phone only shows and controls.
+- **We build the connection ourselves, learning from DSH Remote.** DSH Remote (MIT) already has a
+  mature way to connect: end-to-end encryption, the computer only connects outward, and a relay is
+  used automatically when a direct connection fails. We use its connection code, changed to DS Bot's
+  own protocol, and improve it ourselves from there, without depending on its plugin, servers or
+  versions. The files we use are listed in `NOTICE`.
+- **We build the whole interface ourselves.** The pages for the Bot team, group chats and cards
+  follow DS Bot's own design, not a generic remote-session interface.
+- **One codebase for both platforms.** Expo React Native, with native builds.
 
-## 已定的行为
+## Decided behavior
 
-### 结构
+### Structure
 
-| 部分 | 在哪里 | 做什么 |
+| Part | Where | What it does |
 |---|---|---|
-| 手机 App | `mobile/` | iOS 和 Android。界面、团队状态、加密连接 |
-| Host 模块 | 电脑上，桌面应用内置；插件版也能用 | 认配对过的手机，把手机的操作交给 `ds-bot` 的 `api/bot`，和桌面界面用同一套操作 |
-| 中转服务器 | DS Bot 提供一个；用户也能自己搭，在 App 里换地址 | 配对、设备列表、中转、推送。只转发密文，看不到内容 |
+| Mobile app | `mobile/` | iOS and Android. Interface, team state, encrypted connection |
+| Host module | On the computer, built into the desktop app; the plugin can use it too | Recognizes paired phones and passes the phone's actions to `ds-bot`'s `api/bot`, using the same actions as the desktop interface |
+| Relay server | DS Bot provides one; users can also run their own and change the address in the app | Pairing, device list, relay, push. It only forwards ciphertext and cannot see the content |
 
-- 电脑只往外连，不需要公网 IP，不用开端口。
-- 手机和电脑之间端到端加密（Noise）。能直连就直连，连不上走中转。
-- 手机能用的操作和 `ds-bot` 同一个版本发布。`ds-bot` 加了操作，手机跟着能用。
+- The computer only connects outward: no public IP and no open ports are needed.
+- The phone and the computer are encrypted end to end (Noise). They connect directly when they can
+  and go through the relay when they cannot.
+- The actions the phone can use are released with the same version of `ds-bot`. When `ds-bot` adds
+  an action, the phone can use it too.
 
-### 配对和设备
+### Pairing and devices
 
-- 电脑上显示二维码，手机扫码配对，不要账号。
-- 第一次连上时记住电脑的身份。以后身份变了，手机拒绝连接并提示。
-- 电脑上能看到已配对的手机，能移除。移除后这台手机立刻断开，不能再连。
-- 手机的密钥存在系统钥匙串（iOS Keychain、Android Keystore）。
+- The computer shows a QR code, and the phone scans it to pair. No account is needed.
+- The phone remembers the computer's identity on the first connection. If the identity changes
+  later, the phone refuses to connect and shows a warning.
+- The computer shows the paired phones and can remove them. A removed phone is disconnected at once
+  and cannot connect again.
+- The phone's keys are stored in the system keychain (iOS Keychain, Android Keystore).
 
-### 手机上能做什么
+### What the phone can do
 
-完整功能：桌面 DS Bot 能做的，手机上都能做。
+Full features: whatever DS Bot can do on the desktop, the phone can do too.
 
-| 页面 | 内容 |
+| Page | Contents |
 |---|---|
-| 电脑列表 | 已配对的电脑、在线状态、重新配对 |
-| 团队 | Bot 和群的列表、搜索、未读；「需要你」：所有等你处理的审批、提问、卡片 |
-| 私聊 | 消息、图片、更早的记录、Side chat、停止 Bot 的工作 |
-| 群聊 | 消息、进度；停下群里的工作 |
-| 审批、提问、卡片 | 选项和桌面一样；卡片能填、能回复 |
-| Bot 和群 | 新建、编辑、复制、删除；设 Main Bot；模型、思考强度、权限预设；成员 Agent |
-| 记忆 | 每个 Bot 和群的记忆：查看、问、忘记 |
-| 密钥 | 回应 Bot 的密钥卡；在设置里新增、更新、删除。值只在加密连接里传，手机上不回显 |
-| 连接器 | 连接、断开、重试 |
-| 日程 | 新建、删除、查看 |
-| 能力 | MCP、技能、能力包：查看、保存、批准、删除 |
-| 模型服务商 | 新增、删除，填 key，选模型 |
-| 工作文件夹 | 在文件夹列表里选；团队工作区 |
-| Bot 浏览器 | 看画面、接管、交还、回应浏览器等待 |
-| 用量和统计 | 查看 |
-| 更新和诊断 | 查更新、装更新；看诊断日志、清理 |
+| Computer list | Paired computers, online state, pair again |
+| Team | List of Bots and groups, search, unread; "Needs you": every approval, question and card waiting for you |
+| Private chat | Messages, images, earlier history, Side chat, stopping a Bot's work |
+| Group chat | Messages, progress; stopping the work in a group |
+| Approvals, questions, cards | The same options as on the desktop; cards can be filled in and answered |
+| Bots and groups | Create, edit, copy, delete; set a Main Bot; model, thinking effort, permission preset; member agents |
+| Memory | Each Bot's and group's memory: view, ask, forget |
+| Secrets | Answer a Bot's secret card; add, update and delete in the settings. Values travel only over the encrypted connection and are not shown back on the phone |
+| Connectors | Connect, disconnect, retry |
+| Schedules | Create, delete, view |
+| Capabilities | MCP, skills, capability packs: view, save, approve, delete |
+| Model providers | Add, delete, enter the key, pick models |
+| Work folders | Pick from a folder list; team workspace |
+| Bot browser | Watch the screen, take over, hand back, answer browser waits |
+| Usage and stats | View |
+| Updates and diagnostics | Check for updates, install updates; view diagnostic logs, clean up |
 
-- 只有必须在电脑本机做的事换了做法：选文件夹的系统对话框换成手机上的文件夹列表；Bot 浏览器还在电脑上跑，手机看画面、接管。
-- 角色和权限和桌面一样，见[角色与权限](2026-10-07-roles-and-permissions.md)。
+- Only things that must happen on the computer itself work differently: the system dialog for
+  picking a folder becomes a folder list on the phone; the Bot browser still runs on the computer,
+  and the phone watches the screen and takes over.
+- Roles and permissions are the same as on the desktop; see
+  [roles and permissions](2026-10-07-roles-and-permissions.md).
 
-### 高权限操作
+### High-privilege actions
 
-- 改密钥、模型服务商 key、连接器、能力、装更新，每次要先在手机上解锁（Face ID、指纹或锁屏密码）。没解锁不发出。
+- Changing secrets, model provider keys, connectors or capabilities, and installing updates, each
+  needs the phone to be unlocked first (Face ID, fingerprint or the screen-lock passcode). Without
+  unlocking, nothing is sent.
 
-### 同步
+### Sync
 
-- 团队状态按版本号同步，只取变化的部分。
-- App 在后台时停止刷新，回到前台时补齐。
-- 断线时页面显示「已断开」，重连后补齐。写操作不自动重试，避免同一条消息发两次。
+- Team state syncs by version number, fetching only what changed.
+- The app stops refreshing while in the background and catches up when it comes back to the
+  foreground.
+- When disconnected, pages show "Disconnected" and catch up after reconnecting. Write actions are
+  not retried automatically, so that one message is not sent twice.
 
-### 推送
+### Push
 
-- 有事需要你时（审批、提问、Bot 回复、任务结束）推送通知。
-- 推送内容端到端加密，手机收到后本地解密显示，例如「Chief 请你审批：……」。中转服务器只看到密文。
+- When something needs you (an approval, a question, a Bot reply, a task finishing), a push
+  notification is sent.
+- Push content is encrypted end to end. The phone decrypts it locally and shows it, for example
+  "Chief asks for your approval: …". The relay server only sees ciphertext.
 
-### 安全
+### Security
 
-- 只接受配对过的手机。参数只能是普通 JSON 对象。
-- Bot 发来的卡片是不可信内容：只按固定格式渲染，有深度和大小上限，不执行网页、脚本，不访问网络。
+- Only paired phones are accepted. Parameters can only be plain JSON objects.
+- Cards sent by Bots are untrusted content: they render only in a fixed format, with limits on depth
+  and size, and they run no web pages or scripts and access no network.
 
-## 不做什么
+## Not done
 
-- 不在手机上跑 Agent，不在手机上存团队数据和聊天记录。
-- 不做远程桌面和终端。
+- No agent running on the phone, and no team data or chat history stored on the phone.
+- No remote desktop or terminal.
 
-## 已知限制
+## Known limits
 
-- iOS 上架要 Apple 开发者账号，测试版走 TestFlight。Android 可以直接装 APK。
-- 电脑关机或睡眠时，手机连不上。
-- 推送端到端加密要原生通知扩展，先验证能做。
+- Publishing on iOS needs an Apple developer account; test builds go through TestFlight. Android can
+  install the APK directly.
+- When the computer is off or asleep, the phone cannot connect.
+- End-to-end encrypted push needs a native notification extension; first check that it can be done.
 
-## 变更
+## Changes

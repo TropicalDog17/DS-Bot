@@ -1,53 +1,95 @@
-# 密钥的静态加密（可选）
+# Encrypting secrets at rest (optional)
 
-- 日期：2026-11-12
-- 相关：#1467、[浏览器、搜索、密钥和连接器](2026-10-08-browser-and-secrets.md)、[连接器](2026-11-04-connectors.md)
+- Date: 2026-11-12
+- Related: #1467, [browser, search, secrets and connectors](2026-10-08-browser-and-secrets.md), [connectors](2026-11-04-connectors.md)
 
-## 为什么
+## Why
 
-今天 Bot 的密钥（`bot/secrets.json`）只有文件权限 600、输出脱敏和 `$DSH_SECRET_<NAME>` 注入，值本身是明文。自建在 Linux 服务器上的用户接个人邮箱、连接器时，数据目录或备份会被拷走，明文密钥随之泄露。用户希望能选用系统密钥环或外部 secret provider。
+Today a Bot's secrets (`bot/secrets.json`) have only file mode 600, redaction in output and
+`$DSH_SECRET_<NAME>` injection; the values themselves are plain text. When a user who self
+hosts on a Linux server connects personal mail or connectors, the data directory or a
+backup can be copied away, and the plain-text secrets leak with it. Users want to be able
+to choose the system keyring or an external secret provider.
 
-先明确威胁模型：**运行中的进程必须能拿到密钥**，所以静态加密只防「磁盘/备份被拷走」，不防被入侵的运行进程、能读进程内存或口令来源的本机管理员。这条写进产品判断，不当作加密能解决的问题。
+First the threat model: **the running process must be able to get the secrets**, so
+encryption at rest only protects against "the disk or a backup is copied away". It does
+not protect against a compromised running process, or a local administrator who can read
+process memory or the passphrase source. This is written into the product judgment and is
+not treated as a problem that encryption can solve.
 
-## 方案比较
+## Options compared
 
-| 方案 | 优点 | 代价 |
+| Option | Pros | Cost |
 |---|---|---|
-| 系统密钥环（macOS Keychain、Windows DPAPI、Linux Secret Service） | 解锁跟随桌面登录，用户不用记口令 | Linux 无桌面会话没有 Secret Service；插件进程不是 Electron 主进程，拿不到 `safeStorage`；三平台各一套代码和失败路径 |
-| 外部 secret provider 接口（Vault 等） | 运维已有密钥管理 | 需要联网托管服务，用户明确不要；接口和部署成本大 |
-| 口令加密文件（本 PR 选的起步方案） | 无依赖、无网络、Linux 无桌面可用；改动集中在一个文件 | 用户要记口令；无人值守重启要把口令放进服务管理器 |
+| System keyring (macOS Keychain, Windows DPAPI, Linux Secret Service) | Unlocks with the desktop login; the user does not need to remember a passphrase | Linux without a desktop session has no Secret Service; the plugin process is not the Electron main process and cannot get `safeStorage`; one set of code and failure paths per platform |
+| External secret provider interface (Vault and others) | Operators already have secret management | Needs a networked hosted service, which users explicitly do not want; high interface and deployment cost |
+| Passphrase-encrypted file (the starting option chosen in this pull request) | No dependencies, no network, works on Linux without a desktop; the change stays in one file | The user must remember a passphrase; an unattended restart needs the passphrase in the service manager |
 
-先做口令加密文件，把「系统密钥环/外部 provider」留成以后可加的 provider；本 PR 不引入依赖、不联网。
+The passphrase-encrypted file comes first; "system keyring / external provider" is left as
+a provider that can be added later. This pull request adds no dependencies and uses no
+network.
 
-## 已定的行为
+## Decided behavior
 
-- **默认不变**：不启用时 `secrets.json` 就是今天的 `{version:1,secrets:[...]}`，权限 600、写入方式、API、界面都同现在；现有用户不需要迁移。
-- **可选启用**：设置 → 密钥里「静态加密」卡片，用户设一个口令（至少 8 个字符），把 `secrets.json` **同一个文件**原子替换成加密信封。启用后磁盘上只有密文（文件里不出现密钥名、值或用途）。
-- **格式**：`secrets.json` 内容变为
-  `{version:2, encrypted:true, kdf:{name:"scrypt",N:32768,r:8,p:1}, salt, iv, tag, ciphertext}`。
-  密钥用 scrypt（N=2^15, r=8, p=1, 16 字节盐）派生 32 字节，AES-256-GCM 加密，12 字节随机 IV、16 字节 tag；明文负载仍是原来的 `{version:1,secrets:[...]}`。文件权限仍为 600，salt/iv 每次加密重新随机。
-- **解锁**：启动时按顺序取口令——本进程内存里已解锁的口令、`DS_BOT_SECRETS_PASSPHRASE`、`DS_BOT_SECRETS_PASSPHRASE_FILE`（文件内容去掉一个结尾换行）。都没有就进入「已锁定」：不写文件、密钥列表为空，设置页显示解锁卡片，日志给出可操作提示；不会静默当成没有密钥。
-- **界面解锁**：设置 → 密钥输入口令解锁；解锁只在这个进程内有效，进程退出后重新锁上。
-- **关闭加密（回滚）**：输入口令后把同一文件原子写回明文 `version:1`；明文写成功才切模式，失败时文件保持加密、模式不变。锁定状态下也能用口令回滚。
-- **备份**：启用后数据目录里的 `secrets.json` 是密文，备份可以照常做；口令必须单独保管，**口令丢了密钥不可恢复**（不设后门、不做托管）。启用前留下的明文备份要自己删掉。
-- **无人值守重启**：把口令放进服务管理器（例如 systemd `EnvironmentFile` 或 `LoadCredential`），用 `DS_BOT_SECRETS_PASSPHRASE_FILE` 指向只有服务用户可读的文件；没有口令时服务能起来，但密钥处于锁定，相关工具/连接器报明确原因，设置页有解锁入口。
-- **写操作在锁定状态下全部拒绝**（新增、改、删密钥），避免把空列表写回密文文件。
+- **Default unchanged**: when encryption is not on, `secrets.json` is today's
+  `{version:1,secrets:[...]}`; mode 600, the write method, the API and the interface are
+  all as they are now. Existing users need no migration.
+- **Opt-in**: the "Encryption at rest" card in Settings → Secrets. The user sets a
+  passphrase (at least 8 characters), and **the same file** `secrets.json` is atomically
+  replaced with an encrypted envelope. Once it is on, only ciphertext is on disk (secret
+  names, values and purposes do not appear in the file).
+- **Format**: the content of `secrets.json` becomes
+  `{version:2, encrypted:true, kdf:{name:"scrypt",N:32768,r:8,p:1}, salt, iv, tag, ciphertext}`.
+  The key is derived with scrypt (N=2^15, r=8, p=1, 16-byte salt) to 32 bytes and used for
+  AES-256-GCM with a random 12-byte IV and a 16-byte tag; the plain-text payload is still
+  the original `{version:1,secrets:[...]}`. File mode stays 600, and salt and iv are random
+  again on every encryption.
+- **Unlock**: at start the passphrase is taken in this order: an already unlocked
+  passphrase in this process's memory, `DS_BOT_SECRETS_PASSPHRASE`,
+  `DS_BOT_SECRETS_PASSPHRASE_FILE` (file content with one trailing newline removed). When
+  none is there, the store is "locked": it does not write the file, the secret list is
+  empty, the settings page shows an unlock card, and the log gives an actionable hint. It
+  never silently acts as if there were no secrets.
+- **Unlock in the interface**: enter the passphrase in Settings → Secrets. Unlocking holds
+  only for this process; after the process exits it is locked again.
+- **Turn encryption off (rollback)**: after the passphrase is entered, the same file is
+  atomically written back as plain-text `version:1`. The mode switches only after the
+  plain-text write succeeds; on failure the file stays encrypted and the mode does not
+  change. Rollback with the passphrase also works while locked.
+- **Backups**: once encryption is on, `secrets.json` in the data directory is ciphertext
+  and backups can go on as usual. The passphrase must be kept separately; **if the
+  passphrase is lost, the secrets cannot be recovered** (no back door, no escrow).
+  Plain-text backups made before encryption was turned on must be deleted by the user.
+- **Unattended restart**: put the passphrase into the service manager (for example
+  systemd `EnvironmentFile` or `LoadCredential`), with `DS_BOT_SECRETS_PASSPHRASE_FILE`
+  pointing to a file that only the service user can read. Without a passphrase the service
+  still starts, but the secrets are locked, the related tools and connectors report a clear
+  reason, and the settings page has an unlock entry.
+- **All writes are refused while locked** (adding, changing, deleting secrets), so an empty
+  list is never written back over the encrypted file.
 
-## 不做什么
+## Not done
 
-- 不改第三方连接器的鉴权流程；连接器读到的仍是解密后的值。
-- 不做密钥轮换、口令修改、自动重新锁定。
-- 不接联网的密钥托管服务，不引新依赖。
-- 不做 OS 密钥环（作为以后的 provider；本 PR 把存储层收成一个模块，方便以后替换）。
+- No change to third-party connector auth flows; connectors still read the decrypted
+  values.
+- No secret rotation, passphrase change or automatic relock.
+- No networked secret hosting service, no new dependencies.
+- No OS keyring (it is a later provider; this pull request gathers the storage layer into
+  one module so it is easy to replace later).
 
-## 已知限制
+## Known limits
 
-- 运行中的进程内存里有明文密钥和口令；本机同用户或 root 能读进程、口令环境变量或口令文件。
-- 口令来源（环境变量/文件）的保护由部署决定；env 会被同用户进程看到。
-- GCM 无法区分解密失败是口令错还是文件损坏，提示统一写「口令不对或文件损坏」。
-- 启用后旧明文的残留副本（备份、日志、别的机器）不在本功能处理范围。
-- 设置页不支持在移动端（手机 App 还没有密钥页）。
+- The running process holds the plain-text secrets and the passphrase in memory; the same
+  local user or root can read the process, the passphrase environment variable or the
+  passphrase file.
+- Protection of the passphrase source (environment variable or file) depends on the
+  deployment; env is visible to processes of the same user.
+- GCM cannot tell whether a failed decryption comes from a wrong passphrase or a damaged
+  file, so the message always says both: wrong passphrase or damaged file.
+- Leftover copies of the old plain text (backups, logs, other machines) after encryption is
+  turned on are outside the scope of this feature.
+- The settings page is not supported on mobile (the phone app has no secrets page yet).
 
-## 变更
+## Changes
 
-- 2026-11-12：初版（#1467）。
+- 2026-11-12: first version (#1467).

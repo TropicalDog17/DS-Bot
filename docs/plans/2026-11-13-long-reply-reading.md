@@ -1,83 +1,136 @@
-# 读长回复
+# Reading long replies
 
-- 日期：2026-11-13
-- 相关：#1562、[长消息](2026-10-16-long-messages.md)、[消息布局和宽度](2026-10-22-message-layout.md)、#601
+- Date: 2026-11-13
+- Related: #1562, [long messages](2026-10-16-long-messages.md), [message layout and width](2026-10-22-message-layout.md), #601
 
-## 为什么
+## Why
 
-Bot 在自己的聊天里给用户的回复，超过 20,000 字才折叠（[长消息](2026-10-16-long-messages.md)）：用户就是来读它的。可一条几千字的回复常常有好几屏高，读的时候有三个麻烦：
+A Bot's reply to the user in its own chat folds only beyond 20,000 characters
+([long messages](2026-10-16-long-messages.md)): the user is there to read it. But a reply
+of a few thousand characters is often several screens tall, and reading it has three
+problems:
 
-- 回复写完时，聊天停在它的末尾。想从头读，要自己往上滚，滚过头了还要找开头在哪。
-- 读到中间，不知道自己在第几部分，也看不到后面还有哪些部分；想跳到「风险」或「结论」，只能一路滚着找标题。
-- 往回找某一节时，只能凭印象滚。
+- When the reply finishes, the chat rests at its end. To read from the start, the user has
+  to scroll up, and after scrolling too far has to find where it begins.
+- In the middle, the user does not know which part they are in and cannot see what parts
+  come later; to jump to "Risks" or "Conclusion" they have to scroll looking for headings.
+- To find a section again, they can only scroll from memory.
 
-#601 已经把气泡里的行距、列表和中英文间距调松。这份文档定的是长回复的导航，不改排版，也不改折叠。
+#601 already loosened line spacing, lists and spacing between Chinese and English in the
+bubble. This note decides navigation for long replies; it does not change typesetting or
+folding.
 
-参考了 Grok Bot。它的公开文档没写聊天里的长回答怎么显示，写了的是另一条路：报告、备忘录这类要读的成品做成 Page，在聊天里是一张卡片，打开后占满窗口，聊天缩成旁边的小面板。仿 Grok Bot 界面的开源项目（不是 Grok Bot 本身）里，长回答整段显示，不折叠，没有目录；写的时候跟随到底部，底部有「回到最新」。DS Bot 也整段显示，「回到最新」由 DSH 提供。这几处都没有的，是读者在长回答中间时的定位：回到开头、知道读到哪一节、按小节跳转。这份文档补的就是这个；读者不在长回答里时，界面上什么都不多。
+We looked at Grok Bot. Its public docs do not say how long answers show in the chat. What
+they describe is a different path: finished pieces meant for reading, such as reports and
+memos, become a Page, which is a card in the chat; opened, it fills the window and the chat
+shrinks to a small side panel. In open-source projects that imitate the Grok Bot interface
+(not Grok Bot itself), long answers show in full, unfolded, with no table of contents; while
+writing, the view follows to the bottom, and there is a "back to latest" at the bottom. DS
+Bot also shows replies in full, and DSH provides "back to latest". What none of these have
+is a sense of place for a reader in the middle of a long answer: going back to the start,
+knowing which section they are in, and jumping by section. That is what this note adds;
+when the reader is not in a long answer, the interface shows nothing extra.
 
-取舍：
+Trade-offs:
 
-- 只在需要时出现。回复整段放得下、读者看得到它的开头、或者已经快读完时都不出现，符合「没事就安静」。
-- 一个小表面同时做「回到开头」和「目录」两件事，不在每条回复上加常驻按钮，也不在侧边加一列目录：正文列最宽 960px，两侧放不下标题。
-- 目录取回复里真正的标题（Markdown 的 `#` 标题，渲染后是 h1–h4），不猜加粗的行算不算标题。
-- 全部在 DS Bot 自己画的 Bot 气泡里做。聊天滚动区是 DSH 的，DS Bot 只读它的位置、调用它的 `scrollTo`，不改 DSH 跟随到底部的逻辑（硬规则 1）。
+- It appears only when needed. It does not appear when the whole reply fits, when the
+  reader can see its start, or when they have nearly finished, in line with "quiet when
+  nothing is going on".
+- One small surface does both "back to start" and "contents". There is no permanent button
+  on every reply and no contents column at the side: the text column is at most 960px wide,
+  and there is no room for headings on either side.
+- The contents use the reply's real headings (Markdown `#` headings, h1–h4 when rendered);
+  it does not guess whether a bold line is a heading.
+- Everything is done in the Bot bubble that DS Bot draws itself. The chat scroll area
+  belongs to DSH; DS Bot only reads its position and calls its `scrollTo`, and does not
+  change DSH's follow-to-bottom logic (hard rule 1).
 
-## 已定的行为
+## Decided behavior
 
-### 什么时候出现
+### When it appears
 
-- 一条 Bot 回复（私聊、更早的分段、群聊里的消息都算）满足下面全部条件时，聊天顶部出现一颗「阅读胶囊」：
-  - 回复已经写完，没有在流式输出，也没有被折叠；
-  - 回复比聊天的可见区域高（可见区域：DS Bot 顶部胶囊下方 8px 到输入框上方）；
-  - 回复的开头已经滚出可见区域上沿；
-  - 胶囊下面至少还剩 96px 回复没读到。
-- 用户自己的消息、Bot 之间的往来记录弹窗不出现胶囊。
-- 同一时刻最多一条回复满足这些条件，所以聊天里最多一颗胶囊。
+- When a Bot reply (in the Bot's own chat, an earlier part, or a group chat message) meets
+  all the conditions below, a "reading pill" appears at the top of the chat:
+  - the reply is finished, not streaming, and not folded;
+  - the reply is taller than the visible area of the chat (visible area: from 8px below DS
+    Bot's top pill to above the input box);
+  - the start of the reply has scrolled past the top edge of the visible area;
+  - at least 96px of the reply below the pill has not been read yet.
+- The user's own messages and the dialog of exchanges between Bots do not show the pill.
+- At most one reply meets these conditions at a time, so there is at most one pill in the
+  chat.
 
-### 样子
+### Look
 
-- 位置：顶部胶囊下方 8px，左边和回复的左边对齐（不超出滚动区左边 8px）。固定在那里，回复滚动时不动。「N 条新消息 ↑」胶囊在场、两颗会碰上时，阅读胶囊挪到它下方 8px。
-- 外观：高 28、胶囊形，玻璃底（`--bt-glass-bg` + 背景模糊），`.5px` 发丝边，玻璃阴影。最宽 360px（窄屏是屏宽减 32px）。
-- 回复里有两个以上标题时，胶囊分两段：
-  - 左边一个 24px 的向上箭头按钮，「回到这条回复的开头」。
-  - 右边是现在读到的那一节的标题，后面一个向下的小箭头；还没读到第一个标题时写「目录」。标题太长时省略号截断。
-- 回复里少于两个标题时，胶囊只有一个按钮：向上箭头加「回复开头」。
-- 入场：`bt-pop-drop`（上移 4px、缩到 .96 → 原位，`SPRING_TAP`）加 `bt-veil-in`；退场 `bt-pop-out` .12s。减少动态效果时没有入场动画。
+- Position: 8px below the top pill, left edge aligned with the reply's left edge (not past
+  8px from the left of the scroll area). It stays fixed there and does not move when the
+  reply scrolls. When the "N new messages ↑" pill is present and the two would touch, the
+  reading pill moves to 8px below it.
+- Appearance: 28 high, pill shaped, glass background (`--bt-glass-bg` + backdrop blur),
+  `.5px` hairline border, glass shadow. At most 360px wide (on narrow screens, screen width
+  minus 32px).
+- When the reply has two or more headings, the pill has two segments:
+  - On the left, a 24px up-arrow button: "back to the start of this reply".
+  - On the right, the heading of the section being read, followed by a small down arrow;
+    before the first heading is reached it says "Contents". A long heading is cut with an
+    ellipsis.
+- When the reply has fewer than two headings, the pill is a single button: an up arrow
+  with "Start of reply".
+- Entrance: `bt-pop-drop` (moved up 4px and scaled to .96 → in place, `SPRING_TAP`) plus
+  `bt-veil-in`; exit `bt-pop-out` .12s. With reduced motion there is no entrance
+  animation.
 
-### 现在读到哪一节
+### Which section is being read
 
-- 「读到」的线在胶囊下沿往下 24px。最后一个顶部在这条线上方或正好在线上的标题，就是现在这一节。
-- 算标题的只有回复自己的 h1–h4：引用块、表格、`<details>` 里的不算，空标题不算。
+- The "reading" line is 24px below the bottom edge of the pill. The last heading whose top
+  is above or exactly on this line is the current section.
+- Only the reply's own h1–h4 count as headings: those inside block quotes, tables and
+  `<details>` do not count, and empty headings do not count.
 
-### 目录
+### Contents
 
-- 点胶囊右段（或在它上面按 ↓）打开目录菜单，挂在胶囊下方 4px，样式同 `.bt-menu`。
-- 一行一个标题。缩进从这条回复用到的最高一级算起：每低一级多缩进 12px，最多两级（20px、32px）。
-- 现在这一节用强调色、字重 500，并标 `aria-current`；菜单打开时焦点在这一项上。
-- 方向键、Home、End 在项之间移动，Esc 关闭菜单并把焦点还给胶囊，点菜单外面关闭。
-- 选一项：滚到这个标题，标题停在胶囊下方 8px，胶囊留着并改成这一节的名字。
+- Clicking the right segment of the pill (or pressing ↓ on it) opens the contents menu,
+  4px below the pill, styled like `.bt-menu`.
+- One heading per row. Indentation counts from the highest level this reply uses: each
+  lower level adds 12px, at most two levels (20px, 32px).
+- The current section uses the accent color and weight 500 and is marked `aria-current`;
+  when the menu opens, focus is on this item.
+- Arrow keys, Home and End move between items; Esc closes the menu and returns focus to the
+  pill; clicking outside the menu closes it.
+- Choosing an item scrolls to that heading, which stops 8px below the pill; the pill stays
+  and changes to that section's name.
 
-### 回到开头
+### Back to start
 
-- 点向上箭头（或只有一个按钮时点它）：滚到回复的开头停在顶部胶囊下方，这时胶囊自己消失。
-- 滚动是平滑滚动；减少动态效果时直接跳过去。
+- Clicking the up arrow (or the single button when there is only one) scrolls so the start
+  of the reply rests below the top pill, and the pill then goes away by itself.
+- Scrolling is smooth; with reduced motion it jumps straight there.
 
-### 性能
+### Performance
 
-- 所有回复共用一个 `ResizeObserver` 看高度；只有比可见区域的四分之三还高的回复才监听滚动，每帧最多量一次位置。回复或滚动区的大小变了就重新判断。留出四分之一，是因为 DSH 的输入框长高时可见区域变矮，而这里收不到大小变化。
+- All replies share one `ResizeObserver` for height. Only replies taller than three
+  quarters of the visible area listen to scrolling, and position is measured at most once
+  per frame. When the size of a reply or the scroll area changes, the check runs again. The
+  one-quarter margin is there because the visible area gets shorter when DSH's input box
+  grows, and no size change reaches this code then.
 
-## 不做什么
+## Not done
 
-- 不改折叠的阈值和行为，不改气泡的排版。
-- 不在发送后把用户的消息顶到屏幕上方、让回复在下面写而不跟随：滚动区和跟随到底部是 DSH 的，DS Bot 不改它（硬规则 1）。
-- 不从加粗的行、编号的段落里猜标题。
-- 不做阅读进度条。
-- 不像 Grok Bot 的 Page 那样把一条回复单独打开成整页、聊天放在旁边。那是另一个功能，和 [Bot 视图](2026-10-20-widget-views.md)、[长消息](2026-10-16-long-messages.md) 都有交集，要单独设计。
-- 流式输出中的回复不出现胶囊。
+- No change to the folding threshold or behavior, and no change to bubble typesetting.
+- No pushing the user's message to the top of the screen after sending so the reply writes
+  below without following: the scroll area and follow-to-bottom belong to DSH, and DS Bot
+  does not change them (hard rule 1).
+- No guessing headings from bold lines or numbered paragraphs.
+- No reading progress bar.
+- No opening a single reply as a full page with the chat at the side, like Grok Bot's Page.
+  That is a different feature that overlaps with [Bot views](2026-10-20-widget-views.md)
+  and [long messages](2026-10-16-long-messages.md), and needs its own design.
+- A reply that is still streaming does not show the pill.
 
-## 已知限制
+## Known limits
 
-- 胶囊固定在可见区域顶部，会盖住它下面那一行的开头几个字；滚动时那一行就过去了。
-- 手机 App 自己画聊天，不在这份文档的范围里。
+- The pill is fixed at the top of the visible area and covers the first few characters of
+  the line under it; when the user scrolls, that line moves on.
+- The phone app draws its own chat and is outside the scope of this note.
 
-## 变更
+## Changes

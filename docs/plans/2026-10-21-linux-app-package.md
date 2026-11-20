@@ -1,28 +1,28 @@
-# Linux 桌面包：一个 AppImage 通吃 + deb 兜底
+# Linux desktop package: one AppImage for all, plus a deb fallback
 
-- 日期：2026-10-21
-- 相关：#410
+- Date: 2026-10-21
+- Related: #410
 
-## 为什么
+## Why
 
-桌面应用只有 Windows（NSIS）和 macOS（zip）两个包。Linux 如果按发行版分别打 deb/rpm/pacman，每加一个格式就多一条维护线，而且这些格式都不支持应用内自动更新。
+The desktop app had only two packages, Windows (NSIS) and macOS (zip). If Linux got a separate deb/rpm/pacman for each distribution, every new format would add one more line to maintain, and none of these formats supports in-app auto-update.
 
-## 已定的行为
+## Decided behavior
 
-- Linux 只出两个包，同一次 `npm run dist` 产出：**AppImage**（主包，一个文件跑所有 glibc 发行版）加 **deb**（Debian/Ubuntu 兜底）。不打 rpm/pacman/Flatpak/Snap，也不做按发行版分包。
-- AppImage 是 Linux 上唯一被 electron-updater 原生支持的格式：读 `latest-linux.yml`，后台下载、退出时替换自身，与 Windows 共用 `watchUpdates` 路径。
-- deb 不能自更新：与 macOS 共用 `watchReleases` 发布页提醒路径，等待的资产是 `linux-amd64.deb`（`watchReleases` 因此加了 `asset` 参数，默认仍是 mac zip）。
-- 文件名遵循 Linux 惯例而非 `${arch}` 字面量：AppImage 是 `linux-x86_64`，deb 是 `linux-amd64`（electron-builder 对 Linux 目标的架构名映射；与 IPFS Desktop 等先例一致）。`main.mjs` 和 `check-update.mjs` 里因此有 x64→amd64 的映射。
-- `main.mjs` 按 `APPIMAGE` 环境变量区分 Linux 上两种格式的更新路径。
-- 不选 Flatpak/Snap：应用要在宿主机跑 pnpm 装插件、用 node-pty 开真实终端、读 `~/.dsh` 导入团队，与沙箱直接冲突（`flatpak-spawn --host` 等于拆空沙箱；Snap 的 classic 限制要商店特批，非 Ubuntu 发行版也普遍抵触）。先例：IPFS Desktop 因 confinement 问题弃用 Snap，主推 AppImage。
-- 已知坑写进 README：AppImage 需要 FUSE 2（Ubuntu 24.04+/Debian 13+ 装 `libfuse2t64`）；Ubuntu 24.04+ 的 AppArmor 限制非特权 user namespace，会拦 AppImage 里的 Chromium 沙箱——deb 无此问题（post-install 设好 `chrome-sandbox`，electron-builder 26 起自动生成 AppArmor profile）。
-- 只出 x64；arm64 留到有 `linux/arm64` 预编译链（node-pty 等）确认后的后续工作。
-- 二进制与菜单项名 `dsbot`（`executableName`），deb 装进 `/opt/DS Bot`。
+- Linux gets only two packages, both from the same `npm run dist`: **AppImage** (the main package, one file that runs on every glibc distribution) plus **deb** (the Debian/Ubuntu fallback). No rpm/pacman/Flatpak/Snap, and no per-distribution packages.
+- AppImage is the only Linux format that electron-updater supports natively: it reads `latest-linux.yml`, downloads in the background and replaces itself on exit, sharing the `watchUpdates` path with Windows.
+- deb cannot update itself: it shares the `watchReleases` release-page reminder path with macOS, and the asset it waits for is `linux-amd64.deb` (so `watchReleases` gained an `asset` parameter; the default is still the mac zip).
+- File names follow Linux conventions instead of the `${arch}` literal: the AppImage is `linux-x86_64` and the deb is `linux-amd64` (electron-builder's architecture name mapping for Linux targets; consistent with precedents such as IPFS Desktop). That is why `main.mjs` and `check-update.mjs` map x64 to amd64.
+- `main.mjs` uses the `APPIMAGE` environment variable to tell the update paths of the two Linux formats apart.
+- Flatpak/Snap are not chosen: the app has to run pnpm on the host to install plugins, open real terminals with node-pty, and read `~/.dsh` to import the team, which conflicts directly with the sandbox (`flatpak-spawn --host` empties the sandbox; Snap's classic confinement needs special store approval, and non-Ubuntu distributions widely resist it). Precedent: IPFS Desktop dropped Snap over confinement problems and promotes AppImage.
+- Known pitfalls go into the README: AppImage needs FUSE 2 (on Ubuntu 24.04+/Debian 13+ install `libfuse2t64`); Ubuntu 24.04+ AppArmor restricts unprivileged user namespaces, which blocks the Chromium sandbox inside the AppImage. The deb does not have this problem (post-install sets up `chrome-sandbox`, and electron-builder 26 and later generate an AppArmor profile automatically).
+- x64 only; arm64 is later work, once a `linux/arm64` prebuilt chain (node-pty and others) is confirmed.
+- The binary and the menu entry are named `dsbot` (`executableName`), and the deb installs into `/opt/DS Bot`.
 
 ## CI
 
-- `test.yml` 加 `app-package-linux`：构建、xvfb 下 `check-packed`、deb 安装/检查/更新提醒/卸载、AppImage 自更新端到端（退出后文件 sha512 等于新版）。runner 上 `sysctl kernel.apparmor_restrict_unprivileged_userns=0` 并装 `libfuse2t64`（一次性的抛弃环境，安全代价可接受）。
-- `release.yml` 加 `app-linux` job：把 AppImage（含 `.blockmap`）、deb 和 `latest-linux.yml` 挂到 release。
-- `result` 汇总 job 的 `needs` 同步加 `app-package-linux`。
+- `test.yml` adds `app-package-linux`: build, `check-packed` under xvfb, deb install/check/update reminder/uninstall, and AppImage self-update end to end (after exit, the file's sha512 equals the new version). The runner sets `sysctl kernel.apparmor_restrict_unprivileged_userns=0` and installs `libfuse2t64` (a one-off throwaway environment, so the security cost is acceptable).
+- `release.yml` adds an `app-linux` job: it attaches the AppImage (with its `.blockmap`), the deb and `latest-linux.yml` to the release.
+- The `needs` of the `result` summary job also adds `app-package-linux`.
 
-- 2026-11-01：程序与包名改为 dsbot；deb 声明替换并冲突于旧包，安装新包时由包管理器移除旧程序，用户数据保留。
+- 2026-11-01: the program and package name became dsbot; the deb declares that it replaces and conflicts with the old package, so installing the new package makes the package manager remove the old program, and user data is kept.

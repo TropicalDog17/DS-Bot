@@ -1,40 +1,77 @@
-# 侧边栏分组（Sections）
+# Sidebar sections
 
-- 日期：2026-11-04
-- 相关：Issue #836
+- Date: 2026-11-04
+- Related: Issue #836
 
-## 为什么
+## Why
 
-当团队里的 Bot 和群聊增多、分属不同工作或业务线时，所有对话平铺在一个列表里会因为后台活动频繁上下跳动，难以按工作归拢查看。侧边栏需要一层轻量的工作分组，同时避免传统「文件夹」折叠后看不出内部工作状态的问题。
+When a team has more Bots and group chats, spread over different work or business lines,
+a single flat list of every conversation keeps jumping up and down with background
+activity, and it is hard to look at the work grouped together. The sidebar needs a light
+layer of work sections, without the problem of classic "folders" that hide the state of
+the work inside once they are collapsed.
 
-## 已定的行为
+## Decided behavior
 
-- **归属范围与排序**：
-  - 第一主 Bot（`mainBotIds[0]`）固定作为侧边栏顶部大卡片（`.bt-tile`），不进入任何分组；某个 Bot 被设为第一主 Bot 时自动清除其 `sectionId`。
-  - 其余普通 Bot、副主 Bot、群聊和 DSH Agent 都可以放进同一个分组（`entry.sectionId`）。
-  - 没有设置 `sectionId`（或指向不存在的分组）的条目平铺在主 Bot 卡片下方、所有分组上方。
-  - 未分组区域和每个分组内部，都按「置顶（`pinned`）优先 → 最近活动时间（`at`）降序」排列。
-  - 分组之间按 `state.sections` 的顺序排列，用户可以上移或下移分组。
-- **展开与收起（方案 A）**：
-  - 宽栏模式下，分组头高 `30px`，左侧显示随开合弹簧旋转的箭头、可选 `6px` 标记色点、分组名与可见条目数；展开时组内行保持完整宽度，鼠标悬停分组时左侧浮现导轨细线。
-  - 分组收起时，组体按 `SPRING_SHAPE` 收拢，组头右侧滑入组内最多 3 个唯一 Bot 的 `18px` 微缩 3D 角色簇（超出显示 `+N`），并在右侧透出组内聚合状态（等你回答/审批 `?` > 工作中绿点 > 未读圆点）。
-  - 分组收起后组内不露任何行，当前主视图打开的会话也随分组收起；展开后组内行全部恢复（#1458）。
-- **88px 头像窄栏模式（Rail）**：
-  - 展开的分组在窄栏中以一条胶囊短横线（带分组颜色与名称提示，点击可收起）与上方分隔，组内条目按 `44px` 头像平铺。
-  - 已收起的分组在窄栏中合成为一个 `56×56` 的圆角微缩角色簇方块（复用 `RoomAvatar` 遮罩簇与状态角标），点击即可展开分组。
-- **操作入口与工具**：
-  - 侧边栏顶部栏提供「新建分组」按钮，新建后自动聚焦组头内联输入框改名；双击任意分组头可内联重命名。
-  - 分组头悬停显示 `+` 与 `···`：
-    - 点击 `+` 打开「添加到分组」菜单：上方可直接在当前分组内「新建 Bot」或「新建群聊」，下方列出团队已有的 Bot 和群聊，点击即可加入或移出该分组。
-    - 点击 `···` 或右键分组头：可重命名、在组内新建 Bot、设置分组标记色（无 / 蓝 / 橙 / 绿 / 紫 / 粉）、上下移动分组或「解散分组」。
-  - 解散分组只移除分组本身并清除组内条目的 `sectionId`，使其回到顶部未分组区，不删除任何 Bot 或群聊。
-  - 在任意非主卡片的 Bot、群聊或 DSH Agent 行上右键，可直接点选已有分组移入、移出分组或「移至新分组…」；宽栏下也支持直接拖拽行到目标分组或顶部未分组区。
-  - 复制 Bot（`duplicate-bot`）时，新副本继承原 Bot 的 `sectionId`。
-  - Main Bot 的 `create_bot`、`update_bot`、`create_group`、`update_group` 工具支持可选 `section` 参数（按名称匹配已有分组或自动新建分组，传空字符串移出分组），`list_bots` 输出包含所属分组名。
-- **持久化**：
-  - 分组保存在 `state.json` 的 `sections: [{ id, name, collapsed?, color? }]`，条目保存在各自的 `sectionId` 字段；加载 `state.json` 时自动清理指向不存在分组的孤儿 `sectionId`。
+- **What goes where, and order**:
+  - The first Main Bot (`mainBotIds[0]`) is always the large card at the top of the
+    sidebar (`.bt-tile`) and never goes into a section; when a Bot becomes the first Main
+    Bot, its `sectionId` is cleared.
+  - All other ordinary Bots, secondary Main Bots, group chats and DSH Agents can go into a
+    section (`entry.sectionId`).
+  - Entries with no `sectionId` (or one that points to a section that does not exist) are
+    listed flat below the Main Bot card and above all sections.
+  - The unsectioned area and the inside of each section are sorted by pinned first
+    (`pinned`), then by latest activity time (`at`), newest first.
+  - Sections follow the order of `state.sections`; the user can move a section up or down.
+- **Expand and collapse (option A)**:
+  - In the wide sidebar, a section header is `30px` high. On the left it shows an arrow
+    that rotates with a spring as the section opens and closes, an optional `6px` color
+    dot, the section name and the number of visible entries. When expanded, the rows
+    inside keep their full width, and a thin guide line appears on the left while the
+    pointer is over the section.
+  - When a section collapses, its body closes with `SPRING_SHAPE`. On the right of the
+    header slides in a cluster of `18px` small 3D characters of at most 3 distinct Bots
+    in the section (more shows `+N`), and the right side shows the combined state of the
+    section (waiting for your answer or approval `?` > working green dot > unread dot).
+  - A collapsed section shows no rows at all; the Session open in the main view also
+    collapses with its section. Expanding brings back all rows of the section (#1458).
+- **88px avatar rail**:
+  - An expanded section in the rail is set apart from what is above it by a short pill
+    line (with the section color and a name hint; clicking it collapses the section), and
+    its entries are laid out as `44px` avatars.
+  - A collapsed section in the rail becomes one `56×56` rounded block with a small
+    character cluster (reusing the `RoomAvatar` masked cluster and status badge); clicking
+    it expands the section.
+- **Entry points and tools**:
+  - The sidebar top bar has a "New section" button. After creating one, focus moves to an
+    inline input in the header to rename it; double-clicking any section header renames it
+    inline.
+  - Hovering a section header shows `+` and `···`:
+    - Clicking `+` opens the "Add to {name}" menu. At the top it can create a new Bot or a
+      new group chat directly in this section; below it lists the team's existing Bots and
+      group chats, and clicking one adds it to or removes it from the section.
+    - Clicking `···` or right-clicking the header offers: rename, create a new Bot in the
+      section, set the section color (none / blue / orange / green / purple / pink), move
+      the section up or down, or "Ungroup section".
+  - Ungrouping removes only the section itself and clears the `sectionId` of its entries,
+    so they go back to the unsectioned area at the top. No Bot or group chat is deleted.
+  - Right-clicking any Bot, group chat or DSH Agent row other than the main card lets the
+    user pick an existing section to move into, remove the row from its section, or choose
+    "Move to new section…". In the wide sidebar, rows can also be dragged onto a target
+    section or the unsectioned area at the top.
+  - When a Bot is duplicated (`duplicate-bot`), the new copy inherits the original Bot's
+    `sectionId`.
+  - The Main Bot's `create_bot`, `update_bot`, `create_group` and `update_group` tools take
+    an optional `section` argument (matches an existing section by name or creates a new
+    one; an empty string removes the entry from its section). The output of `list_bots`
+    includes the section name.
+- **Storage**:
+  - Sections are saved in `state.json` as `sections: [{ id, name, collapsed?, color? }]`,
+    and entries keep their own `sectionId` field. Loading `state.json` clears orphan
+    `sectionId` values that point to sections that do not exist.
 
-## 不做什么
+## Not done
 
-- 不支持多层嵌套子分组。
-- 解散分组时不批量删除组内 Bot 或群聊。
+- No nested subsections.
+- Ungrouping a section does not delete the Bots or group chats in it.
