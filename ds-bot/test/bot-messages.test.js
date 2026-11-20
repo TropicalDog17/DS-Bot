@@ -282,6 +282,36 @@ test('an answer names the user messages its turns read, also one steered in and 
   ])
 })
 
+test('a group turn names the user messages its round showed it, also when the round cut into a running turn', async (t) => {
+  const { rt, emit, stop } = await start(team({ group: true }))
+  t.after(stop)
+  const heard = []
+  rt.companions.notes.onReply(reply => heard.push({ ...reply }))
+  const round = (exchangeId, requests) => emit('gb', 'user/message', {
+    content: textBlock('[Group]\nUser: status?'),
+    source: { kind: SOURCE_KIND, form: 'relay', role: 'room', roomId: 'r1', exchangeId, senderName: 'You', ...(requests ? { requests } : {}) },
+  })
+
+  // The note reaches Writer while its turn is still on earlier work: that turn read
+  // it and answers it, though it began before the note.
+  emit('gb', 'turn/start', { turn: 1 }, { time: 5000 })
+  round('x1')
+  emit('gb', 'assistant/message', { message: { content: [...textBlock('Đang chờ build.'), { type: 'tool-call', id: 't1', name: 'wait' }] } })
+  round('x2', ['n1'])
+  emit('gb', 'assistant/message', assistantText('Card đã xong, PR đã mở.'))
+  emit('gb', 'turn/end', { turn: 1, reason: { kind: 'completed' } })
+  // Its next turn there is about something else and names no note.
+  emit('gb', 'turn/start', { turn: 2 }, { time: 6000 })
+  round('x3')
+  emit('gb', 'assistant/message', assistantText('Đã đóng các phiên cũ.'))
+  emit('gb', 'turn/end', { turn: 2, reason: { kind: 'completed' } })
+
+  assert.deepEqual(heard.filter(reply => reply.roomId === 'r1'), [
+    { botId: 'b', roomId: 'r1', text: 'Đang chờ build.\n\nCard đã xong, PR đã mở.', since: 5000, heard: ['n1'] },
+    { botId: 'b', roomId: 'r1', text: 'Đã đóng các phiên cũ.', since: 6000 },
+  ])
+})
+
 // #1501: a Bot may ask from a background part of its own chat while the user reads the
 // foreground one. The answer comes back to the thread it was asked from.
 test('a reply to a Bot that asked from a background part comes back to that part', async (t) => {

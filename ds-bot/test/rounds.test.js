@@ -84,7 +84,7 @@ function start({ home = mkdtempSync(join(tmpdir(), 'ds-bot-rounds-')) } = {}) {
   const emit = async (sessionId, event) => {
     for (const listener of ctx.listeners.get('session/event') ?? []) await listener({ id: sessionId }, event)
   }
-  const userMessage = text => ({ type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text }] } })
+  const userMessage = (text, rpcId) => ({ type: 'user/message', data: { source: { kind: 'user', ...(rpcId ? { rpcId } : {}) }, content: [{ type: 'text', text }] } })
   // What the shell's composer does: prompt the group's Session directly.
   const compose = (sessionId, content, mode = 'queue') => ctx.sessionController.prompt({
     requestId: randomUUID(),
@@ -163,7 +163,7 @@ test('a message the composer queues mid-round joins the round and leaves the Ses
   const room = await team(call, sent)
 
   // The user's first message opens the round: the admin speaks first.
-  await emit(room.id, userMessage('Tell me a long story'))
+  await emit(room.id, userMessage('Tell me a long story', 'opening'))
   const running = relay(room.id, 'relay')
   const first = await turnFor(sent)
   assert.ok(first, 'the admin gets the first turn')
@@ -177,6 +177,11 @@ test('a message the composer queues mid-round joins the round and leaves the Ses
   assert.ok(second, 'the Writer gets the next turn')
   assert.match(second.message.content[0].text, /@Writer ping mid-round/)
   assert.match(second.message.content[0].text, /the user mentioned you/)
+  // Each turn names the user messages it was shown, by request id: the first only the
+  // one that opened the round, the Writer's both.
+  assert.deepEqual(first.message.source.requests, ['opening'])
+  assert.equal(second.message.source.requests.length, 2)
+  assert.equal(second.message.source.requests[0], 'opening')
 
   await answer(second.sessionId, second.message.source.exchangeId, 'Ping back!', 2)
   const result = JSON.parse(await running)

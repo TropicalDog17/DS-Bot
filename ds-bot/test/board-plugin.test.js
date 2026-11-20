@@ -286,15 +286,17 @@ test('a group card waits for the answer in its group; two notes wait from the fi
   await h.post('note', { id: group, text: 'add tests' })
   clock = 1500
   await h.post('note', { id: group, text: 'and docs' })
-  // The group passes the note on as its own message: no request id to wait on.
-  assert.deepEqual(h.cards()[0].awaiting, { botId: 'b', roomId: 'r1', since: 1000 })
-  h.team.reply({ botId: 'b', text: 'in my own chat', since: 1200 })
-  h.team.reply({ botId: 'b', roomId: 'r1', text: 'older work', since: 900 })
-  h.team.reply({ botId: 'b', roomId: 'r1', text: 'On it: tests first.', since: 1200 })
+  // The round shows the note to the Bot, so the turn that read it names it.
+  assert.deepEqual(h.cards()[0].awaiting, { botId: 'b', roomId: 'r1', since: 1000, requests: h.team.requests.slice(0, 2) })
+  h.team.reply({ botId: 'b', text: 'in my own chat', since: 1200, heard: h.team.requests.slice(0, 2) })
+  // A turn there that did not read the note is about something else, also a later one.
+  h.team.reply({ botId: 'b', roomId: 'r1', text: 'closed the old sessions', since: 1600 })
+  // The turn that read the note answers it, though it began before the note.
+  h.team.reply({ botId: 'b', roomId: 'r1', text: 'On it: tests first.', since: 900, heard: [h.team.requests[1]] })
   await h.settle()
   assert.deepEqual(h.cards()[0].notes.map(note => note.text), ['add tests', 'and docs', 'On it: tests first.'])
 
-  // Two group cards wait on Writer there: the one asked first gets the first answer.
+  // Two group cards that waited before notes had ids: the one asked first gets the first answer.
   clock = 5000
   await h.tool({ action: 'open', title: 'One' }, 'gb')
   await h.tool({ action: 'open', title: 'Two' }, 'gb')
@@ -303,6 +305,7 @@ test('a group card waits for the answer in its group; two notes wait from the fi
   await h.post('note', { id: second, text: 'two?' })
   clock = 4000
   await h.post('note', { id: first, text: 'one?' })
+  await h.handle.store.change((data) => { for (const id of [first, second]) delete data.cards[id].awaiting.requests })
   h.team.reply({ botId: 'b', roomId: 'r1', text: 'answer one', since: 6000 })
   await h.settle()
   const byId = (await h.post('state')).value.cards

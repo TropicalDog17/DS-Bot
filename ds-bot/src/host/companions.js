@@ -59,8 +59,8 @@ export function notesService(rt) {
   return Object.freeze({
     // { botId, text, roomId? } -> { sessionId, where: 'group' | 'chat', requestId } | { error }.
     // A roomId the Bot is not (or no longer) a member of falls back to its own chat.
-    // requestId is the note's id as a user message: an answer in the Bot's own chat
-    // lists it in `heard` once a turn read the note.
+    // requestId is the note's id as a user message: an answer in the Bot's own chat or
+    // in the group lists it in `heard` once a turn read the note.
     async deliver({ botId, roomId, text } = {}) {
       await rt.load()
       const bot = typeof botId === 'string' ? rt.botOf(botId) : undefined

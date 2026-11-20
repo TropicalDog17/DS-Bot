@@ -339,9 +339,9 @@ export function createBoard({ roster, now = Date.now }) {
   }
 
   // A Bot's answer in its chat, or in a group (dsBotNotes onReply), joins every card
-  // whose note it read (`heard`). A card with no request ids to match (a group note)
-  // gets the answer only by waiting longest for that Bot there, from a turn that began
-  // after the note. A card waiting on request ids is never matched by order: an answer
+  // whose note it read (`heard`). A card with no request ids to match (one that waited
+  // before notes had ids) gets the answer only by waiting longest for that Bot there,
+  // from a turn that began after the note. A card waiting on request ids is never matched by order: an answer
   // to another card would land on it. `trace` is how the Bot got there (live.js keep):
   // its reasoning and tool calls.
   const mirror = (cards, { botId, roomId, text, since, heard, trace } = {}) => {
