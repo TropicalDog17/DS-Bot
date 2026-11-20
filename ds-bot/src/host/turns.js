@@ -937,6 +937,10 @@ export function install(rt) {
       case 'user/message': {
         const source = event.data?.source
         if (source?.kind === 'user' && typeof source.rpcId === 'string') noteHeard(id, source.rpcId)
+        // A group round shows the member the user's lines; the turn that reads them heard them.
+        if (source?.kind === SOURCE_KIND && source.role === 'room' && Array.isArray(source.requests)) {
+          for (const requestId of source.requests) noteHeard(id, requestId)
+        }
         if (source?.kind === 'subagent-settled' || source?.kind === 'agent-message') {
           const childId = typeof source.senderSessionId === 'string' ? source.senderSessionId : undefined
           // Only settlement ends a child's turn; an intermediate `agent-message` keeps the
@@ -1081,7 +1085,7 @@ export function install(rt) {
             const content = Array.isArray(event.data.content) ? event.data.content : []
             const images = content.filter(block => block?.type === 'image' && !block.offloaded).map(block => block.attachment)
             const files = content.filter(block => block?.type === 'file' && block.attachment !== undefined).map(block => block.attachment)
-            queueRoomMessage(rt.roomOf(id).id, { text: textOf(event.data.content), ...(images.length > 0 ? { images } : {}), ...(files.length > 0 ? { files } : {}), ...(viaOf(source) ? { via: viaOf(source) } : {}) })
+            queueRoomMessage(rt.roomOf(id).id, { text: textOf(event.data.content), ...(images.length > 0 ? { images } : {}), ...(files.length > 0 ? { files } : {}), ...(viaOf(source) ? { via: viaOf(source) } : {}), ...(typeof source.rpcId === 'string' ? { request: source.rpcId } : {}) })
           }
           const own = rt.chatOwners.get(id)
           if (own !== undefined) rt.userWrote(own)
