@@ -1,35 +1,35 @@
-# DSH 让步总账
+# DSH concessions ledger
 
-- 日期：2026-10-13 建立，之后持续追加
-- 相关：#37、#38、#105、#112、#116、#118、#123、#125、#127、#128、#129、#133，PR #134、#135、#140、#141、#161、#168、#169
+- Date: started 2026-10-13, added to since
+- Related: #37, #38, #105, #112, #116, #118, #123, #125, #127, #128, #129, #133, PR #134, #135, #140, #141, #161, #168, #169
 
-## 为什么
+## Why
 
-DS Bot 是 DSH 插件，只能用 DSH 公开的接口。有些地方 DSH 的设计和 Bot 不合：全局注册、没有按会话过滤、预设是全局的、界面结构不对插件开放。原则是 **以 Bot 的正确行为为准，不为兼容 DSH 的特定模式或限制无限增加复杂度**。不得不让步的地方记在这里，等桌面应用自己掌握 profile 和界面之后逐条清理。
+DS Bot is a DSH plugin and can only use DSH's public interfaces. In some places DSH's design does not fit Bots: global registration, no per-Session filtering, global presets, and an interface structure that is not open to plugins. The principle is **the correct Bot behavior comes first; do not keep adding complexity to stay compatible with a particular DSH mode or limit**. The places where a concession could not be avoided are recorded here, to be cleaned up one by one once the desktop app controls its own profile and interface.
 
-判断一个 Issue 是 DS Bot 的 bug 还是 DSH 的限制时，先看这张表。属于 DSH 的，加 `upstream` 标签。
+When deciding whether an issue is a DS Bot bug or a DSH limit, check this table first. If it belongs to DSH, add the `upstream` label.
 
-## 总账
+## Ledger
 
-| # | 日期 | 相关 | DSH 的限制 | 现在的做法 | 代价 | 桌面应用之后 |
+| # | Date | Related | DSH limit | What we do now | Cost | After the desktop app |
 |---|---|---|---|---|---|---|
-| C1 | 10-13 | #37 #38 #105 #123，PR #134 #135 #168 | PTC 预设下模型只能直接调用 `run_code`，真正的工具在子调用里；一次程序运行最长约 10 分钟 | 工具展示和服务端都遍历子调用。新会话固定用 standard 预设；旧 PTC 群会话的中继包一层 `run_code` | 每个工具相关功能都要同时处理顶层调用和子调用；PTC 下群里一轮超过 10 分钟会被中止；模拟模型和冒烟测试不覆盖 PTC | 固定用 standard 预设，删掉子调用兼容代码 |
-| C2 | 10-13 | #133，PR #168 | 命令全局注册，不能按会话过滤或拦截 | Bot 会话一律不支持 goal：去掉 goal 工具，goal 一创建就停下并说明，界面不显示 goal 轮次 | `/goal` 仍出现在命令菜单里，但用不了 | 不提供 `/goal`；需要长任务自主推进时，做成 Bot 自己的功能，并能跨段保留 |
-| C3 | 10-11 | PR #19 | `@` 引用源全局注册，不能在 Bot 会话里隐藏 | `@` 菜单把 Bot 组排在最前；引用对话放到「+」 | 群聊里打 `@名字` 直接回车，可能选中 DSH「对话」组的第一项 | `@` 只列 Bot |
-| C4 | 10-10 | — | DSH 不提供删除指令菜单项的接口 | 「+」和「/」里仍有计划、权限、模型、压缩等 Bot 不该用的入口 | Bot 的设置可能被绕过 | 自己画菜单 |
-| C5 | 10-13 | #128，PR #161 | patch 没有条件语法；网页搜索选择器在配置的 id 没注册时不回落，也没有优先级 | 只写文档：关掉 `web-search-auto` 时必须同时改 `web.searchProvider` | 只关这一行，所有会话的 `web_search` 都会失效 | profile 里直接写 `searchProvider`，和 provider 一起管理 |
-| C6 | 10-13 | #125 | MCP 客户端把服务器响应体写进日志，插件没法脱敏 | 文档建议把密钥放在 headers 里 | 服务器回显 URL 时，密钥可能进 DSH 日志 | 控制日志出口，或向 DSH 提需求 |
-| C7 | 10-13 | #127，PR #169 | 其他插件的 CSS 能覆盖 ds-bot；ds-bot 依赖 DSH 的私有类名 | 最小修正：几处布局属性加 `!important`，占位文字改用 `::before` | DSH 每次改结构或换皮都可能弄坏布局 | 用自己的组件，不再覆盖 DSH 的 DOM |
-| C8 | 10-13 | #118 #123 | 插槽不允许重复声明或渲染没声明的子节点 | 工具展示只补了 present，其他插件的工具视图没有通用组合 | 其他插件的工具视图在 Bot 聊天里不显示 | 自己渲染全部工具 |
-| C9 | 10-13 | #116，PR #140 | 显式默认模型不可用时，`defaultModel()` 返回模型目录第一项 | 接受这个行为 | 可能落到另一个服务商的模型上 | 自己管理候选模型和回落顺序 |
-| C10 | 10-13 | #112，PR #141 | profile 里禁用 bot 行后插件不加载，插件内部无法诊断 | 只写排障文档 | 用户只能手动排查 | 启动器在加载插件前诊断 |
-| C11 | 10-13 | #129 | 模型流卡死时没有看门狗，回合不会结束 | 没读的请求合成一条，`list_bots` 和 `message_bot` 里看得到对方在做什么、在等什么（#262） | 卡死的 Bot 要用户手动停止 | 监控回合，提供恢复入口 |
-| C12 | 10-13 | #38 | 超长工具结果会被截断（默认约 12500 tokens） | 未处理 | 超长的群轮次，刷新后回复可能不见 | 插件侧可改为只存摘要和 id；应用有自己的存储 |
-| C13 | 10-14 | #37，PR #168 | 预设是全局或按会话选的，插件不能只给 Bot 会话换掉 PTC 的工具展示、保留用户其余配置 | DS Bot 新建的会话一律用 standard 预设，用户给 DSH 选的预设（包括自定义组合）不用于 Bot | 用户自定义预设里的插件不会出现在 Bot 里 | 每个 Bot 可选自己的 harness（愿景第 9 条），默认 standard |
-| C14 | 10-20 | #362，PR #363 | DSH 网页前端的 Windows 标题栏布局只有不透明一种，没有让窗口材质透出侧栏的接口；桌面模式（`data-platform`）要 DSH Desktop 的原生键盘桥 | 桌面应用只标 `data-windows-titlebar`（DSH 网页前端自己的标题栏布局），页面留在网页模式。Windows 11 上 `app/src/mica.css` 用 DSH 的私有类名让 Mica 透出侧栏；`check-packed` 检查每条规则还能找到元素 | 升级锁定的 DSH 时类名或结构可能变；macOS 暂时保留系统标题栏 | 自己的界面接着做时，窗口外框由应用自己画 |
-| C15 | 10-22 | #398 | DeepSeek 账号由 DSH 的账号插件管理，登录、退出的操作和文案都在它注入的条目里；DS Bot 没有自己的账号界面 | Bot 模式的账号菜单借用这个条目：账号插件在、且已登录时显示「退出登录」，确认文案和退出操作都用插件自己的 | 账号插件改了条目或文案的结构，这一项就不显示；文案跟着 DSH 走，不是 DS Bot 的 | DS Bot 自己的前端管理账号的登录和退出 |
+| C1 | 10-13 | #37 #38 #105 #123, PR #134 #135 #168 | Under the PTC preset the model can only call `run_code` directly, and the real tools are in sub-calls; one program run lasts at most about 10 minutes | Both the tool display and the server walk the sub-calls. New Sessions always use the standard preset; relays for old PTC group Sessions are wrapped in a `run_code` | Every tool-related feature has to handle both top-level calls and sub-calls; under PTC a group turn longer than 10 minutes is aborted; the mock model and the smoke test do not cover PTC | Always use the standard preset and delete the sub-call compatibility code |
+| C2 | 10-13 | #133, PR #168 | Commands are registered globally and cannot be filtered or intercepted per Session | Bot Sessions never support goals: the goal tools are removed, a goal stops with an explanation as soon as it is created, and the interface does not show goal turns | `/goal` still appears in the command menu but does not work | No `/goal`; when long tasks need to move forward on their own, build that as a Bot feature that carries across parts |
+| C3 | 10-11 | PR #19 | `@` mention sources are registered globally and cannot be hidden in Bot Sessions | The `@` menu puts the Bot group first; mentioning a conversation moves to "+" | Typing `@name` in a group chat and pressing Enter right away can pick the first item of DSH's "Conversations" group | `@` lists only Bots |
+| C4 | 10-10 | — | DSH has no interface to remove command menu items | "+" and "/" still have entries Bots should not use, such as plan, permissions, model and compaction | A Bot's settings can be bypassed | Draw our own menus |
+| C5 | 10-13 | #128, PR #161 | Patches have no conditional syntax; the web search selector does not fall back when the configured id is not registered, and has no priority | Docs only: turning off `web-search-auto` also requires changing `web.searchProvider` | Turning off only that line breaks `web_search` in every Session | Write `searchProvider` directly in the profile and manage it together with the provider |
+| C6 | 10-13 | #125 | The MCP client writes server response bodies into the log, and the plugin cannot redact them | The docs advise putting secrets in headers | When a server echoes the URL, a secret can end up in the DSH log | Control where logs go, or ask DSH for it |
+| C7 | 10-13 | #127, PR #169 | Other plugins' CSS can override ds-bot; ds-bot depends on DSH's private class names | Minimal fix: a few layout properties get `!important`, and placeholder text uses `::before` | Each DSH change to structure or skin can break the layout | Use our own components and stop overriding DSH's DOM |
+| C8 | 10-13 | #118 #123 | Slots do not allow repeated declarations or rendering children that were not declared | The tool display only added present; other plugins' tool views have no general composition | Other plugins' tool views do not show in Bot chats | Render all tools ourselves |
+| C9 | 10-13 | #116, PR #140 | When the explicit default model is not available, `defaultModel()` returns the first entry in the model catalog | Accept this behavior | It can land on another provider's model | Manage candidate models and the fallback order ourselves |
+| C10 | 10-13 | #112, PR #141 | When the bot line is disabled in the profile, the plugin does not load and cannot diagnose itself | Troubleshooting docs only | The user can only investigate by hand | The launcher diagnoses before loading the plugin |
+| C11 | 10-13 | #129 | When the model stream hangs there is no watchdog, and the turn never ends | Unread requests are merged into one, and `list_bots` and `message_bot` show what the other Bot is doing and waiting for (#262) | The user has to stop a hung Bot by hand | Monitor turns and offer a way to recover |
+| C12 | 10-13 | #38 | Very long tool results are truncated (about 12500 tokens by default) | Not handled | For a very long group turn, the reply can disappear after a refresh | The plugin could store only a summary and an id; the app has its own storage |
+| C13 | 10-14 | #37, PR #168 | Presets are chosen globally or per Session; a plugin cannot replace the PTC tool display for Bot Sessions only while keeping the rest of the user's config | Sessions DS Bot creates always use the standard preset; the preset the user picked for DSH (including custom combinations) is not used for Bots | Plugins in the user's custom preset do not appear in Bots | Each Bot can pick its own harness (vision item 9), standard by default |
+| C14 | 10-20 | #362, PR #363 | The DSH web front end has only an opaque Windows title bar layout, with no interface to let the window material show through the sidebar; desktop mode (`data-platform`) needs DSH Desktop's native keyboard bridge | The desktop app only sets `data-windows-titlebar` (the DSH web front end's own title bar layout) and the page stays in web mode. On Windows 11, `app/src/mica.css` uses DSH's private class names to let Mica show through the sidebar; `check-packed` checks that every rule still finds an element | Upgrading the pinned DSH can change the class names or structure; macOS keeps the system title bar for now | When our own interface is built further, the app draws the window frame itself |
+| C15 | 10-22 | #398 | DeepSeek accounts are managed by DSH's account plugin; the login and logout actions and text live in the entry it injects; DS Bot has no account interface of its own | The account menu in Bot mode borrows that entry: when the account plugin is present and logged in, it shows "Log out", using the plugin's own confirmation text and logout action | If the account plugin changes the structure of the entry or its text, this item disappears; the text follows DSH, not DS Bot | DS Bot's own front end manages account login and logout |
 
-## 记录规则
+## Recording rules
 
-- 新的让步追加到表尾，写明日期、相关 Issue/PR、DSH 的限制、现在的做法、代价、桌面应用之后怎么处理。
-- 处理完的条目不删，在「现在的做法」里写「已处理」、日期和 PR。
+- Add a new concession to the end of the table, with the date, related issues and pull requests, the DSH limit, what we do now, the cost, and how to handle it after the desktop app.
+- Do not delete handled entries; write "handled", the date and the pull request in "What we do now".

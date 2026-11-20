@@ -1,7 +1,5 @@
 # Contributing to DS Bot
 
-English | [中文](CONTRIBUTING.zh.md)
-
 Thank you for helping. This file explains how the team works, how to set up the plugin, how to test a change and which rules a change must follow. For what the plugin does and how users install it, see [README.md](README.md).
 
 ## Who can open pull requests

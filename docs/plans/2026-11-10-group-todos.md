@@ -1,36 +1,53 @@
-# 群聊共享待办
+# Shared group to-dos
 
-- 日期：2026-11-10
-- 相关：#326
+- Date: 2026-11-10
+- Related: #326
 
-## 为什么
+## Why
 
-群里的决定和待办常常只存在某个 Bot 的对话里：换一段就丢，别的成员也看不到。群公告是管理员写给全组的指令，不是每个成员都能加的一行条目。
+Decisions and to-dos in a group often live only in one Bot's conversation: they are lost
+when a new part starts, and other members cannot see them. The group notice is an
+instruction the admin writes for the whole group, not a line item that every member can
+add.
 
-维护者定在插件里做每群一份清单。任务对象和进度查询仍留给桌面应用（[Bot 之间派活](2026-10-16-bot-handoffs.md)）；这里只做一份跟着群走的轻量清单。
+The maintainer decided to build one list per group in the plugin. Task objects and
+progress queries stay with the desktop app ([handing work between Bots](2026-10-16-bot-handoffs.md));
+this is only a light list that belongs to the group.
 
-## 已定的行为
+## Decided behavior
 
-- 每个群一份共享待办，存在群记录里；删除群时一起删除，没有单独的存储。
-- 条目一行一条：文本（最多 200 字）、是否完成、创建时间和创建者；完成时记完成者和时间。
-- 整个清单最多 100 条。满了以后新增被拒绝，并说明要先删一条或清空已完成；已有条目都留着，不丢掉。
-- 群成员和 Main Bot 都能加、勾、删、清空已完成、看：Bot 用 `group_todo` 工具（`list` / `add` / `check` / `remove` / `clear`），用户在群详情里看、勾、删除单条、清空已完成。
-- 群详情里未完成的排在前面，完成的排在后面并加删除线；标题旁显示未完成数量，有已完成时可以清空它们。每一行可以删除。
-- 工具列出每条时给短 id（uuid 前 8 位）；`check` 和 `remove` 接受完整 id 或能唯一匹配的前缀。
-- 同一条被勾两次不报错；取消勾选要明确传 `done: false`。
-- 改动只更新这条群记录，不需要重启。
+- Each group has one shared to-do list, stored in the group record. It is deleted with the
+  group; there is no separate storage.
+- One line per item: text (at most 200 characters), done or not, creation time and
+  creator. When an item is done, who finished it and when are recorded.
+- The whole list holds at most 100 items. When it is full, a new item is refused with a
+  note to delete one or clear the done items first; existing items all stay and none are
+  dropped.
+- Group members and Main Bots can add, check, remove, clear done items and view. Bots use
+  the `group_todo` tool (`list` / `add` / `check` / `remove` / `clear`); the user views,
+  checks, removes single items and clears done items in the group details.
+- In the group details, open items come first and done items come after with a
+  strikethrough. The title shows the number of open items, and when there are done items
+  they can be cleared. Every row can be removed.
+- When the tool lists items it gives a short id (the first 8 characters of the uuid);
+  `check` and `remove` accept the full id or a prefix that matches exactly one item.
+- Checking the same item twice is not an error; unchecking needs an explicit
+  `done: false`.
+- A change updates only this group record and needs no restart.
 
-## 不做什么
+## Not done
 
-- 不做负责人、截止时间、优先级、提醒和通知。
-- 不在群详情里加输入框：新增走 Bot 的工具入口。
-- 不做跨群清单，也不把待办注入成员的提示词。
+- No owner, due date, priority, reminders or notifications.
+- No input box in the group details: new items come in through the Bot's tool.
+- No list across groups, and to-dos are not injected into members' prompts.
 
-## 已知限制
+## Known limits
 
-- 待办不进 Bot 的提示词，Bot 要主动用 `group_todo` 读取。
+- To-dos are not in a Bot's prompt; a Bot has to read them with `group_todo` itself.
 
-## 变更
+## Changes
 
-- 2026-11-10：初版（#326）。
-- 2026-11-12：补上删除单条和清空已完成（群详情和 `group_todo`）。清单满 100 条时新增仍被拒绝并说明原因，删掉条目后可以继续加。
+- 2026-11-10: first version (#326).
+- 2026-11-12: added removing single items and clearing done items (group details and
+  `group_todo`). When the list is full at 100 items, a new item is still refused with the
+  reason; after items are removed, adding works again.

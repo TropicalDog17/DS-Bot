@@ -1,74 +1,129 @@
-# 隐私 Bot
+# Private Bots
 
-- 日期：2026-10-27
-- 相关：Issue #597
+- Date: 2026-10-27
+- Related: Issue #597
 
-## 为什么
+## Why
 
-团队里的 Bot 默认互相协作：能看到彼此的状态、记忆和工作内容。但有些任务只适合用户和一个 Bot 看。隐私 Bot 提供一道单向边界：它仍可以读取团队，其他 Bot 不能读取它；它向其他 Bot 分享内容时，由用户决定。
+Bots in a team work together by default: they can see each other's status, memory and
+work. But some tasks are meant only for the user and one Bot. A private Bot gives a
+one-way boundary: it can still read the team, but other Bots cannot read it, and the user
+decides when it shares content with other Bots.
 
-这道边界只用于 Bot 之间，不是操作系统沙箱，也不对模型服务商隐藏内容。
+This boundary applies only between Bots. It is not an operating system sandbox, and it
+does not hide content from the model provider.
 
-## 已定的行为
+## Decided behavior
 
-### 开关
+### Switch
 
-- 每个 Bot 的设置页有「隐私」开关，只有用户能开关；Bot 不能通过工具改变自己或其他 Bot 的隐私状态。
-- 隐私 Bot 不能是 Main Bot，也不能加入群聊。已经是 Main Bot 或群成员的 Bot，要先取消对应身份或退出群聊。
-- 隐私 Bot 不能被复制，避免把它的指令和文件夹带进一个公开的新 Bot。
-- 界面提供英文和中文文案；不可能的状态在设置里禁用。
+- Each Bot's settings page has a "Private" switch. Only the user can turn it on or off; a
+  Bot cannot change its own or another Bot's private state through tools.
+- A private Bot cannot be a Main Bot and cannot join group chats. A Bot that is already a
+  Main Bot or a group member must first drop that role or leave the group chat.
+- A private Bot cannot be duplicated, so its instructions and folder are not carried into
+  a new public Bot.
+- The interface has English and Chinese text; impossible states are disabled in settings.
 
-### 独立文件夹
+### Separate folder
 
-- 隐私 Bot 必须有单独的工作文件夹。
-- 这个文件夹不能与总工作区、其他 Bot 的工作文件夹或群文件夹互相包含。比较路径时会解析链接；目标文件尚不存在时，也会解析最深的现有父目录。
-- 其他 Bot、群或总工作区不能改到与隐私 Bot 重叠的文件夹。
-- 文件夹不能重叠是强制条件：DSH 的搜索工具会遍历目录，插件不能从搜索结果里可靠地剔除其中一部分文件。
+- A private Bot must have its own work folder.
+- This folder must not contain, or be contained in, the team workspace, another Bot's work
+  folder or a group folder. Path comparison resolves links; when the target file does not
+  exist yet, the deepest existing parent directory is resolved.
+- Other Bots, groups or the team workspace cannot be changed to a folder that overlaps a
+  private Bot's folder.
+- Non-overlapping folders are a hard requirement: DSH's search tools walk directories, and
+  a plugin cannot reliably remove part of the files from search results.
 
-### 其他 Bot 看不到什么
+### What other Bots cannot see
 
-- `list_bots` 只向其他 Bot 显示隐私 Bot 的名字、角色和隐私状态，不显示它的指令、当前工作、模型或文件夹。
-- 其他 Bot 不能向它发 `message_bot`，不能用 `stop_bot` 或 `update_bot` 操作它，不能用 `attach_capability` 或 `detach_capability` 改它的能力，也不能通过 `recall`、`remember`、`forget` 读取或修改它的记忆。
-- 文件工具、图片读取、`glob`、`grep`、`working_directory`、`subagent` / `subagent_fork` 的 `cwd` 和会话查询会检查目标；命中隐私 Bot 的文件夹、记忆或会话就拒绝。其他 Bot 做跨会话搜索时必须给出经过检查的安全会话或父会话 id，不能做未过滤的全局搜索。
-- 会话目标会沿 `parentSession` 追踪；隐私 Bot 的子 agent Session 也同样关闭。
-- 团队状态文件、共享聊天索引、记忆变更日志和暂存文件也对其他 Bot 关闭。存在隐私 Bot 或其保留的归档时，其他 Bot 不能在数据位置做目录遍历搜索，也不能直接读取其中的共享数据文件；自己的文件夹、总工作区和团队共享记忆仍可正常使用。
-- 隐私 Bot 的记忆变更日志保存在它自己的受保护目录，条目的前后正文不写进团队共享日志。
-- 子 agent 继承最上层 Bot 的身份，多层嵌套不会改变这道边界。
+- `list_bots` shows other Bots only the private Bot's name, role and private state, not
+  its instructions, current work, model or folder.
+- Other Bots cannot send it `message_bot`, cannot act on it with `stop_bot` or
+  `update_bot`, cannot change its capabilities with `attach_capability` or
+  `detach_capability`, and cannot read or change its memory through `recall`, `remember`
+  or `forget`.
+- File tools, image reads, `glob`, `grep`, `working_directory`, the `cwd` of `subagent` /
+  `subagent_fork` and Session queries check their target, and refuse when it hits the
+  private Bot's folder, memory or Sessions. Another Bot searching across Sessions must give
+  a checked, safe Session id or parent Session id; it cannot run an unfiltered global
+  search.
+- Session targets are traced along `parentSession`; the private Bot's subagent Sessions
+  are closed in the same way.
+- The team status file, the shared chat index, the memory change log and staging files are
+  also closed to other Bots. While a private Bot or its kept archive exists, other Bots
+  cannot run directory-walking searches in the data location and cannot read the shared
+  data files there directly. Their own folders, the team workspace and team shared memory
+  still work as usual.
+- A private Bot's memory change log is kept in its own protected directory, and the
+  before and after text of its entries is not written into the team shared log.
+- A subagent inherits the identity of the top-level Bot; nesting several levels deep does
+  not change the boundary.
 
-### 隐私 Bot 能做什么
+### What a private Bot can do
 
-- 它读取公开 Bot 和团队共享内容的方式不变，包括读取其他公开 Bot 的记忆。
-- 它可以读自己的文件夹、记忆和会话，也可以读团队其他允许读取的内容。
-- 它向其他 Bot 发 `message_bot`、保存所有 Bot 都能读取的共享能力，或写自己文件夹之外的文件时，要先得到用户批准。
-- 批准卡显示接收方和完整的待分享内容；拒绝、取消或无法回答时，操作不执行。
-- 它在自己的文件夹里读写不需要额外批准。
+- It reads public Bots and team shared content as before, including the memory of other
+  public Bots.
+- It can read its own folder, memory and Sessions, and anything else in the team that it
+  is allowed to read.
+- It needs the user's approval before it sends `message_bot` to another Bot, saves a
+  shared capability that all Bots can read, or writes a file outside its own folder.
+- The approval card shows the recipient and the full content to be shared. On reject,
+  cancel or no answer, the action does not run.
+- Reading and writing in its own folder needs no extra approval.
 
-### 删除以后
+### After deletion
 
-- 删除隐私 Bot 不会把它留下的内容自动公开。
-- 它原来的工作文件夹、归档记忆和会话仍受同样的 Bot 间边界保护；这些位置不能被其他 Bot、群或总工作区接管。
-- 团队保留完成这项保护所需的最少归档记录，不在 Bot 列表中显示已经删除的 Bot。
-- 用户可以在设置 → Bots 页底部的「删除后仍受保护」列表里，逐条解除这些保护。列表只在有保留项时出现，每条显示 Bot 名和它的工作文件夹。
-- 解除要点两次：第一次点「解除保护」，该条变为确认状态并说明后果；4 秒内再点同一条才生效，点另一条会把确认转到那一条。
-- 解除只移除保护，不删除文件夹、记忆或会话。解除后，其他 Bot 可以读取它的文件夹、记忆和对话，其他 Bot、群或总工作区也可以使用这个文件夹。已解除的保护不能自动恢复。
-- 解除由用户在设置里完成；Bot 不能通过工具解除，只读窗口也不能解除。
+- Deleting a private Bot does not make the content it leaves behind public.
+- Its former work folder, archived memory and Sessions stay protected by the same
+  boundary between Bots; other Bots, groups or the team workspace cannot take over these
+  locations.
+- The team keeps the minimum archive record needed for this protection, and does not show
+  deleted Bots in the Bot list.
+- In Settings → Bots, the user can remove these protections one by one in the "Closed
+  after deletion" list at the bottom. The list appears only when there are kept entries;
+  each entry shows the Bot name and its work folder.
+- Removing takes two clicks: the first click on "Remove protection" puts the entry into a
+  confirm state that explains the result; a second click on the same entry within 4
+  seconds takes effect. Clicking another entry moves the confirm state to that entry.
+- Removing only removes the protection; it does not delete the folder, memory or Sessions.
+  After removal, other Bots can read its folder, memory and conversations, and other Bots,
+  groups or the team workspace can use the folder. A removed protection does not come back
+  by itself.
+- Removal is done by the user in settings; a Bot cannot remove a protection through tools,
+  and a read-only window cannot remove one either.
 
-## 不做什么
+## Not done
 
-- 不拦截 `web_fetch`、`web_search`、浏览器、MCP 或 shell 里的网络访问。只拦部分联网工具会给出虚假的安全感。
-- 不改变模型请求：隐私 Bot 使用的服务商仍会收到发给模型的内容。
-- 不修改 DSH，不宣称实现操作系统级或内核级隔离。
-- 不提供隐私群聊或隐私 Main Bot。
+- No blocking of network access in `web_fetch`, `web_search`, the browser, MCP or the
+  shell. Blocking only some network tools would give a false sense of safety.
+- No change to model requests: the provider a private Bot uses still receives what is sent
+  to the model.
+- No change to DSH, and no claim of operating system or kernel level isolation.
+- No private group chats or private Main Bots.
 
-## 已知限制
+## Known limits
 
-- DSH 的文件沙箱不限制读取。文件工具和目录搜索的路径检查是在 DS Bot 的工具钩子里做的，不是系统安全边界。
-- shell 命令只能按其中出现的路径和会话标识做保守检查。动态拼接路径、通过相对路径向上走、遍历未直接写出隐私路径的父目录等方式仍可能绕过检查。能够执行 shell 的模型，最终仍可能读取当前系统账号有权限读取的文件，也能直接写共享文件夹而不经过文件夹外写入批准。
-- 网络工具保持可用，所以隐私 Bot 仍可能把内容发到外部服务；是否允许这类任务，仍由用户按 Bot 的权限和工具配置判断。
-- 路径检查偏保守：包含隐私会话标识的路径，以及与受保护位置同前缀的个别路径，可能被一并拒绝。
-- 如果外部文件系统改动后来造成目录重叠，遍历搜索会按失败关闭处理，直到用户把目录分开；这是可用性损失，不能为了继续搜索而暴露受保护内容。
+- DSH's file sandbox does not restrict reads. The path checks for file tools and directory
+  searches are done in DS Bot's tool hooks; they are not a system security boundary.
+- Shell commands can only be checked conservatively by the paths and Session ids that
+  appear in them. Paths built at run time, walking up through relative paths, or walking a
+  parent directory without naming the private path can still get past the check. A model
+  that can run a shell can in the end read any file the current system account can read,
+  and can write to shared folders directly without the approval for writes outside its
+  folder.
+- Network tools stay available, so a private Bot can still send content to outside
+  services. Whether such tasks are allowed is still up to the user, through the Bot's
+  permissions and tool settings.
+- Path checks lean conservative: paths that contain a private Session id, and some paths
+  that share a prefix with a protected location, may be refused as well.
+- If a later change to the file system outside DS Bot makes directories overlap,
+  directory-walking searches fail closed until the user separates the directories. This
+  costs usability, but protected content must not be exposed to keep search working.
 
-## 变更
+## Changes
 
-- 2026-10-27：初版，Issue #597。
-- 2026-10-27：删除后默认继续保护，用户可在设置里逐条解除。
+- 2026-10-27: first version, Issue #597.
+- 2026-10-27: protection continues by default after deletion; the user can remove it entry
+  by entry in settings.

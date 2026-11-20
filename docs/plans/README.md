@@ -1,76 +1,81 @@
-# docs/plans：已定的设计
+# docs/plans: decided designs
 
-这里收录 DS Bot 已经定下的设计：为什么这样做、已定的行为、不做什么、已知限制。拿不准一个现象是 bug 还是设计如此时，先查这里和 [愿景](../vision.zh.md)；这里没写的，在 Issue 里问。
+This directory holds the designs that DS Bot has decided: why it works this way, the decided behavior, what is
+not done, and the known limits. When you are not sure whether something is a bug or works as designed, check
+here and the [vision](../vision.md) first; if it is not written here, ask in an issue.
 
-设计文档用中文写。
+Design notes are written in English.
 
-## 什么时候写
+## When to write one
 
-- **大功能**：在同一个 Pull Request 里附一份 `docs/plans/<日期>-<主题>.md`，和代码一起审、一起合。
-- **改动已定的设计**：先在 Issue 里和维护者确认（带 `maintainer` 标签），合并时同步改对应的文档。
-- **修 bug**：不用写。
+- **Large feature**: add a `docs/plans/<date>-<topic>.md` to the same pull request, reviewed and merged together
+  with the code.
+- **Change to a decided design**: first confirm it with the maintainer in an issue (with the `maintainer`
+  label), and update the matching note in the same merge.
+- **Bug fix**: no note needed.
 
-## 格式
+## Format
 
 ```markdown
-# 标题
+# Title
 
-- 日期：设计定下的日期（之后的修改在文末「变更」里追加）
-- 相关：Issue / PR 编号
+- Date: the date the design was decided (later changes are added under "Changes" at the end)
+- Related: issue / pull request numbers
+- Code: the main files that implement it
 
-## 为什么
-要解决的问题，以及当时的取舍。
+## Why
+The problem to solve, and the trade-offs made at the time.
 
-## 已定的行为
-可以验证的规则。写现在的行为，不写过程。
+## Decided behavior
+Rules that can be checked. Write the current behavior, not the history.
 
-## 不做什么
+## Not done
 
-## 已知限制
+## Known limits
 
-## 变更
-- 日期：改了什么，对应的 PR。
+## Changes
+- Date: what changed, and the pull request.
 ```
 
-## 目录
+## Contents
 
-| 文档 | 内容 |
+| Note | What it covers |
 |---|---|
-| [DSH 让步总账](2026-10-13-dsh-concessions.md) | 因 DSH 本身的限制而做的妥协，以及桌面应用之后怎么处理。判断「是 DS Bot 的 bug 还是 DSH 的限制」先看这里 |
-| [角色与权限](2026-10-07-roles-and-permissions.md) | 用户、Main Bot、群管理员、普通 Bot 各能做什么；Bot 的权限预设和群的统一权限 |
-| [隐私 Bot](2026-10-27-private-bots.md) | 只有用户能开关；其他 Bot 读不到它的文件夹、记忆和会话，外发由用户批准；独立文件夹、删除后的保护和隔离边界 |
-| [群聊](2026-10-07-group-chat.md) | 谁来回答、同时开工与按顺序发言、@ 提及、派活批次、干活中的进度和迟到的回复、审批与全部停止 |
-| [群聊 Goal](2026-11-01-group-goal.md) | 管理员先对齐再写 Goal；分阶段派给成员、每阶段带证据验收；每轮带 Goal 账本防跑偏；空闲时自动推进；暂停、纠偏、终止；会话头胶囊和吊舱显示进度与分工 |
-| [Bot 聊天和群聊的 `/` 菜单](2026-11-13-bot-slash-commands.md) | `/` 菜单里 DSH 命令行的执行被按 agent 作用域遮蔽（菜单行仍在）；DS Bot 动作进菜单：`/scheduled-task`、群里 bare `/goal` 打开群 Goal；技能不受影响 |
-| [iOS 出包与 TestFlight](2026-11-13-ios-release.md) | 用户要办的 Apple 账号、App ID、App Store Connect API Key；拿到后的签名、archive、上传 TestFlight 和排查；真机配对等账号和设备 |
-| [群聊任务面板](2026-11-12-group-task-board.md) | Bot 用 `group_task` 显式登记群里的任务：负责人、目标、状态、最新进展、结果摘要、历史；面板上补备注以 `@负责人` 的用户消息下发；数据随群保存 |
-| [群聊共享待办](2026-11-10-group-todos.md) | 每个群一份清单：成员用 `group_todo` 加、勾、删、清空已完成、看，用户在群详情里看、勾、删；随群保存和删除；上限 100 条，满了删一条或清空已完成后再加 |
-| [浏览器、搜索、密钥和连接器](2026-10-08-browser-and-secrets.md) | 每个 Bot 的浏览器和 `read_browser`、`auto` 联网搜索、密钥卡和替换规则、GitHub 连接器(已被 2026-11-04 通用连接器取代) |
-| [密钥的静态加密](2026-11-12-encrypted-secrets.md) | 可选的 `secrets.json` 口令加密：同一文件原子切换成 scrypt + AES-256-GCM 信封；无人值守用环境变量或口令文件解锁；锁定时的行为和回滚 |
-| [浏览器插件](2026-10-21-browser-plugins.md) | 全团队一个浏览器后端，每个 Bot 一份 profile；`refs` / `script` / `task` |
-| [电脑操控](2026-11-04-computer-use.md) | 设置里的总开关和 DSH 提供方；每个 Bot 四档（关 / 只看 / 后台操作 / 可以动前台）；按 Bot 记的应用授权；不能碰的应用；应用租约和前台租约；指示器、停止、「电脑」页；接管和交接卡与浏览器共用 |
-| [上下文与记忆](2026-10-09-context-and-memory.md) | 对话分段、上下文管家（压缩还是换段）、交接包、`read_own_chat`；记忆的存放、格式、权限、整理和冻结 |
-| [记忆的四种读法](2026-11-09-memory-layers.md) | 常驻、增量、自动召回、按需；额度、团队常驻层、定期整理、群的持久日志 |
-| [记忆撤销与更改记录](2026-11-01-memory-restore.md) | 记忆窗口「更改记录」列出 `journal.jsonl` 的改动；按记录 id 对单条添加、修改或删除做逆操作撤销 |
-| [Bot 运行配置](2026-10-10-bot-runtime.md) | Agent 预设、每个 Bot 的模型和思考强度、新 Bot 默认模型、工作文件夹、能力（MCP、技能、能力包） |
-| [本地 Agent CLI 作为 Bot](2026-11-04-local-agents.md) | 本地 agent CLI 作为 Bot 的运行方式（英文文档）：运行方式的选择和切换、会话映射、工具桥、审批、记忆、会话管理与徽标 |
-| [头像库](2026-10-23-avatar-library.md) | 可复用的自定义头像库（`bot/avatars/`，按内容去重）与单张容错的批量导入 |
-| [AGENTS.md 维护](2026-10-27-agents-md-upkeep.md) | 从项目工作中审阅持久规则；用户批准后才原子写入 |
-| [消息账本](2026-11-10-message-ledger.md) | 群里的每条消息先写进群的只追加账本，界面、成员、记忆整理、IM 都从账本读；一轮的工具结果只记序号范围，刷新后不丢 |
-| [长消息](2026-10-16-long-messages.md) | state.json 只存开头；超过 2 万字的 Bot 消息转成 DSH 文件；成员和界面怎么读全文 |
-| [读长回复](2026-11-13-long-reply-reading.md) | 比可见区域高的 Bot 回复，开头滚出去后顶部出现阅读胶囊：回到开头、显示读到哪一节、按标题跳转 |
-| [桌面应用](2026-10-16-desktop-app.md) | 壳、引擎和界面怎么分；锁定的 DSH 版本、独立的数据位置、首次启动和导入、插件怎么兼容 DSH、安装和更新 |
-| [Linux 桌面包](2026-10-21-linux-app-package.md) | AppImage（自更新）加 deb（Debian/Ubuntu 沙箱兜底），同一轮构建产出 |
-| [Bot 之间派活](2026-10-16-bot-handoffs.md) | Bot 看得到对方的状态；没读的消息合成一条；派活树：下面的活交回后才往上交，不许发给在等结果的 Bot；不设总量和链长上限 |
-| [Bot 视图](2026-10-20-widget-views.md) | Bot 在回答里画视图：固定组件目录的 JSON 蓝图（含图表、输入和本地公式），目录外的放沙箱 html；提问卡回路的泛化 |
-| [Side chat（侧边对话）](2026-10-21-btw.md) | 人顺带问一句：侧栏里的常驻对话，以与会话同构的请求回答、不执行工具、不打断、不进模型可见历史；可追问、可开多条；Bot 之间的 `ask_bot` 另行提案 |
-| [消息布局和宽度](2026-10-22-message-layout.md) | 气泡 / 平铺两种布局；平铺时 Bot 的话带头像、名字、时间；气泡宽度和平铺正文宽度各用一个滑块，按正文列的百分比调 |
-| [侧边栏分组](2026-11-04-sidebar-sections.md) | 按工作把 Bot 和群聊收进分组：折叠态 3D 微缩角色簇与状态透出、选中行露出、组头 `+`（新建或选已有加入）、右键与拖拽归组、88px 窄栏角色簇方块、Main Bot 工具 `section` 参数 |
-| [Windows 上手流程](2026-10-26-windows-onboarding.md) | 从下载到第一条回复：下载区和信任说明、安装、窗口先出来的启动页、一个位置和推荐盘、启动页上的一键导入、Main Bot 聊天里的模型设置卡（登录或检查过的 key、自动选模型）、修复卡、第一个小时的 Windows 问题、卸载时问一次 |
-| [启动窗口](2026-10-26-start-window.md) | 启动页的样子和动作：单独的小窗口（待定），Main Bot 的鲸鱼浮在水线上，围着它三段弧的圆环就是三个真实阶段，顺利时没有字，点它会喷水；等待越久越慢，卡片和失败页在同一张纸面上变形，就绪时圆环合上、鲸鱼跳到团队窗口里 Main Bot 的头像上、团队窗口在同一处盖上来 |
-| [启动页文案](2026-10-29-start-copy.md) | 启动页和壳里系统对话框的字：按页面位置分层，每层一条写法规则；`text.mjs` 一张表、旧键到新键的对照、扫全表的测试 |
-| [IM](2026-11-04-im.md) | 在微信、飞书、钉钉、企业微信、QQ、Telegram、Discord、Slack 里和 Bot 或群说话：IM 机器人绑一个 Bot，群绑 DS Bot 群；只认配对过的账号；回复和卡片发回聊天软件；只有占着团队锁的 dsh 连接 |
-| [手机 App](2026-10-24-mobile-app.md) | iOS 和 Android 远程操控电脑上的 Bot 团队：手机不跑 Agent；扫码配对、端到端加密、电脑只往外连；完整功能，高权限操作要解锁手机 |
-| [移动端客户端 API](2026-10-24-mobile-api.md) | 自己画界面的客户端（手机）用的接口：握手和版本、群聊条目、提醒和补发、头像按引用取、直接改记忆、单个 Bot 的用量 |
-| [Office 文档](2026-10-27-office-documents.md) | Bot 离线处理 .docx/.pptx/.xlsx：应用带的 payload、`office.js` 命令行、office 路由换成带 `office-tools` 的版本 |
-| [连接器](2026-11-04-connectors.md) | 通用连接器引擎、OAuth、网关、邮箱 |
+| [DSH concessions ledger](2026-10-13-dsh-concessions.md) | Compromises made because of limits in DSH itself, and how the desktop app handles them later. To tell "a DS Bot bug or a DSH limit", look here first |
+| [Roles and permissions](2026-10-07-roles-and-permissions.md) | What the user, a Main Bot, a group admin and a normal Bot can each do; Bot permission presets and the shared permissions of a group |
+| [Private Bots](2026-10-27-private-bots.md) | Only the user can turn it on or off; other Bots cannot read its folder, memory or Sessions, and anything sent out needs the user's approval; its own folder, protection after deletion and the isolation boundary |
+| [Group chat](2026-10-07-group-chat.md) | Who answers, working at the same time and speaking in turn, @ mentions, handoff batches, progress while working and late replies, approvals and Stop all |
+| [Group chat Goal](2026-11-01-group-goal.md) | The admin aligns first, then writes the Goal; work is handed to members in stages, each stage accepted with evidence; every turn carries the Goal ledger to stay on track; automatic progress when idle; pause, correct, end; the Session header capsule and the pod show progress and who does what |
+| [The `/` menu in Bot chats and group chats](2026-11-13-bot-slash-commands.md) | Running DSH command lines from the `/` menu is masked per agent scope (the menu rows stay); DS Bot actions are in the menu: `/scheduled-task`, and a bare `/goal` in a group opens the group Goal; skills are not affected |
+| [iOS build and TestFlight](2026-11-13-ios-release.md) | The Apple account, App ID and App Store Connect API Key the user must get; after that, signing, archive, upload to TestFlight and troubleshooting; device pairing waits for the account and devices |
+| [Group chat task board](2026-11-12-group-task-board.md) | Bots register group tasks explicitly with `group_task`: owner, goal, status, latest progress, result summary, history; a note added on the panel is sent as a user message `@owner`; the data is saved with the group |
+| [Shared group to-dos](2026-11-10-group-todos.md) | One list per group: members add, check, delete, clear completed and view with `group_todo`; the user views, checks and deletes in the group details; saved and deleted with the group; at most 100 items, when full delete one or clear completed before adding |
+| [Browser, search, secrets and connectors](2026-10-08-browser-and-secrets.md) | Each Bot's browser and `read_browser`, `auto` web search, secret cards and replacement rules, the GitHub connector (replaced by the general connectors of 2026-11-04) |
+| [Encrypting secrets at rest](2026-11-12-encrypted-secrets.md) | Optional passphrase encryption of `secrets.json`: the same file switches atomically to a scrypt + AES-256-GCM envelope; unattended unlock with an environment variable or a passphrase file; behavior while locked, and rollback |
+| [Browser plugins](2026-10-21-browser-plugins.md) | One browser backend for the whole team, one profile per Bot; `refs` / `script` / `task` |
+| [Computer use](2026-11-04-computer-use.md) | The master switch and the DSH provider in Settings; four levels per Bot (off / view only / operate in the background / may use the foreground); app grants recorded per Bot; apps that must not be touched; app leases and the foreground lease; indicator, stop, the Computer page; takeover and handoff cards shared with the browser |
+| [Context and memory](2026-10-09-context-and-memory.md) | Conversation parts, the context keeper (compact or start a new part), the handoff package, `read_own_chat`; where memory is stored, its format, permissions, tidying and freezing |
+| [Four ways to read memory](2026-11-09-memory-layers.md) | Always loaded, incremental, automatic recall, on demand; budgets, the team always-loaded layer, scheduled tidying, the group's durable log |
+| [Memory undo and change history](2026-11-01-memory-restore.md) | The memory window's "Change history" lists the changes in `journal.jsonl`; undo a single add, edit or delete by its record id with the inverse operation |
+| [Bot runtime settings](2026-10-10-bot-runtime.md) | Agent presets, each Bot's model and thinking effort, the default model for new Bots, the working folder, capabilities (MCP, skills, capability packs) |
+| [Local agent CLIs as Bots](2026-11-04-local-agents.md) | Local agent CLIs as a way to run a Bot: choosing and switching how a Bot runs, Session mapping, the tool bridge, approvals, memory, Session management and badges |
+| [Avatar library](2026-10-23-avatar-library.md) | A reusable library of custom avatars (`bot/avatars/`, deduplicated by content) and bulk import that tolerates a single failed image |
+| [AGENTS.md upkeep](2026-10-27-agents-md-upkeep.md) | Review lasting rules from project work; write them atomically only after the user approves |
+| [Message ledger](2026-11-10-message-ledger.md) | Every group message is first written to the group's append-only ledger; the interface, members, memory tidying and IM all read from the ledger; a turn's tool results record only a sequence range, so nothing is lost after a reload |
+| [Long messages](2026-10-16-long-messages.md) | state.json stores only the beginning; Bot messages over 20,000 characters become DSH files; how members and the interface read the full text |
+| [Reading long replies](2026-11-13-long-reply-reading.md) | For a Bot reply taller than the visible area, a reading capsule appears at the top once the beginning scrolls out: back to the beginning, which section you are reading, jump by heading |
+| [Desktop app](2026-10-16-desktop-app.md) | How the shell, the engine and the interface are split; the pinned DSH version, the separate data location, first start and import, how the plugin stays compatible with DSH, install and updates |
+| [Linux desktop package](2026-10-21-linux-app-package.md) | AppImage (self-updating) plus deb (fallback for the Debian/Ubuntu sandbox), produced by the same build |
+| [Handoffs between Bots](2026-10-16-bot-handoffs.md) | Bots see each other's status; unread messages are merged into one; the handoff tree: work is handed up only after the work below has come back, and nothing may be sent to a Bot that is waiting for a result; no limit on total count or chain length |
+| [Bot views](2026-10-20-widget-views.md) | Bots draw views in their answers: JSON blueprints from a fixed component catalog (including charts, inputs and local formulas), anything outside the catalog goes into sandboxed html; a generalization of the question-card loop |
+| [Side chat](2026-10-21-btw.md) | A quick side question from the user: a persistent chat in the sidebar, answered with a request shaped like the Session's, runs no tools, does not interrupt, does not enter the model-visible history; follow-ups and several side chats are possible; `ask_bot` between Bots is a separate proposal |
+| [Message layout and width](2026-10-22-message-layout.md) | Two layouts, bubbles and flat; in the flat layout a Bot's message carries its avatar, name and time; one slider each for bubble width and flat body width, set as a percentage of the body column |
+| [Sidebar sections](2026-11-04-sidebar-sections.md) | Group Bots and group chats into sections by work: collapsed 3D miniature character clusters that show status, the selected row stays visible, a `+` on the section header (create new or add an existing one), grouping by right-click and drag, character cluster tiles in the 88px narrow sidebar, the `section` parameter of the Main Bot tools |
+| [Windows onboarding](2026-10-26-windows-onboarding.md) | From download to the first reply: the download area and trust notes, install, a start page where the window appears first, one location and a recommended drive, one-click import on the start page, the model setup card in the Main Bot chat (signed-in or checked key, automatic model choice), the repair card, Windows problems in the first hour, one question on uninstall |
+| [Start window](2026-10-26-start-window.md) | How the start page looks and acts: a separate small window (undecided); the Main Bot's whale floats on the waterline, and the ring of three arcs around it is the three real stages; no text when all goes well; clicking it makes it spout; the longer the wait, the slower it gets; cards and the failure page morph on the same sheet; when ready, the ring closes, the whale jumps onto the Main Bot's avatar in the team window, and the team window covers it in the same spot |
+| [Start page copy](2026-10-29-start-copy.md) | The text on the start page and in the shell's system dialogs: layered by position on the page, one writing rule per layer; one table in `text.mjs`, a map from old keys to new keys, a test that scans the whole table |
+| [IM](2026-11-04-im.md) | Talk to a Bot or a group in WeChat, Feishu, DingTalk, WeCom, QQ, Telegram, Discord and Slack: an IM bot binds to one Bot, an IM group binds to a DS Bot group; only paired accounts are accepted; replies and cards go back to the chat app; only the dsh connection that holds the team lock |
+| [Mobile app](2026-10-24-mobile-app.md) | iOS and Android control the Bot team on the computer remotely: the phone runs no agent; QR pairing, end-to-end encryption, the computer only connects outward; full features, and high-privilege actions require unlocking the phone |
+| [Mobile client API](2026-10-24-mobile-api.md) | The API for clients that draw their own interface (phones): handshake and versions, group chat items, notifications and resending, avatars fetched by reference, editing memory directly, usage of a single Bot |
+| [Office documents](2026-10-27-office-documents.md) | Bots handle .docx/.pptx/.xlsx offline: the payload bundled with the app, the `office.js` command line, the office route replaced by a version with `office-tools` |
+| [Connectors](2026-11-04-connectors.md) | The general connector engine, OAuth, gateways, email |

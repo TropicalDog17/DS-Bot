@@ -1,51 +1,135 @@
-# 连接器（Connectors）
+# Connectors
 
-日期：2026-11-04。代码：`ds-bot/src/host/connectors/`（`catalog.js` 目录、`oauth.js` 登录、`gateway.js` 本地网关、`mail/` 邮箱、`index.js` 引擎），客户端 `src/client/connectors.js`，端点在 `src/host/channel.js` 的 `connector-*` / `mail-*`。
+Date: 2026-11-04. Code: `ds-bot/src/host/connectors/` (`catalog.js` catalog, `oauth.js` sign-in, `gateway.js` local gateway, `mail/` mail, `index.js` engine), client `src/client/connectors.js`, endpoints `connector-*` / `mail-*` in `src/host/channel.js`.
 
-## 目录
+## Catalog
 
-`catalog.js` 是一个纯数据数组，一项一个服务：`{ id, name, category, about, remote?: { url }, auth, headers?, whoami? }`。`about` 是自己写的一句话，不抄官网。`auth` 四种：`none`（免登录）、`oauth`（MCP OAuth，`client` 指定已知的公开客户端，`token: true` 同时接受贴令牌）、`key`（密钥放 header 或 query 参数，`keyUrl` 指路去哪里拿）、自定义项（用户加的地址或命令）。GitHub 保留原来的样子：`mcp__github__*` 工具名不变、`GITHUB_TOKEN` 不变、贴令牌流程不变。行内图标一律自绘：GitHub 用原标，其余用按 id 取色的首字母块。
+`catalog.js` is a plain data array with one entry per service:
+`{ id, name, category, about, remote?: { url }, auth, headers?, whoami? }`. `about` is one
+sentence we write ourselves, not copied from the service's website. `auth` has four kinds:
+`none` (no sign-in), `oauth` (MCP OAuth; `client` names a known public client, and
+`token: true` also accepts a pasted token), `key` (the key goes in a header or a query
+parameter; `keyUrl` points to where to get it), and custom entries (an address or command
+the user adds). GitHub keeps its existing shape: the `mcp__github__*` tool names, the
+`GITHUB_TOKEN` and the paste-a-token flow do not change. Row icons are all drawn by us:
+GitHub uses its official mark, the rest use an initial-letter block colored by id.
 
-## 登录
+## Sign-in
 
-OAuth 登录的顺序是定的：目录里写的客户端 → CIMD → DCR → 让用户填 client。CIMD（client metadata document，`https://dsbot.app/oauth/client.json`）只在回环监听拿到固定端口 38517 时用，因为文档里登记的回调是 `http://127.0.0.1:38517/callback`；拿不到就落到 DCR：按本次的回调地址注册，地址变了或 client secret 过期就重新注册。都不行的（Asana、Box、HubSpot、Slack 这类要先在服务商注册的）显示 client 表单。发现元数据走三段：未认证请求拿 `WWW-Authenticate` → 受保护资源元数据（含 well-known 回退）→ AS 元数据；老服务器（如 Atlassian）没有资源文档时退回 MCP 源站查 AS 元数据。授权请求带 PKCE（S256）、`state` 和 `resource`；贴回的地址校验 `state`，贴裸 code 时用本次的 state。GitHub 走设备码（`client_id` + scope 换 `device_code`，轮询时遵守 `slow_down`）；`DS_BOT_GITHUB_OAUTH_CLIENT_ID` 为空时只显示令牌表单，和现在一样。
+OAuth sign-in follows a fixed order: the client named in the catalog → CIMD → DCR → ask
+the user to fill in a client. CIMD (client metadata document,
+`https://dsbot.app/oauth/client.json`) is used only when the loopback listener gets the
+fixed port 38517, because the callback registered in the document is
+`http://127.0.0.1:38517/callback`. When it cannot get that port it falls back to DCR: it
+registers with this sign-in's callback address, and registers again when the address
+changes or the client secret expires. When neither works (services such as Asana, Box,
+HubSpot and Slack that require registering with the provider first) it shows the client
+form. Metadata discovery has three steps: an unauthenticated request for
+`WWW-Authenticate` → protected resource metadata (with a well-known fallback) → AS
+metadata. For older servers (such as Atlassian) that have no resource document, it falls
+back to looking up AS metadata at the MCP origin. The authorization request carries PKCE
+(S256), `state` and `resource`. A pasted-back address has its `state` checked; a pasted
+bare code uses this sign-in's state. GitHub uses the device code flow (`client_id` + scope
+for a `device_code`, honoring `slow_down` while polling). When
+`DS_BOT_GITHUB_OAUTH_CLIENT_ID` is empty, only the token form shows, as it does today.
 
-## 网关
+## Gateway
 
-凭据永远不进 mcp-client 的配置，因为 `@deepseek-ai/dsh-mcp-client` 只接受静态 headers，没有 OAuth 也没有刷新。所以每个远程连接器在插件进程里挂的是 `http://127.0.0.1:<port>/c/<id>` 加一次性的随机 nonce；网关在转发时才注入真凭据（Bearer、key header 或 key query、目录里的静态 headers），转发 `Mcp-Session-Id`、`MCP-Protocol-Version`、`Accept` 等头，回传 `Mcp-Session-Id`，SSE 原样透传，下游断开就销毁上游。上游 401 且还没回字节时：刷新一次、重试一次；并发 401 共享一次刷新；刷新轮换时写新 refresh token，写失败留旧的；`invalid_grant` 转「需要重新登录」；只读窗口不刷新、只重读密钥。非 https 的上游一律拒绝（本机回环 http 除外，给本地自定义服务器）。每个远程连接器有「Read-only」开关：打开后网关把 `tools/list` 过滤到 `readOnlyHint` 工具，写 `tools/call` 在本地拒绝（批请求整体拒掉），stdio 连接器不显示这个开关。
+Credentials never go into the mcp-client config, because `@deepseek-ai/dsh-mcp-client`
+accepts only static headers and has neither OAuth nor refresh. So every remote connector
+is mounted in the plugin process as `http://127.0.0.1:<port>/c/<id>` plus a one-time
+random nonce. The gateway injects the real credentials only when it forwards (Bearer, key
+header or key query, static headers from the catalog). It forwards headers such as
+`Mcp-Session-Id`, `MCP-Protocol-Version` and `Accept`, passes `Mcp-Session-Id` back,
+passes SSE through unchanged, and destroys the upstream connection when the downstream one
+closes. When the upstream returns 401 before any bytes have been sent back, it refreshes
+once and retries once. Concurrent 401s share one refresh. When a refresh rotates the
+token, it writes the new refresh token; if the write fails it keeps the old one.
+`invalid_grant` turns into "needs sign-in again". A read-only window does not refresh; it
+only reads the secrets again. Non-https upstreams are always refused (except loopback http
+on the local machine, for local custom servers). Every remote connector has a "Read-only"
+switch: when it is on, the gateway filters `tools/list` down to `readOnlyHint` tools and
+refuses write `tools/call` locally (a batch request is refused as a whole). stdio
+connectors do not show this switch.
 
-## 状态与密钥
+## State and secrets
 
-密钥在 DS Bot 密钥里，首次写入 `scope: []`（不进任何 Bot shell）：GitHub 仍用 `GITHUB_TOKEN`，其他 `CONNECTOR_<ID>_TOKEN / _REFRESH / _CLIENT_SECRET / _KEY`，邮箱 `MAIL_<地址>_PASSWORD / _TOKEN / _REFRESH`。非密状态在 `state.connectors[id]`（账号、连接时间、client 元信息、token 过期、readOnly、offFor、custom）。令牌变化不触发重挂（指纹不含令牌）。
+Secrets live in DS Bot secrets and are first written with `scope: []` (they go into no
+Bot's shell). GitHub still uses `GITHUB_TOKEN`; others use
+`CONNECTOR_<ID>_TOKEN / _REFRESH / _CLIENT_SECRET / _KEY`, and mail uses
+`MAIL_<address>_PASSWORD / _TOKEN / _REFRESH`. Non-secret state is in
+`state.connectors[id]` (account, connect time, client metadata, token expiry, readOnly,
+offFor, custom). A token change does not trigger a remount (the fingerprint does not
+include tokens).
 
-## 每个 Bot 的开关
+## Per-Bot switches
 
-默认所有 Bot 都能用已连接的连接器。Bot 详情 → Connectors 逐项关（`offFor`）：按 `mcp__<id>__*` / `mail_` 前缀在 per-agent 工具遮罩里 deny，`tools/change` 时按需重挂，只有 deny 集合变了才动。关掉后该 Bot 看不到工具，也不能再发起新的连接请求。
+By default every Bot can use the connected connectors. Bot details → Connectors turns them
+off one by one (`offFor`): the per-agent tool mask denies the `mcp__<id>__*` / `mail_`
+prefixes, and on `tools/change` it remounts as needed, only when the deny set changed.
+Once a connector is off, that Bot cannot see its tools and cannot start new connect
+requests.
 
-## Bot 工具和卡片
+## Bot tools and cards
 
-`list_connectors` 列目录、连接状态和本 Bot 可用性；`request_connector`（id、purpose）在本 Bot 自己的会话里出卡片，按密钥卡同一套规矩：只在私聊、群聊拒绝、只读窗口拒绝、记录 pending 并 `concludeTurn`、连接或取消后回话。`request_secret` 的笔记机制原样复用（`rt.deliver` 带角色标签）。邮箱发送同样复用 `show_view` 的 `form` 卡片：展示可编辑的待发邮件（主题、只读发件人、收件人、抄送、密送、多行正文与附件名和大小），用户可直接修改后点「发送」或「丢弃」。默认每封信都需要确认；左下角规则菜单可设为「允许收件人」「需要批准（默认）」「允许此 Bot 直接发送」或打开「管理规则」（设置 → 连接器 → 邮箱可查看与移除规则）；隐私 Bot 始终需要确认；`mail_draft` 不出卡。
+`list_connectors` lists the catalog, the connection state and whether this Bot can use
+each one. `request_connector` (id, purpose) shows a card in the Bot's own Session and
+follows the same rules as the secret card: only in the Bot's own chat, refused in group
+chats, refused in a read-only window, records a pending entry and calls `concludeTurn`,
+and replies after the connector is connected or the request is cancelled. The note
+mechanism of `request_secret` is reused as is (`rt.deliver` with a role label). Sending
+mail likewise reuses the `form` card of `show_view`: it shows the pending mail as an
+editable form (subject, read-only sender, to, cc, bcc, multi-line body, and attachment
+names and sizes), and the user can edit it directly and then click "Send" or "Discard".
+By default every mail needs confirmation. The rule menu at the bottom left can be set to
+"Allow recipient", "Needs approval" (the default) or "Allow this Bot to send directly", or
+can open "Manage rules" (Settings → Connectors → Mail shows and removes rules). A private
+Bot always needs confirmation. `mail_draft` shows no card.
 
-## 邮箱
+## Mail
 
-按地址域名选预设：QQ（含 foxmail）、163、126、Gmail、iCloud、其他（自填主机端口）。163/126 不发 IMAP `ID` 命令会回 Unsafe Login，所以每个账号都带 `ID`（name/version/vendor）。QQ 限频繁登录，一个账号复用一条连接。加账号先登录验证一次（IMAP + SMTP）再保存，验证码错误只报干净的错。工具：`mail_search / mail_read / mail_draft / mail_send / mail_update`，只在有账号时注册。附件保存进 Bot 的工作文件夹，文件名清理防目录穿越；发送的附件限工作文件夹内（realpath 校验），卡片显示名字和大小。Gmail 也支持 Google 登录（Gmail API，`openid + userinfo.email + gmail.modify`），client 由 `DS_BOT_GOOGLE_OAUTH_CLIENT_ID/SECRET` 提供，缺一则按钮隐藏——应用过 Google 审核前只有测试账号能登。不落任何 Google secret 进仓。
+A preset is chosen by the address's domain: QQ (including foxmail), 163, 126, Gmail,
+iCloud, and Other (host and port filled in by the user). 163/126 answer Unsafe Login when
+the IMAP `ID` command is not sent, so every account sends `ID` (name/version/vendor). QQ
+limits frequent sign-ins, so one account reuses one connection. Adding an account first
+signs in once to verify (IMAP + SMTP) and then saves; a wrong verification code reports
+only a clean error. Tools: `mail_search / mail_read / mail_draft / mail_send /
+mail_update`, registered only when there is an account. Attachments are saved into the
+Bot's work folder, with file names cleaned to prevent directory traversal. Attachments to
+send must be inside the work folder (checked with realpath), and the card shows their
+names and sizes. Gmail also supports Google sign-in (Gmail API,
+`openid + userinfo.email + gmail.modify`). The client comes from
+`DS_BOT_GOOGLE_OAUTH_CLIENT_ID/SECRET`; when either is missing the button is hidden. Until
+the app passes Google's review, only test accounts can sign in. No Google secret goes into
+the repository.
 
-## 导入与自定义
+## Import and custom connectors
 
-`connector-import-scan` 只读扫 Claude Desktop、Cursor、VS Code 的 MCP 配置（不改源文件），返回名称和 env 名；`connector-import` 把 env 值移进 DS Bot 密钥（`CONNECTOR_<ID>_<ENV>`），配置里留 `$DSH_SECRET_` 引用。自定义 id 从名字派生，唯一、≤32 字符、不占目录 id；能力名校验同样拒绝连接器 id。
+`connector-import-scan` reads the MCP config of Claude Desktop, Cursor and VS Code without
+changing it (it does not touch the source files) and returns names and env names.
+`connector-import` moves env values into DS Bot secrets (`CONNECTOR_<ID>_<ENV>`) and
+leaves a `$DSH_SECRET_` reference in the config. A custom id is derived from the name: it
+is unique, at most 32 characters, and does not take a catalog id. Capability name
+validation likewise refuses connector ids.
 
-## 不做
+## Not done
 
-- 不加 Google 的 Gmail/Drive/Calendar MCP（开发者预览条款），不引入任何厂商 logo。
-- 不把凭据放进 Bot shell 或 mcp-client 配置；不改 DSH。
+- No Google Gmail/Drive/Calendar MCP (developer preview terms), and no vendor logos.
+- No credentials in a Bot's shell or in the mcp-client config; no change to DSH.
 
-## 已知限制
+## Known limits
 
-- 浏览器登录只在本机回环；远程浏览器用贴回地址兜底。
-- 只读过滤依赖服务的 `readOnlyHint`；没标注的按写处理。
-- 邮箱线程按 References/In-Reply-To 关联；Gmail 的「移动」按标签实现。
-- Google 登录在应用过审前仅限测试账号。
+- Browser sign-in works only on the local loopback; a remote browser falls back to pasting
+  the address back.
+- The read-only filter depends on the service's `readOnlyHint`; tools without it are
+  treated as writes.
+- Mail threads are linked by References/In-Reply-To; a Gmail "move" is done with labels.
+- Google sign-in is limited to test accounts until the app passes review.
 
-## 变更
+## Changes
 
-- 2026-11-04 重写：修正网关把连接器路径和 query 丢到源站根的问题；下游断开销毁上游；只读模式拒批请求；CIMD 存储客户端只在固定端口复用；邮箱附件路径收紧并显示大小；卡片回话与密钥卡同一机制。
+- 2026-11-04 rewrite: fixed the gateway dropping the connector path and query and sending
+  them to the origin root; the upstream is destroyed when the downstream closes; read-only
+  mode refuses batch requests; a client stored through CIMD is reused only on the fixed
+  port; the mail attachment path is tighter and its size is shown; the card reply uses the
+  same mechanism as the secret card.

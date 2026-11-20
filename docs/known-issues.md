@@ -1,7 +1,5 @@
 # Known issues
 
-English | [中文](known-issues.zh.md)
-
 ## "@Name" shows as a file in a message that is not sent yet
 
 **Where:** your own message while it waits: just after you press Send, or while it waits in the queue for a Bot that is busy.

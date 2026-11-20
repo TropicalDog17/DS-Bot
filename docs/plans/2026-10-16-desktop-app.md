@@ -1,176 +1,400 @@
-# 桌面应用
+# Desktop app
 
-- 日期：2026-10-16
-- 相关：PR #275；[愿景](../vision.zh.md)「两种形态」、[DSH 让步总账](2026-10-13-dsh-concessions.md)
+- Date: 2026-10-16
+- Related: PR #275; [vision](../vision.md), "Two forms"; [DSH concessions ledger](2026-10-13-dsh-concessions.md)
 
-## 为什么
+## Why
 
-插件版跑在用户自己的 DSH 里，界面结构、全局配置和 DSH 版本都由 DSH 决定，很多地方只能让步（见让步总账）。用户的 DSH 一更新，Bot 也可能被打坏。桌面应用让 DS Bot 自己掌握 profile、数据、界面和 DSH 版本，一打开就是 Bot 团队。
+The plugin runs in the user's own DSH. DSH decides the interface layout, the global settings and the DSH
+version, so the plugin has to give way in many places (see the concessions ledger). When the user's DSH
+updates, it can also break the Bots. The desktop app lets DS Bot own its profile, data, interface and DSH
+version. When it opens, the Bot team is there.
 
-取舍：
+Trade-offs:
 
-- **引擎用 DSH，不另写 Agent 运行时。** Bot 的回合、工具、模型、会话、MCP、技能照旧走 DSH，和插件版一样。
-- **界面先用 DSH 的网页前端。** 自己写界面要把 DSH 网页前端已有的东西（工具卡片、审批、设置、Markdown、发文件、群聊历史）一样样重做，拖慢了其他工作，所以先停下。窗口用 DSH 的网页前端，`ds-bot` 以插件的形式在里面，和 DSH Desktop 里一样。自己的界面以后再接着做，原因不变：DSH 网页前端启动时要激活全部界面插件，一个插件出错整页停住；它的模块格式和页面结构由 DSH 决定，还在变。
+- **The engine is DSH; there is no separate agent runtime.** Bot turns, tools, models, Sessions, MCP and
+  skills still go through DSH, the same as in the plugin.
+- **The interface uses the DSH web front end for now.** An own interface would have to redo, one by one,
+  what the DSH web front end already has (tool cards, approvals, settings, Markdown, sending files, group
+  chat history). That slowed other work, so it is paused. The window uses the DSH web front end, with
+  `ds-bot` inside it as a plugin, the same as in DSH Desktop. The own interface will continue later, for
+  the same reasons as before: when the DSH web front end starts, it activates every interface plugin, and
+  one failing plugin stops the whole page; DSH decides its module format and page structure, and both are
+  still changing.
 
-## 已定的行为
+## Decided behavior
 
-### 结构
+### Structure
 
-| 部分 | 做什么 |
+| Part | What it does |
 |---|---|
-| 壳 | Electron 主进程。只开一个实例；窗口加载引擎自己的本机地址（`http://127.0.0.1:端口`），和 DSH Web 一样由引擎提供网页前端；管引擎进程的启动和退出。窗口见下面「窗口」一节 |
-| 引擎 | 子进程，Linux 用随包独立 Node，避免 sharp 的 libvips 与 Electron 的系统 glib 冲突；macOS 和 Windows 用 Electron 自带的 Node。通过 `@deepseek-ai/dsh/profile-boot` 的 `runProfile()` 启动 profile `ds-bot`，只监听 `127.0.0.1`。端口第一次启动时选一个空闲的，之后一直用它：页面的本地存储（未读标记、布局、偏好）跟着地址走。端口被占用时换一个新的。环境变量 `DS_BOT_APP=1` 告诉 ds-bot 它跑在桌面应用里 |
-| 界面 | DSH 的网页前端加上 `ds-bot` 插件，和插件版一样 |
+| Shell | The Electron main process. Only one instance runs. The window loads the engine's own local address (`http://127.0.0.1:port`), and the engine serves the web front end, the same as DSH Web. The shell starts and stops the engine process. For the window, see "Window" below |
+| Engine | A child process. On Linux it uses a bundled standalone Node, so that sharp's libvips does not clash with Electron's system glib; on macOS and Windows it uses the Node that ships with Electron. It starts the profile `ds-bot` with `runProfile()` from `@deepseek-ai/dsh/profile-boot` and listens only on `127.0.0.1`. The port is a free one chosen on the first start and kept after that, because the page's local storage (unread marks, layout, preferences) follows the address. When the port is taken, it picks a new one. The environment variable `DS_BOT_APP=1` tells ds-bot that it runs in the desktop app |
+| Interface | The DSH web front end with the `ds-bot` plugin, the same as the plugin |
 
-- 插件版和桌面应用用同一份 `ds-bot`，插件版不变。
-- 安装包和 `ds-bot` 用同一个版本号。
-- 引擎的 profile 由三个 bundle 叠成：DSH 的 `dsh-base`、DSH 的网页前端 `dsh-web-app`、`ds-bot`，用户装的插件排在后面。每次启动时，引擎把这三个 bundle 排回最前面。
+- The plugin and the desktop app use the same `ds-bot`. The plugin does not change.
+- The installer and `ds-bot` share one version number.
+- The engine's profile is three bundles stacked: DSH's `dsh-base`, the DSH web front end `dsh-web-app`
+  and `ds-bot`; plugins the user installs come after them. On every start, the engine moves these three
+  bundles back to the front.
 
-### 窗口
+### Window
 
-- 每次启动先显示 720 × 540（显示器工作区矮时 720 × 500）的**启动窗口**（`app/src/start/`）：Main Bot 的鲸鱼沿着水线游过三个真实阶段，团队界面在隐藏的主窗口里加载，就绪后启动窗口长到主窗口的矩形、主窗口在原位露面（见 [启动窗口](2026-10-26-start-window.md)）。
-- Windows：窗口无边框，和 DSH Desktop 一样。标题栏并进页面，系统的最小化、最大化、关闭按钮留在右上角，颜色和它下面的界面一致，跟着主题变。拖标题栏移动窗口，双击最大化。
-- Windows 11（22H2 及以后）：侧栏用 Mica 材质，一直通到窗口顶部；对话区也到顶，左上角是圆角，系统按钮在对话区上。Windows 10 上标题栏和侧栏同色、不透明。
-- 弹出对话框时，标题栏和系统按钮跟页面一起变暗。
-- 页面仍是 DSH 网页前端的网页模式，快捷键和网页版一样。
-- macOS：窗口也无边框。红绿灯在页面顶部 40 px 的标题带左端，侧栏和对话区都通到窗口顶部；侧栏用系统的侧栏材质（vibrancy），窗口不在前台时材质不变。拖标题带移动窗口，双击按系统设置缩放；全屏时红绿灯藏起来，侧栏开关回到最左。
-- Linux：系统标题栏。
+- Every start first shows a **start window** of 720 × 540 (720 × 500 when the display's work area is
+  short) (`app/src/start/`). The Main Bot's whale swims along the waterline through three real stages
+  while the team interface loads in the hidden main window. When it is ready, the start window grows to
+  the main window's rectangle and the main window appears in its place (see
+  [start window](2026-10-26-start-window.md)).
+- Windows: the window is frameless, the same as DSH Desktop. The title bar is part of the page. The
+  system minimize, maximize and close buttons stay at the top right, in the same color as the interface
+  under them, and follow the theme. Drag the title bar to move the window; double-click to maximize.
+- Windows 11 (22H2 and later): the sidebar uses the Mica material and reaches the top of the window. The
+  chat area also reaches the top, with a rounded top-left corner, and the system buttons sit over it. On
+  Windows 10 the title bar has the same color as the sidebar and is opaque.
+- When a dialog opens, the title bar and system buttons dim with the page.
+- The page is still the DSH web front end in web mode, and the shortcuts are the same as on the web.
+- macOS: the window is frameless too. The traffic lights sit at the left end of a 40 px title band at the
+  top of the page; the sidebar and the chat area both reach the top of the window. The sidebar uses the
+  system sidebar material (vibrancy), which does not change when the window is not in front. Drag the
+  title band to move the window; double-click zooms as the system setting says. In full screen the
+  traffic lights hide and the sidebar toggle moves back to the far left.
+- Linux: the system title bar.
 
-### 托盘和退出
+### Tray and quitting
 
-- Windows、macOS、Linux 都有常驻的系统托盘图标，图标是应用自己的鲸鱼。托盘菜单是「打开 DS Bot」和「退出 DS Bot」。
-- 关掉窗口不是退出：窗口藏起来，引擎和 Bot 照常工作，Bot 浏览器的标签页也还在。再打开一次应用，窗口回到桌面上（单实例锁把第二次启动交给已经在跑的那一个）。
-- 窗口真的不在了的时候（渲染进程没了之类），托盘的「打开」重新建一个窗口，接着现在跑着的引擎：地址还是引擎的本机地址，第一次加载换来的 cookie 还在，不用启动第二个引擎，也不用再用一次启动用的令牌。
-- 所有窗口都关掉不会退出应用。托盘里的「退出」是唯一的正常退出入口。
-- 第一次关窗口时，窗口里出一张卡片（盖在页面上，不是系统对话框），说明应用会留在托盘里继续运行。只有点了卡片上的〔好〕窗口才藏起来；Esc 不关这张卡。这个确认记在应用自己的数据里，以后不再问。页面画不出卡片（没加载完、2 秒内没回话）时窗口照样藏进托盘，下次关窗口再说（待维护者确认）。关窗口等着这张卡片的回答，所以卡片出来时窗口先回到最前（最小化的先还原），卡片还在时再点一次关闭也是把窗口带到最前；Bot 浏览器的视图画在页面上面，卡片在的时候先藏起来，免得把卡片挡住。
-- 导入团队、搬数据位置的时候，关窗口是取消这些事，和以前一样：复制停在安全的地方，不留下半个团队。
-- 这些时候窗口是真的关掉，不是藏起来：更新装好要重启、搬完数据要重启、启动失败、系统的关机和注销。
-- macOS：点一下托盘图标出菜单，Dock 图标点一下窗口回来。全屏的窗口先退出全屏再藏起来，不然桌面上留下一块黑。
-- 属于窗口的提示（更新的提示）在窗口藏着或者最小化的时候不出，等窗口回来了再出，也是窗口里的卡片。
-- macOS 的应用菜单里没有「退出」，也没有 ⌘Q：托盘里的「退出」是唯一的正常退出入口。
-- 托盘图标建不起来时（有的桌面环境没有托盘），应用还有一条明确的路出去：macOS 的应用菜单里多一个「退出」，别的系统上关窗口时窗口里的卡片问一句「要不要结束它」，答「不结束」或者卡片画不出来就把窗口最小化，窗口留在任务栏里，不会消失，也不会退出应用。这是唯一的例外，别的情形应用不会自己问要不要退出。
-- 引擎给的启动地址只能用一次。第一次的加载没成功（窗口在加载的时候没了），新窗口不会再用这个地址：它去引擎的本机地址，cookie 不在的时候引擎会拒绝，这时重新打开应用会有新的地址。
+- Windows, macOS and Linux all have a system tray icon that stays. The icon is the app's own whale. The
+  tray menu has "Open DS Bot" and "Quit DS Bot".
+- Closing the window does not quit: the window hides, the engine and the Bots keep working, and the Bot
+  browser tabs stay. When the app is opened again, the window comes back to the desktop (the
+  single-instance lock hands the second start to the one already running).
+- When the window is really gone (for example the renderer process died), the tray's "Open" builds a new
+  window on the engine that is running: the address is still the engine's local address and the cookie
+  from the first load is still there, so there is no second engine and the start token is not used
+  again.
+- Closing all windows does not quit the app. "Quit" in the tray is the one normal way to quit.
+- The first time the window is closed, a card appears in the window (over the page, not a system
+  dialog). It says the app stays in the tray and keeps running. The window hides only after the user
+  clicks [OK] on the card; Esc does not close this card. The app keeps this confirmation in its own data
+  and does not ask again. When the page cannot draw the card (not loaded yet, no answer within
+  2 seconds), the window still hides into the tray, and the card comes on the next close (waiting for
+  the maintainer to confirm). Closing the window waits for the card's answer, so when the card appears
+  the window first comes to the front (a minimized window is restored first). While the card is there,
+  another click on close also brings the window to the front. Bot browser views are drawn above the
+  page, so they hide while the card is there and do not cover it.
+- While a team import or a data move runs, closing the window cancels it, as before: the copy stops at a
+  safe point and does not leave half a team.
+- In these cases the window really closes instead of hiding: an installed update needs a restart, a data
+  move finished and needs a restart, the start failed, the system shuts down or logs out.
+- macOS: a click on the tray icon shows the menu; a click on the Dock icon brings the window back. A
+  full-screen window leaves full screen before it hides, or the desktop keeps a black area.
+- Notices that belong to the window (the update notices) do not show while the window is hidden or
+  minimized. They wait until the window is back, and they are also cards in the window.
+- The macOS app menu has no "Quit" and no ⌘Q: "Quit" in the tray is the one normal way to quit.
+- When the tray icon cannot be created (some desktop environments have no tray), the app still has a
+  clear way out: the macOS app menu gets a "Quit", and on other systems closing the window shows a card
+  in the window that asks whether to end it. If the answer is no, or the card cannot be drawn, the window
+  is minimized: it stays in the taskbar, does not disappear and does not quit the app. This is the only
+  exception; in no other case does the app ask on its own whether to quit.
+- The start address from the engine works only once. If the first load did not succeed (the window was
+  gone while it loaded), a new window does not use this address again: it goes to the engine's local
+  address. Without the cookie the engine refuses it, and opening the app again gives a new address.
 
-### 选择框
+### Picker
 
-- 应用里没有系统的选择框：选数据位置（首次启动的〔换个位置…〕、以后的启动和设置里的搬数据）、选 cookie 文件、下载另存为，都是应用自己的选择框，盖在发起它的那个窗口的页面上（启动窗口或团队窗口），和卡片用同一层、同一套颜色和弹簧（`app/src/page-card.css`）。
-- 样子：标题；上一级按钮和路径的面包屑；能直接输入路径的一行（`~` 是家目录，相对路径从当前文件夹算，按 Enter 或〔前往〕）；左边是位置（主文件夹、桌面、文档、下载，存在的才列）和磁盘（Windows 是盘符，macOS 是 `/` 和 `/Volumes` 下的卷，Linux 是 `/` 和 `/media`、`/run/media`、`/mnt` 下的卷），窗口窄时这一列变成路径下面横着的一行；右边是当前文件夹的内容，文件夹在前，按人读数字的顺序排，隐藏的（点开头、Windows 的 `$` 系统文件夹）不列；底部是〔新建文件夹〕〔取消〕和主按钮（〔选择这个文件夹〕〔打开〕〔保存〕）；另存为多一行文件名，打开时选中文件名不带扩展名的部分。
-- 选文件夹：选中了一个文件夹就选它，没选就选当前文件夹。选文件：只有选中一个文件时主按钮才能点，双击文件直接选。另存为：点一个文件把名字填进文件名；同名的文件已经在了，选择框里出一行「已经有「chart.png」了。要替换它吗？」〔替换〕，不直接覆盖；同名的是文件夹就请换个名字。
-- 出错都写在选择框里，不弹框，也不关掉选择框：文件夹不在了、磁盘不在了（拔掉的盘、断开的网络盘）、没有权限、不是文件夹、路径太长、名字不能用（Windows 不允许的字符和保留名）、同名的文件夹已经有了。读不了的文件夹留在原来那一层，错误写在列表上面。超过 2000 项的文件夹只列前 2000 项，并且这样写。
-- 键盘：方向键、Home、End、PageUp、PageDown 在列表里移动，Enter 进文件夹或选定，Backspace 和 Alt+↑ 到上一级，Esc 先收起替换的问话或新建文件夹的那一行，再取消选择框；Tab 只在选择框里转。
-- 页面只画：列文件夹、新建文件夹、检查选定的路径都在主进程里做，经 IPC 回答（`app/src/folder-picker.mjs`、`app/src/picker-host.mjs`，画在 `app/src/preload.cjs` 的 `showPicker`）。只有正在显示这个选择框的页面能问，选择框收起以后什么都不答。主进程对选定的路径再查一遍：选文件夹必须是存在的文件夹，选文件必须是文件，另存为的文件夹必须存在、名字必须能用。
-- 页面 2 秒内没有画出选择框（没加载完、卡住了）算没有选：选位置和选 cookie 文件就当取消；下载存进「下载」文件夹，名字被占了就加 ` (2)`、` (3)`。
-- 下载：Electron 要在下载开始时就知道存到哪里，选择框的回答在后面，所以下载先存进应用数据里的 `downloading` 暂存文件夹，选好了、下载也完了，再移到选的位置（跨盘就复制）；取消选择框就取消下载，暂存的文件删掉。
-- 选择框开着时 Bot 浏览器的视图先藏起来（它们画在页面上面），收起后再回来。
+- The app has no system pickers. Choosing the data location (the first start's "Change the location…",
+  data moves on later starts and in settings), choosing a cookie file and Save As for downloads all use
+  the app's own picker. It covers the page of the window that opened it (the start window or the team
+  window), on the same layer as cards, with the same colors and springs (`app/src/page-card.css`).
+- Look: a title; an up button and a breadcrumb of the path; a line where a path can be typed (`~` is the
+  home folder, a relative path starts from the current folder, press Enter or [Go]); on the left, places
+  (Home, Desktop, Documents, Downloads, only those that exist) and drives (drive letters on Windows; `/`
+  and the volumes under `/Volumes` on macOS; `/` and the volumes under `/media`, `/run/media` and `/mnt`
+  on Linux). When the window is narrow, this column becomes a horizontal row under the path. On the
+  right, the contents of the current folder, folders first, sorted with numbers in human order; hidden
+  items (names that start with a dot, Windows `$` system folders) are not listed. At the bottom, [New
+  folder], [Cancel] and the main button ([Choose this folder], [Open], [Save]). Save As has an extra
+  file name line; when it opens, the part of the file name without the extension is selected.
+- Choosing a folder: a selected folder is chosen; with no selection, the current folder is chosen.
+  Choosing a file: the main button works only when one file is selected; double-clicking a file chooses
+  it. Save As: clicking a file puts its name into the file name. When a file with the same name exists,
+  the picker shows a line "chart.png already exists. Do you want to replace it?" with [Replace], and does
+  not overwrite directly. When the same name belongs to a folder, the user is asked to choose another
+  name.
+- Errors are all written in the picker. No box pops up and the picker does not close: the folder is
+  gone, the drive is gone (an unplugged drive, a disconnected network drive), no permission, not a
+  folder, path too long, name not allowed (characters and reserved names that Windows does not allow),
+  a folder with that name already exists. A folder that cannot be read leaves the picker on the level it
+  was on, with the error above the list. A folder with more than 2000 items lists only the first 2000
+  and says so.
+- Keyboard: the arrow keys, Home, End, PageUp and PageDown move in the list; Enter opens a folder or
+  chooses; Backspace and Alt+↑ go up one level; Esc first closes the replace question or the new folder
+  line, then cancels the picker; Tab cycles only inside the picker.
+- The page only draws. Listing folders, creating folders and checking the chosen path all happen in the
+  main process and answer over IPC (`app/src/folder-picker.mjs`, `app/src/picker-host.mjs`, drawn by
+  `showPicker` in `app/src/preload.cjs`). Only the page that shows this picker can ask, and after the
+  picker closes nothing is answered. The main process checks the chosen path again: a chosen folder must
+  be an existing folder, a chosen file must be a file, and for Save As the folder must exist and the name
+  must be allowed.
+- When the page does not draw the picker within 2 seconds (not loaded, stuck), it counts as no choice:
+  choosing a location and choosing a cookie file count as cancel; a download is saved in the Downloads
+  folder, with ` (2)`, ` (3)` added when the name is taken.
+- Downloads: Electron needs to know where to save when the download starts, but the picker answers
+  later. So the download first goes into a `downloading` staging folder in the app data. When the choice
+  is made and the download is done, it moves to the chosen place (copied across drives). Cancelling the
+  picker cancels the download and deletes the staged file.
+- While the picker is open, Bot browser views hide (they are drawn above the page) and come back when it
+  closes.
 
-### 模型
+### Models
 
-- 模型服务商和 key 在 DS Bot 设置 →「模型」和 Main Bot 聊天里的 key 卡片里配，写进 DSH 的凭据和设置，存在桌面应用的数据位置里，和插件版一样。DSH 自己的模型页在「高级设置（DeepSeek Harness）」里，打开时直接落在「模型」上。
-- DSH 网页版自己的自动凭据引导（「开始使用」「添加一个 API Key 开始使用」）关掉：应用每次启动都在 `profiles/app-onboarding.patch.yml` 里写 `ui-settings-models` 的 `credentialOnboarding: false`，经 `runProfile` 的 `patchFiles` 传入。这个补丁只有这一行。DSH 的「预览版说明」没有开关，仍然出现（见 [DSH 让步总账](2026-10-13-dsh-concessions.md) C16）。
+- The model provider and key are set in DS Bot Settings → "Models" and in the key card in the Main Bot
+  chat. They are written into DSH's credentials and settings and stored in the desktop app's data
+  location, the same as in the plugin. DSH's own model page is in "Advanced settings (DeepSeek
+  Harness)" and opens directly on "Models".
+- The DSH web front end's own automatic credential onboarding ("Get started", "Add an API key to get
+  started") is turned off: on every start the app writes `credentialOnboarding: false` for
+  `ui-settings-models` in `profiles/app-onboarding.patch.yml` and passes it through the `patchFiles` of
+  `runProfile`. This patch has only this one line. DSH's "Preview Notice" has no switch and still
+  appears (see [DSH concessions ledger](2026-10-13-dsh-concessions.md) C16).
 
-### DSH 版本
+### DSH version
 
-- 安装包锁定一个 DSH 版本，只跟 DSH 的 rc 版本，不跟 alpha 版本。现在是 0.2.2-rc.1。
-- 锁定版要跟上 DSH Desktop 提供的 rc 版本：同一个会话格式版本里，新版 DSH 能写入旧版不认识、必须拒绝的记录，这样的对话导入后在应用里打不开。
-- DSH 的修复和新功能，跟着 DS Bot 的新版本一起到用户手里。
+- The installer pins one DSH version. It follows only DSH rc versions, not alpha versions. Now it is
+  0.2.2-rc.1.
+- The pinned version must keep up with the rc version that DSH Desktop ships: within the same Session
+  format version, a newer DSH can write records that an older one does not know and must reject, and
+  such chats cannot be opened in the app after an import.
+- DSH fixes and new features reach users with new DS Bot versions.
 
-### 数据
+### Data
 
-- 数据位置就是桌面应用的 `DSH_HOME`，默认 `~/.ds-bot`。profile、会话、团队数据、模型设置和密钥都在这里。
-- 壳自己的数据（窗口、浏览器存储）放在系统给应用的目录里。新安装使用 DS Bot 目录；已有安装继续使用原目录和浏览器加密身份，保留登录、偏好、端口和已选位置，不搬动用户文件。
-- 桌面应用不写用户 DSH 的 `~/.dsh`，导入时只读。
+- The data location is the desktop app's `DSH_HOME`, by default `~/.ds-bot`. The profile, Sessions, team
+  data, model settings and keys are all here.
+- The shell's own data (window, browser storage) is in the folder the system gives the app. A new
+  install uses the DS Bot folder; an existing install keeps using its old folder and browser encryption
+  identity, keeps sign-ins, preferences, the port and the chosen locations, and does not move the user's
+  files.
+- The desktop app does not write the user's DSH `~/.dsh`; the import only reads it.
 
-### 首次启动和导入
+### First start and import
 
-- 首次启动不弹系统选择框，直接用默认数据位置（`~/.ds-bot`）和总工作区（`~/DS Bot`），记在壳数据的 `locations.json` 里。启动窗口底注右侧写着放在哪、盘还剩多少空间，并带「换个位置…」：点了才打开系统文件夹选择框，选一个文件夹按定根规则（`src/place.mjs`，见 [Windows 上手流程](2026-10-26-windows-onboarding.md)）把数据放在 `<根>/data`、总工作区放在 `<根>/workspace`；以后也能在设置里改（见下面「改位置」）。两个位置不能一个在另一个里面，也不能在用户 DSH 的数据里。
-- 发现用户 DSH 里已有团队时，问要不要导入，只在首次启动问一次。导入复制 Bot、群、记忆、会话、附件、模型设置和密钥，旧位置一个字节都不改。导入以后两个团队各走各的，不同步。
-  - DSH 正在用这个团队时，请用户先关掉。「正在用」和插件的 home-lock 同一个规则：锁在 60 秒内刷新过，且同一台机器上锁里的进程还活着（Windows 会重用进程号，只看进程号会把旧锁当成活的）。
-  - 目标里已经有 `.credentials.yaml` 或 `.env` 时不覆盖，导入结果里记成「保留」；只含引擎自己写的 `client-connection/` 记录的 `.credentials.yaml` 不算用户的，照常换成旧的。复制用的暂存文件夹不论成功、失败还是中途退出都会删掉。
-  - 引擎先在新数据位置启动一次再复制，这样 DSH 不会把旧团队的文件夹当成自己的项目。
-  - 旧团队工作文件夹里的文件复制到新的总工作区，不覆盖已有的文件。
-  - 模型设置只取 profile 里模型的那几行（DeepSeek API 和账号、其他服务商、默认模型、预设）。几个 profile 都有时让用户选一份。DSH 里另外配的 MCP、技能和 DSH Agent 不导入。
-- 导入后，每个 Bot 和群在下一个回合前换到新的一段（新工作文件夹），旧段只当历史读，照常能看、能搜。以后搬工作文件夹也一样。
-- 用户 DSH 写的会话格式比锁定版新时，停下来请用户先更新 DS Bot。
-- 复制之前，用锁定版把团队的每段对话读一遍：同一个格式版本里，新版 DSH 也能写入锁定版必须拒绝的记录。读的是数据位置里一份临时副本，用一个不带 `ds-bot` 的 DSH profile（只有 `dsh-base`、`dsh-web-app`），读完删掉。有新版 DSH 写的对话时，和格式版本新一样停下来，按钮是「退出 / 不带团队开始」；选退出的话，下次打开重新问位置和导入。文件损坏的对话不拦：用户自己的 DSH 也打不开它们。检查本身跑不起来时照常复制。
-- 首次启动没走完就退出时什么都不记，下次打开从头再问：关掉欢迎框或选「退出」、在对话框开着时退出、复制途中关掉窗口都算。复制会停在安全的地方，不留下半个团队，下次能重新复制。
+- The first start does not open a system picker. It uses the default data location (`~/.ds-bot`) and
+  team workspace (`~/DS Bot`) directly and records them in `locations.json` in the shell data. The right
+  side of the start window's footer says where the data is and how much space is left on the drive, with
+  "Change the location…". Only a click on it opens the system folder picker. For the chosen folder, the
+  root rule (`src/place.mjs`, see [Windows onboarding](2026-10-26-windows-onboarding.md)) puts the data
+  in `<root>/data` and the team workspace in `<root>/workspace`. Both can also be changed later in
+  settings (see "Change location" below). Neither location can be inside the other, and neither can be
+  inside the user's DSH data.
+- When the user's DSH already has a team, the app asks whether to import it, only once, on the first
+  start. The import copies Bots, groups, memory, Sessions, attachments, model settings and keys, and does
+  not change a single byte in the old location. After the import, the two teams go their own ways and do
+  not sync.
+  - When DSH is using this team, the user is asked to close it first. "In use" follows the same rule as
+    the plugin's home-lock: the lock was refreshed within 60 seconds, and the process in the lock is
+    still alive on the same machine (Windows reuses process IDs, so looking only at the process ID would
+    take an old lock for a live one).
+  - When the target already has `.credentials.yaml` or `.env`, they are not overwritten, and the import
+    result records them as "kept". A `.credentials.yaml` that holds only the `client-connection/` records
+    the engine wrote itself is not the user's, and is replaced by the old one as usual. The staging folder
+    for the copy is always deleted, whether the copy succeeds, fails or is stopped halfway.
+  - The engine starts once in the new data location before the copy, so that DSH does not take the old
+    team's folder for one of its projects.
+  - Files in the old team's work folder are copied to the new team workspace, without overwriting
+    existing files.
+  - From the model settings, only the model lines of the profile are taken (DeepSeek API and account,
+    other providers, default model, presets). When several profiles have them, the user picks one. MCP,
+    skills and DSH Agents set up separately in DSH are not imported.
+- After the import, every Bot and group moves to a new part (a new work folder) before its next turn.
+  The old parts are read only as history and can still be viewed and searched. Moving a work folder
+  later works the same way.
+- When the user's DSH writes a newer Session format than the pinned version, the app stops and asks the
+  user to update DS Bot first.
+- Before the copy, the pinned version reads every chat of the team once: within the same format version,
+  a newer DSH can also write records that the pinned version must reject. It reads a temporary copy in
+  the data location with a DSH profile without `ds-bot` (only `dsh-base` and `dsh-web-app`), and deletes
+  the copy afterwards. When there are chats written by a newer DSH, the app stops as it does for a newer
+  format version, with the buttons "Quit / Start without the team". If the user quits, the next start
+  asks again for the location and the import. Chats with damaged files do not block it: the user's own
+  DSH cannot open them either. When the check itself cannot run, the copy goes ahead as usual.
+- When the app quits before the first start is finished, nothing is recorded, and the next start asks
+  everything again from the beginning. This includes closing the welcome box or choosing "Quit", quitting
+  while a dialog is open, and closing the window during the copy. The copy stops at a safe point and
+  does not leave half a team, so it can be copied again next time.
 
-### 改位置
+### Change location
 
-- 入口在 DS Bot 设置 → 通用 →「位置」。总工作区就是没有单独设置文件夹的 Bot 和群工作的地方，英文界面叫 Team workspace。
-- 换总工作区：选或输入一个文件夹，不存在就新建。不能在 DSH 或团队的数据里，也不能包含它们。不用重启。用总工作区的 Bot 和群在下一个回合换到新的一段，和其他换文件夹一样；旧文件夹和里面的文件不动。插件版也能换。
-- 换数据位置（只有桌面应用有）：选一个空文件夹或新文件夹，不能和总工作区互相包含，不能在用户 DSH 的数据里或程序目录里，也不能选整个磁盘。确认后停掉引擎，把数据复制到新文件夹旁边的临时文件夹，复制完整才改成新文件夹的名字，然后应用自己重启，用新位置。
-  - 旧数据文件夹原样保留，用户确认没问题后自己删。
-  - 复制失败就提示原因，重启后接着用旧位置；复制途中退出也是旧位置，不留半份数据和临时文件夹。
-  - 开发和测试用的临时运行（`DS_BOT_HOME`）不能换数据位置。
+- The entry is DS Bot Settings → General → "Location". The team workspace is where Bots and groups
+  without their own folder work. The English interface calls it Team workspace.
+- Change the team workspace: choose or type a folder; it is created if it does not exist. It cannot be
+  inside the DSH or team data, and it cannot contain them. No restart is needed. Bots and groups that use
+  the team workspace move to a new part on their next turn, the same as for other folder changes; the
+  old folder and its files are not touched. The plugin can change it too.
+- Change the data location (desktop app only): choose an empty or new folder. It cannot contain or be
+  inside the team workspace, cannot be in the user's DSH data or the program folder, and cannot be a
+  whole drive. After confirmation, the app stops the engine and copies the data into a temporary folder
+  next to the new folder. Only when the copy is complete is it renamed to the new folder. Then the app
+  restarts on its own and uses the new location.
+  - The old data folder stays as it is; the user deletes it after checking that all is well.
+  - When the copy fails, the app shows the reason and keeps using the old location after the restart.
+    Quitting during the copy also keeps the old location, without half a copy or a temporary folder.
+  - Temporary runs for development and tests (`DS_BOT_HOME`) cannot change the data location.
 
-### 插件
+### Plugins
 
-- DSH 插件的引擎部分（工具、模型、MCP、技能、搜索等）原样安装、原样运行。安装用应用自带的 pnpm。
-- 界面插件的写法照 Cordis：插件提供和使用服务、声明依赖、每个注册都能撤销、界面靠插槽组合。
-- 和 DSH 重叠的位置，用 DSH 的插槽名和数据：先做工具卡片（`tool.call.toolview`）、全局弹层（`shell.overlay`）和设置（`settings.section`、`settings.general.item`）。DSH 的界面插件换打包方式、接上这些插槽就能迁过来。
-- 界面插件按页面加载。一个插件出错，只有它那一块显示错误，其他部分照常。
-- 电脑操作和浏览器操作：DSH 的提供方插件和 DS Bot 自己的都能装，用户在设置里选用哪一个，同一时间只加载一个。界面要能显示这些插件用到的截图、审批和提问。
+- The engine parts of DSH plugins (tools, models, MCP, skills, search and so on) are installed and run
+  as they are. Installation uses the pnpm that ships with the app.
+- Interface plugins are written the Cordis way: plugins provide and use services, declare dependencies,
+  every registration can be undone, and the interface is composed through slots.
+- Where the app overlaps with DSH, it uses DSH's slot names and data: first tool cards
+  (`tool.call.toolview`), the global overlay (`shell.overlay`) and settings (`settings.section`,
+  `settings.general.item`). A DSH interface plugin can move over by changing its packaging and plugging
+  into these slots.
+- Interface plugins load per page. When one plugin fails, only its own area shows an error; the rest
+  works as usual.
+- Computer use and browser use: both DSH's provider plugins and DS Bot's own can be installed. The user
+  chooses which one to use in settings, and only one loads at a time. The interface must be able to show
+  the screenshots, approvals and questions these plugins use.
 
-### 安装和更新
+### Install and update
 
-- 应用标识（appId）是 `io.github.fei2411.dsbot`。Windows 安装器的 GUID 保持已发布版本的值，改程序名后仍覆盖原安装，并更新快捷方式和卸载入口。
-- Windows（x64）：安装向导，可以改程序位置，装完可以直接运行。只给当前用户安装：不问「为所有用户还是只为我」，不要管理员权限，默认装在 `%LOCALAPPDATA%\Programs\DS Bot`。卸载不删数据位置。
-- Windows 自动更新：后台下载，校验 sha512，下载完在窗口里提示重启以更新；不重启的话，下次退出时装上。
-  - 启动时查一次 GitHub 上最新的 Release，之后每 4 小时查一次。Release 里的 `latest.yml` 写着安装包的文件名和 sha512。
-  - 提示是窗口里的卡片（2026-11-01 前是系统对话框）：「立即重启」先停掉引擎再装；「先不重启」等下次退出，卡片画不出来也算「先不重启」（[启动页文案](2026-10-29-start-copy.md)）。
-  - 引擎起不来时也能更新：检查在引擎启动前开始（首次启动的导入之后）。启动失败时，错误框里说有新版本，关掉错误框后等下载完，装上并重新打开。
-  - 应用里的 ds-bot 和 DSH 随应用一起更新：插件不自己查这两项的更新，关于页写「随 DS Bot 应用一起更新」。
-- 发版：发布 Release 时，工作流打 Windows 安装包，把它、它的 `.blockmap` 和 `latest.yml` 传到 Release。应用和 ds-bot 用同一个版本号，Release 的标签就是这个版本号。各平台的包都传完后，工作流再传 `SHA256SUMS.txt` 和不带版本号的安装包（如 `DS-Bot-win-x64.exe`），在说明开头加「下载 / Download」表，最后才把 Release 标为最新；所以发布时不勾「Set as the latest release」。
-- macOS（Apple 芯片和 Intel）：zip；不能自动更新，有新版时提示下载。不用 dmg：macOS 26 上下载的未签名 dmg 显示「已损坏」，打不开。
-- 安装包带着锁定的 DSH 装上的全部文件，不按 profile 删减。
-- 不用开发者证书签名，也不公证；macOS 包只做 ad-hoc 签名。macOS 第一次打开会被拦下，要到「系统设置 → 隐私与安全性」点「仍要打开」。
+- The app ID (appId) is `io.github.fei2411.dsbot`. The Windows installer GUID keeps the value of the
+  released versions, so after the program rename it still installs over the old install and updates the
+  shortcuts and the uninstall entry.
+- Windows (x64): an install wizard. The program location can be changed, and the app can run right after
+  the install. It installs only for the current user: it does not ask "for all users or just me", needs
+  no administrator rights, and installs into `%LOCALAPPDATA%\Programs\DS Bot` by default. Uninstalling
+  does not delete the data location.
+- Windows auto-update: downloads in the background, checks the sha512, and when the download is done
+  shows a notice in the window to restart and update. Without a restart, it installs on the next quit.
+  - It checks the latest GitHub Release once at start and then every 4 hours. The Release's
+    `latest.yml` has the installer's file name and sha512.
+  - The notice is a card in the window (a system dialog before 2026-11-01). "Restart now" stops the
+    engine first and then installs; "Not now" waits for the next quit. When the card cannot be drawn,
+    that also counts as "Not now" ([start page copy](2026-10-29-start-copy.md)).
+  - It can update even when the engine does not start: the check begins before the engine starts (after
+    the first start's import). When the start fails, the error box says a new version is out; after the
+    error box is closed, the app waits for the download, installs it and opens again.
+  - ds-bot and DSH inside the app update with the app: the plugin does not check updates for these two
+    itself, and the About page says "Updates come with the DS Bot app."
+- Release: when a Release is published, the workflow builds the Windows installer and uploads it, its
+  `.blockmap` and `latest.yml` to the Release. The app and ds-bot share one version number, and the
+  Release tag is that version number. After the packages for all platforms are uploaded, the workflow
+  uploads `SHA256SUMS.txt` and installers without a version number (such as `DS-Bot-win-x64.exe`), adds
+  the `Download / 下载` (Download) table at the top of the notes, and only then marks the Release as
+  latest. So do not tick "Set as the latest release" when publishing.
+- macOS (Apple silicon and Intel): a zip. It cannot auto-update; when a new version is out, it tells the
+  user to download it. No dmg: on macOS 26 a downloaded unsigned dmg shows as "damaged" and cannot be
+  opened.
+- The installer carries all the files the pinned DSH installs, not trimmed by profile.
+- No signing with a developer certificate and no notarization; the macOS package is only ad-hoc signed.
+  macOS blocks the first open, and the user has to click "Open Anyway" in "System Settings → Privacy &
+  Security".
 
-## 不做什么
+## Not done
 
-- 不 fork DSH，不给 DSH 打补丁。
-- 不做 npm 安装的桌面应用，也不做在 DSH Desktop 里一键安装。
+- No fork of DSH, no patches to DSH.
+- No desktop app installed through npm, and no one-click install inside DSH Desktop.
 
-## 暂时不做
+## Not done for now
 
-- DS Bot 自己的界面：先停下，窗口用 DSH 的网页前端。代码留在仓库里（`app/ui/` 和它的引擎层 `app/engine/`），不安装、不打包。上面「插件」一节里界面插件的写法，等自己的界面接着做时再落实。
+- DS Bot's own interface: paused; the window uses the DSH web front end. The code stays in the
+  repository (`app/ui/` and its engine layer `app/engine/`), but is not installed or packaged. The way of
+  writing interface plugins in "Plugins" above will be put in place when the own interface continues.
 
-## 已知限制
+## Known limits
 
-- 第一次运行：Windows 会弹出 SmartScreen 警告，macOS 要在系统设置里手动放行。
-- Linux 上托盘图标看不看得见由桌面环境决定：GNOME 和 KDE 要有托盘扩展才画得出来。图标建起来了不等于看得见，这时再打开一次应用，窗口还是回到桌面上。
-- Windows 上托盘图标由系统按缩放比例缩小，150% 以上会不清楚。
-- 托盘的图标、菜单和「关窗口变藏窗口」在 Windows 上用真的 Electron 验过（`app/scripts/check-lifecycle.mjs`）。macOS 的 Dock 和全屏、Linux 的托盘可见性、系统的关机和注销，都还没有在真的机器上验过：代码按 DSH Desktop 的做法写，单元测试管的是规则本身。
-- 会话里记着工作文件夹的完整路径，不能改。所以导入和搬工作文件夹都要换段。
+- First run: Windows shows a SmartScreen warning; on macOS the user has to allow the app by hand in
+  System Settings.
+- On Linux, whether the tray icon is visible depends on the desktop environment: GNOME and KDE need a
+  tray extension to draw it. A created icon is not always a visible one; in that case opening the app
+  again still brings the window back to the desktop.
+- On Windows the system scales the tray icon down by the display scale, and above 150% it is not sharp.
+- The tray icon, the menu and "closing the window hides it" were checked with real Electron on Windows
+  (`app/scripts/check-lifecycle.mjs`). The macOS Dock and full screen, tray visibility on Linux, and
+  system shutdown and logout have not been checked on real machines yet: the code follows how DSH Desktop
+  does it, and unit tests cover the rules themselves.
+- A Session records the full path of its work folder, and this cannot change. So both the import and
+  moving a work folder need a new part.
 
-## 变更
+## Changes
 
-- 2026-10-17：电脑操作和浏览器操作的提供方由用户选，PR #278。
-- 2026-10-17：窗口换成自己的界面，用插件版的 Bot 界面画：团队侧栏、Bot 的私聊、详情、搜索、新建和设置；窗口无边框，PR #279。
-- 2026-10-17：Bot 详情要显示轮数、tok/s、缓存命中和上下文；DSH 的右侧栏和「经典 Agent 模式」暂时不做，PR #279。
-- 2026-10-17：Bot 详情显示轮数、tok/s、缓存命中和上下文，PR #287。
-- 2026-10-17：引擎的 profile 换成桌面应用自己的组合，不再加载 DSH 的网页前端，PR #291。
-- 2026-10-18：固定应用身份；Windows 只给当前用户安装，更新下载完提示重启；安装包不按 profile 删减 DSH 的文件，PR #303。
-- 2026-10-18：设置里加「模型」页，服务商和 key 存在 DSH 里，PR #319。
-- 2026-10-18：自己的界面先停下，窗口换回 DSH 的网页前端和系统标题栏；引擎的 profile 换回 `dsh-base`、`dsh-web-app`、`ds-bot`，PR #323。
-- 2026-10-18：首次启动选两个位置、从用户 DSH 导入团队的细节，PR #324。
-- 2026-10-19：Windows 自动更新的细节；发 Release 时传 Windows 安装包；应用里的插件不再自己查更新，PR #329。
-- 2026-10-19：macOS 出两个 dmg（Apple 芯片 arm64、Intel x64），各在同架构的 runner 上打包；ad-hoc 签名（不签名的话下载后会显示"已损坏"）；有新版时弹框，点「下载」打开发布页，不自动安装；新版的 dmg 传上去以后才提示；CI 和发版都打包并检查，PR #334。
-- 2026-10-19：锁定的 DSH 升到 0.2.1-rc.2；锁定版跟上 DSH Desktop 提供的 rc 版本，PR #336。
-- 2026-10-27：锁定的 DSH 升到 0.2.1-rc.4。
-- 2026-11-01：锁定的 DSH 升到 0.2.1-rc.5。
-- 2026-11-04：锁定的 DSH 升到 0.2.2-rc.1。
-- 2026-10-19：复制团队前用锁定版把每段对话读一遍，有新版 DSH 写的对话时停下来，PR #340。
-- 2026-10-20：首次启动没走完就退出时什么都不记，下次从头再问；欢迎框加「退出」；复制停在安全的地方，不留半个团队，PR #360。
-- 2026-10-20：Windows 上窗口无边框，Windows 11 上侧栏用 Mica；macOS 仍用系统标题栏，Issue #362。
-- 2026-11-06：macOS 上窗口也无边框，红绿灯在标题带里，侧栏用系统的侧栏材质；页面仍是网页模式，快捷键不变，Issue #1044。
-- 2026-10-20：macOS 改发 zip，不再发 dmg：macOS 26 上用 Safari 下载的未签名 dmg（arm64、x64，本机和 CI 打的都一样）显示「已损坏」，打不开；dmg 做 ad-hoc 签名也不行；zip 只被 Gatekeeper 拦下，可以「仍要打开」，Issue #351。
-- 2026-10-20：设置里能换总工作区和数据位置；中文界面里「团队工作区」改叫「总工作区」，Issue #364。
-- 2026-10-20：窗口改为加载引擎的本机地址，不再用 `dsh-app://app`：DSH 的账号登录把页面地址当作浏览器登录完回来的地址，只接受本机 http 地址。DSH 打开的登录窗口交给系统浏览器，Issue #376。弹出对话框时标题栏一起变暗。
-- 2026-10-23：应用里接上 Bot 浏览器：应用自己提供 webview 桥，每个 Bot 的登录存在壳自己的数据里，删掉 Bot 时一起清掉，Issue #449。
-- 2026-10-25：关掉窗口只是藏起来，应用留在系统托盘；托盘的「打开」找回窗口，「退出」是唯一的正常退出入口，Issue #500。
-- 2026-10-26：关掉 DSH 网页版的自动凭据引导，模型在 DS Bot 自己的模型页和 key 卡片里配；导入时判断团队「正在用」加上锁的刷新时间，不覆盖已有的 key，总会删掉暂存文件夹；建窗口不再依赖「下载」文件夹；启动失败后再双击也能把窗口叫到前面；Release 最后才标为最新，并附 `SHA256SUMS.txt`、不带版本号的安装包和下载表（[Windows 上手流程](2026-10-26-windows-onboarding.md) M1）。
-- 2026-10-29：桌面应用随包带上 Office 运行时（Python、独立 Node、LibreOffice 引擎和 Office 技能），见 [Office 文档](2026-10-27-office-documents.md)，Issue #613，PR #624。
-- 2026-11-01：程序、可执行文件和安装包统一使用 DS Bot / dsbot；保留已有安装、数据、浏览器加密身份和旧客户端更新入口的兼容。
-- 2026-11-01（待维护者确认）：用户要求「其他界面全部避免弹出 Windows 的框」。第一次关窗口的托盘说明、没有托盘时的「要不要结束它」、更新的两个提示、设置里搬数据的确认和「这里放不了」都改成团队窗口里的卡片：应用自己的预载在页面上盖一层，样式表由主进程插入，颜色和弹簧和启动窗口同源（`app/src/page-card.css`，由 `scripts/start-assets.mjs` 生成）。只剩系统选择框（选文件夹、选 cookie 文件、下载另存为）是系统窗口，用户同意保留。
-- 2026-11-02（待维护者确认）：用户问「所有类似的提示全部自建页面是否可行」，答「是的」，选择框也换成应用自己的：选数据位置、选 cookie 文件、下载另存为都是页面上的选择框（「选择框」一节），`app/src` 里不再有 `dialog.show*`。第一次关窗口的托盘卡片出来时窗口先回到最前，Bot 浏览器的视图让开，页面画不出卡片时不记成已确认。
-- 2026-11-02：LibreOffice 引擎包移到 `app.asar` 外的 `resources/node_modules`，修复打包后 Office 文件预览无法启动子进程的问题（#679，PR #705）；启动窗口、鲸鱼进度、底注位置行和恢复卡合入（PR #702）。
+- 2026-10-17: the user chooses the provider for computer use and browser use, PR #278.
+- 2026-10-17: the window switches to an own interface drawn with the plugin's Bot interface: team
+  sidebar, Bot private chats, details, search, new Bot and settings; the window is frameless, PR #279.
+- 2026-10-17: Bot details are to show turns, tok/s, cache hits and context; the DSH right sidebar and
+  "Classic Agent mode" are not done for now, PR #279.
+- 2026-10-17: Bot details show turns, tok/s, cache hits and context, PR #287.
+- 2026-10-17: the engine's profile becomes the desktop app's own combination and no longer loads the DSH
+  web front end, PR #291.
+- 2026-10-18: fixed app identity; Windows installs only for the current user and asks for a restart when
+  an update has downloaded; the installer does not trim DSH files by profile, PR #303.
+- 2026-10-18: a "Models" page in settings; the provider and key are stored in DSH, PR #319.
+- 2026-10-18: the own interface is paused, and the window goes back to the DSH web front end and the
+  system title bar; the engine's profile goes back to `dsh-base`, `dsh-web-app` and `ds-bot`, PR #323.
+- 2026-10-18: details of choosing the two locations on the first start and importing the team from the
+  user's DSH, PR #324.
+- 2026-10-19: details of Windows auto-update; publishing a Release uploads the Windows installer; the
+  plugin inside the app no longer checks for updates itself, PR #329.
+- 2026-10-19: macOS gets two dmgs (Apple silicon arm64, Intel x64), each built on a runner of the same
+  architecture; ad-hoc signing (without a signature the download shows as "damaged"); when a new version
+  is out, a box pops up, and "Download" opens the release page without installing automatically; the
+  notice comes only after the new dmg is uploaded; CI and the release both build and check the packages,
+  PR #334.
+- 2026-10-19: the pinned DSH goes to 0.2.1-rc.2; the pinned version keeps up with the rc version that DSH
+  Desktop ships, PR #336.
+- 2026-10-27: the pinned DSH goes to 0.2.1-rc.4.
+- 2026-11-01: the pinned DSH goes to 0.2.1-rc.5.
+- 2026-11-04: the pinned DSH goes to 0.2.2-rc.1.
+- 2026-10-19: before copying the team, the pinned version reads every chat once and stops when there are
+  chats written by a newer DSH, PR #340.
+- 2026-10-20: when the app quits before the first start is finished, nothing is recorded and the next
+  start asks again from the beginning; the welcome box gets "Quit"; the copy stops at a safe point and
+  does not leave half a team, PR #360.
+- 2026-10-20: the window is frameless on Windows, and the sidebar uses Mica on Windows 11; macOS still
+  uses the system title bar, Issue #362.
+- 2026-11-06: the window is frameless on macOS too, with the traffic lights in the title band and the
+  system sidebar material on the sidebar; the page is still in web mode and the shortcuts do not change,
+  Issue #1044.
+- 2026-10-20: macOS ships a zip instead of a dmg: on macOS 26 an unsigned dmg downloaded with Safari
+  (arm64 and x64, built locally or in CI alike) shows as "damaged" and cannot be opened; ad-hoc signing
+  the dmg does not help either; a zip is only blocked by Gatekeeper and can be opened with "Open Anyway",
+  Issue #351.
+- 2026-10-20: the team workspace and the data location can be changed in settings; in the Chinese
+  interface `团队工作区` is renamed `总工作区` (both "team workspace"), Issue #364.
+- 2026-10-20: the window loads the engine's local address instead of `dsh-app://app`: DSH's account
+  sign-in uses the page address as the address to return to after the browser sign-in, and accepts only
+  a local http address. Sign-in windows that DSH opens go to the system browser, Issue #376. The title
+  bar dims with the page when a dialog opens.
+- 2026-10-23: the app connects the Bot browser: the app provides its own webview bridge, each Bot's
+  sign-ins are stored in the shell's own data and are cleared when the Bot is deleted, Issue #449.
+- 2026-10-25: closing the window only hides it, and the app stays in the system tray; "Open" in the tray
+  brings the window back, and "Quit" is the one normal way to quit, Issue #500.
+- 2026-10-26: DSH Web's automatic credential onboarding is turned off, and models are set on DS Bot's own
+  model page and key card; deciding whether a team is "in use" during the import also looks at when the
+  lock was refreshed; existing keys are not overwritten; the staging folder is always deleted; creating
+  the window no longer depends on the Downloads folder; double-clicking after a failed start also brings
+  the window to the front; the Release is marked latest only at the end, and comes with `SHA256SUMS.txt`,
+  installers without a version number and a download table ([Windows onboarding](2026-10-26-windows-onboarding.md)
+  M1).
+- 2026-10-29: the desktop app bundles the Office runtime (Python, standalone Node, the LibreOffice engine
+  and the Office skills), see [Office documents](2026-10-27-office-documents.md), Issue #613, PR #624.
+- 2026-11-01: the program, the executable and the installer all use DS Bot / dsbot; existing installs,
+  data, the browser encryption identity and the update path of old clients stay compatible.
+- 2026-11-01 (waiting for the maintainer to confirm): the user asked to "avoid Windows boxes in all
+  other parts of the interface". The tray notice on the first window close, the "end it?" question when
+  there is no tray, the two update notices, and the confirmation and "this place won't work" for data
+  moves in settings all become cards in the team window: the app's own preload puts a layer over the
+  page, the main process inserts the stylesheet, and the colors and springs come from the same source as
+  the start window (`app/src/page-card.css`, generated by `scripts/start-assets.mjs`). Only the system
+  pickers (choose folder, choose cookie file, Save As for downloads) remain system windows, which the
+  user agreed to keep.
+- 2026-11-02 (waiting for the maintainer to confirm): the user asked "is it possible to build all such
+  prompts as our own pages", the answer was "yes", and the pickers also become the app's own: choosing
+  the data location, choosing a cookie file and Save As for downloads are all pickers on the page (the
+  "Picker" section), and `app/src` no longer has `dialog.show*`. When the tray card on the first window
+  close appears, the window first comes to the front and Bot browser views get out of the way; when the
+  page cannot draw the card, it is not recorded as confirmed.
+- 2026-11-02: the LibreOffice engine package moves to `resources/node_modules` outside `app.asar`, which
+  fixes Office file previews failing to start a child process after packaging (#679, PR #705); the start
+  window, whale progress, footer location line and recovery card are merged (PR #702).

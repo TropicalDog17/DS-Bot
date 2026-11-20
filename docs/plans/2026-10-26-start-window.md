@@ -1,467 +1,1310 @@
-# 启动窗口：领航鲸
+# Start window: the pilot whale
 
-- 日期：2026-10-26
-- 相关：[Windows 上手流程](2026-10-26-windows-onboarding.md) 第 3、4、5、6、8 节，#559
-- 一起改：[Windows 上手流程](2026-10-26-windows-onboarding.md)（第 3 节、第 4 节、第 5 节、第 8 节、用词、「改动的已定设计」、分批上线、验收、待定、已知限制）、[启动页文案](2026-10-29-start-copy.md)（第 2、3、4 节、「改动的已定设计」）、[桌面应用](2026-10-16-desktop-app.md)（结构、窗口）、[UI 标准](../design/ui-standard.md)（1、3.1、4.4、8.3、8.4、12、14）
-- 代码：新的 `app/src/start/`（`start.html`、`start.css`、`start.js`、`whale.js`、`text.mjs`）、`app/src/start-window.mjs`、`app/src/start-frame.mjs`、`app/scripts/start-assets.mjs`；`app/src/main.mjs`、`preload.cjs`、`window-frame.mjs`；插件的 `ds-bot/src/client/sidebar.js`（交接时 Main Bot 头像的位置）
+- Date: 2026-10-26
+- Related: [Windows onboarding](2026-10-26-windows-onboarding.md) sections 3, 4, 5, 6 and 8, #559
+- Changed with: [Windows onboarding](2026-10-26-windows-onboarding.md) (sections 3, 4, 5 and 8, wording, "Changes to decided designs", staged rollout, acceptance, open questions, known limits), [Start page copy](2026-10-29-start-copy.md) (sections 2, 3 and 4, "Changes to decided designs"), [Desktop app](2026-10-16-desktop-app.md) (structure, window), [UI standard](../design/ui-standard.md) (1, 3.1, 4.4, 8.3, 8.4, 12, 14)
+- Code: the new `app/src/start/` (`start.html`, `start.css`, `start.js`, `whale.js`, `text.mjs`), `app/src/start-window.mjs`, `app/src/start-frame.mjs`, `app/scripts/start-assets.mjs`; `app/src/main.mjs`, `preload.cjs`, `window-frame.mjs`; the plugin's `ds-bot/src/client/sidebar.js` (where the Main Bot's avatar is at the handoff)
 
-## 为什么
+## Why
 
-- 引擎第一次启动要 3 到 20 秒，以后要 3 到 12 秒。第 3 节定了这段时间显示什么（真实阶段、卡片、恢复页），没定它怎么动。
-- 主 Bot 的鲸鱼是 DS Bot 自己生成的形象，用户进团队后第一眼看到的也是它。启动时让它替用户「干活」，用户进门前就认识了它，也先见过它的状态动作。
-- 双击以后的这几秒里做不了有用的事。窗口只做四件事：证明应用活着、在动；一眼看出走到了哪一步；只问等不了的事（导入、盘不够）；把形象带进团队窗口。所以窗口里只有鲸鱼和围着它的圆环：三段弧就是三个阶段，顺利时没有字，只在要用户知道或回答时，鲸鱼才说一句。窗口显示用户感受到的东西，不显示实现的结构（维护者 2026-10-27 的反馈），也不吵（维护者 2026-10-30 转来的讨论：「现在这版有点噪了」）。
-- 等待只取这些原则：
-  - 有事做、有解释的等待显得短（Maister）。
-  - 看得见真实的工作更让人放心，假进度适得其反（Buell 和 Norton；Harrison 等）。
-  - 1 秒内不显示进度；超过 10 秒，要看得见进度和出路（NN/g）。
-  - 入场不超过 1 秒，不为动画推迟启动（Android 启动画面）。
-  - 天天看的画面动得越少越好（Kowalski）。
-- 启动页是本地文件，引擎的页面在 `http://127.0.0.1`，两者跨源。同一个窗口里 `loadURL` 时，Chromium 不保留旧画面，也做不了跨文档过渡；不改 DSH 就接不上。窗口会先空一下，再露出 DSH 自己的加载过程，「打开团队」这一步用户其实看不到。
-- 所以启动页放进单独的小窗口，团队界面在隐藏的主窗口里加载，挂载好了才露面。小窗口一直有 Mica，交接时没有空白帧。交接时小窗口先长成主窗口的矩形，主窗口再在同一个矩形上露面，不再从小窗口一下跳成大窗口。
+- The engine takes 3 to 20 seconds to start the first time and 3 to 12 seconds after that. Section 3
+  of the onboarding note decided what this time shows (the real phases, the cards, the recovery page),
+  but not how it moves.
+- The Main Bot's whale is DS Bot's own generated figure, and it is also the first thing the user sees
+  in the team. If it "does the work" for the user during the start, the user knows it before they come
+  in, and has already seen its state motions.
+- Nothing useful can happen in the few seconds after the double-click. The window does only four
+  things: it shows that the app is alive and moving; it shows at a glance how far the start has got;
+  it asks only what cannot wait (the import, a full disk); and it carries the figure into the team
+  window. So the window holds only the whale and a ring around it: three arcs are the three phases.
+  When all goes well there is no text; the whale says one line only when the user must know or
+  answer something. The window shows what the user feels, not how the code is built (maintainer
+  feedback, 2026-10-27), and it is not noisy (a discussion the maintainer passed on, 2026-10-30:
+  "this version is a bit noisy now").
+- From the research on waiting we take only these principles:
+  - A wait with something to do and an explanation feels shorter (Maister).
+  - Seeing the real work reassures more; fake progress backfires (Buell and Norton; Harrison et al.).
+  - No progress display under 1 second; past 10 seconds, progress and a way out must be visible (NN/g).
+  - The entrance takes at most 1 second, and the start never waits for an animation (Android splash
+    screens).
+  - A screen seen every day should move as little as possible (Kowalski).
+- The start page is a local file and the engine's page is at `http://127.0.0.1`, so they are on
+  different origins. When one window calls `loadURL`, Chromium does not keep the old frame and cannot
+  do a cross-document transition; this cannot be joined without changing DSH. The window would go
+  blank for a moment and then show DSH's own loading, and the user would never actually see the
+  "Open the team" step.
+- So the start page goes in a separate small window, and the team view loads in a hidden main window
+  that shows only once it has mounted. The small window has Mica the whole time, so the handoff has no
+  blank frame. At the handoff the small window first grows to the main window's rectangle, and the
+  main window then appears on the same rectangle, instead of jumping from the small window to the
+  big one.
 
-## 已定的行为
+## Decided behavior
 
-### 1. 两个窗口（待定）
+### 1. Two windows (open)
 
-- 每次启动先出来**启动窗口**：
-  - 内容区 720 × 540；显示器工作区不到 588 高时为 720 × 500。
-  - 不能缩放、最大化和全屏，只有最小化和关闭两个系统按钮。
-  - 无边框，40 px 的标题带可以拖动，里面什么都不放。
-  - Windows 11 22H2 及以后用 Mica。
-  - 在光标所在的显示器上居中。
-- 启动窗口在交接之前不改大小：首次启动、以后的启动、卡片、失败页都在这一个尺寸里。只在交接时改一次：主进程把它长成主窗口的矩形（第 8 节）。
-- **主窗口**照旧 1320 × 860：
-  - 启动窗口第一次画好以后，主窗口隐藏着建好，就建在它最后的矩形上：以启动窗口的中心居中，不超出工作区；启动窗口被拖动过时，交接前按它那时的位置重新放好。露面时不再改位置和大小。
-  - 引擎起来后，在里面加载引擎的本机地址（同一个地址和端口）。例外：导入卡开着、用户还没回答时不加载（插件一收到 `state` 就会建出空白团队），等回答以后、〔复制过来〕的第一段复制完以后才加载。
-  - `dsBotApp.ready()` 之后才显示：启动窗口先长到同一个矩形，主窗口在它上面露面，启动窗口随后销毁（第 8 节）。
-- 交接前关掉启动窗口（× 或 Alt+F4）就退出应用，走现在的退出流程：停引擎，正在复制的就停下。
-- 交接前再双击图标，恢复并聚焦启动窗口；交接后聚焦主窗口。
-- 首次启动的选择框和提示都挂在启动窗口上。选择框从不自己弹出，只在用户点了选文件夹的按钮或链接之后出现。
-- 登录窗口（[上手流程](2026-10-26-windows-onboarding.md) 第 5 节）是主窗口的子窗口，只在交接之后、用户点了某个登录入口（设置卡的〔登录 DeepSeek 账号〕、〔重新登录〕、修复卡、鲸鱼菜单）时出现；启动窗口阶段没有登录，也没有它。
-- 换位置时（〔移到…〕，今天的 `notePage(t.moving)`），主窗口先隐藏，启动窗口按「以后的启动」的样子显示搬数据的页面：鲸鱼工作，没有字（同一个卷上只是改名，这一页一闪而过）。任务栏进度照旧，搬完照旧重开；工作文件在重开后由应用后台复制，不经过启动窗口。
+- Every start first shows the **start window**:
+  - Content area 720 × 540; 720 × 500 when the display's work area is less than 588 high.
+  - It cannot be resized, maximized or made full screen; it has only the minimize and close system
+    buttons.
+  - Frameless, with a 40 px title band that drags the window and holds nothing.
+  - Mica on Windows 11 22H2 and later.
+  - Centred on the display that holds the pointer.
+- The start window keeps its size until the handoff: the first start, later starts, cards and the
+  failure page all use this one size. It changes once, at the handoff: the main process grows it to
+  the main window's rectangle (section 8).
+- The **main window** stays 1320 × 860:
+  - After the start window has painted for the first time, the main window is built hidden, right on
+    its final rectangle: centred on the start window's centre and kept inside the work area. If the
+    start window was dragged, the main window is placed again from its position just before the
+    handoff. It does not move or resize when it appears.
+  - Once the engine is up, it loads the engine's local address (the same address and port).
+    Exception: while the import card is open and the user has not answered, it does not load (the
+    plugin builds an empty team as soon as it gets `state`); it loads after the answer, and after the
+    first part of `〔复制过来〕` ("Copy them over") has been copied.
+  - It shows only after `dsBotApp.ready()`: the start window first grows to the same rectangle, the
+    main window appears on top of it, and the start window is then destroyed (section 8).
+- Closing the start window before the handoff (× or Alt+F4) quits the app through the current quit
+  flow: the engine stops, and a copy in progress stops.
+- Double-clicking the icon again before the handoff restores and focuses the start window; after the
+  handoff it focuses the main window.
+- The first start's pickers and prompts are attached to the start window. A picker never opens by
+  itself; it appears only after the user clicks the button or link that chooses a folder.
+- The sign-in window ([onboarding](2026-10-26-windows-onboarding.md) section 5) is a child of the
+  main window. It appears only after the handoff, when the user clicks a sign-in entry (the settings
+  card's `〔登录 DeepSeek 账号〕` ("Sign in to DeepSeek"), `〔重新登录〕` ("Sign in again"), the repair
+  card, the whale menu). The start window phase has no sign-in and no sign-in window.
+- When the data moves (`〔移到…〕` ("Move to…"), today's `notePage(t.moving)`), the main window hides
+  first, and the start window shows the data-moving page the way a later start looks: the whale works
+  and there is no text (a rename on the same volume only flashes this page). The taskbar progress
+  stays as it is, and the app reopens after the move as it does now; the work files are copied by the
+  app in the background after the reopen, not through the start window.
 
-### 2. 布局
+### 2. Layout
 
-首次启动的布局（坐标是内容区里的 DIP）：
+The first start's layout (coordinates are DIPs in the content area):
 
-| 部分 | 没有卡片时 | 有卡片时 | 内容 |
+| Part | Without a card | With a card | Content |
 |---|---|---|---|
-| 标题带 | y 0–40 | 同左 | 空，可以拖动 |
-| 圆环 | 圆心 (360, 255)，半径 106 | 圆心 (360, 150)，半径约 66 | 三段弧，一段一个阶段；从 DSH 复制团队时，复制开始后四段（见下面）；2 px 的线，圆头 |
-| 水道 | x 48–672，y 147–287 | 跟着圆环缩小 | 112 px 的鲸鱼在圆环中间（x 304–416）；水线以下的部分被裁掉 |
-| 水线 | 圆环的一条弦：y 287，x 260–460 | y 约 170，宽约 124 | 1 px `--bt-line-2`，首尾各 18% 渐隐；涟漪（68 × 12）在它中间 |
-| 鲸鱼的话 | y 379–399，居中 | y 226–246，居中，在圆环和卡片之间 | 15/20、600，`--bt-ink`；只有一行，不换行，实在放不下才用省略号；只在第 3 节列的几种时候有字 |
-| 提示行 | y 403–431，居中 | 隐藏 | 13/18，`--bt-ink-2`；最多约 22 个字，只有盘不够时的那一句；平时空着 |
-| 纸面 | 空，点击穿过它 | x 48–672，y 260–496 | 只放卡片 |
-| 位置行 | 居中，y 500–528，在纸面下面 4 px；挤不下时字省略，按钮不让 | 同左 | 「数据放在 C 盘（剩 412 GB）」，13/18，`--bt-ink-2`，后面一个灰色的小按钮〔换个位置…〕（28 px 高，第 6 节）。首次启动只在盘不够时有（和提示行同一个条件：剩不到 5 GB），重装没有；以后的启动只在数据所在的盘只剩开始时的五分之一时有，按钮当场搬数据（第 5 节）；导入一开始复制就收起；失败页和「团队界面没有加载出来」时隐藏，180 秒的问题开着时还能点。剩余空间按资源管理器的算法（1024 进制）。Windows 以外写文件夹（`~/.ds-bot`）代替盘；查不到剩余空间时不写括号 |
+| Title band | y 0–40 | Same | Empty, drags the window |
+| Ring | Centre (360, 255), radius 106 | Centre (360, 150), radius about 66 | Three arcs, one per phase; four once a copy from DSH has started (see below); 2 px line, round caps |
+| Water channel | x 48–672, y 147–287 | Shrinks with the ring | The 112 px whale in the middle of the ring (x 304–416); the part below the waterline is clipped |
+| Waterline | A chord of the ring: y 287, x 260–460 | y about 170, about 124 wide | 1 px `--bt-line-2`, fading out over 18% at each end; the ripple (68 × 12) at its middle |
+| The whale's line | y 379–399, centred | y 226–246, centred, between the ring and the card | 15/20, 600, `--bt-ink`; one line only, no wrap, an ellipsis only when it really does not fit; text only in the cases listed in section 3 |
+| Hint row | y 403–431, centred | Hidden | 13/18, `--bt-ink-2`; at most about 22 characters, and only the one line for a full disk; empty otherwise |
+| Paper | Empty, clicks pass through it | x 48–672, y 260–496 | Holds only cards |
+| Place line | Centred, y 500–528, 4 px below the paper; when it is too tight the text gets an ellipsis, the button does not give way | Same | `「数据放在 C 盘（剩 412 GB）」` ("Data on drive C, 412 GB free"), 13/18, `--bt-ink-2`, followed by a small grey button `〔换个位置…〕` ("Change the location…", 28 px high, section 6). On a first start it shows only when the disk is short of space (the same condition as the hint row: less than 5 GB free), never on a reinstall; on a later start only when the disk with the data has a fifth of its starting free space left, and then the button moves the data right away (section 5); it folds away as soon as the import starts copying; hidden on the failure page and on "The team view didn't load"; still clickable while the 180-second question is open. Free space is counted the way File Explorer counts it (base 1024). Outside Windows it names the folder (`~/.ds-bot`) instead of a drive; when the free space cannot be read, there is no bracket |
 
-- 圆环的三段弧从正上方起顺时针排，依次是「准备数据文件夹」「启动本机引擎」「打开团队」，各占 120°，段与段之间空 10°（每段画出 110°）：
-  - 没开始：`--bt-line` 的淡线。
-  - 进行中（等满 250 ms，第 3 节）：这段淡线染上 22% 的 `--bt-ink-deepseek`，一小段亮光（弧长的 22%，2.5 px，75% 的 `--bt-ink-deepseek`）沿着它顺时针跑，1.8 s 一趟，45 秒起 2.6 s 一趟。
-  - 完成：`--bt-ink-deepseek` 的线顺时针把这一段画满，.56 s。
-  - 失败：这段线变成 60% 的 `--bt-danger`（第 7 节）。
-  - 交接：段与段之间的空隙接上，合成一整圈（.3 s），整圈鼓起一次（.5 s，最大 1.035 倍，第 8 节）。
-- 每次启动都从三段开始，要导入的首次启动也一样。答〔复制过来〕、复制开始以后，多出一个阶段「复制以前的团队」，排在数据文件夹和引擎之间：圆环变成四段，各占 90°，段与段之间仍空 10°（每段画出 80°），依次是数据文件夹、复制、引擎、团队。换的时候不跳：卡片变成的圆点落在第一段后面的空隙（120°）上，复制那一段从那一点长出来，其他三段同时挪开让位，每一帧都按新旧角度之间画（所以一直在圆上），走 `SPRING_SHAPE`（.42 s）。复制失败后「先不带团队开始」时反过来：复制那一段缩回那一点，其他三段回到三段的位置。答〔先不复制〕就一直是三段。复制这一段：
-  - 圆点落下、这一段长出来时就是进行中（第 6 节）。
-  - 按复制的真实进度画满：检查对话占前 15%，复制 Bot 和对话按字节占其余 85%，每 200 ms 一次，.3 s 跟上，不往回走。
-  - 复制失败：这段线和已经画到的部分变成 `--bt-danger`，重试时回到进行中，从 0 重画。
-  - 复制完了这一段画满，之后一直是四段；复制失败后「先不带团队开始」：回到三段（上面）。
-  - 预热好的引擎为复制停下，引擎那一段回到没开始，等复制好的团队的引擎起来才画满；复制完到引擎起来这段时间是引擎那一段在进行中。
-- 道具：鲸鱼面前（x 413–459，底边在水线上）一个 46 px 的小道具，画的是进行中那一段在做的事：「准备数据文件夹」一个文件夹，里面的纸一张接一张翻起来（1.5 s）；「复制以前的团队」左边一个浅色的旧箱子，右边一个新箱子，中间一条点线：一个箱子从旧的上面被拿起，沿点线往前倾着飞过去，压扁一下落到新箱子上，停一下再淡掉（1.6 s 一趟）；「启动本机引擎」两个咬合的齿轮反向转（9 齿和 6 齿，2.7 s 和 1.8 s 一圈，所以一直咬着），整组 1.35 s 鼓一下；「打开团队」三个小成员一个接一个跳一下（1.8 s）。只在那段弧进行中时有：出现用 `SPRING_POP` 从 .6 倍弹到原大、淡入 .2 s，离开淡出 .16 s；没人看见就已经完成的阶段也有它的一拍：页面画出来以前就建好的数据文件夹、导入卡等回答或复制进行时就起来的引擎，等轮到它时照样先进行中，道具出来，至少停 420 ms 再画满；真在进行中的阶段不多等。「打开团队」也一样：团队界面在这一段进行中以前就好了（卡片等回答时、或者一下子就加载完），首次启动在交接前先让它进行中 420 ms（首次启动的兜底是 2.5 s，够用）。颜色是 `--bt-ink-deepseek` 和它的淡色，纸和成员的眼睛是 `--bt-card`。道具在水塘里，出卡片时跟着缩小上移；失败、卡片等回答（那段弧不是进行中）和交接时没有。
-- 圆环、水道、水线、鲸鱼的点击区和涟漪是一块，下面叫水塘。没有卡片时，水塘、鲸鱼的话和提示行整组比有卡片时低 45 px，鲸鱼在窗口的视觉中心稍上一点。要出卡片时，整组用 `SPRING_SHAPE` 上移 45 px，水塘在同一个弹簧里以圆心为准缩到 .62 倍、再上移 60 px，圆环落在卡片上面，卡片出现在下面的纸面里；卡片收回后，水塘回到原大，整组回到低处。位置行不动。页面不能滚动（第 11 节）。
-- 鲸鱼的话和提示行直接写在 Mica 上。没有卡片时它们在纸面的位置上：纸面空着时点击穿过它。
-- 卡片是不透明的 `--bt-card`：1 px `--bt-line` 边，圆角 12，内边距 16 × 20。卡片正文比纸面高时，正文在卡片里滚动，按钮行固定在卡片底部。
-- 以后的启动和首次启动是同一个布局：同样 112 px 的鲸鱼、圆环和水线；位置行只在盘快满时有（第 5 节）。
+- The ring's three arcs run clockwise from the top: "Prepare the data folder" (`准备数据文件夹`),
+  "Start the local engine" (`启动本机引擎`) and "Open the team" (`打开团队`). Each takes 120°, with
+  10° gaps between arcs (each arc draws 110°):
+  - Not started: a faint `--bt-line` line.
+  - In progress (after the full 250 ms, section 3): the faint line takes a 22% tint of
+    `--bt-ink-deepseek`, and a short highlight (22% of the arc length, 2.5 px, 75%
+    `--bt-ink-deepseek`) runs clockwise along it, one lap per 1.8 s, one per 2.6 s from 45 seconds on.
+  - Done: a `--bt-ink-deepseek` line fills the arc clockwise, .56 s.
+  - Failed: the arc's line turns 60% `--bt-danger` (section 7).
+  - Handoff: the gaps between arcs close into one full circle (.3 s), and the circle swells once
+    (.5 s, at most 1.035 times, section 8).
+- Every start begins with three arcs, also a first start that will import. After `〔复制过来〕` is
+  answered and the copy starts, one more phase, "Copy your old team" (`复制以前的团队`), comes between
+  the data folder and the engine: the ring becomes four arcs of 90° each, still with 10° gaps (each arc
+  draws 80°): data folder, copy, engine, team. The change does not jump: the dot the card turns into
+  lands in the gap after the first arc (at 120°), the copy arc grows out of that point, and the other
+  three arcs move aside at the same time. Every frame draws between the old and new angles (so it
+  stays on the circle), on `SPRING_SHAPE` (.42 s). When "Start without the team" follows a failed
+  copy, this runs backwards: the copy arc shrinks back into that point and the other three arcs
+  return to their three-arc places. With `〔先不复制〕` ("Don't copy yet") the ring stays at three arcs.
+  The copy arc:
+  - It is in progress from the moment the dot lands and the arc grows (section 6).
+  - It fills with the real progress of the copy: checking the chats takes the first 15%, and copying
+    Bots and chats takes the other 85% by bytes; it updates every 200 ms, catches up in .3 s and never
+    goes back.
+  - Copy failed: the line and the part already drawn turn `--bt-danger`; a retry returns it to in
+    progress and redraws from 0.
+  - When the copy is done the arc is full, and the ring stays at four arcs from then on; "Start
+    without the team" after a failed copy goes back to three arcs (above).
+  - A pre-warmed engine stops for the copy, so the engine arc goes back to not started, and fills only
+    when the engine of the copied team is up; from the end of the copy until the engine is up, the
+    engine arc is in progress.
+- Prop: in front of the whale (x 413–459, its bottom on the waterline) is a small 46 px prop that
+  shows what the arc in progress is doing. "Prepare the data folder": a folder whose sheets flip up
+  one after another (1.5 s). "Copy your old team": a pale old box on the left, a new box on the right
+  and a dotted line between them; a box is lifted off the old one, flies along the dotted line leaning
+  forward, squashes as it lands on the new box, pauses, and fades (one round per 1.6 s). "Start the
+  local engine": two meshing gears turn in opposite directions (9 and 6 teeth, one turn per 2.7 s and
+  1.8 s, so they stay meshed), and the whole group swells every 1.35 s. "Open the team": three small
+  members hop one after another (1.8 s). It is there only while that arc is in progress: it appears with `SPRING_POP` from .6 times to full
+  size and fades in over .2 s, and fades out over .16 s when it leaves. A phase that finished before
+  anyone could see it still gets its beat: a data folder built before the page painted, or an engine
+  that came up while the import card waited for an answer or the copy ran, still goes in progress
+  first when its turn comes, shows the prop and stays at least 420 ms before it fills; a phase really
+  in progress does not wait longer. "Open the team" works the same way: if the team view was ready
+  before this arc went in progress (while a card waited for an answer, or because it loaded at once),
+  a first start puts it in progress for 420 ms before the handoff (the first start's fallback of
+  2.5 s is enough). The colours are `--bt-ink-deepseek` and its pale tint; the sheets and the members'
+  eyes are `--bt-card`. The prop is in the pond and shrinks and moves up with it when a card comes; it
+  is not there on failure, while a card waits for an answer (the arc is not in progress), or at the
+  handoff.
+- The ring, water channel, waterline, the whale's click area and the ripple form one block, called the
+  pond below. Without a card, the pond, the whale's line and the hint row sit as a group 45 px lower
+  than with a card, which puts the whale a little above the window's visual centre. When a card is
+  about to come, the group moves up 45 px on `SPRING_SHAPE`, and in the same spring the pond shrinks
+  to .62 times around the ring's centre and moves up another 60 px, so the ring rests above the card
+  and the card appears in the paper below. When the card goes, the pond returns to full size and the
+  group goes back down. The place line does not move. The page cannot scroll (section 11).
+- The whale's line and the hint row are written straight on the Mica. Without a card they sit where
+  the paper is: while the paper is empty, clicks pass through it.
+- A card is an opaque `--bt-card`: 1 px `--bt-line` border, radius 12, padding 16 × 20. When the
+  card's body is taller than the paper, the body scrolls inside the card and the button row stays at
+  the bottom of the card.
+- A later start has the same layout as the first start: the same 112 px whale, ring and waterline;
+  the place line shows only when the disk is nearly full (section 5).
 
-### 3. 鲸鱼的总规则
+### 3. The whale's general rules
 
-- 只为真实的事动：阶段开始和完成、出卡片、失败、就绪，以及用户的指针、点击、键盘焦点和回到窗口。唯一的例外是卡片等用户回答时的呼吸和眨眼（下面第二张表）。
-- 鲸鱼面朝右，一直在圆环中间，不游走。主进程报告一个阶段完成时，那一段弧画满，鲸鱼在原地划两下尾巴、向前一涌：弧不会提前画，画满了也不退回（只有换个新文件夹重新开始时，三段一起回到没开始，第 7 节）。
-- 等用户回答时停下：正常档和活泼档只有探身、呼吸和眨眼这几个小动作（活泼档另有越跳越稀的跳）。等得越久动得越慢，从不变快。
-- 换动作时从当前姿势接着走：读出当前的 `transform`，停掉循环，再用弹簧走到下一个动作的起点。不跳回原位。
-- 一个阶段等满 250 ms 才算「进行中」：它的弧染上淡蓝、跑起光，鲸鱼换成这个阶段的动作；更快完成的阶段不显示进行中，弧直接画满。
-- 循环状态和进行中的弧出现后至少停 400 ms；失败和交接不等。
-- 阶段一个一个完成：上一段弧开始画满 360 ms 后才画下一段（已经排着的 200 ms）。交接不排队：还没画满的弧一起画满（第 8 节）。
-- 大动作只放在 SVG 外面的 HTML 包层上，用 `translate`、`rotate`、`scale`、`transform`，交给合成线程。SVG 里只动眼睛和尾巴。圆环和喷出的水柱是另外的 SVG：弧和水柱用 `stroke-dashoffset` 画，合上的整圈鼓起用 `scale`；水滴是 HTML 圆点，用 `translate`、`scale` 和不透明度。
-- 循环用 CSS 动画，按 `html` 上的状态属性选。一次性动作用 WAAPI，结束时 `commitStyles()` 再 `cancel()`。
-- 每段一次性动作带序号，新状态到了就丢掉旧的。等动画结束的地方都配一个计时器兜底，因为最小化的窗口不走动画。
-- 弹簧只用 `motion.js` 的常量。头像动作的关键帧沿用插件的写法（`styles.js` 的 `bt-hop`、`bt-bob` 等），换算成像素。
-- 鲸鱼说话：
-  - 页面上轻易不写字：顺利的时候、慢的时候（45 秒）、搬数据的时候都没有字，进度和在做什么只靠圆环、鲸鱼的姿势和道具（第 2 节）。只有两种时候有字：盘不够（提示行和位置行，第 4、5、6 节），和出了错。出错时圆环下面那一行（第 2 节）才有一句短话，用 Main Bot 自己的口吻：
-    - 180 秒：「等太久了，要不要重试？」（第 6 节）。
-    - 失败：「DS Bot 没能启动」「团队界面没有加载出来」（第 7 节）。
-  - 出错的每一页都能一键带走日志：〔复制详细信息〕和〔保存日志…〕（第 6、7 节）。
-  - 换句时淡出 .16 s，再淡入 .16 s。没有停留时间，也不排队：快照或启动的时钟一变，这一行就跟着换。
-  - 卡片在时这一行空着，由卡片自己的第一行说（第 6 节）。180 秒的卡和失败页例外：180 秒的问题由鲸鱼问，卡上只有按钮；失败页上是已定的标题（第 7 节）。
-  - 提示行只有一样：盘不够、又没有更好的盘时，前 10 秒的「C 盘只剩 1.2 GB」（第 4、6 节）。
+- It moves only for real events: a phase starting and finishing, a card appearing, a failure, being
+  ready, and the user's pointer, clicks, keyboard focus and return to the window. The only exception
+  is breathing and blinking while a card waits for the user's answer (the second table below).
+- The whale faces right, always stays in the middle of the ring and does not swim around. When the
+  main process reports a phase done, that arc fills, and the whale strokes its tail twice in place
+  and surges forward. An arc never fills early and never goes back once full (only when a new folder
+  starts over do all three arcs go back to not started, section 7).
+- It holds still while waiting for the user's answer: at the Normal and Lively levels it has only
+  small motions, leaning in, breathing and blinking (Lively also has hops that grow rarer). The longer
+  it waits the slower it moves, never faster.
+- A change of motion continues from the current pose: read the current `transform`, stop the loop,
+  then spring to the start of the next motion. It never jumps back to rest.
+- A phase counts as "in progress" only after it has run a full 250 ms: its arc takes the pale blue
+  tint and the highlight runs, and the whale switches to that phase's motion. A phase that finishes
+  sooner never shows in progress; its arc just fills.
+- A loop state and an arc in progress stay at least 400 ms once they appear; failure and the handoff
+  do not wait.
+- Phases finish one at a time: the next arc starts filling 360 ms after the previous one started
+  (200 ms for one already queued). The handoff does not queue: all arcs not yet full fill together
+  (section 8).
+- Large motions go only on the HTML wrapper outside the SVG, with `translate`, `rotate`, `scale` and
+  `transform`, so the compositor thread runs them. Inside the SVG only the eyes and tail move. The
+  ring and the water spout are separate SVGs: the arcs and the spout are drawn with
+  `stroke-dashoffset`, and the closed circle swells with `scale`; the drops are HTML dots, moved with
+  `translate`, `scale` and opacity.
+- Loops are CSS animations, selected by a state attribute on `html`. One-off motions use WAAPI and
+  end with `commitStyles()` and then `cancel()`.
+- Each one-off motion carries a sequence number, and a new state drops the old ones. Every place that
+  waits for an animation to end also has a fallback timer, because a minimized window does not run
+  animations.
+- Springs use only the constants in `motion.js`. The keyframes of avatar motions follow the plugin's
+  (`bt-hop`, `bt-bob` and so on in `styles.js`), converted to pixels.
+- The whale speaks:
+  - The page rarely shows text: there is none when all goes well, none when it is slow (45 seconds)
+    and none while data moves. Progress and the current work show only through the ring, the whale's
+    pose and the prop (section 2). Text appears only in two cases: a full disk (the hint row and the
+    place line, sections 4, 5 and 6) and an error. On an error the line under the ring (section 2)
+    says one short sentence, in the Main Bot's own voice:
+    - 180 seconds: `「等太久了，要不要重试？」` ("This is taking too long. Try again?", section 6).
+    - Failure: `「DS Bot 没能启动」` ("DS Bot couldn't start"), `「团队界面没有加载出来」` ("The team
+      view didn't load", section 7).
+  - Every error page can take the log away in one click: `〔复制详细信息〕` ("Copy details") and
+    `〔保存日志…〕` ("Save log…", sections 6 and 7).
+  - A change of line fades out over .16 s and in over .16 s. There is no hold time and no queue: when
+    the snapshot or the start clock changes, the line follows.
+  - While a card is up this line is empty, and the card says it in its own first line (section 6).
+    The 180-second card and the failure page are exceptions: the whale asks the 180-second question
+    and the card holds only buttons; the failure page shows the decided title (section 7).
+  - The hint row has one use only: when the disk is short of space and there is no better disk, it
+    shows `「C 盘只剩 1.2 GB」` ("Only 1.2 GB left on drive C") for the first 10 seconds (sections 4
+    and 6).
 
-| 时刻 | 鲸鱼 | 时长和曲线 |
+| Moment | Whale | Duration and curve |
 |---|---|---|
-| 首次启动入场 | 从水线下 96 px 浮上来，12° 的倾斜回正；尾巴甩一下；睁眼 | `SPRING_STRETCH` 560 ms；睁眼 160 ms |
-| 以后的启动入场 | 从水线下 84 px 浮上来，不倾斜，眼睛睁着 | `SPRING_TAP` 290 ms |
-| 准备数据文件夹 | 搜索：前倾探头，眼睛左右扫 | 1 s；眼睛 1.6 s |
-| 一个阶段完成 | 不挪地方：尾巴划两下，身子向前一涌（约 5 px，抬头 3°），同时这一段弧顺时针画满；这一拍走完（360 ms）点一下头，几段接连画满时只在最后一段之后点 | 尾巴 200 ms × 2；一涌 420 ms；弧 .56 s |
-| 启动本机引擎 | 工作：上下晃、尾巴摆、眨眼 | 1.6 s、1.1 s、2.4 s；52.8 s 内不完全重复 |
-| 10 秒 | 看向用户 600 ms，慢眨一次眼；所有循环放慢到 0.85 倍 | 看 600 ms |
-| 45 秒 | 换成思考：歪头慢慢起伏、眯眼；尾巴停下；弧上的光和道具放慢；不出字 | 2.2 s；换动作用 `SPRING_SHAPE`；光 2.6 s 一趟；道具 2.6 s 一拍，齿轮 4 s 一圈 |
-| 打开团队 | 发消息：向前冲，每冲一次尾巴划两下 | 1.1 s |
-| 应用主动问（卡片、180 秒） | 跳两下，然后停下，看着卡片（停下以后见下一张表） | 1.3 s × 2 |
-| 用户自己引出的卡片 | 不跳，停下 | 无 |
-| 失败 | 从当前姿势下沉 4 px、低头 4°，眼皮变重，然后完全静止 | `SPRING_SHAPE` |
-| 就绪，庆祝（首次启动；重试或重新开始后第一次成功） | 圆环合上的同时压扁再拉长，「^ ^」眼，喷一次水；560 ms 时跳出水面，飞到 Main Bot 的头像会在的位置，缩到头像的大小落下（第 8 节）；没有地方落时潜下去，深到身高的 1.25 倍 | 460 ms；跳 590 ms（潜下去用 `SPRING_SHAPE`） |
-| 就绪（以后的启动） | 圆环合上，100 ms 后直接跳向 Main Bot 的头像；没有地方落时直接潜下去，同样深到身高的 1.25 倍 | 跳 550 ms（潜下去用 `SPRING_TAP` 290 ms） |
+| First start entrance | Rises from 96 px below the waterline, a 12° tilt straightens; one tail flick; eyes open | `SPRING_STRETCH` 560 ms; eyes open in 160 ms |
+| Later start entrance | Rises from 84 px below the waterline, no tilt, eyes already open | `SPRING_TAP` 290 ms |
+| Prepare the data folder | Searching: leans forward and peers, eyes scan left and right | 1 s; eyes 1.6 s |
+| A phase done | Stays in place: two tail strokes, the body surges forward (about 5 px, head up 3°), while the arc fills clockwise; when this beat ends (360 ms) a nod, and when several arcs fill in a row, only one nod after the last | Tail 200 ms × 2; surge 420 ms; arc .56 s |
+| Start the local engine | Working: bobs up and down, tail sways, blinks | 1.6 s, 1.1 s, 2.4 s; no exact repeat within 52.8 s |
+| 10 seconds | Looks at the user for 600 ms, one slow blink; all loops slow to 0.85 times | Look 600 ms |
+| 45 seconds | Switches to thinking: head tilted, rising and falling slowly, eyes narrowed; tail stops; the highlight on the arc and the prop slow down; no text | 2.2 s; the switch uses `SPRING_SHAPE`; highlight one lap per 2.6 s; prop one beat per 2.6 s, gears one turn per 4 s |
+| Open the team | Sending a message: dashes forward, two tail strokes per dash | 1.1 s |
+| The app asks (a card, 180 seconds) | Two hops, then holds still and looks at the card (after that, see the next table) | 1.3 s × 2 |
+| A card the user brought up | No hop, holds still | None |
+| Failure | From the current pose sinks 4 px, head down 4°, eyelids grow heavy, then goes fully still | `SPRING_SHAPE` |
+| Ready, celebration (first start; first success after a retry or a fresh start) | As the ring closes, squashes then stretches, `「^ ^」` eyes, one spout; at 560 ms jumps out of the water, flies to where the Main Bot's avatar will be, shrinks to the avatar's size and lands (section 8); when there is nowhere to land, dives instead, to 1.25 times its height | 460 ms; jump 590 ms (the dive uses `SPRING_SHAPE`) |
+| Ready (later start) | The ring closes, and 100 ms later it jumps straight to the Main Bot's avatar; when there is nowhere to land it dives straight away, also to 1.25 times its height | Jump 550 ms (the dive uses `SPRING_TAP` 290 ms) |
 
-鲸鱼还有下面这些小反应，每一个都有原因：卡片在等、用户做了什么，或者交接；第 9 条是唯一一个没有外因的，让工作时的上下晃不那么像循环。它更有反应，不是动得更多。安静档没有 1 到 7 和 9；减少动态效果时 1 到 9 都没有；失败页（启动失败、团队界面没有加载出来、复制失败）上也都没有。
+The whale also has the small reactions below, each with a cause: a card is waiting, the user did
+something, or the handoff. Number 9 is the only one without an outside cause; it makes the working
+bob feel less like a loop. The whale is more responsive, not busier. The Quiet level has none of 1
+to 7 or 9; with reduced motion none of 1 to 9; and the failure pages (start failed, the team view
+didn't load, copy failed) have none of them.
 
-| # | 动作 | 什么时候 | 怎么动 |
+| # | Motion | When | How |
 |---|---|---|---|
-| 1 | 探身 | 应用主动问的卡片：最后一跳落地时（跳开始后 2.0 s；导入时空间不够的卡 0.7 s）。用户自己引出的卡片：变形开始 70 ms 后。复制中、正在下载和复制失败的卡没有 | 朝卡片前倾 2.5°（`translate(1.91px, -1.27px) rotate(2.5deg)`，按 112 px 的鲸鱼），`SPRING_SHAPE`；眼睛仍看着卡片。回答时随点头收回，卡片还在时（比如换了模型设置）1 秒后再探身；抚摸时收回，指针离开后再来 |
-| 2 | 呼吸 | 停下 600 ms 后 | 身体轻轻起伏（`scale` 1 → 1.008 1.018 → 1），4.2 s 一次；按这张卡自己的时钟，30 秒后放慢到 .8 倍，90 秒后 .6 倍，不再变快；状态一变，240 ms 回到原样 |
-| 3 | 眨眼 | 停下后 1.4–2.2 s 第一次，以后每 3.2–6.8 s 一次（30 秒后间隔乘 1.4，90 秒后乘 2）；五次里有一次连眨两下，隔 340 ms | 270 ms：眼睛压到 .03 再回来；抚摸、跳、看用户时不眨，眼皮重、眯眼和「^ ^」眼（比如喷水时）也不眨 |
-| 4 | 回到窗口时看你 | 窗口失去焦点 5 秒以上后又拿到焦点，或者隐藏 5 秒以上后又看得见 | 和 10 秒那次一样：看向用户 600 ms，慢眨一次眼。和 10 秒那次合算，20 秒内最多一次；只在启动循环里或停在卡片前时有，阶段完成的那一下、跳、抚摸、潜下去和失败的姿势时没有 |
-| 5 | 眼睛跟着键盘焦点 | 键盘把焦点移到纸面或提示行里的按钮、勾选框上 | 眼睛看向那个控件的中心，限幅和跟随指针一样；指针一动就交回指针。卡片出现时焦点自动移到主按钮，那一次不跟，眼睛仍看着卡片 |
-| 6 | 按下预备 | 在回答卡片的按钮上按下指针（展开「详细」「详细信息」、打开模型设置的「更换」、〔复制详细信息〕不算回答） | 身体微蹲：`scale` 1.03 .97，120 ms；点下去时用 `SPRING_TAP` 弹回并点头，移开或取消只弹回；键盘只点头。卡片的动作照旧在点击时才发出 |
-| 7 | 活泼档越跳越稀 | 活泼档，应用主动问、要跳两下的卡片 | 在 0、1.3、3.9、9.1 秒开始跳，以后每 9 秒一次，中间停下来呼吸、眨眼；抚摸或回答后不再跳；导入时空间不够的卡只跳一次 |
-| 8 | 潜得更深 | 交接时没有地方落（第 8 节） | 潜到鲸鱼身高的 1.25 倍（140 px），窗口开始长大时鲸鱼已经在水线下 |
-| 9 | 张望 | 首次启动「启动本机引擎」那一段、鲸鱼工作时，每 5 到 9 秒一次，间隔随机 | 眼睛随机向左或向右看 600 ms：`#eye-pair` 平移 14%，150 ms 过去、停 270 ms、180 ms 回来，`ease-in-out`，叠在上下晃上。10 秒放慢后照常，45 秒换成思考后没有；眼睛跟着指针或键盘焦点时、看向用户的那 600 ms 里、抚摸和跳时都不张望，窗口看不见时也不；正张望着要看向用户时，眼睛先用 120 ms 回正。只在首次启动的这一段：以后的启动和搬数据的页面、复制中的卡也用工作的循环，但不张望 |
+| 1 | Lean in | A card the app asks: when the last hop lands (2.0 s after the hops start; 0.7 s for the import's not-enough-space card). A card the user brought up: 70 ms after the shape change starts. Not on the copying, downloading or copy-failed cards | Leans 2.5° towards the card (`translate(1.91px, -1.27px) rotate(2.5deg)`, for the 112 px whale), `SPRING_SHAPE`; the eyes keep looking at the card. On an answer it pulls back with the nod, and leans in again 1 second later if the card is still there (for example after a model setting changed); petting pulls it back, and it leans in again once the pointer leaves |
+| 2 | Breathe | 600 ms after holding still | The body rises and falls gently (`scale` 1 → 1.008 1.018 → 1), once per 4.2 s; on this card's own clock it slows to .8 times after 30 seconds and to .6 times after 90 seconds, never faster again; when the state changes it returns to rest in 240 ms |
+| 3 | Blink | First 1.4–2.2 s after holding still, then every 3.2–6.8 s (the gap times 1.4 after 30 seconds, times 2 after 90 seconds); one blink in five is a double, 340 ms apart | 270 ms: the eyes squash to .03 and come back; no blinking while being petted, hopping or looking at the user, nor with heavy eyelids, narrowed eyes or `「^ ^」` eyes (for example while spouting) |
+| 4 | Looks at you on return | The window gets focus again after losing it for 5 seconds or more, or becomes visible again after being hidden for 5 seconds or more | The same as at 10 seconds: looks at the user for 600 ms, one slow blink. Counted together with the 10-second look, at most once in 20 seconds; only during the start loop or while holding still at a card, not during the phase-done beat, a hop, petting, the dive or the failure pose |
+| 5 | Eyes follow keyboard focus | The keyboard moves focus to a button or checkbox in the paper or the hint row | The eyes look at that control's centre, with the same limits as following the pointer; as soon as the pointer moves, the pointer takes over again. When a card appears, focus moves to its main button by itself; that one move is not followed, and the eyes keep looking at the card |
+| 6 | Ready to press | The pointer goes down on a button that answers the card (opening "Details" (`详细`, `详细信息`), opening the model setting's `更换` ("Change"), or `〔复制详细信息〕` do not count as answers) | The body crouches slightly: `scale` 1.03 .97, 120 ms; on the click it springs back on `SPRING_TAP` and nods; moving away or cancelling only springs back; the keyboard only nods. The card's action still fires on the click |
+| 7 | Lively hops grow rarer | Lively level, a card the app asks with two hops | Hops start at 0, 1.3, 3.9 and 9.1 seconds, then every 9 seconds, with breathing and blinking in between; no more hops after petting or an answer; the import's not-enough-space card hops only once |
+| 8 | Dive deeper | Nowhere to land at the handoff (section 8) | Dives to 1.25 times the whale's height (140 px), so the whale is below the waterline when the window starts to grow |
+| 9 | Glance around | On a first start, during "Start the local engine" while the whale works, once every 5 to 9 seconds at random gaps | The eyes look left or right at random for 600 ms: `#eye-pair` shifts 14%, 150 ms there, 270 ms hold, 180 ms back, `ease-in-out`, on top of the bob. It goes on after the 10-second slowdown and stops once the 45-second thinking starts; no glancing while the eyes follow the pointer or keyboard focus, during the 600 ms look at the user, while being petted or hopping, or while the window is not visible; if it is mid-glance when it should look at the user, the eyes first return to centre in 120 ms. Only in this phase of a first start: later starts, the data-moving page and the copying card use the working loop too, but do not glance |
 
-- 动画三档用团队里设的那一档：主窗口的页面报告给应用，应用记在自己的 userData 里，下次启动时用。没有记录时（首次启动）按「正常」。
-  - 安静：只有第一张表的状态动作和点鲸鱼时的喷水（小一号，连同它的压扁、甩尾和「^ ^」眼）。除此之外没有眼睛跟随、抚摸、尾巴、点头、看向用户和涟漪，交接时没有「^ ^」眼，也没有第二张表的 1 到 7 和 9；阶段完成时只有弧画满，鲸鱼不划尾巴、不往前涌。
-  - 正常：加上眼睛跟随指针、尾巴、点头、看向用户、涟漪、「^ ^」眼、阶段完成时的划尾巴和一涌，以及第二张表的 1 到 6 和 9。等用户回答时可以抚摸（UI 标准 8.5）。
-  - 活泼：再加上第二张表的第 7 条：等用户回答时越跳越稀，代替 UI 标准 8.4 的「一直跳」。
-- 点鲸鱼它就喷水（点击区 140 × 108，盖住鲸鱼露出水面的部分）：
-  - 压扁再回弹（460 ms），尾巴甩一下，「^ ^」眼 480 ms。喷水孔冒出一根水柱（170 ms），顶上向两边卷开（120 ms 起，200 ms），380 ms 起整股水向上散掉；两边各两滴、中间一滴落回去（330 到 400 ms 起，各约 .5 到 .6 s），760 ms 时一圈涟漪。水柱和水滴是 70% 的 `--bt-ink-deepseek`。
-  - 2.5 秒内点到第 4 下，喷一次大的：1.35 倍，压得更扁，两边各三滴，「^ ^」眼 900 ms；然后重新数。
-  - 失败趴着时只冒一小股：.55 倍，不卷开，一滴，不压扁，眼睛不换。
-  - 入场、沉下去重新开始、就绪以后和交接时，点了没有反应；抚摸时照样喷，眼睛不换。
-  - 每种启动都有。安静档也有：水柱小一号（.85 倍），没有涟漪，压扁、尾巴甩一下和「^ ^」眼照旧；减少动态效果时只换成「^ ^」眼（第 9 节）。
-- 涟漪是一个 68 × 12 的细线椭圆，在水线中间，出现在三处：首次启动浮上来时（以后的启动没有）；喷出的水落回去时（喷水后 760 ms）；庆祝的交接里鲸鱼潜下去时（660 ms；交接时喷的水不另起一圈，鲸鱼跳向头像时这一圈也没有）。喷水和潜下去的那几次 160 ms 淡完（浮上来的那次 .56 s）。安静档和减少动态效果时没有涟漪。
-- 鲸鱼和圆环对读屏隐藏（`aria-hidden`）。三个阶段留在一个看不见的列表里（「启动进度」，每项带状态词，当前一项 `aria-current="step"`），礼貌朗读区照旧说「{阶段}：进行中」「{阶段}：已完成」。鲸鱼的话是普通文字，不进朗读区；失败的标题例外，会读出来。卡片出现时朗读它的第一行和第一句话（180 秒的卡读鲸鱼的问题）。
+- The three animation levels follow the level set in the team: the main window's page reports it to
+  the app, the app stores it in its own userData and uses it at the next start. Without a record
+  (the first start) the level is Normal.
+  - Quiet: only the state motions in the first table, and the spout when the whale is clicked (one
+    size smaller, with its squash, tail flick and `「^ ^」` eyes). Apart from that there is no eye
+    following, petting, tail, nod, look at the user or ripple, no `「^ ^」` eyes at the handoff, and
+    none of 1 to 7 and 9 in the second table; when a phase is done only the arc fills, and the whale
+    neither strokes its tail nor surges.
+  - Normal: adds eyes that follow the pointer, the tail, the nod, the look at the user, the ripple,
+    `「^ ^」` eyes, the tail strokes and surge when a phase is done, and 1 to 6 and 9 of the second
+    table. While waiting for the user's answer it can be petted (UI standard 8.5).
+  - Lively: adds number 7 of the second table: while waiting for the user's answer the hops grow
+    rarer, instead of the "keeps hopping" of UI standard 8.4.
+- Click the whale and it spouts (click area 140 × 108, covering the part of the whale above the
+  water):
+  - It squashes and springs back (460 ms), flicks its tail once, `「^ ^」` eyes for 480 ms. A water
+    column rises from the blowhole (170 ms), its top curls out to both sides (from 120 ms, 200 ms),
+    and from 380 ms the whole spout scatters upwards; two drops on each side and one in the middle
+    fall back (starting at 330 to 400 ms, about .5 to .6 s each), and at 760 ms comes one ripple. The
+    column and drops are 70% `--bt-ink-deepseek`.
+  - The 4th click within 2.5 seconds gives one big spout: 1.35 times, a deeper squash, three drops on
+    each side, `「^ ^」` eyes for 900 ms; then the count starts over.
+  - While lying down after a failure it gives only a small puff: .55 times, no curl, one drop, no
+    squash, the eyes do not change.
+  - During the entrance, sinking to start over, after ready and during the handoff, a click does
+    nothing; while being petted it still spouts, and the eyes do not change.
+  - Every kind of start has it. The Quiet level has it too: the column one size smaller (.85 times),
+    no ripple, the squash, tail flick and `「^ ^」` eyes as usual; with reduced motion it only changes
+    to `「^ ^」` eyes (section 9).
+- The ripple is a thin-line 68 × 12 ellipse in the middle of the waterline. It appears in three
+  places: when the whale rises on a first start (not on later starts); when the spout falls back
+  (760 ms after the spout); and when the whale dives during the celebration handoff (660 ms; the spout
+  at the handoff does not start a ripple of its own, and there is no ripple when the whale jumps to
+  the avatar). The spout and dive ripples fade in 160 ms (the rising one in .56 s). The Quiet level
+  and reduced motion have no ripple.
+- The whale and the ring are hidden from screen readers (`aria-hidden`). The three phases stay in an
+  invisible list (`「启动进度」` ("Start progress"), each item with a state word, the current one with
+  `aria-current="step"`), and the polite live region still says `「{阶段}：进行中」` ("{phase}: in
+  progress") and `「{阶段}：已完成」` ("{phase}: done"). The whale's line is plain text and does not go
+  to the live region; a failure title is the exception and is read out. When a card appears, its
+  first line and first sentence are read (for the 180-second card, the whale's question).
 
-### 4. 首次启动，逐拍
+### 4. The first start, beat by beat
 
-时间从页面拿到 `?start=first` 的那一帧算起。
+Time counts from the frame in which the page gets `?start=first`.
 
-1. 入场：
-   - 0 ms，鲸鱼在圆环中间从水线下 96 px 浮上来。
-   - 120 ms，涟漪。
-   - 180 ms，圆环的三段淡线各自顺时针画出来（.5 s）。
-   - 220 ms，水线淡入。
-   - 360 ms，睁眼。
-   - 420 ms，位置行（只在盘不够时有）淡入。
-   - 560 ms，到位。
-   入场全是 CSS，不等脚本。入场时来的卡片和就绪，等它到位再处理。鲸鱼的话空着；提示行只在盘不够时有那一句（第 3 拍）。
-2. 「准备数据文件夹」：到 560 ms 还没完成、并且已经等了 250 ms，第一段弧才进入进行中，鲸鱼搜索。完成时第一段弧画满，但不早于入场后 260 ms（页面画出来后 820 ms），好让人看见它画满；这一小段等待里鲸鱼不换循环（入场后的姿势，或者接着搜索），弧画满、这一拍走完（360 ms）才换成工作的循环：为这 260 ms 换循环，循环自己要停满的 400 ms 会把弧再推迟。这 820 ms 只是弧在等：主进程建好数据文件夹就接着启动引擎，不等页面画出来。一般的首次启动里，数据阶段在页面画出来以前就结束了（主进程建文件夹要 0.3 到 1.2 秒，页面要 1 秒上下、冷启动时好几秒才画出来），所以第一段弧不显示进行中，820 ms 时直接画满。重新开始（第 7 节）不等这一拍；入场时就来的就绪照第 1 拍。
-3. 「启动本机引擎」：第二段弧进行中，鲸鱼工作，偶尔张望（第 3 节第二张表第 9 条），面前的齿轮转起来（第 2 节）。鲸鱼的话和提示行空着；盘不够、又没有更好的盘时，前 10 秒（按启动的时钟）提示行写「C 盘只剩 1.2 GB」（第 6 节）。
-4. 10 秒，引擎还没起来：鲸鱼看向用户一次，循环放慢；不出字。
-5. 45 秒，引擎还没起来：鲸鱼改成思考，弧上的光和齿轮放慢；不出字。
-6. 180 秒：见第 6 节。
-7. 引擎起来：主进程在隐藏的主窗口里加载引擎的页面，开始 20 秒的就绪检查。第二段弧画满，第三段「打开团队」进行中，鲸鱼改成发消息，齿轮换成三个小成员。导入卡开着、还没回答时，预热好的引擎只算到第二段：不加载页面、第三段不开始、不开始 20 秒检查，三件事都等回答以后（〔复制过来〕的等第一段复制完）。
-8. `dsBotApp.ready()`：剩下的弧画满，圆环合上，鲸鱼喷一次水，跳出水面，落到团队窗口里 Main Bot 的头像上（没有地方落时潜下去），见第 8 节。
+1. Entrance:
+   - 0 ms, the whale rises from 96 px below the waterline in the middle of the ring.
+   - 120 ms, the ripple.
+   - 180 ms, each of the ring's three faint arcs draws itself clockwise (.5 s).
+   - 220 ms, the waterline fades in.
+   - 360 ms, the eyes open.
+   - 420 ms, the place line (only when the disk is short of space) fades in.
+   - 560 ms, in place.
+   The entrance is all CSS and does not wait for the script. A card or ready that arrives during the
+   entrance is handled once the whale is in place. The whale's line is empty; the hint row shows its
+   one line only when the disk is short of space (beat 3).
+2. "Prepare the data folder": the first arc goes in progress, and the whale searches, only if the
+   phase is not done by 560 ms and has already run 250 ms. When it is done the first arc fills, but no
+   earlier than 260 ms after the entrance (820 ms after the page paints), so that people see it fill.
+   During this short wait the whale keeps its loop (the pose after the entrance, or the search it is
+   in); it changes to the working loop only once the arc has filled and this beat has ended (360 ms).
+   Changing loops for those 260 ms would delay the arc further by the 400 ms that a loop must stay.
+   The 820 ms is only the arc waiting: the main process starts the engine as soon as it has built the
+   data folder, without waiting for the page to paint. On a typical first start the data phase ends
+   before the page paints (the main process takes 0.3 to 1.2 seconds to build the folder, and the page
+   takes about 1 second, or several on a cold start, to paint), so the first arc never shows in
+   progress and simply fills at 820 ms. A fresh start (section 7) does not wait for this beat; a ready
+   that arrives during the entrance follows beat 1.
+3. "Start the local engine": the second arc is in progress, the whale works and glances around now
+   and then (section 3, second table, number 9), and the gears in front of it turn (section 2). The
+   whale's line and the hint row are empty; when the disk is short of space and there is no better
+   disk, the hint row shows `「C 盘只剩 1.2 GB」` for the first 10 seconds (on the start clock)
+   (section 6).
+4. 10 seconds, the engine is not up yet: the whale looks at the user once and the loops slow down; no
+   text.
+5. 45 seconds, the engine is not up yet: the whale switches to thinking, and the highlight on the arc
+   and the gears slow down; no text.
+6. 180 seconds: see section 6.
+7. The engine is up: the main process loads the engine's page in the hidden main window and starts
+   the 20-second ready check. The second arc fills, the third, "Open the team", goes in progress, the
+   whale switches to sending a message, and the gears give way to three small members. While the
+   import card is open and not yet answered, a pre-warmed engine only counts up to the second arc: the
+   page does not load, the third arc does not start and the 20-second check does not start; all three
+   wait for the answer (for `〔复制过来〕`, until the first part has been copied).
+8. `dsBotApp.ready()`: the remaining arcs fill, the ring closes, the whale spouts once, jumps out of
+   the water and lands on the Main Bot's avatar in the team window (or dives when there is nowhere to
+   land), see section 8.
 
-- 10 秒、45 秒和 180 秒按启动的时钟算，页面上不显示这个时钟。卡片等用户回答时它停着，回答后接着走：用户自己想了多久，不算在引擎头上。
-- 位置行（第 2 节）只在盘不够时从入场起就在：新团队和要导入时写「数据放在 C 盘（剩 1.2 GB）」和〔换个位置…〕，什么都不点就按它走，不问。盘够时没有位置行，首次启动也就没有自己选位置的入口，要换位置在进门以后去 设置 → 通用 → 位置。点〔换个位置…〕才开选择框（第 6 节），选择框开着时时钟也停。交接时随整组淡出（第 8 节）。
+- 10, 45 and 180 seconds are counted on the start clock, which the page does not show. It stops while
+  a card waits for the user's answer and goes on after the answer: the time the user spends thinking
+  does not count against the engine.
+- The place line (section 2) is there from the entrance only when the disk is short of space: for a
+  new team and for an import it shows `「数据放在 C 盘（剩 1.2 GB）」` ("Data on drive C, 1.2 GB
+  free") and `〔换个位置…〕`, and if nothing is clicked the start goes with that place without asking.
+  When there is enough space there is no place line, so the first start has no entry for choosing the
+  place; to change it, go to Settings → General → Location once inside. Only a click on
+  `〔换个位置…〕` opens the picker (section 6), and the clock also stops while the picker is open. At
+  the handoff the line fades out with the whole group (section 8).
 
-### 5. 以后的启动
+### 5. Later starts
 
-- 和首次启动是同一个页面：112 px 的鲸鱼在圆环中间，一段水线，三段弧跟着阶段走（第 2、3 节）；顺利时没有字，也没有位置行，盘快满时例外（下面）。
-- 0 ms：鲸鱼从水线下 84 px 浮上来（`SPRING_TAP` 290 ms），不倾斜，眼睛睁着，没有涟漪；圆环的淡线 180 ms 起画出来，水线 220 ms 淡入。第一段弧最早在入场后 260 ms（页面画出来后 550 ms）画满。
-- 前 1 秒鲸鱼不换循环：第一段弧画满时照样划两下尾巴、向前一涌，再点一下头（第 3 节）。1 秒后开始工作（只上下晃和眨眼，三个阶段都一样）。
-- 10 秒：鲸鱼看向用户一次，循环放慢，不出字。
-- 45 秒，引擎还没起来：鲸鱼改成思考，不出字。
-- 180 秒：和首次启动一样。
-- 盘快满了：数据放到一个文件夹时（首次启动定下位置、导入复制完、换位置或搬数据以后），`locations.json` 记下那块盘当时的剩余空间（`freeAtStart`）；以后启动时剩余空间到了它的 20% 以下（开始时剩 412 GB 的，到 82 GB 以下），数据阶段读出位置时出现位置行「数据放在 C 盘（剩 30 GB）」和〔换个位置…〕，淡入 .22 s。点〔换个位置…〕走 设置 → 通用 → 位置 的搬数据，但除了选择框不弹系统对话框，都在纸面的卡片上问（第 6 节）：选了不能用的文件夹出「这里放不了」加一句原因，〔重新选…〕；能用就出「搬到这个文件夹？」「会把数据复制到 `D:\Data`，然后重新启动。原来的 `C:\Users\<用户名>\.ds-bot` 原样留着，确认没问题后可以自己删掉。」〔移动并重启〕（主按钮）〔重新选…〕〔取消〕。选择框和卡片开着时时钟停、交接等着；选择框被取消或点〔取消〕就回到启动，照常进团队。点〔移动并重启〕时再查一次（总工作区可能刚好换了），然后启动窗口当场变成搬数据的样子（页面重新载入，鲸鱼工作，没有字），这次启动的引擎停下，走 设置 → 通用 → 位置 的〔移到…〕同一条路：复制完在新文件夹重新启动（今天旧文件夹留着，卡片上也这样写；上手流程第 8 节「搬是搬」落地时这里一起改）；复制时另一个 DSH 正在用这份数据、或者复制失败，仍和设置里一样弹系统对话框，然后在原来的文件夹重新启动（「已知限制」）。以前存下、没有记这个数的位置，这次启动补记，下一次起才按它算；`DS_BOT_HOME` 的一次性运行不记也不显示。
-- 换位置（第 1 节）时，鲸鱼下面没有字，45 秒起鲸鱼改成思考。
-- 就绪时没有庆祝（重试或重新开始后第一次成功时例外，第 8 节）：剩下的弧画满、圆环合上，100 ms 后鲸鱼跳向 Main Bot 的头像（没有地方落时潜下去）；220 ms 时发 `handoffShow`，启动窗口和首次启动一样长成主窗口的矩形，鲸鱼 650 ms 时落在头像上，主窗口在就绪后约 0.7 秒露面（第 8 节）。
-- `DS_BOT_HOME` 的一次性运行用这一套，只是不出卡片。
+- The same page as the first start: the 112 px whale in the middle of the ring, a waterline, three
+  arcs that follow the phases (sections 2 and 3). When all goes well there is no text and no place
+  line, except when the disk is nearly full (below).
+- 0 ms: the whale rises from 84 px below the waterline (`SPRING_TAP` 290 ms), no tilt, eyes open, no
+  ripple; the ring's faint arcs draw from 180 ms, and the waterline fades in at 220 ms. The first arc
+  fills 260 ms after the entrance at the earliest (550 ms after the page paints).
+- For the first second the whale keeps its loop: when the first arc fills it still strokes its tail
+  twice, surges forward and then nods (section 3). After 1 second it starts working (only the bob and
+  blinks, the same in all three phases).
+- 10 seconds: the whale looks at the user once, the loops slow down, no text.
+- 45 seconds, the engine is not up yet: the whale switches to thinking, no text.
+- 180 seconds: as on the first start.
+- The disk is nearly full: when the data is put in a folder (the place set on a first start, after an
+  import copy, a change of place or a data move), `locations.json` records that disk's free space at
+  that time (`freeAtStart`). On a later start, once the free space falls below 20% of it (below
+  82 GB if it started with 412 GB free), the data phase reads the place and the place line appears,
+  `「数据放在 C 盘（剩 30 GB）」` ("Data on drive C, 30 GB free") with `〔换个位置…〕`, fading in over
+  .22 s. `〔换个位置…〕` takes the data move of Settings → General → Location, but apart from the
+  picker it opens no system dialog and asks everything on cards in the paper (section 6). A folder
+  that cannot be used gives `「这里放不了」` ("That place won't work") plus one sentence with the
+  reason, and `〔重新选…〕` ("Choose again…"). A usable one gives `「搬到这个文件夹？」` ("Move the data
+  here?"), `「会把数据复制到 D:\Data，然后重新启动。原来的 C:\Users\<用户名>\.ds-bot 原样留着，确认没问题后可以自己删掉。」`
+  ("DS Bot copies its data to `D:\Data` and starts again. `C:\Users\<user>\.ds-bot` stays as it is;
+  once all is well you can delete it yourself."), `〔移动并重启〕` ("Move and restart", main button),
+  `〔重新选…〕` and `〔取消〕` ("Cancel"). While the picker and the cards are open the clock stops and the
+  handoff waits; when the picker is cancelled or `〔取消〕` is clicked, the start goes on and enters the
+  team as usual. `〔移动并重启〕` checks once more (the team workspace may have just changed), then the
+  start window turns into the data-moving page on the spot (the page reloads, the whale works, no
+  text), this start's engine stops, and the move takes the same path as `〔移到…〕` in Settings →
+  General → Location: after the copy it starts again in the new folder (today the old folder stays,
+  and the card says so; this changes here too when "moving is moving" in onboarding section 8 lands).
+  When another DSH is using this data during the copy, or the copy fails, it still opens a system
+  dialog as in Settings, and then starts again in the old folder ("Known limits"). A place saved
+  before without this number gets it recorded on this start, and it counts from the next start on;
+  a one-off run with `DS_BOT_HOME` neither records nor shows it.
+- During a change of place (section 1) there is no text under the whale, and from 45 seconds the
+  whale switches to thinking.
+- Ready has no celebration (except for the first success after a retry or a fresh start, section 8):
+  the remaining arcs fill, the ring closes, and 100 ms later the whale jumps to the Main Bot's avatar
+  (or dives when there is nowhere to land); at 220 ms `handoffShow` is sent, the start window grows to
+  the main window's rectangle as on the first start, the whale lands on the avatar at 650 ms, and the
+  main window appears about 0.7 seconds after ready (section 8).
+- A one-off run with `DS_BOT_HOME` uses all of this, only without cards.
 
-### 6. 卡片、180 秒和导入
+### 6. Cards, 180 seconds and the import
 
-- 所有卡片用同一套变形：
-  - 出现：鲸鱼的话和提示行淡出 .16 s；整组上移 45 px，水塘在同一个弹簧里缩到 .62 倍、再上移 60 px（第 2 节，首次启动和以后的启动一样）；卡片的底色和边线两层从 0 高长到内容的高度（`clip-path`，走 `SPRING_SHAPE`；底色 .22 s 淡入）；内容先按最终尺寸排好，晚 70 ms 淡入；焦点移到主按钮。
-  - 回答后：内容 .16 s 退场（下沉 6 px、缩到 .975、模糊 3px），卡片收回，水塘回到原大，整组回到低处。
-- 卡片在时鲸鱼的话空着、提示行隐藏。卡片自己的第一行是鲸鱼说的一句（15/20、600，一行），写在已定的内容上面，内容本身不变：
-  - 导入卡：「找到你以前的团队了：4 个 Bot、0 个群聊」，这一行就是整张卡的话。
-  - 推荐盘：「C 盘有点挤」（空间不够），「这里不让我放东西」（默认位置不能用）。
-  - 「会放在…」：「我多加了一层文件夹」。
-  - 被拒绝的卡：「这里放不了」。
-  - 以后的启动搬数据的确认：「搬到这个文件夹？」。
-  - 找不到数据文件夹：「数据不在原来的地方了」。
-  - 导入时空间不够：「地方不够放」。
-  - DSH 正在用这个团队：「DeepSeek Harness 还在用这个团队」。
-  - 更新版本的对话，和它的「正在下载」：「这些对话比我新」。
-  - 复制中没有卡片（圆环上的复制那一段就是进度）。
-  - 恢复卡、团队界面没有加载出来和复制失败的卡没有这一行，也不说俏皮话（第 7 节）。180 秒的卡也没有，问题由鲸鱼问。
-- 鲸鱼跳不跳：
-  - 应用主动问的卡片（推荐盘、找不到数据文件夹、导入、180 秒），跳两下，最后一跳落地时探身看着卡片，然后停下（第 3 节第二张表）。
-  - 用户自己引出的卡片（「其他位置…」选完后的「会放在…」、以后的启动搬数据时的「这里放不了」和「搬到这个文件夹？」），不跳，变形开始 70 ms 后探身。复制中没有卡片，鲸鱼工作。
-  - 同一件事又出了新问题（复制时空间不够），跳一下。
-- 选位置的卡片只有推荐盘这一种，只在首次启动出现，〔放到 D 盘〕〔仍然放在 C 盘〕都已经试写通过（上手流程第 3 节）；以后的启动还会出「找不到数据文件夹」卡：
-  - 推荐盘：「C 盘只剩 1.2 GB。放到 D 盘（剩 412 GB）？」〔放到 D 盘〕（主按钮，拿到焦点）〔仍然放在 C 盘〕，按钮行末尾一个小链接「其他位置…」。默认位置不能用时，第一句换成原因（「DS Bot 没有权限在 `C:\Users\<用户名>` 里写文件。」），第二句一样；按钮只有〔放到 D 盘〕（主按钮）和小链接「其他位置…」，没有〔仍然放在 C 盘〕；没有可推荐的盘时只有〔选择其他位置…〕。
-  - 「其他位置…」打开选择框，卡片留在后面。定出的根就是用户选的文件夹时（上手流程第 3 节的规则），卡片直接收回，照常启动，不确认。应用在里面加了一层 `DS Bot` 时，同一张卡变形成「会放在 `D:\DS Bot`。」〔继续〕（主按钮）〔重新选…〕。选的位置不能用，同一张卡写一句原因（「DS Bot 没有权限在 `D:\Data` 里写文件。」「`C:\Users\<用户名>\OneDrive\文档` 在 OneDrive 里，同步会打断正在写入的对话。」「`D:\Projects\DS Bot` 里已经有别的文件。」），〔重新选…〕（主按钮），来时那张卡的〔放到 D 盘〕〔仍然放在 C 盘〕照旧留着；选择框被取消就回到来时的卡。「会放在…」和被拒绝的卡也有脚注。
-  - 脚注都是「以后可以在 设置 → 通用 → 位置 里改。」
-  - 没有更好的盘时不出卡片：前 10 秒提示行写「C 盘只剩 1.2 GB」，之后提示行空着（第 4 节）。
-  - 位置行的〔换个位置…〕（第 2 节）不等推荐盘的卡：新团队和要导入的首次启动期间随时能点，引擎正在起也可以，走和「其他位置…」同一条路。选完先定根（上手流程第 3 节「一个位置」）：根就是选的文件夹时不出卡，直接重新开始；加了一层 `DS Bot` 时出「会放在 `D:\DS Bot`。」〔继续〕（主按钮）〔重新选…〕；不能用时出「这里放不了」加一句原因（上面三句，再加「`D:\Data` 是 DeepSeek Harness 的数据。」「`C:\Program Files\DS Bot\data` 在程序文件夹里，卸载时会删掉。」），〔重新选…〕（主按钮）；这两张卡都是用户自己引出的，不跳。选择框被取消就回到位置行：这一路没有来时的卡，「会放在…」和「这里放不了」也一起收回，仍按默认位置走。选了现在的根或数据文件夹就当没选；选在现在的数据文件夹里面、或者定出的根和它重叠，出「这里放不了」加「`C:\Users\<用户名>\.ds-bot\旧` 和现在放数据的位置重叠。」，总工作区里已经有东西时也一样，还空着的（这次启动刚建的）可以成为新的根：默认位置下选用户文件夹，就是「会放在 `C:\Users\<用户名>\DS Bot`。」；读不了的文件夹按没有权限处理；检查都穿过链接和联接看真正的路径，DSH 的家那句写用户选的文件夹。选择框或这两张卡开着时团队就绪了，交接和 20 秒的界面检查都等答完再走：交接会把启动窗口连同挂在它上面的选择框一起收掉。定好以后按第 7 节〔换个位置…〕的路重新开始：鲸鱼立刻沉下去，位置行立刻写新的盘；旧引擎直接结束，不等它起完、也不等它有序退出（两者都要 3 到 10 秒，鲸鱼会一直在水下；那个文件夹马上就删，没有要保全的东西），默认位置上这一次建的文件夹删掉（数据文件夹整个删，总工作区只在还是空的时候删），位置这时就记下，三段弧回到没开始，鲸鱼在原处重新浮上来。导入复制进行中不接这一下，复制完以后这一行收起：搬一个复制好的团队是 设置 → 通用 → 位置 的事。
-- 以后的启动在盘快满时点位置行的〔换个位置…〕（第 5 节）：选完先查能不能搬过去（和设置里搬数据的检查一样），不能用的出「这里放不了」加一句原因，用的是上面被拒绝的卡的原因，多两句：「`D:\` 是整块磁盘，要选它里面的一个文件夹。」「`D:\Work` 和总工作区互相包含。」，已经有东西的文件夹是「`D:\Data` 里已经有别的文件。」，〔重新选…〕（主按钮）；能用的出「搬到这个文件夹？」〔移动并重启〕（主按钮）〔重新选…〕〔取消〕，脚注和正文见第 5 节。这两张卡都没有〔放到 D 盘〕〔仍然放在 C 盘〕。
-- 重装（`C:\Users\<用户名>\.ds-bot` 里有团队、没有保存的位置）不出卡片，盘不够也不出；启动页上不写上次的团队和路径，进门后就是它。
-- 180 秒：鲸鱼立刻问「等太久了，要不要重试？」，卡片里只有〔继续等待〕（主按钮）〔重试〕〔复制详细信息〕〔保存日志…〕，读屏读的是这句问话。
-  - 〔继续等待〕：卡片收回，180 秒后再问。
-  - 〔重试〕：重启引擎，时钟从 0 开始，鲸鱼抖一抖，回到工作。
-  - 卡片还在时引擎起来了：卡片收回，照常画满第二段弧。
-- 找不到数据文件夹（多见于以后的启动）：文字和按钮按第 3 节已定的，主按钮在前。〔重试〕后还是找不到：按钮下面出现「还是找不到这个文件夹。」（`--bt-danger`，4 秒后淡出）。鲸鱼的眼睛左右看一遍，不跳。
-- 导入（第 4 节）都在纸面里，用同一套变形：
-  - 导入卡越短越好：只有一行「找到你以前的团队了：4 个 Bot、0 个群聊」和〔复制过来〕（主按钮，拿到焦点）〔先不复制〕，按钮行末尾一个「详细」。「详细」是和失败页一样的折叠区，展开才有：「复制后会多占 4.6 GB，DeepSeek Harness 里的原件不动。」（不到 1 MB 写「不到 1 MB」，不写「0 MB」）、「模型设置：DeepSeek API · DeepSeek-V4-Pro　更换」、两个勾选框、脚注「也可以在 设置 → 通用 → 位置 里复制。」；展开时卡片的边用 `SPRING_SHAPE` 长高，内容晚 70 ms 淡入。找到的名字、段数和会复制什么不在卡上（名字和段数进门后在「复制好了」卡上）。
-  - 卡片在第一段（数据文件夹）画满以后才出来。卡片一出现，引擎就开始预热，没被 DSH 占着时检查对话同时进行，鲸鱼跳两下后停下。答之前圆环停在第一段：预热好了也不画引擎那一段、不出齿轮。答〔先不复制〕时鲸鱼点一下头，预热好的引擎接着当正式引擎用，不重启，引擎那一段接着画（三段）。
-  - 空间不够（只查第一段）：「空间不够：复制要约 1.7 GB，C 盘只剩 1.5 GB，还差 0.2 GB。」〔选择其他位置…〕（主按钮）〔先不复制〕
-  - 复制中：卡片不收回，而是跳上去变成圆环的一段。答〔复制过来〕（或复制失败后的〔重试〕）时：
-    - 卡片的内容照常 .16 s 退场；卡片的底色和边线 60 ms 后开始收：用 `clip-path` 缩成卡片中间一个 12 px 的圆点，同时变成 `--bt-ink-deepseek`，沿一条先上后右的弧线跳到圆环上：三段时落在第一段后面的空隙，已经四段时（复制失败后的〔重试〕）落在复制那一段的中点（这时水塘还是缩小上移的样子），落地前淡掉，一共 .52 s：前 45% 缩小上升（`cubic-bezier(.3,.7,.4,1)`），到 80% 跳到位，最后淡掉。
-    - 圆点到位时（.42 s）圆环从三段变四段（第 2 节），复制那一段从落点长出来、进行中，淡线一下子粗到 5 px 再回到 2 px（.42 s）；道具换成搬箱子。然后水塘回到原大，整组回到低处（第 2 节）。
-    - 复制那一段按真实进度画满（第 2 节）；没有分步的清单、数字和剩余时间。任务栏进度照旧显示在启动窗口上。
-    - 复制在落地前就做完了（团队很小）：那一段照样先亮起，进行中满 420 ms 才画满。
-    - 鲸鱼工作。
-  - 复制没有停止按钮（用户 2026-11-02 定的）：要停就退出应用或关掉启动窗口，复制在一个安全的地方停下、不留下复制了一半的团队，然后才退出。
-  - DSH 正在用这个团队（答〔复制过来〕后）：鲸鱼停下，不晃。每 2 秒重查一次，不显示任何东西；锁一放开，卡片直接变成复制中。卡上一个〔先不复制〕（主按钮）。「正在下载」的卡也有〔先不复制〕（主按钮），加「下载太慢？手动下载」；下载失败时〔重试〕〔手动下载〕。
-  - 复制失败：鲸鱼用失败的姿势，复制那一段变红（第 2 节）。卡上一句发生了什么「团队没有复制完：文件被别的程序占用。DeepSeek Harness 里的团队没有变化。」、一句该怎么办「可以重试，或者先不带团队开始，以后在 设置 → 通用 → 位置 里再复制。」（小字），〔重试〕（主按钮）〔先不带团队开始〕和失败页一样的日志按钮、「详细信息」。〔重试〕：卡片跳回复制那一段，从 0 重画；〔先不带团队开始〕：卡片收回，圆环缩回三段。检查对话出错不算失败：复制照样进行，只是不先查（第 4 节）。
-  - 工作文件不经过启动窗口：团队打开后由应用在后台复制，进度在 设置 → 通用 → 位置 和 Main Bot 聊天里的「复制好了」卡上。
+- All cards use the same shape change:
+  - Appearing: the whale's line and the hint row fade out over .16 s; the group moves up 45 px, and in
+    the same spring the pond shrinks to .62 times and moves up another 60 px (section 2, the same on
+    first and later starts); the card's background and border layers grow from 0 height to the
+    content's height (`clip-path`, on `SPRING_SHAPE`; the background fades in over .22 s); the content
+    is laid out at its final size first and fades in 70 ms later; focus moves to the main button.
+  - After the answer: the content leaves in .16 s (sinks 6 px, shrinks to .975, blurs 3px), the card
+    folds away, the pond returns to full size, and the group goes back down.
+- While a card is up the whale's line is empty and the hint row is hidden. The card's own first line
+  is one sentence spoken by the whale (15/20, 600, one line), written above the decided content; the
+  content itself does not change:
+  - Import card: `「找到你以前的团队了：4 个 Bot、0 个群聊」` ("Found your old team: 4 Bots, 0 group
+    chats"); this line is all the card says.
+  - Recommended drive: `「C 盘有点挤」` ("Drive C is a bit full", not enough space), `「这里不让我放东西」`
+    ("I'm not allowed to put things here", the default place cannot be used).
+  - "It will go in…" (`「会放在…」`): `「我多加了一层文件夹」` ("I added one more folder").
+  - The rejected card: `「这里放不了」`.
+  - Confirming a data move on a later start: `「搬到这个文件夹？」`.
+  - Data folder not found: `「数据不在原来的地方了」` ("Your data isn't where it was").
+  - Not enough space for the import: `「地方不够放」` ("Not enough room").
+  - DSH is using this team: `「DeepSeek Harness 还在用这个团队」` ("DeepSeek Harness is still using this
+    team").
+  - Chats from a newer version, and its "downloading" card: `「这些对话比我新」` ("These chats are newer
+    than me").
+  - There is no card during the copy (the copy arc on the ring is the progress).
+  - The recovery card, the team view didn't load and the copy-failed card have no such line and no
+    jokes (section 7). The 180-second card has none either; the whale asks the question.
+- Whether the whale hops:
+  - A card the app asks (recommended drive, data folder not found, import, 180 seconds): two hops; as
+    the last hop lands it leans in and looks at the card, then holds still (section 3, second table).
+  - A card the user brought up (the "It will go in…" card after choosing in `「其他位置…」` ("Another
+    location…"), and `「这里放不了」` and `「搬到这个文件夹？」` during a later start's data move): no
+    hop; it leans in 70 ms after the shape change starts. There is no card during the copy; the whale
+    works.
+  - A new problem in the same matter (not enough space during the copy): one hop.
+- The only card for choosing a place is the recommended drive. It appears only on a first start, and
+  both `〔放到 D 盘〕` ("Put it on drive D") and `〔仍然放在 C 盘〕` ("Keep it on drive C") have already
+  passed a test write (onboarding section 3). A later start can also show the "data folder not found"
+  card:
+  - Recommended drive: `「C 盘只剩 1.2 GB。放到 D 盘（剩 412 GB）？」` ("Only 1.2 GB left on drive C.
+    Put it on drive D (412 GB free)?"), `〔放到 D 盘〕` (main button, gets focus), `〔仍然放在 C 盘〕`,
+    and at the end of the button row a small link `「其他位置…」`. When the default place cannot be
+    used, the first sentence becomes the reason (`「DS Bot 没有权限在 C:\Users\<用户名> 里写文件。」`
+    ("DS Bot can't write files in `C:\Users\<user>`.")) and the second stays the same; the buttons are
+    only `〔放到 D 盘〕` (main button) and the small link `「其他位置…」`, without `〔仍然放在 C 盘〕`. When
+    there is no drive to recommend, there is only `〔选择其他位置…〕` ("Choose another location…").
+  - `「其他位置…」` opens the picker, and the card stays behind it. When the root it settles on is the
+    folder the user chose (the rule in onboarding section 3), the card folds away and the start goes
+    on without a confirmation. When the app added a `DS Bot` folder inside it, the same card changes
+    into `「会放在 D:\DS Bot。」` ("It will go in `D:\DS Bot`."), `〔继续〕` ("Continue", main button) and
+    `〔重新选…〕`. When the chosen place cannot be used, the same card says one sentence with the reason
+    (`「DS Bot 没有权限在 D:\Data 里写文件。」` ("DS Bot can't write files in `D:\Data`."),
+    `「C:\Users\<用户名>\OneDrive\文档 在 OneDrive 里，同步会打断正在写入的对话。」`
+    ("`C:\Users\<user>\OneDrive\Documents` is in OneDrive; syncing interrupts chats while they are
+    being written."), `「D:\Projects\DS Bot 里已经有别的文件。」` ("`D:\Projects\DS Bot` already has
+    other files in it.")), with `〔重新选…〕` (main button), and the original card's `〔放到 D 盘〕` and
+    `〔仍然放在 C 盘〕` stay; when the picker is cancelled it goes back to the card it came from. The
+    "It will go in…" and rejected cards also have the footnote.
+  - The footnote is always `「以后可以在 设置 → 通用 → 位置 里改。」` ("You can change this later in
+    Settings → General → Location.").
+  - When there is no better drive there is no card: the hint row shows `「C 盘只剩 1.2 GB」` for the
+    first 10 seconds and is empty after that (section 4).
+  - The place line's `〔换个位置…〕` (section 2) does not wait for the recommended-drive card: it can be
+    clicked at any time during the first start of a new team or an import, also while the engine is
+    starting, and takes the same path as `「其他位置…」`. After the choice the root is settled first
+    (onboarding section 3, "one place"): when the root is the chosen folder there is no card and the
+    start begins again at once; when a `DS Bot` folder was added it shows `「会放在 D:\DS Bot。」`,
+    `〔继续〕` (main button) and `〔重新选…〕`; when it cannot be used it shows `「这里放不了」` plus one
+    sentence with the reason (the three above, plus `「D:\Data 是 DeepSeek Harness 的数据。」`
+    ("`D:\Data` is DeepSeek Harness's data.") and `「C:\Program Files\DS Bot\data 在程序文件夹里，卸载时会删掉。」`
+    ("`C:\Program Files\DS Bot\data` is in the program folder, which uninstalling removes.")), with
+    `〔重新选…〕` (main button). Both cards are brought up by the user and do not hop. When the picker is
+    cancelled it goes back to the place line: this path has no card it came from, so "It will go in…"
+    and `「这里放不了」` fold away as well, and the start keeps the default place. Choosing the current
+    root or data folder counts as no choice. A choice inside the current data folder, or a root that
+    overlaps it, gives `「这里放不了」` plus `「C:\Users\<用户名>\.ds-bot\旧 和现在放数据的位置重叠。」`
+    ("`C:\Users\<user>\.ds-bot\old` overlaps where the data is now."); the same goes when the team
+    workspace already holds something, while one that is still empty (just built by this start) can
+    become the new root: choosing the user folder under the default place gives
+    `「会放在 C:\Users\<用户名>\DS Bot。」` ("It will go in `C:\Users\<user>\DS Bot`."). A folder that
+    cannot be read is treated as no permission. All checks follow links and junctions to the real
+    path, and the DSH home sentence names the folder the user chose. If the team becomes ready while
+    the picker or one of these two cards is open, the handoff and the 20-second view check wait until
+    the answer: the handoff would take away the start window together with the picker attached to it.
+    Once settled, the start begins again by the path of `〔换个位置…〕` in section 7: the whale sinks at
+    once and the place line names the new drive at once. The old engine is ended directly, without
+    waiting for it to finish starting or to quit in order (both take 3 to 10 seconds, the whale would
+    stay under water all that time, and that folder is deleted right away with nothing in it worth
+    keeping). The folders this start built in the default place are deleted (the data folder entirely,
+    the team workspace only while it is still empty), the place is recorded at this point, the three
+    arcs go back to not started, and the whale rises again where it was. While an import copy is
+    running this click is not taken, and once the copy is done the line folds away: moving a copied
+    team belongs to Settings → General → Location.
+- On a later start, `〔换个位置…〕` on the place line when the disk is nearly full (section 5): after the
+  choice it first checks whether the data can move there (the same checks as the data move in
+  Settings). One that cannot be used gives `「这里放不了」` plus one sentence with the reason, from the
+  reasons of the rejected card above, plus two more: `「D:\ 是整块磁盘，要选它里面的一个文件夹。」`
+  ("`D:\` is a whole drive; choose a folder on it.") and `「D:\Work 和总工作区互相包含。」` ("`D:\Work`
+  and the team workspace contain each other."); a folder that already holds something gives
+  `「D:\Data 里已经有别的文件。」` ("`D:\Data` already has other files in it."); with `〔重新选…〕` (main
+  button). A usable one gives `「搬到这个文件夹？」`, `〔移动并重启〕` (main button), `〔重新选…〕` and
+  `〔取消〕`; for the footnote and the body see section 5. Neither card has `〔放到 D 盘〕` or
+  `〔仍然放在 C 盘〕`.
+- A reinstall (`C:\Users\<user>\.ds-bot` holds a team and there is no saved place) shows no card, not
+  even when the disk is short of space; the start page does not show the last team or its path, and
+  once inside it is the same team.
+- 180 seconds: the whale asks at once `「等太久了，要不要重试？」`, and the card holds only `〔继续等待〕`
+  ("Keep waiting", main button), `〔重试〕` ("Try again"), `〔复制详细信息〕` and `〔保存日志…〕`; the screen
+  reader reads the question.
+  - `〔继续等待〕`: the card folds away, and asks again after another 180 seconds.
+  - `〔重试〕`: restarts the engine, the clock starts from 0, the whale shakes itself and goes back to
+    work.
+  - The engine comes up while the card is still there: the card folds away and the second arc fills
+    as usual.
+- Data folder not found (mostly on later starts): text and buttons as decided in section 3 of the
+  onboarding note, main button first. Still not found after `〔重试〕`: `「还是找不到这个文件夹。」`
+  ("Still can't find this folder.") appears under the buttons (`--bt-danger`, fades out after 4
+  seconds). The whale's eyes look left and right once; no hop.
+- The import (section 4 of the onboarding note) happens entirely in the paper, with the same shape
+  change:
+  - The import card is as short as it can be: only one line `「找到你以前的团队了：4 个 Bot、0 个群聊」`
+    with `〔复制过来〕` (main button, gets focus) and `〔先不复制〕`, and a "Details" (`「详细」`) at the
+    end of the button row. "Details" is a fold like the one on the failure page, and only when opened
+    does it show: `「复制后会多占 4.6 GB，DeepSeek Harness 里的原件不动。」` ("The copy takes another
+    4.6 GB; the originals in DeepSeek Harness stay untouched.", below 1 MB it says "less than 1 MB",
+    never "0 MB"), `「模型设置：DeepSeek API · DeepSeek-V4-Pro　更换」` ("Model settings: DeepSeek API ·
+    DeepSeek-V4-Pro  Change"), two checkboxes, and the footnote `「也可以在 设置 → 通用 → 位置 里复制。」`
+    ("You can also copy the team in Settings → General → Location."). When it opens, the card's border
+    grows taller on `SPRING_SHAPE`, and the content fades in 70 ms later. The names found, the number
+    of parts and what will be copied are not on the card (the names and the number of parts are on the
+    "Copied" (`「复制好了」`) card once inside).
+  - The card appears only after the first arc (data folder) has filled. As soon as the card appears,
+    the engine starts warming up, the chats are checked at the same time when DSH is not holding them,
+    and the whale hops twice and holds still. Until the answer the ring stays at the first arc: even a
+    pre-warmed engine does not draw the engine arc or show the gears. On `〔先不复制〕` the whale nods,
+    the pre-warmed engine goes on as the real engine without a restart, and the engine arc goes on
+    drawing (three arcs).
+  - Not enough space (only the first part is checked): `「空间不够：复制要约 1.7 GB，C 盘只剩 1.5 GB，还差 0.2 GB。」`
+    ("Not enough space: the copy needs about 1.7 GB, drive C has 1.5 GB left, 0.2 GB short."),
+    `〔选择其他位置…〕` (main button), `〔先不复制〕`
+  - During the copy: the card does not fold away but jumps up and becomes an arc of the ring. On
+    `〔复制过来〕` (or `〔重试〕` after a failed copy):
+    - The card's content leaves in .16 s as usual; 60 ms later the card's background and border start
+      to fold: with `clip-path` it shrinks to a 12 px dot in the middle of the card, turns
+      `--bt-ink-deepseek` at the same time, and jumps along an arc, first up and then right, onto the
+      ring. With three arcs it lands in the gap after the first arc; with four already (`〔重试〕`
+      after a failed copy) it lands at the middle of the copy arc (the pond is still shrunk and moved
+      up at this point). It fades before landing, .52 s in all: the first 45% shrinking and rising
+      (`cubic-bezier(.3,.7,.4,1)`), in place by 80%, and the rest fading.
+    - When the dot is in place (.42 s) the ring changes from three arcs to four (section 2): the copy
+      arc grows out of the landing point, in progress, and the faint line thickens at once to 5 px and
+      returns to 2 px (.42 s); the prop changes to the moving boxes. Then the pond returns to full size
+      and the group goes back down (section 2).
+    - The copy arc fills with the real progress (section 2); there is no step list, no numbers and no
+      time left. The taskbar progress still shows on the start window.
+    - The copy finished before the dot landed (a very small team): the arc still lights up first and
+      fills only after 420 ms in progress.
+    - The whale works.
+  - The copy has no stop button (decided by the user, 2026-11-02): to stop, quit the app or close the
+    start window; the copy stops at a safe point, leaves no half-copied team, and only then does the
+    app quit.
+  - DSH is using this team (after `〔复制过来〕`): the whale holds still and does not bob. It checks
+    again every 2 seconds without showing anything; once the lock is free, the card turns straight
+    into the copy. The card has one `〔先不复制〕` (main button). The "downloading" card also has
+    `〔先不复制〕` (main button), plus `「下载太慢？手动下载」` ("Download too slow? Download manually");
+    when the download fails, `〔重试〕` and `〔手动下载〕` ("Download manually").
+  - Copy failed: the whale takes the failure pose, and the copy arc turns red (section 2). The card
+    has one sentence on what happened, `「团队没有复制完：文件被别的程序占用。DeepSeek Harness 里的团队没有变化。」`
+    ("The team wasn't fully copied: a file is in use by another program. The team in DeepSeek Harness
+    is unchanged."), one on what to do, `「可以重试，或者先不带团队开始，以后在 设置 → 通用 → 位置 里再复制。」`
+    ("Try again, or start without the team and copy it later in Settings → General → Location.", small
+    text), `〔重试〕` (main button), `〔先不带团队开始〕` ("Start without the team"), the same log buttons
+    as the failure page, and "Details" (`「详细信息」`). `〔重试〕`: the card jumps back to the copy arc,
+    which redraws from 0; `〔先不带团队开始〕`: the card folds away and the ring shrinks back to three
+    arcs. An error while checking the chats is not a failure: the copy goes ahead, only without the
+    check first (section 4 of the onboarding note).
+  - The work files do not go through the start window: the app copies them in the background after
+    the team opens, and the progress shows in Settings → General → Location and on the "Copied" card in
+    the Main Bot's chat.
 
-### 7. 失败、更新和界面没加载出来
+### 7. Failure, updates and a view that didn't load
 
-- 失败后 1 秒内：
-  - 鲸鱼的话立刻换成「DS Bot 没能启动」，写在圆环和卡片之间（第 2 节），读屏读出这一句。
-  - 鲸鱼换成失败的姿势（第 3 节），卡住的那段弧变红，不画叉：失败只靠鲸鱼的姿势、红的那段弧和这一句。
-  - 提示行淡出。
-  - 纸面变成恢复卡：一句发生了什么（原因）、一句该怎么办（小字，按原因写：没有写入权限「给这个文件夹写入权限后重试。」，空间不够「清理出一些空间后重试。」（〔换个位置…〕在恢复卡上还没有接上，这两句先不提换位置），程序文件不完整「重新安装 DS Bot 后再打开。」，找不到放数据的文件夹（移动硬盘没插上）「插上那块硬盘，或者把文件夹放回原处后重试。」，引擎停下和其他「先重试一次；还不行，就复制详细信息去反馈。」）、五个按钮、「详细信息」。卡片没有鲸鱼的第一行。数据文件夹建不出来、写不进去时红的是第一段，引擎起不来或者 Host 退出时红的是引擎那段。水塘缩小上移，圆环在卡片上面（第 2 节）。
-  - 焦点移到〔重试〕。窗口不隐藏。
-- 主进程里没人接住的错误也走这一页：交接以前和启动失败一样变成恢复卡，不弹 Electron 自己的错误框；交接以后只记进日志，团队照常用。启动窗口从头到尾没有系统的消息框和错误框。
-- 〔复制详细信息〕点过后，按钮上的字变成「已复制」，1.6 秒后变回来。复制的是版本、平台、原因和最后 200 行日志。
-- 〔保存日志…〕打开挂在启动窗口上的系统保存框（默认文件名 `DS-Bot-log.txt`），把同样的开头和最后 5000 行日志写进选的文件；取消就什么都不做。失败页、「团队界面没有加载出来」、180 秒的卡和复制失败的卡上都有这两个按钮，代替原来的〔打开日志文件夹〕。「详细信息」最多展开 168 px，日志在框里滚动。
-- 有新版本时：
-  - 恢复卡在原因和按钮之间展开一条更新条。〔下载并安装〕成为唯一的主按钮，〔重试〕变成普通按钮。
-  - 下载中显示「正在下载 {版本}（37%，78/212 MB）」、4 px 的进度条和「下载太慢？手动下载」。
-  - 下载完显示「正在安装，装好后会重新打开。」
-  - 下载失败显示「下载失败。」〔重试〕〔手动下载〕。
-  - 鲸鱼抬一次头，看向更新条，然后又静止。
-- 恢复卡上的选择：
-  - 〔重试〕：画满的弧保持画满；红的那段回到进行中，鲸鱼抖一抖，回到工作。
-  - 〔换个位置…〕和〔用新的空白团队开始…〕：先选文件夹（定根和首次启动同一条规则）；然后鲸鱼沉到水线下 84 px，.16 s 淡出，三段弧回到没开始，鲸鱼在原处重新浮上来（12° 的倾斜回正，`SPRING_STRETCH`）。位置行的〔换个位置…〕（第 6 节）走同一条路；阶段被收回时，就算下一个快照里第一段马上又完成了，鲸鱼也先沉下去。
-  - 重试或重新开始后第一次成功时庆祝一次，首次启动和以后的启动一样：圆环合上时压扁、「^ ^」眼、喷水，然后跳到 Main Bot 的头像上，没有地方落时潜下去（第 8 节）。
-- 团队界面 20 秒没加载出来：
-  - 主窗口始终不显示。
-  - 鲸鱼换成失败的姿势，「打开团队」那段弧变红，它的话换成「团队界面没有加载出来」，不画叉；卡片里先是一句发生了什么「引擎已经起来了，但团队界面 20 秒内没有画出来。」和一句该怎么办「重新载入一次；还不行，就复制详细信息去反馈。」（小字），然后〔重新载入〕〔复制详细信息〕〔保存日志…〕和「详细信息」，没有鲸鱼的第一行。
-  - 〔重新载入〕：在隐藏的主窗口里重新载入，「打开团队」那段弧回到进行中，20 秒重新算。
-  - `ready()` 晚到了也直接交接，不庆祝。
+- Within 1 second of a failure:
+  - The whale's line changes at once to `「DS Bot 没能启动」`, written between the ring and the card
+    (section 2), and the screen reader reads it.
+  - The whale takes the failure pose (section 3), and the stuck arc turns red, with no cross: the
+    failure shows only through the whale's pose, the red arc and this line.
+  - The hint row fades out.
+  - The paper becomes the recovery card: one sentence on what happened (the reason), one on what to do
+    (small text, by reason: no write permission, `「给这个文件夹写入权限后重试。」` ("Allow writing to
+    this folder and try again."); not enough space, `「清理出一些空间后重试。」` ("Free up some space and
+    try again.") (`〔换个位置…〕` is not wired into the recovery card yet, so these two sentences do not
+    mention changing the place); incomplete program files, `「重新安装 DS Bot 后再打开。」` ("Reinstall
+    DS Bot and open it again."); data folder not found (external drive unplugged),
+    `「插上那块硬盘，或者把文件夹放回原处后重试。」` ("Plug the drive back in, or put the folder back,
+    and try again."); the engine stopped, and anything else, `「先重试一次；还不行，就复制详细信息去反馈。」`
+    ("Try again; if it still fails, copy the details and report it.")), five buttons and "Details"
+    (`「详细信息」`). The card has no first line from the whale. When the data folder cannot be built or
+    written, the first arc is red; when the engine cannot start or the Host exits, the engine arc is
+    red. The pond shrinks and moves up, and the ring sits above the card (section 2).
+  - Focus moves to `〔重试〕`. The window does not hide.
+- An error in the main process that nobody catches also goes to this page: before the handoff it
+  becomes the recovery card as for a start failure, without Electron's own error box; after the
+  handoff it only goes to the log, and the team works as usual. The start window never shows a system
+  message box or error box.
+- After `〔复制详细信息〕` is clicked, the button's text changes to `「已复制」` ("Copied") and changes
+  back after 1.6 seconds. It copies the version, platform, reason and the last 200 lines of the log.
+- `〔保存日志…〕` opens the system save dialog attached to the start window (default file name
+  `DS-Bot-log.txt`) and writes the same header and the last 5000 lines of the log into the chosen
+  file; cancelling does nothing. The failure page, "The team view didn't load", the 180-second card
+  and the copy-failed card all have these two buttons, in place of the old `〔打开日志文件夹〕` ("Open
+  log folder"). "Details" opens to at most 168 px, and the log scrolls inside the box.
+- When there is a new version:
+  - The recovery card opens an update bar between the reason and the buttons. `〔下载并安装〕`
+    ("Download and install") becomes the only main button, and `〔重试〕` becomes a normal button.
+  - While downloading it shows `「正在下载 {版本}（37%，78/212 MB）」` ("Downloading {version} (37%,
+    78/212 MB)"), a 4 px progress bar and `「下载太慢？手动下载」`.
+  - When downloaded it shows `「正在安装，装好后会重新打开。」` ("Installing; it reopens when done.").
+  - When the download fails it shows `「下载失败。」` ("The download failed."), `〔重试〕` and
+    `〔手动下载〕`.
+  - The whale lifts its head once, looks at the update bar, and goes still again.
+- The choices on the recovery card:
+  - `〔重试〕`: filled arcs stay filled; the red arc goes back to in progress, the whale shakes itself
+    and goes back to work.
+  - `〔换个位置…〕` and `〔用新的空白团队开始…〕` ("Start with a new blank team…"): first a folder is
+    chosen (the root is settled by the same rule as on the first start); then the whale sinks to 84 px
+    below the waterline and fades out over .16 s, the three arcs go back to not started, and the whale
+    rises again where it was (the 12° tilt straightens, `SPRING_STRETCH`). The place line's
+    `〔换个位置…〕` (section 6) takes the same path; when the phases are taken back, the whale sinks
+    first even if the next snapshot finishes the first phase again at once.
+  - The first success after a retry or a fresh start celebrates once, the same on first and later
+    starts: as the ring closes it squashes, shows `「^ ^」` eyes and spouts, then jumps onto the Main
+    Bot's avatar, or dives when there is nowhere to land (section 8).
+- The team view has not loaded after 20 seconds:
+  - The main window never shows.
+  - The whale takes the failure pose, the "Open the team" arc turns red, and its line changes to
+    `「团队界面没有加载出来」`, with no cross. The card first has one sentence on what happened,
+    `「引擎已经起来了，但团队界面 20 秒内没有画出来。」` ("The engine is up, but the team view didn't
+    draw within 20 seconds."), and one on what to do, `「重新载入一次；还不行，就复制详细信息去反馈。」`
+    ("Reload it; if it still doesn't show, copy the details and report it.", small text), then
+    `〔重新载入〕` ("Reload"), `〔复制详细信息〕`, `〔保存日志…〕` and "Details" (`「详细信息」`), with no
+    first line from the whale.
+  - `〔重新载入〕`: reloads in the hidden main window, the "Open the team" arc goes back to in progress,
+    and the 20 seconds start over.
+  - A late `ready()` hands off directly, without a celebration.
 
-### 8. 交接
+### 8. Handoff
 
-每种启动的交接都这样开始。`t0` 是 `ready()` 到达的那一刻（入场还没到位时，从到位算）：还没画满的弧一起画满（.56 s），圆环合上：空隙接上（.3 s），整圈鼓起一次（.5 s，第 2 节）。交接不等排着的阶段，也不等页面上的字。
+Every kind of start begins its handoff the same way. `t0` is the moment `ready()` arrives (counted
+from the end of the entrance if the whale is not yet in place): all arcs not yet full fill together
+(.56 s), and the ring closes: the gaps close (.3 s), and the full circle swells once (.5 s, section 2).
+The handoff waits neither for queued phases nor for text on the page.
 
-庆祝的交接，就是首次启动的交接，以及重试或重新开始后第一次成功的交接（第 7 节）：
+The celebration handoff is the handoff of a first start, and of the first success after a retry or a
+fresh start (section 7):
 
-| 时间 | 启动窗口 | 主进程 |
+| Time | Start window | Main process |
 |---|---|---|
-| `t0` | 圆环合上；鲸鱼压扁再拉长（460 ms），「^ ^」眼，尾巴甩一下，喷一次水（第 3 节） | 主窗口在最后的矩形上显示出来，但不透明度 0、不在任务栏上、压在启动窗口下面：Windows 自己的打开过渡在看不见时走完，显示这么大的窗口也不再卡住后面长大的第一步 |
-| `t0` + 160 ms | 提示行淡出 | |
-| `t0` + 560 ms | 拉到最长时跳出水面，飞向 Main Bot 的头像会在的位置（590 ms，见下面「跳到 Main Bot 的头像上」）；没有地方落时潜下去，深到身高的 1.25 倍；鲸鱼的话、水线、圆环、还在落的水、纸面和位置行淡出 .16 s | |
-| `t0` + 660 ms | 只在潜下去时：涟漪，160 ms 淡完（交接时喷的水不另起一圈） | |
-| `t0` + 720 ms | 发 `handoffShow` | 主窗口已经隐藏着放在最后的矩形上（以启动窗口的中心居中，不超出工作区）；任务栏上仍是启动窗口的按钮 |
-| `handoffShow` + 40 ms | 字、水线、圆环和纸面都已淡完，只剩 Mica 和飞着的鲸鱼（潜下去时鲸鱼在水线下，只剩 Mica） | 把启动窗口从 720 × 540 长到主窗口的矩形，260 ms，缓入缓出，逐步 `setBounds`，约 14 ms 一步 |
-| `handoffShow` + 300 ms | | 长到位 |
-| `t0` + 1080 ms（潜下去时 980 ms） | 长到位 60 ms 后落在头像上（这最后一小段在不再动的窗口里），发 `handoffDone`（潜下去时是潜完） | |
-| `handoffDone`，最早长到位时 | | 主窗口在启动窗口下面变成不透明、回到任务栏；启动窗口离开任务栏，180 ms 淡出（`setOpacity`，系统合成，不重排），鲸鱼化进它脚下真的头像；淡完给主窗口焦点，销毁启动窗口。长到位 300 ms 后还没有 `handoffDone`，也照样开始 |
+| `t0` | The ring closes; the whale squashes then stretches (460 ms), `「^ ^」` eyes, one tail flick, one spout (section 3) | The main window shows on its final rectangle, but at opacity 0, off the taskbar and below the start window: Windows' own opening transition finishes while it cannot be seen, and showing a window this big no longer stalls the first step of the growth that follows |
+| `t0` + 160 ms | The hint row fades out | |
+| `t0` + 560 ms | At full stretch it jumps out of the water and flies to where the Main Bot's avatar will be (590 ms, see "Jumping onto the Main Bot's avatar" below); when there is nowhere to land it dives, to 1.25 times its height; the whale's line, waterline, ring, water still falling, paper and place line fade out over .16 s | |
+| `t0` + 660 ms | Only for the dive: the ripple, faded in 160 ms (the spout at the handoff does not start a ripple of its own) | |
+| `t0` + 720 ms | Sends `handoffShow` | The main window is already hidden on its final rectangle (centred on the start window's centre, inside the work area); the taskbar still shows the start window's button |
+| `handoffShow` + 40 ms | Text, waterline, ring and paper have all faded, leaving only the Mica and the flying whale (for the dive the whale is below the waterline, leaving only the Mica) | Grows the start window from 720 × 540 to the main window's rectangle, 260 ms, ease in and out, with step-by-step `setBounds`, about 14 ms per step |
+| `handoffShow` + 300 ms | | Fully grown |
+| `t0` + 1080 ms (980 ms for the dive) | Lands on the avatar 60 ms after the window is fully grown (this last short stretch is in a window that no longer moves), sends `handoffDone` (for the dive, when the dive ends) | |
+| `handoffDone`, at the earliest when fully grown | | The main window turns opaque under the start window and returns to the taskbar; the start window leaves the taskbar and fades out over 180 ms (`setOpacity`, composited by the system, no relayout), and the whale melts into the real avatar beneath it; when the fade ends the main window gets focus and the start window is destroyed. If there is still no `handoffDone` 300 ms after the window is fully grown, this starts anyway |
 
-- 庆祝的交接里主窗口在就绪后约 1.1 秒开始露出来，1.3 秒完全露出。
-- 长大由主进程做：Electron 44 在 Windows 上不理 `setBounds` 的 `animate` 参数，只能一步一步改大小。每一步页面都重新排版，但只重画其中一部分（探针里 23 步重画了 8 次），所以长大时页面上只有飞着的鲸鱼：字、水线、圆环和纸面都在长大之前淡完。鲸鱼的动画走合成线程，但页面只在其中几步重画，这 260 ms 里鲸鱼可能一顿一顿地动，机器忙时更明显（已知限制）。
-- 不庆祝的交接（以后的启动）：圆环合上；100 ms 时页面上的字、水线、圆环和纸面淡出 .16 s，鲸鱼跳向 Main Bot 的头像（480 ms），580 ms 时（长到位 60 ms 后）落下、发 `handoffDone`；没有地方落时鲸鱼 290 ms 潜下去（`SPRING_TAP`），深到身高的 1.25 倍，390 ms 时发 `handoffDone`；两种都在 220 ms 时发 `handoffShow`。长大和露面和首次启动一样从 `handoffShow` 算起，主窗口在就绪后约 0.6 秒开始露出来，0.8 秒完全露出。
-- 页面没发 `handoffShow` 时，主进程自己显示主窗口：首次启动和庆祝的交接在 2.5 秒后，其余以后的启动在 0.8 秒后。页面发得早得多：庆祝的 0.72 秒，不庆祝的 0.22 秒；入场还没到位时，再晚最多一个入场（560 ms、290 ms）。
-- 减少动态效果：不长大，鲸鱼也不跳。剩下的弧画满、圆环合上都只用 .12 s，庆祝时换成「^ ^」眼（安静档不换）；300 ms 时内容淡出 .12 s，420 ms 时发 `handoffShow`，440 ms 时发 `handoffDone`，主窗口直接出现在它最后的矩形上（第 9 节）。
-- 启动窗口有焦点时，主窗口直接显示并拿到焦点。
-- 启动窗口没有焦点时，主窗口不抢焦点，放在启动窗口原来的层次上，任务栏按钮闪烁。
-- 启动窗口最小化着时不长大，主窗口也最小化着出现，任务栏按钮闪烁。
-- 跳到 Main Bot 的头像上：鲸鱼不跨窗口（两个窗口、两个渲染进程、两个来源，画不了一条跨窗口的路），它在启动窗口里飞到 Main Bot 的头像会在的位置。启动窗口长成主窗口的矩形，主窗口在同一个矩形上露面，头像正好在鲸鱼下面，看起来就是 Main Bot 走进了自己的座位。庆祝和不庆祝的交接都这样：
-  - 头像在哪里由插件说：侧栏调 `dsBotApp.ready()` 时带上 Main Bot 的头像在团队页面里画在哪里（团队列里的 `.bt-side [data-bot-id] .bt-mark`，宽的团队列的磁贴上 60 px，窄栏里 44 px）：`{ x, y, width, height, viewportWidth, viewportHeight }`，团队页面的 CSS px。只在 Main Bot 是默认的样子（鲸鱼、`deepseek` 色、没有照片）、头像在团队列里看得见时才带。预载只传有限的数字。
-  - 主进程（`start-window.mjs` 的 `landingOf`）按团队页面的缩放（团队内容区的宽 ÷ `viewportWidth`）换成 DIP，再换成启动窗口长到主窗口的矩形以后启动页自己的坐标（启动窗口的边框偏移照样带过去），放进交接的快照：`landing: { x, y, size }`。不像页面里的一个框（不是数字、小于 16 px、出了页面）就不放。`main.log` 记鲸鱼落在哪里，或者没有地方落、鲸鱼潜下去。交接等用户回答时（第 6 节），这个位置留着，答完照样用。
-  - 启动页（`whale.js` 的 `leap`）：鲸鱼离开水道（水道在水线处裁掉它），进到整个窗口大的 `.flight` 层，按页面自己的坐标先向上跃出水面（飞到 40% 时最高，高过起点和终点），再滑向头像，同时缩到头像的大小；后 300 ms 窗口在往左上长，所以在屏幕上看，它是一路往左上飞进头像。起跳时身体回正：庆祝时的拉长、迟到或挂起的交接之前失败的姿势和低头的视线都在飞行的前 40% 里收回，落下时和头像一样正着。尾巴划两下（安静档没有）；庆祝的交接里「^ ^」眼在 70% 时睁开，落下时和头像一样睁着眼。卡片刚收回、水塘还缩着时，从它看得见的大小起飞。
-  - 主窗口等鲸鱼落下才露出来（`handoffShow` + 40 ms 开始长大，长 260 ms，再过 60 ms 落下）：庆祝的交接 `t0` + 560 ms 起跳，飞 520 ms，1080 ms 落下；不庆祝的 100 ms 起跳，飞 480 ms，580 ms 落下。主进程晚了，就等到长到位；页面没说落下，长到位 300 ms 后照样露出来。露出来是启动窗口在主窗口上面淡出，所以鲸鱼和头像在这 180 ms 里叠在同一处，不会一下跳成两个。
-  - 没有地方落时照旧潜下去：Main Bot 换了别的样子或照片、团队列完全收起（窄栏和打开的抽屉里头像看得见，照样落）、经典 Agent 模式、启动窗口最小化着。DSH Desktop 和 DSH Web 没有 `dsBotApp`，侧栏不报位置，也没有启动窗口。减少动态效果时不跳，照旧淡出（第 9 节）。
-  - 团队界面里的头像不另做动画：鲸鱼落下的地方就是它。
-- 首次启动时 DSH 先显示「预览版说明」，它的遮罩盖着侧栏：鲸鱼照样落在头像的位置上，主窗口露面时头像在遮罩下面。
-- 主窗口第一次露面时，DSH 的加载、第一次挂载侧栏（#559）都已经做完，「预览版说明」已经显示出来。
-- 两个窗口各用各的颜色：启动窗口是 DeepSeek 主题的浅色或深色，主窗口是用户自己的主题。
+- In the celebration handoff the main window starts to show about 1.1 seconds after ready and is
+  fully shown at 1.3 seconds.
+- The main process does the growth: Electron 44 on Windows ignores the `animate` argument of
+  `setBounds`, so the size can only change step by step. Each step relays out the page, but repaints
+  only some of the steps (8 repaints in 23 steps in the probe), so during the growth the page holds
+  only the flying whale: text, waterline, ring and paper have all faded before it. The whale's
+  animation runs on the compositor thread, but the page repaints only on some steps, so in these
+  260 ms the whale may move in jerks, more so when the machine is busy (known limits).
+- The handoff without a celebration (later starts): the ring closes; at 100 ms the page's text,
+  waterline, ring and paper fade out over .16 s and the whale jumps towards the Main Bot's avatar
+  (480 ms), landing at 580 ms (60 ms after the window is fully grown) and sending `handoffDone`. When
+  there is nowhere to land the whale dives in 290 ms (`SPRING_TAP`), to 1.25 times its height, and
+  sends `handoffDone` at 390 ms; both send `handoffShow` at 220 ms. The growth and showing count from
+  `handoffShow` as on the first start, and the main window starts to show about 0.6 seconds after
+  ready and is fully shown at 0.8 seconds.
+- When the page does not send `handoffShow`, the main process shows the main window by itself: after
+  2.5 seconds for a first start and a celebration handoff, after 0.8 seconds for other later starts.
+  The page sends it much earlier: 0.72 seconds with a celebration, 0.22 seconds without; if the
+  entrance has not finished, at most one entrance later (560 ms, 290 ms).
+- Reduced motion: no growth and no jump. The remaining arcs fill and the ring closes, each in just
+  .12 s, and a celebration changes to `「^ ^」` eyes (not at the Quiet level); at 300 ms the content
+  fades out over .12 s, `handoffShow` is sent at 420 ms and `handoffDone` at 440 ms, and the main
+  window appears straight on its final rectangle (section 9).
+- When the start window has focus, the main window shows directly and takes focus.
+- When the start window does not have focus, the main window does not steal focus; it takes the
+  start window's place in the stacking order, and its taskbar button flashes.
+- When the start window is minimized there is no growth, the main window appears minimized too, and
+  its taskbar button flashes.
+- Jumping onto the Main Bot's avatar: the whale does not cross windows (two windows, two renderer
+  processes and two origins cannot draw one path across windows); it flies inside the start window to
+  where the Main Bot's avatar will be. The start window grows to the main window's rectangle, the main
+  window appears on the same rectangle, and the avatar is right under the whale, so it looks as if the
+  Main Bot walks into its own seat. Both the celebration handoff and the one without do this:
+  - The plugin says where the avatar is: when the sidebar calls `dsBotApp.ready()`, it passes where
+    the Main Bot's avatar is drawn in the team page (`.bt-side [data-bot-id] .bt-mark` in the team
+    column, 60 px on the tiles of a wide team column, 44 px in the narrow bar):
+    `{ x, y, width, height, viewportWidth, viewportHeight }`, in the team page's CSS px. It is passed
+    only when the Main Bot has its default look (whale, `deepseek` colour, no photo) and the avatar is
+    visible in the team column. The preload passes only bounded numbers.
+  - The main process (`landingOf` in `start-window.mjs`) converts it to DIPs by the team page's zoom
+    (the width of the team content area ÷ `viewportWidth`), then to the start page's own coordinates
+    once the start window has grown to the main window's rectangle (the start window's frame offset is
+    carried over), and puts it in the handoff snapshot: `landing: { x, y, size }`. Anything that does
+    not look like a box in the page (not numbers, smaller than 16 px, outside the page) is left out.
+    `main.log` records where the whale lands, or that there was nowhere to land and the whale dived.
+    When the handoff waits for the user's answer (section 6), this position is kept and used after
+    the answer.
+  - The start page (`leap` in `whale.js`): the whale leaves the water channel (which clips it at the
+    waterline) for the window-sized `.flight` layer and, in the page's own coordinates, first leaps up
+    out of the water (highest at 40% of the flight, higher than both start and end), then glides to
+    the avatar while shrinking to the avatar's size. For the last 300 ms the window is growing up and
+    to the left, so on screen it flies up and to the left all the way into the avatar. On take-off the
+    body straightens: the celebration's stretch, and the failure pose and lowered gaze before a late or
+    held handoff, are taken back in the first 40% of the flight, so it lands upright like the avatar.
+    Two tail strokes (none at the Quiet level); in the celebration handoff the `「^ ^」` eyes open at
+    70%, so it lands with its eyes open like the avatar. If a card has just folded away and the pond is
+    still shrunk, it takes off at its visible size.
+  - The main window shows only after the whale lands (growth starts at `handoffShow` + 40 ms, takes
+    260 ms, and the landing is 60 ms later): the celebration handoff takes off at `t0` + 560 ms, flies
+    520 ms and lands at 1080 ms; the one without takes off at 100 ms, flies 480 ms and lands at 580 ms.
+    If the main process is late, it waits until the window is fully grown; if the page does not report
+    the landing, the main window shows anyway 300 ms after the window is fully grown. Showing means the
+    start window fades out over the main window, so for these 180 ms the whale and the avatar overlap
+    in one place and never jump into two.
+  - When there is nowhere to land it dives as before: the Main Bot has another look or a photo, the
+    team column is fully collapsed (in the narrow bar and an open drawer the avatar is visible, so it
+    still lands), classic Agent mode, or the start window is minimized. DSH Desktop and DSH Web have no
+    `dsBotApp`, so the sidebar reports no position, and they have no start window either. With reduced
+    motion there is no jump; it fades out as before (section 9).
+  - The avatar in the team view has no animation of its own: where the whale lands is the avatar.
+- On a first start DSH first shows its "Preview notice" (`「预览版说明」`), whose overlay covers the
+  sidebar: the whale still lands where the avatar is, and when the main window appears the avatar is
+  under the overlay.
+- When the main window first appears, DSH's loading and the first mount of the sidebar (#559) are
+  done, and the "Preview notice" is already showing.
+- The two windows use their own colours: the start window uses the light or dark DeepSeek theme, and
+  the main window uses the user's own theme.
 
-### 9. 减少动态效果
+### 9. Reduced motion
 
-- 跟随 `prefers-reduced-motion`（Windows 上是 设置 → 辅助功能 → 视觉效果 → 动画效果）。窗口开着时切换，也立刻生效：正在跑的动画直接到终点。
-- 鲸鱼一直是静止的画面：没有浮上来、循环、跳、涟漪、尾巴、跟随、抚摸和喷水，也没有第 3 节第二张表的九种动作；阶段完成时鲸鱼不动。点鲸鱼只换成「^ ^」眼。
-- 道具直接出现、淡出，不弹、不动：文件夹的纸不翻，箱子不搬，齿轮不转，成员不跳。
-- 状态只靠眼睛直接切换：平时睁眼，45 秒起眯眼，失败时眼皮变重；点鲸鱼时和庆祝的交接里（就绪到内容淡出）是「^ ^」。
-- 圆环不画出来，一开始就在；弧画满、合成一整圈都只用 .12 s，整圈不鼓起；进行中的弧只染淡蓝，没有跑动的光。
-- 鲸鱼的话、卡片、提示行和更新条只淡入 .12 s、淡出 .16 s，没有模糊、位移和缩放。答〔复制过来〕时卡片不飞，照常收回，圆环直接换成四段（不长、不让位），复制那一段直接进行中、不加粗。卡片高度直接到位（内容先是透明的）；整组上移、水塘缩小，回到低处和原大，也都直接到位；没有流光。
-- 沉下去重新开始时，水道淡出 .16 s，各段弧回到没开始，鲸鱼直接回来。
-- 交接时不长大，鲸鱼不跳：剩下的弧画满、圆环合上，300 ms 时内容淡出 .12 s，420 ms 时发 `handoffShow`，主窗口直接出现在它最后的矩形上（第 8 节）。
-- 信息一样不少：各段弧、道具、鲸鱼的话、提示行、按钮、看不见的阶段列表和朗读都在。
+- Follows `prefers-reduced-motion` (on Windows, Settings → Accessibility → Visual effects → Animation
+  effects). Switching it while the window is open takes effect at once: running animations jump to
+  their end.
+- The whale is always a still image: no rising, loops, hops, ripples, tail, following, petting or
+  spouting, and none of the nine motions in the second table of section 3; when a phase is done the
+  whale does not move. Clicking the whale only changes to `「^ ^」` eyes.
+- Props appear and fade directly, without popping or moving: the folder's sheets do not flip, the
+  boxes do not move, the gears do not turn, the members do not hop.
+- State shows only through a direct change of the eyes: open as usual, narrowed from 45 seconds,
+  heavy eyelids on failure; `「^ ^」` when the whale is clicked and in the celebration handoff (from
+  ready until the content fades).
+- The ring does not draw itself; it is there from the start. Filling an arc and closing into a full
+  circle take just .12 s each, and the circle does not swell; an arc in progress only takes the pale
+  blue tint, without a running highlight.
+- The whale's line, cards, hint row and update bar only fade in over .12 s and out over .16 s, without
+  blur, movement or scaling. On `〔复制过来〕` the card does not fly but folds away as usual, the ring
+  changes straight to four arcs (no growing, no moving aside), and the copy arc goes straight in
+  progress without thickening. The card's height is set at once (the content is transparent at
+  first); the group moving up and the pond shrinking, and their return down and to full size, are
+  also set at once; there is no running highlight.
+- When sinking to start over, the water channel fades out over .16 s, the arcs go back to not
+  started, and the whale is back at once.
+- The handoff has no growth and no jump: the remaining arcs fill and the ring closes, at 300 ms the
+  content fades out over .12 s, `handoffShow` is sent at 420 ms, and the main window appears straight
+  on its final rectangle (section 8).
+- No information is lost: the arcs, props, the whale's line, hint row, buttons, the invisible phase
+  list and the announcements are all there.
 
-### 10. 颜色、Mica 和标题带
+### 10. Colour, Mica and the title band
 
-- 颜色是 UI 标准 2.1 节的 DeepSeek 主题，浅色、深色各一套，定义在 `start.css` 的 `:root` 上。由 `start-assets.mjs` 从 `themes.js` 和 `inks.js` 生成，用 `--check` 对照。鲸鱼用 `--bt-ink-deepseek`（`#4D6BFE` / `#6A84FF`）。
-- 浅色还是深色看 `nativeTheme.themeSource`：
-  - 主进程把团队界面最后一次报告的值和动画档，记在 userData 的 `start-frame.json` 里，建启动窗口之前先设好。
-  - 没有记录时跟随系统。
-  - 不写 `DSH_HOME` 和 `~/.dsh`。
-- Windows 11 22H2 及以后：
-  - 窗口用 `backgroundMaterial: 'mica'`，背景 `#00000000`；页面的 `html`、`body` 透明。
-  - 系统按钮颜色 `#00000000`，符号用 `--bt-ink`，按钮下面也是 Mica。
-  - Mica 上最浅的字用 `--bt-ink-2`，不用 `--bt-ink-3`：提示行和位置行也是。
-- 其他 Windows：窗口背景和系统按钮颜色都用 `--bt-main`。页面照样透明，自己不用分辨是哪种情况。
-- 一屏最多两处大面积强调色：鲸鱼和唯一的主按钮（画满的弧是 2 px 的线，水柱和水滴只闪一下，都不算）。
-- 没有警告色（`--bt-warn` 未定）：空间不足、OneDrive 和慢的提示都用中性墨色。
-- 强制颜色（Windows 的对比度主题）：圆环的淡线用 `GrayText`，失败的那段也是（失败靠鲸鱼的姿势和标题）；画满的弧、合上的整圈、弧上的光、水柱和水滴用 `Highlight`。
-- 字体：`-apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif`；路径和日志用 `ui-monospace, Consolas, monospace`。字号只有 13/18、14/22、15/20（600），数字用等宽数字。
-- macOS：和 Windows 一样没有系统标题栏，红绿灯在 40 px 标题带里，窗口用 `vibrancy: 'sidebar'`，背景 `#00000000`，页面透明。
-- Linux：系统标题栏，没有标题带，其余一样。
+- The colours are the DeepSeek theme from UI standard section 2.1, one light and one dark set, defined
+  on `:root` in `start.css`. `start-assets.mjs` generates them from `themes.js` and `inks.js`, and
+  `--check` compares them. The whale uses `--bt-ink-deepseek` (`#4D6BFE` / `#6A84FF`).
+- Light or dark follows `nativeTheme.themeSource`:
+  - The main process stores the value the team view last reported, and the animation level, in
+    `start-frame.json` in userData, and sets it before building the start window.
+  - Without a record it follows the system.
+  - It writes neither `DSH_HOME` nor `~/.dsh`.
+- Windows 11 22H2 and later:
+  - The window uses `backgroundMaterial: 'mica'`, background `#00000000`; the page's `html` and `body`
+    are transparent.
+  - The system buttons' colour is `#00000000`, their symbols use `--bt-ink`, and the Mica shows under
+    the buttons too.
+  - The lightest text on Mica uses `--bt-ink-2`, not `--bt-ink-3`: so do the hint row and the place
+    line.
+- Other Windows versions: the window background and the system buttons' colour both use `--bt-main`.
+  The page is still transparent and does not need to tell the cases apart.
+- At most two large areas of accent colour per screen: the whale and the single main button (a filled
+  arc is a 2 px line, and the spout and drops only flash, so they do not count).
+- No warning colour (`--bt-warn` is not decided): low space, OneDrive and slowness all use neutral
+  ink.
+- Forced colours (Windows contrast themes): the ring's faint lines use `GrayText`, and so does a
+  failed arc (failure shows through the whale's pose and the title); filled arcs, the closed circle,
+  the highlight on the arc, the spout and the drops use `Highlight`.
+- Font: `-apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif`;
+  paths and logs use `ui-monospace, Consolas, monospace`. The only sizes are 13/18, 14/22 and 15/20
+  (600), and numbers use tabular figures.
+- macOS: like Windows, no system title bar; the traffic lights sit in the 40 px title band, the window
+  uses `vibrancy: 'sidebar'`, background `#00000000`, and the page is transparent.
+- Linux: system title bar, no title band, otherwise the same.
 
-### 11. 实现
+### 11. Implementation
 
-- `main.mjs` 启动时的顺序：
-  1. `setMenu`。
-  2. 读 `start-frame.json`，设 `themeSource`。
-  3. `hostPort()`，挪到建窗口之前。
-  4. 建启动窗口（`show: true`），`loadFile`。
-  5. 动态导入其余模块。
-  6. 位置检查（结果变成卡片）。
-  7. 启动引擎。
-  启动窗口画好后，再在最后的矩形上建隐藏的主窗口。
-- 启动页的文件：
-  - `start.html`：CSP `default-src 'self'; base-uri 'none'; object-src 'none'`，没有内联样式和脚本。
-  - `start.css`。
-  - `start.js`：桥和界面。
-  - `whale.js`：鲸鱼的状态机。
-  - `text.mjs`：中英文的唯一一张表，启动页、主进程的选择框和团队窗口里的卡片都用。层、键名、写法规则和测试见 [启动页文案](2026-10-29-start-copy.md)：键的第一段是那里定的层（`voice`、`say`、`hint`、`card`、`reason`、`btn`、`note`、`foot`、`status`、`dialog`），说的是这行字在页面的哪里，每层一条写法规则。
-  - 预算：这五个文件合计不超过 45 KB（未压缩，原型定的目标）；原型超了，怎么办见「待定」。
-- 所有状态的 DOM 一开始就在页面里，用 `hidden` 和属性切换，运行时不插入大块节点。
-- 三个阶段在页面里是一个看不见的列表（`ol`，「启动进度」），`aria-current` 和状态词照旧更新；看得见的只有鲸鱼、水线和圆环：每段弧的 `data-state`（`pending`、`active`、`done`、`failed`）跟着列表里同一个阶段改，合上的整圈是 `html[data-ring=closed]`。
-- 水塘（`.pond`）在卡片要纸面时和整组用同一个弹簧缩小上移（`start.js` 的 `shift()`），以圆心为准（整组坐标里的 (360, 210)）。
-- 鲸鱼的话和提示行由 `start.js` 按快照和启动的时钟选（第 3 节），不问 `whale.js`，也不排队。交接的时间表在 `whale.js` 里（第 8 节），不等页面上的字。快照里的 `explain`（`mode`、`name`、`nextStep`、`previewNotice`）页面不读。
-- `html` 是 `overflow: hidden`，`body` 是 `overflow: clip`：整组低着时超出的部分被裁掉，焦点、滚动锚点和恢复的滚动位置都移不动页面。
-- 鲸鱼的 SVG 由 `start-assets.mjs` 从 `characterMarkup('whale', 'deepseek')` 生成后写进 `start.html`，遮罩 id 固定。同一个脚本把 `motion.js` 的弹簧和主题色写进 `start.css`。`npm test` 跑它的 `--check`。
-- 预载只在页面地址正好是启动页时暴露 `dsBotStart`（`onState`、`act`）。
-- 主进程每次都发完整的状态，页面重新载入后再发一次。预载记住最后一份，有人订阅时先补发。
-- 主进程只接受来自启动窗口主框架、地址完全相同的 `act`，而且名字要在白名单里。
-- 主进程管：阶段、180 秒和 20 秒两个计时器、交接的兜底计时器、任务栏进度、更新状态。页面按时钟算 10 秒和 45 秒。
-- 交接时的长大也由主进程做：主窗口一建就在最后的矩形上，`handoffShow` 后 160 ms 用逐步的 `setBounds` 把启动窗口长过去，460 ms 显示主窗口、同时让启动窗口离开任务栏，再过 300 ms 销毁启动窗口（第 8 节）。兜底计时器按这次交接是不是首次启动、有没有庆祝选 2.5 秒或 0.8 秒。启动页只发 `handoffShow` 和 `handoffDone` 两个事件，和原来一样；鲸鱼落在哪里由主进程在交接开始时按 `ready()` 带来的头像位置算好，放进交接的快照（`landing`，第 8 节），团队界面不另收事件。
-- `main.log` 记三个阶段各用了多久。
-- 启动窗口在交接时销毁，它的渲染进程一起退出。
+- The start order in `main.mjs`:
+  1. `setMenu`.
+  2. Read `start-frame.json` and set `themeSource`.
+  3. `hostPort()`, moved before building the window.
+  4. Build the start window (`show: true`), `loadFile`.
+  5. Import the remaining modules dynamically.
+  6. Place checks (the results become cards).
+  7. Start the engine.
+  Once the start window has painted, build the hidden main window on its final rectangle.
+- The start page's files:
+  - `start.html`: CSP `default-src 'self'; base-uri 'none'; object-src 'none'`, no inline styles or
+    scripts.
+  - `start.css`.
+  - `start.js`: the bridge and the interface.
+  - `whale.js`: the whale's state machine.
+  - `text.mjs`: the one table of Chinese and English text, used by the start page, the main process's
+    pickers and the cards in the team window. Layers, key names, writing rules and tests are in
+    [Start page copy](2026-10-29-start-copy.md): the first part of a key is the layer decided there
+    (`voice`, `say`, `hint`, `card`, `reason`, `btn`, `note`, `foot`, `status`, `dialog`), which says
+    where on the page the line is, with one writing rule per layer.
+  - Budget: these five files together at most 45 KB (uncompressed, the target set by the prototype);
+    the prototype went over, and what to do about it is under "Open questions".
+- The DOM for every state is in the page from the start and is switched with `hidden` and
+  attributes; no large blocks of nodes are inserted at run time.
+- The three phases are an invisible list in the page (`ol`, `「启动进度」`), and `aria-current` and the
+  state words update as before; only the whale, the waterline and the ring are visible: each arc's
+  `data-state` (`pending`, `active`, `done`, `failed`) follows the same phase in the list, and the
+  closed circle is `html[data-ring=closed]`.
+- When a card needs the paper, the pond (`.pond`) shrinks and moves up with the group in the same
+  spring (`shift()` in `start.js`), around the ring's centre ((360, 210) in the group's coordinates).
+- `start.js` picks the whale's line and the hint row from the snapshot and the start clock
+  (section 3), without asking `whale.js` and without a queue. The handoff timeline is in `whale.js`
+  (section 8) and does not wait for text on the page. The page does not read `explain` (`mode`,
+  `name`, `nextStep`, `previewNotice`) in the snapshot.
+- `html` is `overflow: hidden` and `body` is `overflow: clip`: while the group sits low, whatever
+  sticks out is clipped, and neither focus, scroll anchoring nor a restored scroll position can move
+  the page.
+- `start-assets.mjs` generates the whale's SVG from `characterMarkup('whale', 'deepseek')` and writes
+  it into `start.html`, with fixed mask ids. The same script writes `motion.js`'s springs and the
+  theme colours into `start.css`. `npm test` runs its `--check`.
+- The preload exposes `dsBotStart` (`onState`, `act`) only when the page address is exactly the start
+  page.
+- The main process always sends the whole state, and sends it again after the page reloads. The
+  preload keeps the last one and replays it to a new subscriber first.
+- The main process accepts `act` only from the start window's main frame at exactly the same address,
+  and only with a name on the allowlist.
+- The main process owns: the phases, the two timers for 180 seconds and 20 seconds, the handoff's
+  fallback timer, the taskbar progress and the update state. The page counts 10 and 45 seconds on its
+  clock.
+- The main process also does the growth at the handoff: the main window is built on its final
+  rectangle from the start, 160 ms after `handoffShow` the start window grows there with step-by-step
+  `setBounds`, at 460 ms the main window shows while the start window leaves the taskbar, and 300 ms
+  later the start window is destroyed (section 8). The fallback timer picks 2.5 seconds or 0.8 seconds
+  by whether this handoff is a first start and whether it celebrates. The start page sends only two
+  events, `handoffShow` and `handoffDone`, as before; where the whale lands is worked out by the main
+  process at the start of the handoff from the avatar position that `ready()` brought, and put in the
+  handoff snapshot (`landing`, section 8); the team view gets no extra event.
+- `main.log` records how long each of the three phases took.
+- The start window is destroyed at the handoff, and its renderer process exits with it.
 
-## 改动的已定设计
+## Changes to decided designs
 
-| 原来的设计 | 现在 |
+| Original design | Now |
 |---|---|
-| [Windows 上手流程](2026-10-26-windows-onboarding.md) 第 3 节「启动页和引擎的页面共用这个窗口」 | 启动页在单独的启动窗口里；引擎的页面在隐藏的主窗口里加载，`dsBotApp.ready()` 之后主窗口才显示（待定） |
-| 同上「选择框挂在窗口上」 | 挂在启动窗口上，从不自己弹出 |
-| 同上 首次启动说明的第三条「聊天和设置保存在这台电脑上……· 社区开源项目，不是 DeepSeek 官方产品」 | 启动窗口里两半都没有了：前半句随说明一起去掉（见下面「首次启动的说明」那一行）；后半句先做成首次启动每一屏的底注，2026-10-31 也去掉（见本表最后一行）。「不是 DeepSeek 官方产品」留在 README 和上手流程的下载区 |
-| 同上 20 秒没就绪时「回到启动页」 | 启动窗口一直在，主窗口不显示 |
-| 同上「首次启动期间再双击图标：恢复并聚焦已有窗口」 | 聚焦正在显示的那个窗口 |
-| 同上 第 8 节 以后的启动「只写『正在打开你的团队…』」 | 不显示已用秒数；45 秒鲸鱼改成思考，不出字；180 秒同首次启动 |
-| 同上「改动的已定设计」：窗口先加载启动页，再加载引擎的本机地址 | 启动窗口先出来；主窗口隐藏着加载引擎的本机地址（同一个地址和端口），就绪后才显示 |
-| 同上 验收「进程启动后 2 秒内窗口可见」「没有一个 `dialog.show*` 不挂在主窗口上」 | 两条里的窗口都指启动窗口 |
-| [桌面应用](2026-10-16-desktop-app.md)「窗口」 | 加上启动窗口：720 × 540，不能缩放，只有最小化和关闭，Mica；交接时由主进程长成主窗口的矩形（第 8 节） |
-| [UI 标准](../design/ui-standard.md) 4.4 头像尺寸 | 加 112（启动窗口） |
-| 同上 8.3 状态动作 | 加只在启动窗口里有的动作：浮上来、阶段完成时划尾巴向前一涌、点头、喷水、交接时跳到 Main Bot 的头像上（或潜下去）、尾巴摆 |
-| 同上 3.1 字族 | 启动窗口加 `"Microsoft YaHei UI"`，记进第 14 节 |
-| 同上 12 可访问性 | 新出现的卡片和恢复页，焦点移到主按钮 |
-| [Windows 上手流程](2026-10-26-windows-onboarding.md) 第 3 节「标题「正在准备你的 Bot 团队…」，下面三个真实阶段，各带进度勾」；本文首稿第 2 节的标题行和三站（16 px 标记的四种样子、阶段名、站间的细线、进行中的流光） | 没有标题行，阶段不画出来：鲸鱼停在哪一站就是进度，离开的站留下一个圈，水线上不画别的；三个阶段只留在看不见的列表「启动进度」里，朗读照旧；已用秒数移到右上角；没有卡片时整组低 80 px（第 2、3 节） |
-| 同上 首次启动的说明（产品介绍、「下一步：接上一个模型…」、「聊天和设置保存在这台电脑上…」、写位置的小字、「接下来会先显示 DeepSeek Harness 的「预览版说明」…」）；本文首稿第 4 节第 3 拍逐段出现的说明 | 不再有说明。鲸鱼一次说一句短话（第 3、4 节）；提示行只写接下来要知道的一件事：「待会儿要接一个模型：DeepSeek 账号或 API Key」「里面先有一页说明，点「继续」就行」；首次启动不写完整路径，位置行只写盘和剩余空间（2026-10-28 第二次补），路径只在卡片和 设置 → 通用 → 位置 里出现 |
-| 本文 2026-10-28 首稿：首次启动没有自己选位置的入口，只有推荐盘的卡上才有「其他位置…」 | 盘不够时位置行「数据放在 C 盘（剩 1.2 GB）」〔换个位置…〕随时能点（第 2、4、6 节）。维护者 2026-10-28：「给出建议，同时提供自行选择的接口，避免小弹窗」；2026-11-01 起盘够时没有位置行（「变更」） |
-| 同上 超过 10 秒、45 秒的提示「第一次启动会慢一些，Windows 可能在检查刚装好的文件。」「比平时慢，可能是杀毒软件在检查新文件，请再等一会儿。」 | 不出字：45 秒鲸鱼改成思考，弧上的光和道具放慢（2026-11-01） |
-| 同上 启动超过 180 秒：「启动比平常慢很多。可以再等一会儿，或者重试。」 | 鲸鱼问「等太久了，要不要重试？」，卡片里只有〔继续等待〕〔重试〕〔复制详细信息〕〔保存日志…〕 |
-| 同上 重装时说明的小字「接着用上次的数据：6 个 Bot、2 个群聊（`C:\Users\<用户名>\.ds-bot`）。可以在 设置 → 通用 → 位置 里改。」（本文第 6 节照写） | 提示行写「上次的 6 个 Bot 和 2 个群聊都在」，不写路径 |
-| 本文首稿 第 6 节 复制中的标题「正在复制 Bot 团队…」，三步「用和三站一样的标记」 | 标题「正在搬过来」；三步的标记照旧，写在第 6 节（三站已经没有标记） |
-| 同上「不做什么」：「鲸鱼不说话、不冒气泡、不挡卡片和按钮，也不要用户做什么」；第 3 节「一个阶段完成……身后的标记弹出对勾」；第 7 节失败的那一站换成危险色的叉 | 鲸鱼说一句和它的状态有关的短话，卡片的第一行也是它说的（失败的卡除外）；只有 180 秒那一句是问题，回答在卡片的按钮上；仍然不放轮播的提示和笑话，不冒气泡；完成时留下一个圈；失败只靠鲸鱼的姿势和已定的标题，不画叉 |
-| 同上 第 1 节「启动窗口从不改大小」 | 交接之前不改；交接时由主进程把它长成主窗口的矩形，主窗口一建就在这个矩形上（第 1、8 节） |
-| 同上 第 8 节 交接：`t0` 后 620 ms 发 `handoffShow`，这时启动窗口离开任务栏、主窗口显示，主窗口显示满 250 ms（最晚 400 ms）关掉启动窗口；以后的启动 120 ms 时显示主窗口；页面没发 `handoffShow` 时首次启动 1.5 秒兜底；「不做什么」「不为动画推迟启动」「庆祝只在首次启动和重试后第一次成功时有」 | 首次启动先说「进去吧」，300 ms 后庆祝；`handoffShow` 在就绪后约 1.1 秒；160 ms 后启动窗口用 300 ms 长到主窗口的矩形，主窗口在 460 ms 露面，启动窗口这时才离开任务栏，再过 300 ms 销毁；主窗口在就绪后约 1.6 秒露面（以后的启动约 0.6 秒，以后的启动庆祝的那次约 1.5 秒）；兜底改成首次启动和庆祝的交接 2.5 秒，其余以后的启动仍是 0.8 秒；减少动态效果时不长大；不为动画推迟引擎和团队界面的加载，交接为了长大多等约 460 ms；以后的启动庆祝时不说「进去吧」 |
-| [UI 标准](../design/ui-standard.md) 第 1 节第 4 条和 8.4「持续的环境动画只出现在「活泼」档」；8.4 活泼档「等你回答时一直跳」；8.3 状态动作 | 只在启动窗口里、卡片等用户回答时，正常档和活泼档也呼吸和眨眼；活泼档改成越跳越稀；另加探身、按下预备、眼睛跟着键盘焦点、回到窗口时看你一眼（第 3 节第二张表）。安静档和减少动态效果时都没有；插件里的头像不变 |
-| 本文首稿 第 3 节「只为真实的事动：……以及用户的指针和点击」「等用户回答时静止」；第 3 节的表和第 6 节「跳两下，然后静止，看着卡片」「不跳，静止」 | 等用户回答时停下：探身、呼吸和眨眼（第 3 节第二张表），另为键盘焦点和回到窗口而动；安静档、减少动态效果和失败页上停下就不再动 |
-| 本文 2026-10-28 第 4 节第 2 拍「已经完成的话，直接游到第 2 站」 | 等问候读满（页面画出来后 1.66 秒）才离开第 1 站，等的时候晃着（第 4 节）。维护者 2026-10-29 试用时「小鲸鱼看到的时候就在第二个位置」：主进程在页面画出来以前就建好了数据文件夹，鲸鱼一浮上来就游走，第 1 站像没有过 |
-| 本文第 5、6、7 节：45 秒「比平时慢，请再等一会儿。」；「会放在 `D:\DS Bot`」〔继续〕〔重新选〕；「…同步会打断正在写入的聊天记录。」；鲸鱼的话「团队界面没有加载出来。」 | 45 秒不出字（2026-11-01）；「会放在 `D:\DS Bot`。」〔继续〕〔重新选…〕（被拒绝的卡上的〔重新选…〕一样）；「…正在写入的对话。」；「团队界面没有加载出来」。按 [启动页文案](2026-10-29-start-copy.md) 每一层的写法规则 |
-| 本文 2026-10-28 第 2、3、9 节：鲸鱼停在三站之一（x 168 / 360 / 552），一个阶段完成时向右游到下一站，离开的站留下一个圈；624 px 的水线；首次启动的鲸鱼 88 px，以后的启动 64 px、没有水线；减少动态效果时换站淡出淡入 | 鲸鱼一直在中间，围着它的三段弧就是进度：进行中淡蓝加一道跑动的光，完成时顺时针画满，失败时变红；水线是圆环的弦（200 px）；每种启动都是 112 px 的鲸鱼、圆环和水线；出卡片时水塘缩到 .62 倍、上移 60 px，圆环落在卡片上面（第 2、3、9 节）。维护者 2026-10-30 转来一段讨论，说这一版太吵：「现在这版有点噪了」「是不是可以简约一点」；比较三份方案（水线分三段的进度条、圆环、只有鲸鱼）后选了圆环 |
-| 同上 第 3、4 节：鲸鱼一次说一句短话，跟着鲸鱼走、按停留时间排队：入场「嗨，我是总管」（重装用团队里 Main Bot 的名字，导入「嗨，我来了」）、「先找个地方放东西」「找到了」「热身中，等我一下」、10 秒「第一次会慢一点」、「开门去了」；入场时就来的卡等问候读满 1.5 秒；「待定」里问候用哪个名字 | 顺利时不说话；只在 45 秒、180 秒、失败和搬数据时说一句，换句时淡出淡入，不排队（第 3 节）。讨论里：「其实我觉得可能就放一个鲸鱼就够，然后可以做交互动画，文字什么的不太需要」。顺利的启动只有几秒，进度已经由圆环说了；问候用哪个名字也就不用定了 |
-| 同上 第 4 节第 3、8 拍和第 6 节：提示行写接下来要知道的事：新团队「待会儿要接一个模型：DeepSeek 账号或 API Key」，重装「上次的 6 个 Bot 和 2 个群聊都在」，DSH 会挂出预览版说明时「里面先有一页说明，点「继续」就行」 | 提示行只有盘不够时前 10 秒的「C 盘只剩 1.2 GB」和 45 秒起的〔打开日志文件夹〕（第 3、4 节）。这三句说的都是进门以后的事：接模型由 Main Bot 的设置卡说，预览版说明自己有〔继续〕，重装进门就是原来的团队；等的时候提前说，只是多一行字 |
-| 同上 第 2、4 节：5 秒起右上角「已用 N 秒」，卡片等回答时隐藏，一直留到「进去吧」；以后的启动 10 秒起写在提示行里 | 不显示；10 秒、45 秒和 180 秒仍按同一个启动时钟算，卡片等回答时它照样停（第 4 节）。每秒跳一次的数字是顺利时页面上唯一一直在变的字；慢的时候不写字，180 秒的问题和失败页给出路（2026-11-01） |
-| 同上 第 3 节 正常档「首次启动等待时，点鲸鱼它会转一圈」；安静档「没有眼睛跟随、点击转圈、抚摸、尾巴……和「^ ^」眼」；「不做什么」「不喷水」 | 点鲸鱼它就喷水，每种启动都有：2.5 秒内第 4 下喷大的，失败趴着时冒一小股，入场、沉下去、就绪以后不喷；安静档也喷，水柱小一号，压扁、甩尾和「^ ^」眼照旧；减少动态效果只换「^ ^」眼（第 3 节）。维护者提议的就是一只浮在水上、点一下会喷水的鲸鱼：没有字以后，互动是鲸鱼对用户唯一的回应，喷水又是鲸鱼自己的动作。安静档也有：它只在用户点了以后出现一次，不是一直在动的环境动画 |
-| 同上 第 8 节：首次启动先说「进去吧」（上一句能读满 400 ms 才上，`readyLine` 最多等 600 ms），上屏 300 ms 后压扁、「^ ^」眼、潜下去；排队的游动最多让交接晚 600 ms；以后的启动重试或重新开始后第一次成功时不说「进去吧」，压扁回弹 920 ms 后潜下去 | 还没画满的弧一起画满，圆环合上、鼓起一次；庆祝的交接（首次启动，重试或重新开始后第一次成功）同时压扁、「^ ^」眼、喷水，560 ms 潜下去；首次启动和以后的启动庆祝的那次是同一张表（第 8 节）。没有字以后，圆环合上就是「好了」；喷水是用户点鲸鱼时见过的那个动作 |
-| 本文 2026-10-29 第 4 节第 2 拍：鲸鱼等问候读满（页面画出来后 1.66 秒）才离开第 1 站 | 第一段弧最早在入场后 260 ms（页面画出来后 820 ms）画满（第 4 节）。没有问候要等；鲸鱼也不再离开，那 1.66 秒要防的「浮上来就游走了」不会发生，只留一拍让人看见第一段画满 |
-| 本文 2026-10-28 第 5 节：以后的启动 64 px 的鲸鱼下面写「正在打开你的团队…」，1 秒后带流光，没有水线和圈；前 1 秒什么都不再动 | 和首次启动同一个页面，顺利时没有字；45 秒起鲸鱼说「比平时慢，请再等一会儿」，提示行只有〔打开日志文件夹〕；前 1 秒只有第一段弧画满时那一下（划尾巴、一涌、点头）（第 5 节）。圆环已经说了在打开；以后的启动只要 3 到 12 秒，一行一直在的字就是噪音。阶段完成是真实的事（第 3 节），以后的启动也让人看见圆环在走 |
-| 同上 第 8 节：首次启动 `handoffShow` 在就绪后约 1.1 秒，主窗口约 1.6 秒露面；以后的启动 120 ms、约 0.6 秒；以后的启动庆祝的那次约 1.04 秒、约 1.5 秒；减少动态效果约 0.86 秒 | 庆祝的交接 `handoffShow` 在 0.72 秒，主窗口约 1.2 秒露面；不庆祝的 0.22 秒、约 0.7 秒；减少动态效果 0.42 秒；主进程的兜底不变（2.5 秒、0.8 秒，第 8 节）。没有「进去吧」要读，交接不再等字；不庆祝的多出 100 ms，让合上的圆环先被看见 |
-| 本文第 2、6 节：没有卡片时，水塘、鲸鱼的话和提示行整组比有卡片时低 80 px，鲸鱼落在窗口的视觉中心（圆环的圆心 (360, 290)，水线 y 322，鲸鱼的话 y 414–434，提示行 y 438–466）；出卡片时整组上移 80 px | 低 45 px，鲸鱼在窗口的视觉中心稍上一点：圆心 (360, 255)，水道 y 147–287，水线 y 287，鲸鱼的话 y 379–399，提示行 y 403–431；出卡片时整组上移 45 px，有卡片时的位置不变（第 2、6 节）。维护者 2026-10-30：「位置上调一些」 |
-| 本文第 3、4、5、7、8 节：就绪时鲸鱼潜下去，深到身高的 1.25 倍；首次启动时 Main Bot 的鲸鱼在团队界面侧栏的磁贴上浮上来一次，由插件做，主进程显示主窗口时经 `dsBotApp` 发露面事件（待定），Main Bot 聊天里的第一张卡等它浮上来；「待定」里磁贴上的鲸鱼怎么知道该浮上来、「预览版说明」盖着侧栏时怎么办；「不做什么」「鲸鱼不从启动窗口飞进主窗口」 | 鲸鱼跳出水面，在长大的启动窗口里飞到 Main Bot 的头像会在的位置，缩到头像的大小落下；主窗口在同一个矩形上露面，头像正好在它下面。头像的位置由侧栏随 `dsBotApp.ready()` 带来，主进程换成启动页的坐标（`landing`）；没有露面事件，团队界面里的头像不另做动画，第一张卡也不等；「预览版说明」挂着时照样落在头像的位置上。没有地方落时（别的样子或照片、团队列收起、经典 Agent 模式）照旧潜下去，减少动态效果时照旧淡出（第 3、8 节）。维护者 2026-10-30：「启动之后流畅变形为主页面，Chief跳到主页左侧的Chief位置」 |
-| 本文第 8 节「长大时页面上除了 Mica 什么都不能有」 | 长大时页面上只有飞着的鲸鱼：字、水线、圆环和纸面照旧在长大之前淡完；鲸鱼的动画走合成线程，但页面只在其中几步重画，这 300 ms 里鲸鱼可能一顿一顿地动（第 8 节、「已知限制」）。鲸鱼要一直看得见，才能落到头像上：为了「Chief跳到主页左侧的Chief位置」，接受这一点 |
-| 本文 2026-10-28 第 2、4、5 节：左下角的底注「社区开源项目，不是 DeepSeek 官方产品」；位置行在右下角，「换个位置…」是链接；以后的启动没有位置行 | 没有底注；位置行在底部正中，〔换个位置…〕是灰色的小按钮；以后的启动在盘只剩开始时的五分之一时也有，按钮当场搬数据（第 2、5 节）。以后的启动搬数据的确认和「这里放不了」在卡片上问，只有选择框是系统窗口（第 6 节）。维护者 2026-10-31：「移除左下角的社区非官方声明，右下角的init时显示，此外仅在空间不足时（剩余容量是起始容量的20%）显示，换个位置」；起始容量选了首次启动时的剩余空间（实现里是数据放进那个文件夹时那块盘的剩余空间：首次启动定下位置时记，换位置、搬数据、导入复制完以后重记，以前装的下一次启动补记），位置选了底部正中，以后的启动选了点了当场搬数据，「另外做成一个灰色按钮」；看到搬数据被拒绝的系统对话框后：「让我们尽可能避免系统中出现任何这样的默认弹窗」 |
+| [Windows onboarding](2026-10-26-windows-onboarding.md) section 3, "the start page and the engine's page share this window" | The start page is in its own start window; the engine's page loads in the hidden main window, which shows only after `dsBotApp.ready()` (open) |
+| Same, "the picker is attached to the window" | Attached to the start window, and never opens by itself |
+| Same, the third item of the first-start notes, "Chats and settings are saved on this computer… · A community open-source project, not an official DeepSeek product" | Both halves are gone from the start window: the first half went with the notes (see the "first-start notes" row below); the second half first became a footnote on every first-start screen, and was removed too on 2026-10-31 (see the last row of this table). "Not an official DeepSeek product" stays in the README and the download section of the onboarding note |
+| Same, "back to the start page" when not ready after 20 seconds | The start window stays the whole time, and the main window does not show |
+| Same, "double-clicking the icon again during the first start restores and focuses the existing window" | Focuses whichever window is showing |
+| Same, section 8, later starts "only say 'Opening your team…'" | No elapsed seconds; at 45 seconds the whale switches to thinking, no text; 180 seconds as on the first start |
+| Same, "Changes to decided designs": the window loads the start page first, then the engine's local address | The start window comes first; the main window loads the engine's local address (the same address and port) hidden, and shows only once ready |
+| Same, acceptance "the window is visible within 2 seconds of the process starting" and "no `dialog.show*` that is not attached to the main window" | The window in both means the start window |
+| [Desktop app](2026-10-16-desktop-app.md) "Window" | Adds the start window: 720 × 540, not resizable, only minimize and close, Mica; at the handoff the main process grows it to the main window's rectangle (section 8) |
+| [UI standard](../design/ui-standard.md) 4.4 avatar sizes | Adds 112 (start window) |
+| Same, 8.3 state motions | Adds motions found only in the start window: rising, the tail stroke and surge when a phase is done, the nod, the spout, jumping onto the Main Bot's avatar at the handoff (or diving), the tail sway |
+| Same, 3.1 font families | The start window adds `"Microsoft YaHei UI"`, recorded in section 14 |
+| Same, 12 accessibility | For a newly shown card and the recovery page, focus moves to the main button |
+| [Windows onboarding](2026-10-26-windows-onboarding.md) section 3, "the title 'Preparing your Bot team…', with the three real phases below, each with a progress tick"; this note's first draft, section 2: the title row and the three stations (four looks of a 16 px marker, phase names, thin lines between stations, a running highlight while in progress) | No title row, and the phases are not drawn: the station where the whale stops is the progress, a station it leaves keeps a ring, and nothing else is drawn on the waterline; the three phases stay only in the invisible "Start progress" list, and announcements are as before; the elapsed seconds move to the top right; without a card the group sits 80 px lower (sections 2 and 3) |
+| Same, the first-start notes (product introduction, "Next: connect a model…", "Chats and settings are saved on this computer…", the small text giving the place, "DeepSeek Harness's 'Preview notice' shows first…"); this note's first draft, section 4, beat 3, notes that appear one by one | No more notes. The whale says one short line at a time (sections 3 and 4); the hint row says only the one thing to know next: "You'll connect a model soon: a DeepSeek account or an API key", "A notice page comes first; just click 'Continue'"; the first start does not show the full path, the place line shows only the drive and the free space (second addition, 2026-10-28), and the path appears only on cards and in Settings → General → Location |
+| This note's first draft of 2026-10-28: the first start has no entry for choosing the place; only the recommended-drive card has `「其他位置…」` | When the disk is short of space, the place line `「数据放在 C 盘（剩 1.2 GB）」` with `〔换个位置…〕` can be clicked at any time (sections 2, 4 and 6). Maintainer, 2026-10-28: "give a suggestion, and also offer a way to choose for yourself; avoid small pop-ups"; from 2026-11-01 there is no place line when there is enough space ("Changes") |
+| Same, the hints past 10 and 45 seconds, "The first start is a bit slower; Windows may be checking the files it just installed." and "Slower than usual; antivirus software may be checking new files, please wait a little longer." | No text: at 45 seconds the whale switches to thinking, and the highlight on the arc and the prop slow down (2026-11-01) |
+| Same, the start takes more than 180 seconds: "The start is much slower than usual. You can wait a little longer, or try again." | The whale asks `「等太久了，要不要重试？」`, and the card holds only `〔继续等待〕`, `〔重试〕`, `〔复制详细信息〕` and `〔保存日志…〕` |
+| Same, the small text of the notes on a reinstall, "Continuing with your last data: 6 Bots, 2 group chats (`C:\Users\<user>\.ds-bot`). You can change this in Settings → General → Location." (copied in section 6 of this note) | The hint row says "Your 6 Bots and 2 group chats from last time are all here", without the path |
+| This note's first draft, section 6, the copy title "Copying the Bot team…", three steps "with the same markers as the three stations" | Title "Moving in"; the markers of the three steps stay, written in section 6 (the three stations no longer have markers) |
+| Same, "Not done": "The whale does not talk, show bubbles, cover cards or buttons, or ask the user to do anything"; section 3, "a phase done… the marker behind it pops a tick"; section 7, the failed station becomes a cross in the danger colour | The whale says a short line about its state, and a card's first line is also its line (except on failure cards); only the 180-second line is a question, and the answer is on the card's buttons; still no rotating tips or jokes, no bubbles; a finished station keeps a ring; failure shows only through the whale's pose and the decided title, with no cross |
+| Same, section 1, "the start window never changes size" | It does not change before the handoff; at the handoff the main process grows it to the main window's rectangle, and the main window is built on that rectangle from the start (sections 1 and 8) |
+| Same, section 8, handoff: `handoffShow` is sent 620 ms after `t0`, the start window then leaves the taskbar and the main window shows, and the start window closes once the main window has shown for 250 ms (at most 400 ms); later starts show the main window at 120 ms; when the page does not send `handoffShow`, the first start falls back after 1.5 seconds; "Not done", "the start never waits for an animation", "the celebration happens only on the first start and the first success after a retry" | The first start first says "In we go", and celebrates 300 ms later; `handoffShow` about 1.1 seconds after ready; 160 ms later the start window grows to the main window's rectangle in 300 ms, the main window appears at 460 ms, only then does the start window leave the taskbar, and it is destroyed 300 ms later; the main window appears about 1.6 seconds after ready (about 0.6 seconds on later starts, about 1.5 seconds for a later start that celebrates); the fallback becomes 2.5 seconds for a first start and a celebration handoff, and stays 0.8 seconds for other later starts; no growth with reduced motion; loading the engine and the team view never waits for an animation, and the handoff waits about 460 ms more for the growth; a later start that celebrates does not say "In we go" |
+| [UI standard](../design/ui-standard.md) section 1, item 4, and 8.4, "continuous ambient animation only at the Lively level"; 8.4, Lively "keeps hopping while waiting for your answer"; 8.3 state motions | Only in the start window, while a card waits for the user's answer, the Normal and Lively levels also breathe and blink; Lively changes to hops that grow rarer; also adds leaning in, ready to press, eyes following keyboard focus, and a look at you on return to the window (section 3, second table). None of it at the Quiet level or with reduced motion; the avatar in the plugin does not change |
+| This note's first draft, section 3, "moves only for real events: … and the user's pointer and clicks", "still while waiting for the user's answer"; the table in section 3 and section 6, "two hops, then still, looking at the card", "no hop, still" | Holds still while waiting for the user's answer: leaning in, breathing and blinking (section 3, second table), and also moves for keyboard focus and a return to the window; at the Quiet level, with reduced motion and on failure pages, once still it stays still |
+| This note of 2026-10-28, section 4, beat 2, "if already done, swims straight to station 2" | It leaves station 1 only once the greeting has been read in full (1.66 seconds after the page paints), bobbing while it waits (section 4). Maintainer trying it on 2026-10-29: "when I saw the little whale it was already at the second position": the main process had built the data folder before the page painted, so the whale swam off as soon as it rose, and station 1 seemed never to have happened |
+| This note's sections 5, 6 and 7: at 45 seconds "Slower than usual, please wait a little longer."; "It will go in `D:\DS Bot`" with "Continue" and "Choose again"; "…syncing interrupts chat records while they are being written."; the whale's line "The team view didn't load." | No text at 45 seconds (2026-11-01); `「会放在 D:\DS Bot。」` with `〔继续〕` and `〔重新选…〕` (the same `〔重新选…〕` on the rejected card); "…chats while they are being written."; `「团队界面没有加载出来」`. Follows the writing rules of each layer in [Start page copy](2026-10-29-start-copy.md) |
+| This note of 2026-10-28, sections 2, 3 and 9: the whale stops at one of three stations (x 168 / 360 / 552), swims right to the next station when a phase is done, and a station it leaves keeps a ring; a 624 px waterline; an 88 px whale on the first start, 64 px on later starts without a waterline; with reduced motion a change of station fades out and in | The whale stays in the middle, and the three arcs around it are the progress: pale blue with a running highlight while in progress, filled clockwise when done, red on failure; the waterline is a chord of the ring (200 px); every kind of start has the 112 px whale, the ring and the waterline; when a card comes the pond shrinks to .62 times and moves up 60 px, and the ring rests above the card (sections 2, 3 and 9). On 2026-10-30 the maintainer passed on a discussion that found this version too noisy: "this version is a bit noisy now", "could it be a bit simpler"; after comparing three proposals (a progress bar of three waterline segments, a ring, only the whale) the ring was chosen |
+| Same, sections 3 and 4: the whale says one short line at a time, which follows the whale and queues by hold time: entrance "Hi, I'm the chief" (on a reinstall the name of the team's Main Bot, on an import "Hi, I'm here"), "First, find a place for things", "Found it", "Warming up, give me a moment", at 10 seconds "The first time is a bit slower", "Off to open the door"; a card that arrives during the entrance waits 1.5 seconds for the greeting to be read; "Open questions" asks which name the greeting uses | Silent when all goes well; one line only at 45 seconds, 180 seconds, on failure and during a data move, fading out and in on a change, with no queue (section 3). From the discussion: "actually I think just a whale may be enough, and then we can do interactive animation; text isn't really needed". A smooth start lasts only a few seconds, and the ring already shows the progress; so the name of the greeting no longer needs deciding |
+| Same, section 4, beats 3 and 8, and section 6: the hint row says what to know next: for a new team "You'll connect a model soon: a DeepSeek account or an API key", on a reinstall "Your 6 Bots and 2 group chats from last time are all here", and when DSH will show its preview notice "A notice page comes first; just click 'Continue'" | The hint row has only `「C 盘只剩 1.2 GB」` for the first 10 seconds when the disk is short of space, and `〔打开日志文件夹〕` from 45 seconds (sections 3 and 4). All three lines are about what happens once inside: the Main Bot's settings card covers connecting a model, the preview notice has its own "Continue", and a reinstall opens on the old team; saying it early while waiting only adds a line of text |
+| Same, sections 2 and 4: "N seconds elapsed" at the top right from 5 seconds, hidden while a card waits for an answer, kept until "In we go"; on later starts in the hint row from 10 seconds | Not shown; 10, 45 and 180 seconds are still counted on the same start clock, which still stops while a card waits for an answer (section 4). A number that ticks every second was the only text that kept changing on the page in a smooth start; when it is slow there is no text, and the 180-second question and the failure page give the way out (2026-11-01) |
+| Same, section 3, Normal level "while the first start waits, clicking the whale makes it spin once"; Quiet level "no eye following, click spin, petting, tail… or `「^ ^」` eyes"; "Not done", "no spout" | Clicking the whale makes it spout, on every kind of start: the 4th click within 2.5 seconds gives a big spout, while lying down after a failure only a small puff, and no spout during the entrance, the sinking or after ready; the Quiet level spouts too, the column one size smaller, with the squash, tail flick and `「^ ^」` eyes as usual; reduced motion only changes to `「^ ^」` eyes (section 3). The maintainer proposed exactly this: a whale floating on the water that spouts when clicked. Without text, interaction is the whale's only response to the user, and the spout is the whale's own motion. The Quiet level has it too: it appears once only after the user clicks, and is not a continuous ambient animation |
+| Same, section 8: the first start first says "In we go" (shown only after the previous line has been readable for 400 ms, `readyLine` waits at most 600 ms), and 300 ms after it appears squashes, shows `「^ ^」` eyes and dives; queued swimming could delay the handoff by up to 600 ms; a later start's first success after a retry or a fresh start does not say "In we go" and dives 920 ms after the squash and spring back | All arcs not yet full fill together, the ring closes and swells once; the celebration handoff (first start, first success after a retry or a fresh start) at the same time squashes, shows `「^ ^」` eyes and spouts, and dives at 560 ms; the first start and a later start that celebrates use the same table (section 8). Without text, the ring closing is the "done"; the spout is the motion the user has seen when clicking the whale |
+| This note of 2026-10-29, section 4, beat 2: the whale leaves station 1 only once the greeting has been read in full (1.66 seconds after the page paints) | The first arc fills 260 ms after the entrance at the earliest (820 ms after the page paints) (section 4). There is no greeting to wait for; and the whale no longer leaves, so the "rises and swims off" that the 1.66 seconds guarded against cannot happen; only one beat is kept so that people see the first arc fill |
+| This note of 2026-10-28, section 5: on later starts the 64 px whale has "Opening your team…" under it, with a running highlight after 1 second, no waterline and no rings; nothing else moves in the first second | The same page as the first start, with no text when all goes well; from 45 seconds the whale says "Slower than usual, please wait a little longer", and the hint row has only `〔打开日志文件夹〕`; in the first second only the beat when the first arc fills (tail stroke, surge, nod) (section 5). The ring already says it is opening; later starts take only 3 to 12 seconds, so a line of text that is always there is noise. A phase done is a real event (section 3), so later starts also show the ring moving |
+| Same, section 8: on the first start `handoffShow` about 1.1 seconds after ready and the main window appears at about 1.6 seconds; on later starts 120 ms and about 0.6 seconds; for a later start that celebrates about 1.04 seconds and about 1.5 seconds; with reduced motion about 0.86 seconds | The celebration handoff sends `handoffShow` at 0.72 seconds and the main window appears at about 1.2 seconds; without a celebration 0.22 seconds and about 0.7 seconds; with reduced motion 0.42 seconds; the main process's fallback is unchanged (2.5 seconds, 0.8 seconds, section 8). With no "In we go" to read, the handoff no longer waits for text; the handoff without a celebration gains 100 ms, so the closed ring is seen first |
+| This note's sections 2 and 6: without a card, the pond, the whale's line and the hint row sit as a group 80 px lower than with a card, putting the whale at the window's visual centre (ring centre (360, 290), waterline y 322, the whale's line y 414–434, hint row y 438–466); when a card comes the group moves up 80 px | 45 px lower, putting the whale a little above the window's visual centre: ring centre (360, 255), water channel y 147–287, waterline y 287, the whale's line y 379–399, hint row y 403–431; when a card comes the group moves up 45 px, and the position with a card is unchanged (sections 2 and 6). Maintainer, 2026-10-30: "move it up a bit" |
+| This note's sections 3, 4, 5, 7 and 8: at ready the whale dives, to 1.25 times its height; on the first start the Main Bot's whale rises once on its tile in the team view's sidebar, done by the plugin, with a reveal event sent through `dsBotApp` when the main process shows the main window (open), and the first card in the Main Bot's chat waits for it to rise; "Open questions" asks how the whale on the tile knows it should rise, and what happens when the "Preview notice" covers the sidebar; "Not done", "the whale does not fly from the start window into the main window" | The whale jumps out of the water, flies inside the growing start window to where the Main Bot's avatar will be, shrinks to the avatar's size and lands; the main window appears on the same rectangle, with the avatar right under it. The sidebar passes the avatar's position with `dsBotApp.ready()`, and the main process converts it to the start page's coordinates (`landing`); there is no reveal event, the avatar in the team view has no animation of its own, and the first card does not wait; while the "Preview notice" is up it still lands where the avatar is. When there is nowhere to land (another look or a photo, the team column collapsed, classic Agent mode) it dives as before, and with reduced motion it fades out as before (sections 3 and 8). Maintainer, 2026-10-30: "after the start, morph smoothly into the main page, and Chief jumps to Chief's spot on the left of the main page" |
+| This note's section 8, "during the growth nothing but Mica may be on the page" | During the growth the page holds only the flying whale: text, waterline, ring and paper still fade before the growth; the whale's animation runs on the compositor thread, but the page repaints only on some steps, so in these 300 ms the whale may move in jerks (section 8, "Known limits"). The whale must stay visible to land on the avatar: this is accepted for "Chief jumps to Chief's spot on the left of the main page" |
+| This note of 2026-10-28, sections 2, 4 and 5: a footnote at the bottom left, "A community open-source project, not an official DeepSeek product"; the place line at the bottom right, with "Change the location…" as a link; later starts without a place line | No footnote; the place line at the bottom centre, with `〔换个位置…〕` as a small grey button; on later starts it also shows when the disk has only a fifth of its starting free space left, and the button moves the data right away (sections 2 and 5). A later start asks the data-move confirmation and `「这里放不了」` on cards, and only the picker is a system window (section 6). Maintainer, 2026-10-31: "remove the community/unofficial note at the bottom left; show the bottom-right one at init, and otherwise only when space is low (free space is 20% of the starting capacity): change the location"; the starting capacity was taken as the free space at the first start (in the code, the free space of the disk when the data was put in that folder: recorded when the first start sets the place, recorded again after a change of place, a data move or an import copy, and filled in on the next start for older installs), the position as the bottom centre, a later start moves the data right away on the click, and "make it a grey button instead"; after seeing the system dialog that rejected a data move: "let's avoid any default pop-ups like this in the system as far as we can" |
 
-## 变更
+## Changes
 
-- 2026-10-26：定下启动窗口的样子和动作。依据：三套独立方案和两轮评审的合成、Electron 44 上的探针（Mica、系统按钮颜色、隐藏窗口的渲染）、可以打开看的原型。
-- 2026-10-26：位置卡片按上手流程第 3、4 节的简化改写：一张推荐盘的卡代替「找到以前的数据」「盘不够」「位置不能用」「总工作区在 OneDrive」四张，确认只在应用改了路径时出现；重装不出卡；导入卡一句话两个按钮，详情折叠；复制中三步，工作文件不经过启动窗口。评审后补正：默认位置不能用的卡没有〔仍然放在 C 盘〕；每张卡写明主按钮；跳两下的卡片加上「找不到数据文件夹」。
-- 2026-10-27：导入卡加一行小字写明复制后多占多少、原件不动；换位置的页面改叫「正在搬 DS Bot 的数据…」（上手流程 §8 的〔移到…〕改成真正的搬）。评审后补正：导入卡开着时引擎起来只打勾、不加载页面（§1、§4 第 8 拍）；占用卡和下载卡有〔先不复制〕；被拒绝的卡留着来时的按钮和脚注；空间例子改成 1.7 / 1.5 / 0.2 GB。
-- 2026-10-27：第 1 节加登录窗口（上手流程第 5 节）：主窗口的子窗口，只在交接之后、用户点了某个登录入口时出现，启动窗口阶段没有它。
-- 2026-10-28：按维护者 2026-10-27 的反馈改写：小窗口显示的是实现的结构（一条带三个点和阶段名的线、几段说明），不是用户感受到的东西，最后一步跳进团队窗口也太突然。三部分一起定：（1）「鲸鱼即进度」的启动窗口：鲸鱼停在哪一站就是进度，离开的站留下一个圈，窗口里的字都是鲸鱼一次一句的短话，卡片的第一行也是它说的；去掉标题行、三站的标记和阶段名、说明和写位置的小字，180 秒的卡只留按钮，重装只写一句提示，复制中的标题改成「正在搬过来」；鲸鱼更有反应（探身、呼吸、眨眼、回到窗口时看你、眼睛跟着键盘焦点、按下预备、活泼档越跳越稀、潜得更深），呼吸和眨眼只在卡片等用户时有；交接时启动窗口长成主窗口的矩形，主窗口在同一个矩形上露面（就绪后约 1.6 秒，兜底 2.5 秒），鲸鱼在侧栏的磁贴上浮上来。（2）交接后的目标卡改成多选加〔确定〕。（3）AI-native 的后半段：开场白不调模型，目标卡、建议卡和第一件事由插件画，上手期间最多 3 次模型请求，模型关着也走得通。后两部分写在上手流程第 5、6 节，本文只写到交接为止。依据：原型和它的检查（82 个状态、22 个场景、交接和团队窗口的联合检查）、Electron 44 上长大窗口的探针。评审后补正：磁贴上的鲸鱼怎么浮上来写进第 8 节（数值照原型，由主进程经 `dsBotApp` 的露面事件开始，待定），不再指向上手流程第 5 节；问候里的名字跟着团队（重装用团队里的名字，导入和读不出时「嗨，我来了」）；入场时就来的卡等问候读满 1.5 秒；300 ms 的最短停留和「卡片在时这一行空着」写明失败和 180 秒的例外；以后的启动重试或重新开始后第一次成功不说「进去吧」，压扁回弹 920 ms 后潜下去，兜底和首次启动一样 2.5 秒；启动窗口在主窗口露面时才离开任务栏；减少动态效果时「^ ^」眼再停 300 ms；卡片在时已用秒数隐藏；45 KB 的预算写进第 11 节，建议和上手流程一致；「淡圈」统一叫「圈」，和上手流程的用词一样；空 Mica 帧的退路、「不做什么」里的推迟和「不要用户做什么」按新的交接和会说话的鲸鱼改写；首稿里「等用户回答时静止」等规则记进「改动的已定设计」；文件头的「一起改」补全。
-- 2026-10-28 位置行：落地第一批（启动窗口、交接、失败页、日志）时维护者看到首次启动仍弹「欢迎使用 DS Bot」的系统对话框，要求「给出建议，同时提供自行选择的接口，避免小弹窗」。首次启动不再弹这个对话框，底注右边一行「数据放在 C 盘（剩 412 GB）· 换个位置…」（第 2、4 节），点了才开系统选择框，定根、「会放在…」和「这里放不了」按第 6 节，被拒绝的原因加上 DSH 的家和程序文件夹两句，定好后按第 7 节沉下去重新开始，默认位置上这一次建的文件夹删掉；导入复制完以后收起。依据：桌面应用里的实现和它的检查（`place.test.mjs`、`start-window.test.mjs`、未打包的应用上的实测）。
-- 2026-10-28 张望：第 3 节第二张表加第 9 条，第 2 站工作时每 5 到 9 秒随机向一边看 600 ms，安静档和减少动态效果没有；维护者问「小鱼的摇晃改为摇晃-张望随机是否可行」，可行，叠在上下晃上。依据：原型 `alive.cjs` 的 wander 用例（正常档 30 秒内三次、间隔 7.8 到 8.5 秒，安静档和指针在页面上时零次）。
-- 2026-10-29 先打招呼再出发：第 4 节第 2 拍，数据阶段已完成时鲸鱼也等问候读满才离开第 1 站，等的时候晃着。维护者试用落地的启动窗口时「小鲸鱼看到的时候就在第二个位置」：那次首次启动里主进程 2.9 秒就建好了数据文件夹，页面 8.6 秒才画出来（冷启动；之后两次启动 2 秒），鲸鱼浮上来 560 ms 就游到了第 2 站。依据：原型 `alive.cjs` 的 greet 用例（数据阶段在入场结束前完成时，鲸鱼入场后 1.66 秒离开第 1 站、再 0.6 秒说「热身中，等我一下」；搜索到一半完成的也一样，且不说「先找个地方放东西」）、试用副本上的实测（窗口 1.1 秒出现、数据 1.9 秒完成、页面 2.1 秒画出来；鲸鱼入场后 1.68 秒离开第 1 站；`main.mjs` 标记数据完成后紧接着就启动引擎，日志里「engine took」从那一刻起算，和问候无关）。
-- 2026-10-29 文案分层：启动页的字按页面位置分层、一张表，见 [启动页文案](2026-10-29-start-copy.md)；第 11 节 `text.mjs` 一条改成指向它；按各层规则改四处：45 秒的提示和「团队界面没有加载出来」去句号，「会放在 …」加句号、〔重新选〕加 …，OneDrive 的原因里「聊天记录」改成「对话」（第 5、6、7 节）。
-- 2026-10-30 圆环：维护者转来一段讨论，说启动窗口太吵（「现在这版有点噪了」「是不是可以简约一点」「其实我觉得可能就放一个鲸鱼就够，然后可以做交互动画，文字什么的不太需要」），提议只留一只浮在水上、点一下会喷水的鲸鱼，进度做成横条或圆环；比较三份方案（水线分三段的进度条、圆环、只有鲸鱼）后选了圆环。「为什么」、第 2 到 11 节按圆环改写：三站和留下的圈换成围着鲸鱼的三段弧，每种启动都是 112 px 的鲸鱼、圆环和水线，出卡片时水塘缩到 .62 倍、上移 60 px；顺利时不说话（去掉问候、各阶段的话、「进去吧」、接模型、预览版说明和重装的提示、已用秒数，以后的启动去掉「正在打开你的团队…」），只留盘不够的提示、45 秒、180 秒、失败、卡片和搬数据；以后的启动和搬数据时 45 秒那句由鲸鱼说；点鲸鱼喷水代替转一圈；交接时剩下的弧画满、圆环合上，庆祝的那次喷水、560 ms 潜下去、0.72 秒发 `handoffShow`，不庆祝的 0.22 秒。「待定」去掉问候用哪个名字，水线那一行按圆环改写；「不做什么」和「已知限制」跟着改。依据：原型的圆环布局（82 个状态的截图都过了布局探针，探针也查圆环不碰鲸鱼的话、提示行和卡片：没有问题）；`ring-live.cjs`：首次启动 `handoffShow` 在就绪后 0.72 秒（原来的布局 1.09 到 1.17 秒），以后的启动 0.23 到 0.33 秒，都在原型兜底的 1.5 秒和 0.8 秒以内，45 秒的〔打开日志文件夹〕用指针点得到，搬数据那一行在，喷水的「^ ^」眼给失败的姿势让路，〔重试〕清掉红的那段弧；一次独立评审的 10 条意见都已改正（空纸面让点击穿过、卡片在时提示行隐藏、112 px 鲸鱼入场的深度 96 / 84 px、沉下去 84 px、喷水的「^ ^」眼不盖过失败的姿势、就绪以后不喷、强制颜色覆盖弧、光、水柱和水滴、弧 0.5 s 画出来等）。桌面应用里的检查（离屏 Electron、替身桥，15 项都过）：首次启动 `handoffShow` 在就绪后 0.73 秒，以后的启动 0.24 秒（引擎在就绪前 0.5 秒才起来）；数据阶段在页面画出来以前完成时，第一段弧 820 ms 画满，700 ms 时完成的，565 ms 进行中、999 ms 画满。真机上的首次启动（这条分支的一次性副本，装着锁定的 DSH 0.2.1-rc.4）：窗口 1.5 秒出现、页面 2.9 秒画出来，第一段弧在页面时间 2.6 秒画满；引擎 17.1 秒后第二段画满，团队 4.4 秒后就绪；`handoffShow` 在就绪后 738 ms，窗口 173 ms 后开始长大，团队窗口在就绪后 1.31 秒露面，页面上没有留下的圈和已用秒数。和原型有意不同的两处：第一段弧等的时候鲸鱼不换循环（原型先换成工作的循环，循环自己要停满的 400 ms 把弧再推迟）；就绪时正在走的那一拍不再走完，剩下的弧一起画满（原型让它走完；照原型写的桌面应用里，引擎在就绪前 0.5 秒起来的以后的启动 0.46 秒才发 `handoffShow`）。评审后补正：第一段弧等的时候鲸鱼不换循环（第 4 节）；以后的启动前 1 秒有第一段弧画满的那一下（第 5 节）；一拍走完点一下头（第 3 节）；安静档点鲸鱼时照样压扁、甩尾和「^ ^」眼；浮上来的那圈涟漪 .56 s 淡完；盘不够的那句按启动的时钟算前 10 秒，入场时就在。
-- 2026-10-30 跳到 Chief：维护者问「要不要加个正在做的事情的简单描述，位置上调一些，启动之后流畅变形为主页面，Chief跳到主页左侧的Chief位置」，然后「三点都做」，紧接着又说「文案保持取消状态」：所以没有加描述正在做什么的字，顺利时页面上仍然没有字（第 3 节），只做了另外两点。一是位置上调：没有卡片时整组低 45 px（原来 80 px），圆环上移 35 px，出卡片时整组上移 45 px，有卡片时不变（第 2、6 节）。二是交接时鲸鱼不再潜下去，而是跳出水面，在长大的启动窗口里飞到 Main Bot 的头像会在的位置，缩到头像的大小落下，主窗口在同一个矩形上露面（第 3、4、5、7、8、9、11 节）：插件的侧栏在 `dsBotApp.ready()` 里带上 Main Bot 头像的位置（只在默认的鲸鱼、头像在团队列里看得见时），主进程用 `landingOf` 换成启动页的坐标放进交接的快照，启动页的 `leap` 飞 590 ms（不庆祝的 550 ms），比主窗口露面早 30 ms 落下，`handoffDone` 改在落下时发（庆祝的 1150 ms，不庆祝的 650 ms）；没有地方落时照旧潜下去。磁贴上的鲸鱼浮上来和 `dsBotApp` 的露面事件都不做了，「待定」里那一行随之去掉：团队界面里的头像不用自己动，鲸鱼落下的地方就是它；「预览版说明」盖着侧栏时鲸鱼照样落在头像的位置上，头像在遮罩下面（第 8 节）。「长大时页面上除了 Mica 什么都不能有」改成只留飞着的鲸鱼；长大时鲸鱼可能一顿一顿地动、落点在 `ready()` 之后团队列还在动时会差几个像素，记进「已知限制」；「不做什么」跟着改。依据：应用的测试（`start-window.test.mjs`：`landingOf` 在两个窗口边框相同、团队页面缩放到 125 %、只有启动窗口有系统标题栏时都算对，不像样的报告都不落；`ready()` 带着位置时交接的快照里有 `landing`，不带时没有；`start-page.test.mjs` 查 `.flight` 层），插件的侧栏测试（`app-ready.test.js`：默认的鲸鱼报告它的位置，别的样子或照片不报）。真机上的首次启动（一次性副本，装着锁定的 DSH 0.2.1-rc.4，团队页面缩放 125%）：主进程记下「the whale lands at 105, 116 (60 px)」，团队窗口露面后侧栏里 Main Bot 的头像在 (104, 116)、60 px，差 1 px；`handoffShow` 在就绪后 738 ms，窗口在它之后 171 ms 开始长大，`handoffDone` 在它之后 442 ms，团队窗口在就绪后 1.32 秒露面：这台机器上长大比 300 ms 慢，鲸鱼先落下，再跟着窗口一起长到位（两次运行，落点都一样）；首次启动时「预览版说明」的遮罩盖着侧栏，头像在遮罩下面
-- 2026-10-31 位置行：维护者「替换之前的3点式，移除左下角的社区非官方声明，右下角的换个位置」。追问以后：「3点式」就是原来的三站，圆环已经代替了它，这次不改；维护者问「要不要显示圆环显示对应3个正在启动的阶段？」：三段弧本来就各是一个阶段（第 2 节），不加字（2026-10-30「文案保持取消状态」）。底注去掉；位置行挪到底部正中，〔换个位置…〕改成灰色的小按钮（28 px，`small`），整行在纸面下面 4 px（第 2 节）；首次启动照旧有，以后的启动只在数据所在的盘剩下的不到开始时的 20% 时有：开始时的剩余空间在数据放进一个文件夹时记进 `locations.json`（`freeAtStart`；盘满时记不到，下一次再记），以前存下的位置下一次启动补记；以后的启动点〔换个位置…〕当场搬数据（第 5 节）。试的时候搬数据被拒绝弹了系统对话框，维护者：「让我们尽可能避免系统中出现任何这样的默认弹窗」。所以以后的启动搬数据时，除了系统选择框都在卡片上问：「这里放不了」用第 6 节被拒绝的那张卡（原因多「整块磁盘」和「和总工作区互相包含」两句，读不了的文件夹按没有权限），确认是新的一张「搬到这个文件夹？」〔移动并重启〕〔重新选…〕〔取消〕；确认以后启动窗口当场变成搬数据的页面，这次启动让位，等着的交接作废。还剩下的系统对话框记进「已知限制」。第 2、3、4、6、8 节和「改动的已定设计」跟着改。依据：应用的测试（`place.test.mjs`：20% 的界线；`start-window.test.mjs`：变成搬数据的页面并丢掉等着的交接；`main-low-space.test.mjs`：盘快满时以后的启动有位置行，选进数据文件夹里出「这里放不了」，读不了的 `C:\System Volume Information` 按没有权限，取消以后引擎照常起来、团队界面照常加载，〔移动并重启〕以后页面载入 `?start=moving`、引擎在复制之前停下、数据复制到新文件夹、`locations.json` 换成新文件夹和它自己的剩余空间、应用重新启动，一路没有系统对话框；`main-room-left.test.mjs`：剩余空间还多时没有位置行，换总工作区不动记下的剩余空间，设置里搬数据照旧；`main.test.mjs`：没有记过的位置这次补记；`start-page.test.mjs`：页脚只有位置行和灰色按钮、搬数据的卡）；故意改坏 20% 的判断、复制前停引擎、取消时丢掉启动这三处，测试都会失败。离屏渲染的检查 17 项都过（位置行居中、指针点得到、离底边 12 px、有卡片时在纸面下面 4 px、以后的启动和失败页、英文长路径省略、深色、两张卡）。一次独立评审（四个方面，每条意见一个复核）确认 7 条，都已改正：读不了的文件夹不再把正常的启动变成失败页，盘满时记下的 0 不算数，start-copy 第 3 节、本节第 5 节、「改动的已定设计」和上手流程的说法。真机上的以后的启动（这条分支的一次性副本，G 盘剩 4.0 GB，记下的开始空间 10^15 字节）：位置行「数据放在 G 盘（剩 4.0 GB）」，指针点得到；先取消选择框，启动照常走；再点、选了文件夹，团队界面在卡片开着时就绪，交接等着；卡片「搬到这个文件夹？」写着真实的路径，没有系统对话框；点〔移动并重启〕后启动窗口变成搬数据的页面，等着的交接作废（等了 13 秒），6 秒后应用在新文件夹上重新启动并交接，`locations.json` 是新文件夹和 3.99 GB。
-- 2026-11-01 不写字，加道具：用户要求「启动窗口轻易不写文字，除非出现空间不足或者报错，后者并提供一键复制/下载日志的选项」，并且「加载的时候应当有相关组件，例如放在鲸鱼面前一个正在翻动的文件夹，脉冲转动的两个齿轮」。所以去掉 45 秒的两句（「有点久，可能是杀毒软件在查新文件」「比平时慢，请再等一会儿」）、搬数据时的「正在搬 DS Bot 的数据…」和 45 秒的〔打开日志文件夹〕，慢只靠鲸鱼的姿势；位置行在首次启动也只在盘不够时有（推翻 2026-10-31「首次启动照旧显示」那一条，首次启动在盘够时就没有选位置的入口了）；出错的每一页都有〔复制详细信息〕和新的〔保存日志…〕（`saveLog`，系统保存框，最后 5000 行），代替〔打开日志文件夹〕（`openLogs` 不再是启动页的动作）；鲸鱼面前加每个阶段的道具：翻纸的文件夹、咬合的齿轮、跳的小成员（第 2、3、4、5、6、7、9、11 节）。依据：启动页和启动窗口的单元测试；无头 Chrome 加替身桥录的整次启动（浅色、深色）和各阶段、失败页、180 秒、盘不够的截图；减少动态效果时道具没有循环动画。还没有在桌面应用里真机跑，〔保存日志…〕也还没有真点过。这次改的是已定的设计，要维护者确认。
-- 2026-11-01（待维护者确认）：动画只有一个来源。启动窗口的卡片和团队窗口里代替系统对话框的卡片（`app/src/page-card.css`）用同一组颜色和弹簧，都由 `scripts/start-assets.mjs` 从插件的 `themes.js` 和 `motion.js` 生成：卡片出现走 `SPRING_SHAPE`，收起用启动窗口卡片的退场（下沉 6 px、缩到 .975、模糊 3px，.16 s），减少动态效果时只淡入 .12 s、淡出 .16 s（第 9 节）。导入的几张卡（第 6 节）由主进程的 `import-flow.mjs` 发快照，页面照旧只按快照画。
-- 2026-11-01 交接的露面：在桌面应用里录了交接（真的 Electron 44、真的 `StartWindow`、替身团队页、ffmpeg 60 帧录屏），看到三个问题：长大用 `cubic-bezier(.2,.7,.2,1)`，前 40% 就走完了大半，窗口很早看着就长完了，鲸鱼落下后在一大块空的深色窗口里等 200 多毫秒；主窗口用 `show()` 露面时 Windows 自己的打开过渡压在启动窗口上，有一两帧整窗发灰、鲸鱼和头像错开成两个，然后深色一下跳成浅色；长大前 160 ms 的等待让鲸鱼停在跳的最高点。改成：主窗口在 `ready()` 时就以不透明度 0 显示在启动窗口下面（打开过渡看不见地走完，也不卡长大的第一步）；长大 `handoffShow` + 40 ms 开始，260 ms，缓入缓出；鲸鱼长到位 60 ms 后落下，主进程等 `handoffDone` 才让主窗口变成不透明，再把启动窗口 180 ms 淡出，鲸鱼化进头像。减少动态效果和页面没发 `handoffShow` 时不长大，同样淡出。依据：录屏前后对比（首次启动就绪到主窗口露出 1.24 秒带一帧发灰，变成 1.09 秒开始淡、1.29 秒淡完；以后的启动 0.58 秒开始）；启动窗口的单元测试（主窗口在 `ready()` 时透明地显示在下面、等落下或 300 ms、淡出后才给焦点、失败时收回）。Mica 窗口用 `setOpacity` 淡出在 Windows 11 上正常。
-- 2026-11-02 复制没有停止按钮：圆环下那个停止复制的小按钮看着像留下的一个点。用户定的：「取消终止复制按钮」。第 6 节去掉按钮和「停止复制？」那张确认卡；要停就退出应用或关窗口，复制先停下、不留下半个团队再退出。
-- 2026-11-02 没人接住的错误：第 7 节，主进程里没人接住的错误交接前走恢复卡，交接后只记日志，不再弹 Electron 自己的错误框。
-- 2026-11-02 找不到放数据的文件夹：恢复卡的原因多一种，数据所在的盘不在了（不是程序自己的文件不见了）不再写「出了点意外」，而是「找不到放数据的文件夹，可能是移动硬盘没插上。」，红的是第一段。
-- 2026-11-02 复制失败的卡：第 6 节，加一句该怎么办。
-- 2026-11-02 团队界面没加载出来的卡：第 7 节，加一句发生了什么、一句该怎么办和「详细信息」，和恢复卡一样。
-- 2026-11-02 恢复卡说该怎么办：用户要「报错页也都进行补充」。第 7 节：恢复卡在原因下面加一句该怎么办（按原因写）。
-- 2026-11-02 每段都有它的一拍：答〔先不复制〕的录屏里看不到齿轮，引擎在卡片等回答时就预热好了，答完圆环直接跳到「打开团队」。第 2 节：没人看见就完成的阶段（不只是数据文件夹）轮到时照样进行中至少 420 ms、道具出来再画满，首次启动的「打开团队」在交接前也一样。
-- 2026-11-02 先三段，答了再变四段：用户看了四段的录屏，说预想的是「一开始是3条，第一条转完扫出来问要不要，要的话跳上去，重新排布为4条，并开始导入，搬箱子动画优化一下，不要的话继续3条启动」。第 2 节：每次启动都从三段开始，复制开始时才长出复制那一段，其他三段让位，复制停下就缩回三段；搬箱子的道具重画（旧箱子、新箱子和点线，箱子倾着飞、压扁落下）。第 6 节：导入卡等第一段画满才出来，答之前圆环停在第一段；圆点落在第一段后面的空隙。
-- 2026-11-02 导入并进圆环：用户看了导入的录屏，要求「尽可能减少，导入改为一个进度条点击后向上跳转变形将（3段圆环改为四段圆环」。第 2 节：从 DSH 复制团队的首次启动圆环四段，多出「复制以前的团队」，按复制的真实进度画满，复制时道具是搬箱子，预热的引擎为复制停下时引擎那一段回到没开始；其他启动仍三段。第 6 节：导入卡只剩一行和两个按钮，大小、模型设置、勾选框和脚注收进「详细」，找到的名字、段数、会复制什么去掉；「正在搬过来」的分步卡去掉，〔复制过来〕后卡片缩成一个点跳进复制那一段；停止复制改成圆环下的图标按钮加一张确认卡；复制失败那一段变红。第 9 节：减少动态效果时卡片不飞。不到 1 MB 写「不到 1 MB」。依据：桌面应用里对着替身 DSH 家录的导入（`app/dist-recordings/`，不进仓库）。
-- 2026-11-02 鲸鱼缩到 0.75 倍：首次启动 88 → 66 px，以后的启动 64 → 48 px，涟漪和圈 56 × 12 → 42 × 9，绕中心对齐在水线和各站原位置上（PR #702）。
+- 2026-10-26: Decided the start window's look and motion. Basis: a merge of three independent
+  proposals and two rounds of review, probes on Electron 44 (Mica, system button colour, rendering in
+  a hidden window), and a prototype that can be opened and viewed.
+- 2026-10-26: Rewrote the place cards after the simplification in onboarding sections 3 and 4: one
+  recommended-drive card instead of the four cards "Found earlier data", "Disk is short", "Place
+  cannot be used" and "Team workspace is in OneDrive"; a confirmation only when the app changed the
+  path; no card on a reinstall; an import card with one sentence and two buttons, details folded; the
+  copy in three steps, and the work files not through the start window. Corrections after review: the
+  card for an unusable default place has no `〔仍然放在 C 盘〕`; each card names its main button; the
+  "data folder not found" card joins the cards with two hops.
+- 2026-10-27: The import card gets a line of small text that says how much more the copy takes and
+  that the originals stay untouched; the change-of-place page is renamed "Moving DS Bot's data…"
+  (onboarding §8's `〔移到…〕` becomes a real move). Corrections after review: when the engine comes up
+  while the import card is open, it only ticks and does not load the page (§1, §4 beat 8); the in-use
+  card and the download card have `〔先不复制〕`; the rejected card keeps the buttons and footnote of the
+  card it came from; the space example becomes 1.7 / 1.5 / 0.2 GB.
+- 2026-10-27: Section 1 adds the sign-in window (onboarding section 5): a child of the main window,
+  shown only after the handoff when the user clicks a sign-in entry; the start window phase has none.
+- 2026-10-28: Rewritten after the maintainer's feedback of 2026-10-27: the small window showed how the
+  code is built (a line with three dots and phase names, several notes), not what the user feels, and
+  the last step's jump into the team window was too abrupt. Three parts were decided together: (1) a
+  "the whale is the progress" start window: the station where the whale stops is the progress, a
+  station it leaves keeps a ring, all text in the window is the whale's short lines, one at a time,
+  and a card's first line is its line too; the title row, the stations' markers and phase names, the
+  notes and the small text giving the place are removed, the 180-second card keeps only buttons, a
+  reinstall gets a single hint, and the copy title becomes "Moving in"; the whale is more responsive
+  (leaning in, breathing, blinking, a look at you on return to the window, eyes following keyboard
+  focus, ready to press, Lively hops that grow rarer, diving deeper), with breathing and blinking only
+  while a card waits for the user; at the handoff the start window grows to the main window's
+  rectangle and the main window appears on the same rectangle (about 1.6 seconds after ready, fallback
+  2.5 seconds), and the whale rises on its tile in the sidebar. (2) The goal card after the handoff
+  becomes a multiple choice with `〔确定〕` ("OK"). (3) The second half of the AI-native work: the
+  opening line does not call the model, the plugin draws the goal card, the suggestion card and the
+  first task, onboarding makes at most 3 model requests, and it works with the model turned off. The
+  last two parts are in onboarding sections 5 and 6; this note goes only up to the handoff. Basis: the
+  prototype and its checks (82 states, 22 scenarios, a joint check of the handoff and the team
+  window), and a probe of growing windows on Electron 44. Corrections after review: how the whale on
+  the tile rises goes into section 8 (values from the prototype, started by the main process through
+  a `dsBotApp` reveal event, open), no longer pointing at onboarding section 5; the name in the
+  greeting follows the team (a reinstall uses the team's name, an import or an unreadable name gives
+  "Hi, I'm here"); a card that arrives during the entrance waits 1.5 seconds for the greeting to be
+  read; the 300 ms minimum hold and "this line is empty while a card is up" state the failure and
+  180-second exceptions; a later start's first success after a retry or a fresh start does not say "In
+  we go" and dives 920 ms after the squash and spring back, with the same 2.5-second fallback as the
+  first start; the start window leaves the taskbar only when the main window appears; with reduced
+  motion the `「^ ^」` eyes hold 300 ms longer; the elapsed seconds hide while a card is up; the 45 KB
+  budget goes into section 11, with the same suggestion as the onboarding note; "faint ring" is called
+  just "ring", as in the onboarding note; the fallback for an empty Mica frame, the delay in "Not done"
+  and "does not ask the user to do anything" are rewritten for the new handoff and the talking whale;
+  first-draft rules such as "still while waiting for the user's answer" are recorded in "Changes to
+  decided designs"; the "Changed with" list in the header is completed.
+- 2026-10-28 place line: when the first batch landed (start window, handoff, failure page, log), the
+  maintainer saw that the first start still opened the "Welcome to DS Bot" system dialog, and asked to
+  "give a suggestion, and also offer a way to choose for yourself; avoid small pop-ups". The first
+  start no longer opens that dialog; right of the footnote is a line `「数据放在 C 盘（剩 412 GB）· 换个位置…」`
+  (sections 2 and 4), which opens the system picker only on a click; settling the root, "It will go
+  in…" and `「这里放不了」` follow section 6, the rejection reasons add the DSH home and program folder
+  sentences, once settled the start sinks and begins again as in section 7, and the folders this start
+  built in the default place are deleted; it folds away after an import copy. Basis: the code in the
+  desktop app and its checks (`place.test.mjs`, `start-window.test.mjs`, tests on the unpackaged app).
+- 2026-10-28 glancing: section 3's second table adds number 9: while working at station 2 the whale
+  looks to one side for 600 ms every 5 to 9 seconds at random, not at the Quiet level or with reduced
+  motion; the maintainer asked "could the little fish's sway become a random sway-and-glance?", and it
+  can, on top of the bob. Basis: the wander case in the prototype's `alive.cjs` (three times in 30
+  seconds at the Normal level, gaps of 7.8 to 8.5 seconds, zero times at the Quiet level and while the
+  pointer is on the page).
+- 2026-10-29 greet first, then set off: section 4, beat 2: even when the data phase is done, the whale
+  waits for the greeting to be read in full before leaving station 1, bobbing while it waits. When the
+  maintainer tried the landed start window: "when I saw the little whale it was already at the second
+  position": on that first start the main process built the data folder in 2.9 seconds, and the page
+  painted only at 8.6 seconds (a cold start; 2 seconds on the next two starts), so the whale swam to
+  station 2 560 ms after rising. Basis: the greet case in the prototype's `alive.cjs` (when the data
+  phase finishes before the entrance ends, the whale leaves station 1 1.66 seconds after the entrance
+  and says "Warming up, give me a moment" 0.6 seconds later; the same when it finishes halfway through
+  the search, without saying "First, find a place for things"), and measurements on a trial copy (the
+  window appears at 1.1 seconds, the data is done at 1.9 seconds, the page paints at 2.1 seconds; the
+  whale leaves station 1 1.68 seconds after the entrance; `main.mjs` starts the engine right after it
+  marks the data done, and "engine took" in the log counts from that moment, independent of the
+  greeting).
+- 2026-10-29 copy layers: the start page's text is layered by its place on the page, in one table, see
+  [Start page copy](2026-10-29-start-copy.md); the `text.mjs` item in section 11 now points there;
+  four changes follow the layers' rules: the 45-second hint and "The team view didn't load" lose their
+  full stops, "It will go in …" gains one, "Choose again" gains …, and the OneDrive reason says "chats"
+  instead of "chat records" (sections 5, 6 and 7).
+- 2026-10-30 ring: the maintainer passed on a discussion that found the start window too noisy ("this
+  version is a bit noisy now", "could it be a bit simpler", "actually I think just a whale may be
+  enough, and then we can do interactive animation; text isn't really needed"), and proposed keeping
+  only a whale floating on the water that spouts when clicked, with the progress as a bar or a ring;
+  after comparing three proposals (a progress bar of three waterline segments, a ring, only the whale)
+  the ring was chosen. "Why" and sections 2 to 11 are rewritten for the ring: the three stations and
+  the rings they leave become three arcs around the whale, every kind of start has the 112 px whale,
+  ring and waterline, and when a card comes the pond shrinks to .62 times and moves up 60 px; silent
+  when all goes well (the greeting, the per-phase lines, "In we go", connecting a model, the preview
+  notice and reinstall hints, and the elapsed seconds are removed, and later starts lose "Opening your
+  team…"), keeping only the low-space hint, 45 seconds, 180 seconds, failure, cards and the data move;
+  on later starts and during a data move the whale says the 45-second line; clicking the whale spouts
+  instead of spinning; at the handoff the remaining arcs fill and the ring closes, the celebration
+  spouts, dives at 560 ms and sends `handoffShow` at 0.72 seconds, and the one without at 0.22 seconds.
+  "Open questions" loses the greeting's name, and the waterline row is rewritten for the ring; "Not
+  done" and "Known limits" follow. Basis: the prototype's ring layout (screenshots of all 82 states
+  passed the layout probe, which also checks that the ring does not touch the whale's line, the hint
+  row or cards: no problems); `ring-live.cjs`: on the first start `handoffShow` 0.72 seconds after
+  ready (1.09 to 1.17 seconds in the old layout), on later starts 0.23 to 0.33 seconds, all within the
+  prototype's fallbacks of 1.5 and 0.8 seconds; the 45-second `〔打开日志文件夹〕` can be clicked with
+  the pointer, the data-move line is there, the spout's `「^ ^」` eyes give way to the failure pose, and
+  `〔重试〕` clears the red arc; all 10 comments from an independent review are fixed (the empty paper
+  lets clicks through, the hint row hides while a card is up, the 112 px whale's entrance depth of 96 /
+  84 px, sinking 84 px, the spout's `「^ ^」` eyes do not override the failure pose, no spout after ready,
+  forced colours cover the arcs, highlight, spout and drops, the arcs draw in 0.5 s, and so on). Checks
+  in the desktop app (off-screen Electron, a stand-in bridge, all 15 pass): on the first start
+  `handoffShow` 0.73 seconds after ready, on later starts 0.24 seconds (with the engine up only 0.5
+  seconds before ready); when the data phase finishes before the page paints, the first arc fills at
+  820 ms, and one finished at 700 ms goes in progress at 565 ms and fills at 999 ms. A first start on
+  real hardware (a one-off copy of this branch with the pinned DSH 0.2.1-rc.4): the window appears at
+  1.5 seconds, the page paints at 2.9 seconds, the first arc fills at 2.6 seconds page time; the second
+  arc fills after 17.1 seconds of engine start, and the team is ready 4.4 seconds later; `handoffShow`
+  738 ms after ready, the window starts to grow 173 ms later, the team window appears 1.31 seconds
+  after ready, and the page shows no leftover rings or elapsed seconds. Two deliberate differences
+  from the prototype: the whale keeps its loop while the first arc waits (the prototype switched to
+  the working loop first, and the 400 ms that a loop must stay delayed the arc further); and at ready
+  the beat in progress is no longer finished, and the remaining arcs fill together (the prototype let
+  it finish; in the desktop app written after the prototype, a later start whose engine came up 0.5
+  seconds before ready sent `handoffShow` only at 0.46 seconds). Corrections after review: the whale
+  keeps its loop while the first arc waits (section 4); later starts have the beat of the first arc
+  filling in the first second (section 5); a nod when a beat ends (section 3); at the Quiet level a
+  click on the whale still squashes, flicks the tail and shows `「^ ^」` eyes; the rising ripple fades
+  in .56 s; the low-space line counts its first 10 seconds on the start clock and is there from the
+  entrance.
+- 2026-10-30 jump to Chief: the maintainer asked "should we add a short description of what it is
+  doing, move it up a bit, after the start morph smoothly into the main page, and Chief jumps to
+  Chief's spot on the left of the main page", then "do all three", and right after "keep the copy
+  cancelled": so no text describing the current work was added, and the page still has no text when
+  all goes well (section 3); only the other two points were done. First, moving up: without a card the
+  group sits 45 px lower (80 px before), the ring moves up 35 px, and when a card comes the group moves
+  up 45 px; unchanged with a card (sections 2 and 6). Second, at the handoff the whale no longer dives
+  but jumps out of the water, flies inside the growing start window to where the Main Bot's avatar
+  will be, shrinks to the avatar's size and lands, and the main window appears on the same rectangle
+  (sections 3, 4, 5, 7, 8, 9 and 11): the plugin's sidebar passes the Main Bot's avatar position in
+  `dsBotApp.ready()` (only for the default whale with the avatar visible in the team column), the main
+  process converts it with `landingOf` to the start page's coordinates and puts it in the handoff
+  snapshot, and the start page's `leap` flies 590 ms (550 ms without a celebration), landing 30 ms
+  before the main window appears; `handoffDone` is now sent on landing (1150 ms with a celebration,
+  650 ms without); when there is nowhere to land it dives as before. The whale rising on the tile and
+  the `dsBotApp` reveal event are dropped, and their row in "Open questions" goes with them: the avatar
+  in the team view need not move by itself, since where the whale lands is the avatar; when the
+  "Preview notice" covers the sidebar the whale still lands where the avatar is, and the avatar is
+  under the overlay (section 8). "During the growth nothing but Mica may be on the page" becomes
+  "only the flying whale"; that the whale may move in jerks during the growth, and that the landing
+  point may be a few pixels off when the team column is still moving after `ready()`, go into "Known
+  limits"; "Not done" follows. Basis: the app's tests (`start-window.test.mjs`: `landingOf` is right
+  when both windows have the same frame, when the team page is zoomed to 125 %, and when only the start
+  window has a system title bar, and no malformed report lands; with a position in `ready()` the
+  handoff snapshot has `landing`, without one it does not; `start-page.test.mjs` checks the `.flight`
+  layer), and the plugin's sidebar test (`app-ready.test.js`: the default whale reports its position,
+  another look or a photo does not). A first start on real hardware (a one-off copy with the pinned DSH
+  0.2.1-rc.4, the team page zoomed to 125%): the main process recorded "the whale lands at 105, 116
+  (60 px)", and after the team window appeared the Main Bot's avatar in the sidebar was at (104, 116),
+  60 px, 1 px off; `handoffShow` 738 ms after ready, the window starts to grow 171 ms after it,
+  `handoffDone` 442 ms after it, and the team window appears 1.32 seconds after ready: on this machine
+  the growth is slower than 300 ms, so the whale lands first and then grows with the window (two runs,
+  the same landing point both times); on the first start the "Preview notice" overlay covers the
+  sidebar, and the avatar is under the overlay
+- 2026-10-31 place line: the maintainer: "replace the old three-dot style, remove the community/
+  unofficial note at the bottom left, and the change-location at the bottom right". On follow-up
+  questions: the "three-dot style" is the old three stations, which the ring has already replaced, so
+  this change leaves it; the maintainer asked "should the ring show the 3 phases being started?": each
+  of the three arcs already is one phase (section 2), so no text is added (2026-10-30, "keep the copy
+  cancelled"). The footnote is removed; the place line moves to the bottom centre, `〔换个位置…〕` becomes
+  a small grey button (28 px, `small`), and the whole line sits 4 px below the paper (section 2); the
+  first start still has it, and later starts have it only when the disk with the data has less than
+  20% of its starting free space left: the starting free space is recorded in `locations.json` when
+  the data is put in a folder (`freeAtStart`; when the disk is full it cannot be recorded, and is
+  recorded the next time), places saved earlier get it on the next start; on later starts
+  `〔换个位置…〕` moves the data right away (section 5). In testing, a rejected data move opened a system
+  dialog, and the maintainer said: "let's avoid any default pop-ups like this in the system as far as
+  we can". So during a later start's data move everything except the system picker is asked on cards:
+  `「这里放不了」` uses the rejected card of section 6 (with two more reasons, "whole drive" and "contain
+  each other with the team workspace", and an unreadable folder counts as no permission), and the
+  confirmation is a new card, `「搬到这个文件夹？」` with `〔移动并重启〕`, `〔重新选…〕` and `〔取消〕`; after
+  the confirmation the start window turns into the data-moving page on the spot, this start gives way,
+  and the waiting handoff is dropped. The system dialogs that remain go into "Known limits". Sections
+  2, 3, 4, 6 and 8 and "Changes to decided designs" follow. Basis: the app's tests (`place.test.mjs`:
+  the 20% boundary; `start-window.test.mjs`: turning into the data-moving page and dropping the waiting
+  handoff; `main-low-space.test.mjs`: with the disk nearly full a later start has the place line, a
+  choice inside the data folder gives `「这里放不了」`, an unreadable `C:\System Volume Information`
+  counts as no permission, after a cancel the engine comes up and the team view loads as usual, and
+  after `〔移动并重启〕` the page loads `?start=moving`, the engine stops before the copy, the data is
+  copied to the new folder, `locations.json` switches to the new folder and its own free space, and the
+  app restarts, with no system dialog all the way; `main-room-left.test.mjs`: with plenty of free space
+  there is no place line, changing the team workspace leaves the recorded free space alone, and the
+  data move in Settings works as before; `main.test.mjs`: a place never recorded gets recorded this
+  time; `start-page.test.mjs`: the footer holds only the place line and the grey button, and the
+  data-move cards); deliberately breaking the 20% check, stopping the engine before the copy, or
+  dropping the start on cancel each makes the tests fail. All 17 off-screen rendering checks pass (the
+  place line is centred, clickable with the pointer, 12 px from the bottom edge, 4 px below the paper
+  with a card, on later starts and the failure page, long English paths with an ellipsis, dark, both
+  cards). An independent review (four aspects, each comment checked once more) confirmed 7 comments,
+  all fixed: an unreadable folder no longer turns a normal start into the failure page, a 0 recorded
+  while the disk was full does not count, and the wording in start-copy section 3, this note's section
+  5, "Changes to decided designs" and the onboarding note. A later start on real hardware (a one-off
+  copy of this branch, 4.0 GB free on drive G, a recorded starting space of 10^15 bytes): the place
+  line `「数据放在 G 盘（剩 4.0 GB）」` ("Data on drive G, 4.0 GB free"), clickable with the pointer;
+  first the picker was cancelled, and the start went on as usual; then clicked again and a folder
+  chosen, the team view became ready while the card was open, and the handoff waited; the card
+  `「搬到这个文件夹？」` showed the real path, with no system dialog; after `〔移动并重启〕` the start
+  window turned into the data-moving page, the waiting handoff was dropped (after waiting 13 seconds),
+  and 6 seconds later the app restarted on the new folder and handed off, with `locations.json`
+  holding the new folder and 3.99 GB.
+- 2026-11-01 no text, add props: the user asked that "the start window rarely shows text, unless space
+  is low or there is an error, and the latter offers one-click copy/download of the log", and that
+  "while loading there should be related components, for example a folder flipping its pages in front
+  of the whale, two gears turning with a pulse". So the two 45-second lines ("This is taking a while;
+  antivirus software may be checking new files", "Slower than usual, please wait a little longer"),
+  the data move's "Moving DS Bot's data…" and the 45-second `〔打开日志文件夹〕` are removed, and slowness
+  shows only through the whale's pose; on a first start the place line also shows only when the disk
+  is short of space (overturning "the first start still shows it" of 2026-10-31, so a first start with
+  enough space has no entry for choosing the place); every error page has `〔复制详细信息〕` and the new
+  `〔保存日志…〕` (`saveLog`, the system save dialog, the last 5000 lines) in place of `〔打开日志文件夹〕`
+  (`openLogs` is no longer a start page action); a prop for each phase goes in front of the whale: a
+  folder flipping sheets, meshing gears, small hopping members (sections 2, 3, 4, 5, 6, 7, 9 and 11).
+  Basis: unit tests of the start page and the start window; a whole start recorded in headless Chrome
+  with a stand-in bridge (light, dark), and screenshots of each phase, the failure page, 180 seconds
+  and low space; with reduced motion the props have no loop animation. Not yet run on real hardware in
+  the desktop app, and `〔保存日志…〕` has not been clicked for real yet. This change alters a decided
+  design and needs the maintainer to confirm it.
+- 2026-11-01 (waiting for the maintainer to confirm): animation has one source. The start window's
+  cards and the cards in the team window that replace system dialogs (`app/src/page-card.css`) use the
+  same colours and springs, all generated by `scripts/start-assets.mjs` from the plugin's `themes.js`
+  and `motion.js`: a card appears on `SPRING_SHAPE`, folds away with the start window card's exit
+  (sinks 6 px, shrinks to .975, blurs 3px, .16 s), and with reduced motion only fades in over .12 s and
+  out over .16 s (section 9). The import cards (section 6) get their snapshots from the main process's
+  `import-flow.mjs`, and the page still draws only from the snapshot.
+- 2026-11-01 how the handoff shows: a recording of the handoff in the desktop app (real Electron 44,
+  the real `StartWindow`, a stand-in team page, a 60 fps ffmpeg screen recording) showed three
+  problems: the growth used `cubic-bezier(.2,.7,.2,1)`, which covers most of the distance in the first
+  40%, so the window looked finished very early, and after landing the whale waited over 200 ms in a
+  large empty dark window; when the main window appeared through `show()`, Windows' own opening
+  transition played over the start window, with one or two frames of the whole window greyed out, the
+  whale and the avatar split into two, and then dark jumping to light; and the 160 ms wait before the
+  growth left the whale hanging at the top of its jump. Changed to: the main window shows at `ready()`
+  at opacity 0 under the start window (the opening transition finishes unseen and does not stall the
+  first step of the growth); the growth starts at `handoffShow` + 40 ms, 260 ms, ease in and out; the
+  whale lands 60 ms after the window is fully grown, the main process waits for `handoffDone` before
+  making the main window opaque, then fades the start window out over 180 ms, and the whale melts into
+  the avatar. With reduced motion, or when the page sends no `handoffShow`, there is no growth and the
+  same fade. Basis: recordings before and after (on the first start, ready to the main window showing
+  went from 1.24 seconds with one greyed frame to the fade starting at 1.09 seconds and ending at 1.29
+  seconds; later starts begin at 0.58 seconds); unit tests of the start window (the main window shows
+  transparent underneath at `ready()`, waits for the landing or 300 ms, gets focus only after the
+  fade, and is taken back on failure). Fading a Mica window with `setOpacity` works on Windows 11.
+- 2026-11-02 no stop button for the copy: the small stop-copy button under the ring looked like a
+  leftover dot. Decided by the user: "remove the cancel/stop-copy button". Section 6 drops the button
+  and the "Stop the copy?" confirmation card; to stop, quit the app or close the window, and the copy
+  stops first, without leaving half a team, before the app quits.
+- 2026-11-02 uncaught errors: section 7: an uncaught error in the main process goes to the recovery
+  card before the handoff and only to the log after it, and Electron's own error box no longer opens.
+- 2026-11-02 data folder not found: the recovery card gets one more reason: when the disk with the
+  data is gone (not the program's own files missing), it no longer says "Something unexpected
+  happened" but `「找不到放数据的文件夹，可能是移动硬盘没插上。」` ("The data folder can't be found; the
+  external drive may be unplugged."), and the first arc is red.
+- 2026-11-02 copy-failed card: section 6 adds a sentence on what to do.
+- 2026-11-02 the team-view-didn't-load card: section 7 adds a sentence on what happened, one on what to
+  do, and "Details", as on the recovery card.
+- 2026-11-02 the recovery card says what to do: the user wanted "the error pages filled in as well".
+  Section 7: the recovery card adds a sentence on what to do under the reason (by reason).
+- 2026-11-02 every arc gets its beat: in the recording of `〔先不复制〕` the gears never showed; the engine
+  had warmed up while the card waited for an answer, and after the answer the ring jumped straight to
+  "Open the team". Section 2: a phase that finished unseen (not only the data folder) still goes in
+  progress for at least 420 ms when its turn comes, with its prop, before it fills; the same for "Open
+  the team" before the handoff on a first start.
+- 2026-11-02 three arcs first, four after the answer: after watching the four-arc recording, the user
+  said what they had pictured was "three bars at first; when the first finishes its sweep it asks
+  whether you want it; if yes, it jumps up, rearranges into 4 bars and starts the import; improve the
+  box-moving animation a bit; if no, keep the 3-bar start". Section 2: every start begins with three
+  arcs, the copy arc grows only when the copy starts while the other three move aside, and it shrinks
+  back to three arcs when the copy stops; the box-moving prop is redrawn (old box, new box and dotted
+  line, the box flies leaning and squashes as it lands). Section 6: the import card appears only once
+  the first arc has filled, and until the answer the ring stays at the first arc; the dot lands in the
+  gap after the first arc.
+- 2026-11-02 the import joins the ring: after watching the import recording, the user asked to "cut it
+  down as far as possible; make the import a progress bar that, after the click, jumps up and morphs
+  (the 3-arc ring becomes a 4-arc ring)". Section 2: on a first start that copies a team from DSH the
+  ring has four arcs, with the extra "Copy your old team", which fills with the real progress of the
+  copy, the prop during the copy is the moving boxes, and when the pre-warmed engine stops for the
+  copy the engine arc goes back to not started; other starts keep three arcs. Section 6: the import
+  card keeps only one line and two buttons, with size, model settings, checkboxes and footnote folded
+  into "Details", and the names found, the number of parts and what will be copied removed; the
+  step-by-step "Moving in" card is removed, and after `〔复制过来〕` the card shrinks into a dot and jumps
+  into the copy arc; stopping the copy becomes an icon button under the ring plus a confirmation card;
+  a failed copy turns that arc red. Section 9: with reduced motion the card does not fly. Below 1 MB it
+  says "less than 1 MB". Basis: an import recorded in the desktop app against a stand-in DSH home
+  (`app/dist-recordings/`, not in the repository).
+- 2026-11-02 the whale shrinks to 0.75 times: first start 88 → 66 px, later starts 64 → 48 px, ripple
+  and rings 56 × 12 → 42 × 9, aligned around their centres on the waterline and the stations' old
+  positions (PR #702).
 
-## 待定
+## Open questions
 
-| 问题 | 选项 | 建议 |
+| Question | Options | Suggestion |
 |---|---|---|
-| 启动页放在哪里？ | 单独的启动窗口（本文）；主窗口里叠一层透明的 `WebContentsView`，团队界面在下面加载，就绪后淡出；按原来的设计在同一个窗口里 `loadURL` | 单独的启动窗口：真正的小窗，一直有 Mica，交接没有空白帧，「打开团队」也是真的。覆盖层是第二选择：同样没有空白帧，但启动时就是大窗口，还要管两套焦点；Electron 44 上实测，看不见的 `WebContentsView` 不渲染，覆盖层只能不透明，启动时就没有 Mica。原来的做法会露出 DSH 自己的加载，圆环合上、庆祝和长大都只能不做 |
-| 鲸鱼的尾巴能单独动吗？ | 启动页把生成器的输出按尾柄（`27.9, 61.1`）裁成两层，不加新形状；生成器加一个尾巴单独成层的选项；尾巴不动 | 先用裁切，只在启动窗口里用。以后插件也要用时，再给生成器加选项。去掉也只少了尾巴，其余不变 |
-| 水线要不要留？ | 留：圆环的一条弦，200 px，1 px `--bt-line-2`，首尾渐隐；去掉，只留鲸鱼和圆环 | 留：鲸鱼被裁掉的那条边在这里，喷出的水和涟漪也落在这里 |
-| 启动页超过 45 KB 的预算（第 11 节）怎么办？（原型实测：五个文件的源码 113 KB，压缩后 79 KB，gzip 约 35 KB；`text.mjs` 带中英两种语言） | 放宽预算；`text.mjs` 按语言拆开，只加载界面语言的那一份；打包时压缩 | 先按语言拆 `text.mjs`、打包时压缩，在 M4 实测启动页的第一帧；第一帧不晚就放宽预算：页面是本地文件，不走网络（同 [上手流程](2026-10-26-windows-onboarding.md) 的「待定」） |
+| Where does the start page go? | A separate start window (this note); a transparent `WebContentsView` layered in the main window, with the team view loading underneath and fading out once ready; `loadURL` in the same window as in the original design | A separate start window: a real small window, Mica the whole time, no blank frame at the handoff, and "Open the team" is real. The overlay is the second choice: also no blank frame, but the start is a big window from the outset, and two sets of focus need handling; measured on Electron 44, an invisible `WebContentsView` does not render, so the overlay can only be opaque, and the start has no Mica. The original way would show DSH's own loading, and the ring closing, the celebration and the growth would all have to go |
+| Can the whale's tail move on its own? | The start page cuts the generator's output into two layers at the tail stalk (`27.9, 61.1`), adding no new shapes; the generator gets an option to put the tail on its own layer; the tail does not move | Use the cut first, only in the start window. Add the option to the generator when the plugin needs it too. Dropping it only loses the tail; everything else stays |
+| Keep the waterline? | Keep: a chord of the ring, 200 px, 1 px `--bt-line-2`, fading at both ends; drop it and keep only the whale and the ring | Keep: it is where the whale's clipped edge is, and where the spout and ripples land |
+| What to do about the start page going over the 45 KB budget (section 11)? (Measured on the prototype: the five files' source is 113 KB, 79 KB minified, about 35 KB gzipped; `text.mjs` holds both Chinese and English) | Relax the budget; split `text.mjs` by language and load only the interface language; minify when packaging | First split `text.mjs` by language and minify when packaging, and measure the start page's first frame in M4; if the first frame is not late, relax the budget: the page is a local file and does not go over the network (as in the "Open questions" of [onboarding](2026-10-26-windows-onboarding.md)) |
 
-## 不做什么
+## Not done
 
-- 不画百分比进度条：引擎不报百分比。圆环的一段弧只有没开始、进行中、完成、失败四种样子，不按百分比画一部分。复制和下载的进度条用真实的字节数。
-- 不编造阶段，不为动画推迟引擎和团队界面的加载；交接为了长大多等约 460 ms，见第 8 节。庆祝（喷水）只在首次启动和重试、重新开始后第一次成功时有。庆祝的交接里主窗口在 `ready()` 后约 1.2 秒露面（长大要等页面上的字、圆环和纸面淡完才开始），不庆祝的约 0.7 秒。
-- 不放轮播的提示和笑话。顺利时鲸鱼不说话，只在第 3 节列的几种时候说一句和它的状态有关的短话，不冒气泡，不讲笑话，不挡卡片和按钮；鲸鱼的话里只有 180 秒那一句是问题，回答在卡片的按钮上。不提前说进门以后的事（接模型、预览版说明、上次的团队）。失败时不哭不闹，失败页上不说俏皮话。
-- 鲸鱼没有「?」徽标（UI 标准 8.2：大头像不显示徽标），不侧身跃出水面（交接时跳向 Main Bot 的头像是它唯一一次离开水面，第 8 节）；只在用户点它和庆祝的交接时喷水；不游来游去，不对每次按键都有反应，没有声音。
-- 鲸鱼不跨窗口飞：它在启动窗口里飞到 Main Bot 的头像会在的位置，主窗口在同一处接住（第 8 节）；团队界面里的头像不另做浮上来的动画。
-- 不画 DSH 的鲸鱼标志，不用其他产品的动画、插图、声音和字体。
-- 不往引擎的页面里注入 CSS 或 DOM 来接画面，不改 DSH。
-- 不用 Rive、Lottie 和网络字体：CSP `default-src 'self'` 不允许 WASM，也不另加运行时。
-- 标题带里不放能点、能抚摸的东西。
+- No percentage progress bar: the engine does not report a percentage. An arc of the ring has only
+  four looks, not started, in progress, done and failed, and is never drawn partly by percentage. The
+  copy and download progress bars use real byte counts.
+- No invented phases, and loading the engine and the team view never waits for an animation; the
+  handoff waits about 460 ms more for the growth, see section 8. The celebration (the spout) happens
+  only on the first start and the first success after a retry or a fresh start. In the celebration
+  handoff the main window appears about 1.2 seconds after `ready()` (the growth starts only after the
+  page's text, ring and paper have faded), and about 0.7 seconds without a celebration.
+- No rotating tips or jokes. When all goes well the whale is silent; only in the cases listed in
+  section 3 does it say one short line about its state, with no bubbles, no jokes, and without
+  covering cards or buttons; the only question among the whale's lines is the 180-second one, and the
+  answer is on the card's buttons. It does not tell in advance what comes once inside (connecting a
+  model, the preview notice, the last team). On failure it does not cry or make a fuss, and the
+  failure page has no jokes.
+- The whale has no "?" badge (UI standard 8.2: large avatars show no badge), and does not leap out of
+  the water sideways (jumping to the Main Bot's avatar at the handoff is the only time it leaves the
+  water, section 8); it spouts only when the user clicks it and in the celebration handoff; it does not
+  swim around, does not react to every key press, and has no sound.
+- The whale does not fly across windows: it flies inside the start window to where the Main Bot's
+  avatar will be, and the main window takes over at the same spot (section 8); the avatar in the team
+  view has no rising animation of its own.
+- No DSH whale logo, and no animations, illustrations, sounds or fonts from other products.
+- No CSS or DOM injected into the engine's page to join the frames, and no changes to DSH.
+- No Rive, Lottie or web fonts: the CSP `default-src 'self'` does not allow WASM, and no other runtime
+  is added.
+- Nothing clickable or pettable in the title band.
 
-## 已知限制
+## Known limits
 
-- 启动窗口里没有系统窗口：选择框也是应用自己的（[桌面应用](2026-10-16-desktop-app.md)「选择框」），其余都在卡片上问（维护者 2026-10-31：「让我们尽可能避免系统中出现任何这样的默认弹窗」）。下面这些系统对话框 2026-11-01 起都已经换成卡片，留着这条是为了历史：还有这些系统对话框：搬数据时另一个 DSH 正在用这份数据、复制失败（以后的启动和设置里都是），设置里搬数据的确认和「请选择…以外的位置」，首次启动问要不要复制团队的几个问题（导入卡还没落地），复制团队时对话比 DSH 新和复制失败，更新的提示，失败页上的「新版本可能修好了这个问题」，关窗口时第一次的托盘说明。
-- 主窗口在隐藏时启动 DSH 和 ds-bot。`dsBotApp.ready()`、#559 的重新挂载检查和系统按钮颜色的测量，都在看不见的窗口里跑，要在 M4 验证。
-- 从没显示过的 Mica 窗口第一次 `show()` 时，可能先露出一两帧空的 Mica。交接时启动窗口已经长成同样大小的 Mica，上面至多只有落在头像位置上的鲸鱼；主窗口在它上面露面，这一两帧和下面的一样，只是鲸鱼可能先不见一两帧，头像才出来。M4 用 60 帧录像确认主窗口第一帧之前没有白帧或黑帧；有的话，改成主窗口先在长大后的启动窗口下面露面，画出第一帧再放到上面、销毁启动窗口。
-- `#00000000` 的系统按钮颜色，只在一台 Windows 11（26200，深色，窗口不在前台）上验证过是透明的。前台、浅色、悬停和按下都没验证。按钮画成不透明的系统，改用不透明的 `--bt-main` 窗口。
-- 未打包、机器忙时实测：进程启动后 1.35–1.57 秒窗口才建好，页面第一次画出来还要再等 0.9–1.0 秒。启动页的第一帧和空窗口一模一样，这段看不出来，但入场会晚。
-- SVG 里的尾巴和眼睛、圆环的弧和弧上的光、喷出的水柱、内容的模糊淡入和流光不走合成线程。杀毒软件在扫描、引擎又在启动时，可能卡顿；那时先去掉尾巴。
-- 动画档和浅深色要等团队界面报告一次才记得住。在应用外改过主题时，下次启动先用旧的。
-- 第二段弧画满，是从引擎的 HTTP 起来推断的：DSH 不报命名的阶段（「需要 DSH 提供的」第 11 条）。
-- 工作区不到 588 高的显示器上，窗口只有 500 高，长卡片要在纸面里滚动。
-- 启动时多一个渲染进程（约 40–60 MB），交接后销毁。
-- 从开始长大到启动窗口销毁的约 600 ms 里两个窗口同时存在，主窗口露面后的 300 ms 里两个都看得见。启动窗口在主窗口露面时才离开任务栏，任务栏按钮不会消失再出现；但那 300 ms 里 Alt+Tab 可能短暂看到两个。
-- 一般的首次启动里，数据阶段在页面画出来以前就结束了，第一段弧很少显示进行中：入场后 260 ms 直接画满。
-- 庆祝的交接里主窗口在就绪后约 1.2 秒才露面，不庆祝的约 0.7 秒：长大要等页面上的字、圆环和纸面淡完才开始，主窗口长到位才显示。
-- 长大靠逐步 `setBounds`：页面每一步都重新排版，但只重画其中一部分，所以长大时纸面必须是空的；机器忙时长大不平滑。
-- 鲸鱼跳向头像时，后一半是在窗口长大的那 300 ms 里飞的。它的动画走合成线程，但窗口一步一步长大，页面只在其中几步重画（探针里 23 步重画了 8 次），鲸鱼可能一顿一顿地动，机器忙时更明显。
-- 鲸鱼的落点是侧栏调 `ready()` 那一刻量的：之后团队列要是还在动（列表滑动、宽度变化），落点会差几个像素。
-- 圆环的淡线（`--bt-line`）、进行中的淡蓝和水线（`--bt-line-2`）在真的 Mica 上看不看得清，还没验证：原型的截图用的是不透明的 `--bt-main` 背景。
-- 启动页的五个文件超过 45 KB 的预算（第 11 节，见「待定」）。
+- The start window has no system windows: the picker is the app's own too ([Desktop
+  app](2026-10-16-desktop-app.md) "Picker"), and everything else is asked on cards (maintainer,
+  2026-10-31: "let's avoid any default pop-ups like this in the system as far as we can"). The system
+  dialogs below have all been replaced by cards since 2026-11-01; this item stays for the record: the
+  remaining system dialogs were: another DSH using the data during a data move, and a failed copy (on
+  later starts and in Settings), the data-move confirmation in Settings and "Choose a place outside…",
+  the first start's questions about copying the team (the import card had not landed yet), chats newer
+  than DSH and a failed copy during a team copy, the update prompts, "A new version may fix this" on
+  the failure page, and the first tray notice when the window closes.
+- The main window starts DSH and ds-bot while hidden. `dsBotApp.ready()`, the remount check of #559
+  and the measurement of the system button colour all run in an invisible window, and must be verified
+  in M4.
+- When a Mica window that has never shown calls `show()` for the first time, one or two frames of empty
+  Mica may show first. At the handoff the start window has already grown into Mica of the same size,
+  with at most the whale on top where the avatar is; the main window appears on top of it, so those one
+  or two frames look the same as what is underneath, except that the whale may vanish for a frame or
+  two before the avatar appears. M4 confirms with a 60 fps recording that there is no white or black
+  frame before the main window's first frame; if there is, the main window first appears under the
+  grown start window, and moves on top and the start window is destroyed only after it has painted its
+  first frame.
+- The `#00000000` system button colour has been verified as transparent only on one Windows 11
+  (26200, dark, window not in the foreground). Foreground, light, hover and pressed are not verified.
+  On a system that paints the buttons opaque, use an opaque `--bt-main` window instead.
+- Measured unpackaged on a busy machine: the window is built 1.35–1.57 seconds after the process
+  starts, and the page paints for the first time 0.9–1.0 seconds later. The start page's first frame
+  looks exactly like an empty window, so this gap does not show, but the entrance comes late.
+- The tail and eyes inside the SVG, the ring's arcs and their highlight, the spout, the content's
+  blur fade-in and the running highlight do not run on the compositor thread. While antivirus software
+  scans and the engine is starting, they may stutter; in that case drop the tail first.
+- The animation level and light or dark are remembered only after the team view reports them once. If
+  the theme was changed outside the app, the next start uses the old one first.
+- The second arc filling is inferred from the engine's HTTP coming up: DSH does not report named
+  phases (item 11 of "What DSH needs to provide").
+- On a display whose work area is less than 588 high, the window is only 500 high, and long cards
+  scroll inside the paper.
+- The start has one more renderer process (about 40–60 MB), destroyed after the handoff.
+- In the roughly 600 ms from the start of the growth until the start window is destroyed, both windows
+  exist, and in the 300 ms after the main window appears both are visible. The start window leaves the
+  taskbar only when the main window appears, so the taskbar button does not vanish and come back; but
+  in those 300 ms Alt+Tab may briefly show two.
+- On a typical first start the data phase ends before the page paints, so the first arc rarely shows
+  in progress: it simply fills 260 ms after the entrance.
+- In the celebration handoff the main window appears only about 1.2 seconds after ready, and about 0.7
+  seconds without a celebration: the growth starts only after the page's text, ring and paper have
+  faded, and the main window shows only once fully grown.
+- The growth relies on step-by-step `setBounds`: each step relays out the page but repaints only some
+  of them, so the paper must be empty during the growth; on a busy machine the growth is not smooth.
+- When the whale jumps to the avatar, the second half of the flight happens during the window's 300 ms
+  of growth. Its animation runs on the compositor thread, but the window grows step by step and the
+  page repaints only on some steps (8 repaints in 23 steps in the probe), so the whale may move in
+  jerks, more so on a busy machine.
+- The whale's landing point is measured at the moment the sidebar calls `ready()`: if the team column
+  is still moving after that (the list sliding, the width changing), the landing point may be a few
+  pixels off.
+- Whether the ring's faint lines (`--bt-line`), the pale blue of an arc in progress and the waterline
+  (`--bt-line-2`) are legible on real Mica is not verified: the prototype's screenshots used an opaque
+  `--bt-main` background.

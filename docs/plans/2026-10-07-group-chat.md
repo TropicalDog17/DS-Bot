@@ -1,105 +1,233 @@
-# 群聊
+# Group chat
 
-- 日期：2026-10-07 定下按顺序发言和群管理；之后多次调整，见文末「变更」
-- 相关：#129，PR #19、PR #175、PR #79、PR #180
+- Date: 2026-10-07 decided on speaking in order and group management; adjusted several times since,
+  see "Changes" at the end
+- Related: #129, PR #19, PR #175, PR #79, PR #180
 
-## 为什么
+## Why
 
-群聊是多个 Bot 一起工作的主要方式，有两个根本难题：
+Group chat is the main way several Bots work together. It has two basic problems:
 
-1. **协调。** 早期让成员并行写、发出前再检查新消息，连报数都会乱：模型会沿用乱掉的数字硬发。把排序交给模型做不好。所以讨论（全员轮流的普通消息）**一次只有一个人说话**，每个成员开口前读到的都是最新的群。但派活不能排队：一条消息点了几个人，他们要同时开工，否则群聊就失去了多个 Bot 一起干活的意义。
-2. **成本。** 每叫一个成员，就要带上它整个会话的上下文跑一次模型。成本随发言人数线性增长，系数很大。所以默认少叫人：普通消息先给管理员，由它决定点谁。
+1. **Coordination.** Early on, members wrote in parallel and checked for new messages before they
+   sent. Even counting off went wrong: the model kept the broken numbers and sent them anyway. The
+   model cannot do the ordering well. So in a discussion (plain messages that everyone answers in
+   turn) **only one member speaks at a time**, and each member reads the latest group before it
+   speaks. Handing out work cannot queue, though: when one message names several members, they must
+   start at the same time, or the group loses the point of several Bots working together.
+2. **Cost.** Every member that is called runs the model once with the whole context of its Session.
+   The cost grows linearly with the number of speakers, with a large factor. So by default few
+   members are called: a plain message goes to the admin first, and the admin decides whom to call.
 
-另外，成员在群里接到长任务时，不能让用户面对一个静止的页面（「黑盒」），也不能让做完的结果丢掉。
+Also, when a member gets a long task in a group, the user must not face a page that does not move
+(a "black box"), and finished results must not get lost.
 
-## 已定的行为
+## Decided behavior
 
-### 谁来回答
+### Who answers
 
-- 群有两种回答方式：
-  - **管理员先答**（新群默认）：没有 `@` 的普通消息只给管理员，管理员用 `@名字` 叫其他成员。
-  - **全员轮流**：普通消息由每个成员按顺序回答，管理员第一个。
-  - 没有管理员的群按「全员轮流」回答。
-- `@名字` 只叫被点名的成员。`@all`、`@everyone`、`@所有人`、`@全体` 叫全员；成员回复里的这几个词只有管理员说才算，防止成员互相叫起一大片。
-- 同一条消息点到的成员同时开工：用户的 `@` 消息、成员回复里点的几个人、`@all`。谁先好谁先发；一起被点的成员看不到彼此这一轮的回答，提示里写明还有谁在同时回答。需要接着别人的结果做时，用接力：先叫一个人，让他做完再 `@` 下一个。
-- `@` 一发出来就生效：成员干活中途说的话、最后的回复、Bot 在一轮进行中发的帖，里面点到的人马上开工，不等说话的人干完。
-- 一轮进行中用户发的话立刻写进群，交给它该叫的人（管理员模式下是管理员），不排在正在回答的成员后面。
-- 一个成员同一时间只回答一个叫它的消息；前一个回答完（或转去后台干活）才开始下一个。
-- 全员轮流的普通消息（不带 `@`）仍按顺序：上一个人发完（或跳过）下一个人才开始，每个人看到本轮之前所有人的发言和自己的位置。
-- 回复里 `@` 了别人，被点的人接着说（接力）。有实质进展（调了工具、产出新内容）的接力不设次数上限；只有 Bot 之间连续 6 轮 0 工具调用且只是重复、客套确认或「暂无待办 / 待命」这类不 @ 人的状态帖时，才会暂停，群里提示停下原因；停下的叫人只在用户发言后继续，Bot 的帖或迟到的回复不会放行。这个计数属于群：每个 Bot 的一次 0 工具回合计一次，开轮的那条帖不另计（所以全员轮流的一轮里三个人各回一句就是三次）。阶段工作结束后，Bot 自己发的状态帖既不加轮，也不再叫起其他成员。停下期间被压掉的叫人 park 到用户发言为止；工具调用和实质内容只在还没停下时清零，用来避免误停（#853）。要主动停下群里的工作，用户在群详情里点「全部停止」或逐个停。
-- 每个成员可以跳过（`[PASS]`），不必每轮都说话。被点名干活的成员如果只回复「收到 / 现在去查」却没调任何工具就结束回合，宿主会自动把这句作为进度发到群里并在同一调用上续推一次，让它真正调用工具把活做完（#469）；如果那句其实已经是完整的回答，它回 `[PASS]`，群里不会出现两遍。说「检查过了」「处理好了」这类已经做完的话不续推。
+- A group has two answer modes:
+  - **Admin answers first** (the default for a new group): a plain message without `@` goes only to
+    the admin, and the admin calls other members with `@name`.
+  - **Everyone in turn**: each member answers a plain message in order, the admin first.
+  - A group without an admin answers as "everyone in turn".
+- `@name` calls only the named member. `@all`, `@everyone`, `@所有人` ("everyone") and `@全体` ("all")
+  call every member. In a member's reply these words count only when the admin says them, so that
+  members cannot wake a whole crowd for each other.
+- Members named in the same message start at the same time: a user's `@` message, several members
+  named in a member's reply, `@all`. Whoever is ready first posts first. Members called together do
+  not see each other's answers for this turn; the prompt says who else is answering at the same time.
+  When one member needs another's result, use a relay: call one member first and have it `@` the
+  next one when it is done.
+- An `@` takes effect as soon as it is posted: the members named in what a member says while it
+  works, in its final reply, or in a post a Bot makes during a turn start right away. They do not
+  wait for the speaker to finish.
+- What the user says during a turn goes into the group at once and goes to whoever it should call
+  (the admin in admin mode). It does not queue behind the member that is answering.
+- A member answers only one message that calls it at a time. It starts the next one when the
+  previous answer is done (or has moved to background work).
+- A plain message for everyone in turn (without `@`) still goes in order: the next member starts
+  when the previous one has posted (or passed). Each member sees everything said before it in this
+  turn and its own place in the order.
+- When a reply `@`s someone, that member speaks next (a relay). A relay with real progress (tool
+  calls, new content) has no limit. It pauses only when Bots go 6 rounds in a row with 0 tool calls
+  and only repeat themselves, post polite acknowledgements, or post status posts such as "nothing
+  pending / standing by" that `@` nobody. The group then shows why it stopped. The calls that were
+  stopped go on only after the user writes; a Bot's post or a late reply does not release them. The
+  count belongs to the group: each 0-tool turn of a Bot counts once, and the post that opens a turn
+  does not count on its own (so in an everyone-in-turn round, three members each replying one line
+  is three). When a stage of work is done, a status post from a Bot neither adds a round nor calls
+  other members. Calls suppressed while the group is stopped are parked until the user writes. Tool
+  calls and real content reset the count only while the group has not stopped yet, which avoids
+  stopping by mistake (#853). To stop the work in a group, the user clicks "Stop all" in the group
+  details, or stops members one by one.
+- Every member can pass (`[PASS]`) and need not speak every turn. If a member called to do work
+  only replies "Got it / checking now" and ends its turn without calling any tool, the host posts
+  that line to the group as progress and pushes it once more on the same call, so that it calls the
+  tools and finishes the work (#469). If that line was already a complete answer, the member replies
+  `[PASS]`, and the group does not show it twice. A line that says the work is already done, such as
+  "checked it" or "handled it", gets no push.
 
-### 提及
+### Mentions
 
-- 只有 `@名字` 算提及，也只有它渲染成带头像的链接；不带 `@` 的名字是普通文字。客户端和服务端用同一条规则（`ds-bot/src/shared/mentions.js`）。
-- `@` 前面是字母、数字、`_`、`.`（邮箱等地址）不算；名字后面紧跟字母、数字、`_`、`-`（更长的词）不算；代码、链接、引用里的不算。名字不分大小写，长的名字优先匹配。
-- `all`、`everyone`、`所有人`、`全体` 不能用作 Bot 名字。
-- 输入框的 `@` 菜单把 Bot 排在最前（群里列成员和「所有人」，私聊列其他 Bot）。引用其他对话放在「+」里。
+- Only `@name` counts as a mention, and only it renders as a link with an avatar. A name without
+  `@` is plain text. The client and the server use the same rule (`ds-bot/src/shared/mentions.js`).
+- An `@` after a letter, a digit, `_` or `.` (an email or other address) does not count. A name
+  followed right away by a letter, a digit, `_` or `-` (a longer word) does not count. Mentions in
+  code, links and quotes do not count. Names are case-insensitive, and longer names match first.
+- `all`, `everyone`, `所有人` ("everyone") and `全体` ("all") cannot be Bot names.
+- The `@` menu in the input box lists Bots first (in a group: the members and "Everyone"; in a
+  private chat: the other Bots). Quoting other conversations is under "+".
 
-### Bot 发起的轮次和上限
+### Turns that Bots start, and limits
 
-- Main Bot 能往任何群发言，其他 Bot 能往自己所在的群发言（`post_to_group`），发言人自己不参与回答。
-- Main Bot 和管理员的帖子按「谁来回答」叫人。其他成员的帖子只叫它用 `@名字` 点到的成员，`@all` 等不算；没点人就只写进群里，没人回答。同一次转发里还有别的消息时，由那条消息选人。
-- Bot 发起的轮次和全团队的 Bot 消息都不计数（见 [Bot 之间派活](2026-10-16-bot-handoffs.md)）。Bot 被告知不要发感谢或确认，也不要回复一条回复。
-- Bot 为别的 Bot 交给它的活发帖并要回报（`report_back`）时，这一轮是那件活下面的活：回报交回之前，它给派活 Bot 的回复先不交。
+- A Main Bot can post to any group, and other Bots can post to the groups they are in
+  (`post_to_group`). The Bot that posts does not take part in answering.
+- Posts from a Main Bot or the admin call members by "Who answers". A post from another member calls
+  only the members it names with `@name`; `@all` and the like do not count. If it names nobody, the
+  post only goes into the group and nobody answers. If the same relay carries other messages, those
+  messages pick the members.
+- Turns that Bots start and Bot messages across the team are not counted (see
+  [Handing work between Bots](2026-10-16-bot-handoffs.md)). Bots are told not to send thanks or
+  acknowledgements, and not to reply to a reply.
+- When a Bot posts for work another Bot handed it and must report back (`report_back`), this turn is
+  work under that work: its reply to the Bot that handed it the work waits until the report is
+  delivered.
 
-### 干活中的进度和迟到的回复
+### Progress during work, and late replies
 
-- 成员在群里接到需要干活的任务时，第一次调用工具后 15 秒仍在干活，本轮就继续往下走，不再等它。
-- 干活过程中，它说的第一句话和带 `@` 的话立刻发到群里；间隔不到 30 秒的几句合并成一条发。轮次进行中进来的 Bot 群帖、进度和完成消息直接并入当前轮次处理，不再额外塞进群 Session 的待发队列（#663）。
-- 派活按批次收回：不管被点名的成员是在 15 秒内干完还是 15 秒后干完，也不管回复里有没有手写 `@派活人`，只要调了工具干完活，都算作该批次的子项完成；同一条消息并行点名多个人时，各自完成的话立刻发到群里，等这一批全部落地后再统一唤醒派活的 Bot 一次（#619）。派活的 Bot 还在自己这一回合里时，等这回合结束再叫它。用户直接叫的成员，结果是给用户的，不另叫管理员；成员需要管理员拍板时写 `@管理员`。
-- 本轮结束后才完成的回复照样发进群，它叫的人照样接着说。
-- 回答超时只在成员的会话完全没有动静时计时（4 分钟）。没及时回应、需要审批的成员各在群里留一行淡色事件，让用户知道发生了什么。
+- When a member gets a task in a group that needs work, and it is still working 15 seconds after its
+  first tool call, the turn moves on and stops waiting for it.
+- While it works, its first line and every line with an `@` go to the group at once. Lines less than
+  30 seconds apart are merged into one post. Bot group posts, progress and completion messages that
+  come in during a turn are handled as part of the current turn and are no longer added to the group
+  Session's outgoing queue (#663).
+- Handed-out work is collected per batch. Whether a named member finishes within 15 seconds or
+  after, and whether or not its reply has a hand-written `@` for the Bot that handed out the work,
+  once it has called tools and finished, it counts as a finished item of that batch. When one
+  message names several members in parallel, each one's finishing line goes to the group at once,
+  and the Bot that handed out the work is woken once, when the whole batch has landed (#619). If that
+  Bot is still in its own turn, it is called when that turn ends. For a member the user called
+  directly, the result is for the user, and the admin is not called as well. A member that needs the
+  admin to decide writes `@admin`.
+- A reply that finishes after the turn has ended still goes to the group, and the members it calls
+  still speak next.
+- The answer timeout (4 minutes) runs only while the member's Session shows no activity at all. A
+  member that did not answer in time, or needs an approval, leaves a faint event line in the group,
+  so that the user knows what happened.
 
-### 审批与状态
+### Approvals and status
 
-- 群里成员的审批请求（例如提权）由 DS Bot 接到群里：输入框上方的状态胶囊列出正在忙的成员，等审批的排在前面；点开群详情可以「允许一次」或「拒绝」。需要审批的成员立刻让出发言。
-- 成员在群里派出的 DSH 子代理（`subagent`）运行期间，即使成员自己的回合先结束，该成员在群里仍保持忙碌状态并计入派活批次；群详情里的「全部停止」和单成员「停止」会一并中断子代理并忽略其后续结算通知（#701）。
-- 有成员在本群干活（含等审批、跑子代理）时，群详情的成员列表标题旁有一个「全部停止」按钮：一次停掉本群正在跑的一轮和每个成员在本群的工作，被停下的成员各在群里留一行「已叫停」；它们在私聊和别的群里的活照常。DSH 自己的停止只停这一轮，轮次放手后还在干活的成员停不到；群详情里仍可以逐个停。
-- 群的工作文件夹和统一权限是群级设置，见 [角色与权限](2026-10-07-roles-and-permissions.md)。
-- 群自己的 Session 和 Bot 的私聊一样由多段组成：群的身份（群 id）不变，当前段是最新的一段。群的工作文件夹改了，群在下一轮换到在新文件夹里开的一段，群的文件面板随之显示群文件夹；早前的段归档，在群里往回翻照常能看到。成员在没有自己文件夹的群里用 `working_directory` 换的文件夹只作用于这个群，不改这个 Bot 的私聊和别的群。
+- Approval requests from members in a group (for example for raised rights) are brought into the
+  group by DS Bot. The status pill above the input box lists the busy members, with the ones waiting
+  for approval first. In the group details the user can choose "Allow once" or "Deny". A member that
+  needs an approval gives up its turn to speak at once.
+- While a DSH subagent (`subagent`) that a member started in a group is running, the member stays
+  busy in the group and counts in the work batch, even if its own turn ended first. "Stop all" and a
+  single member's "Stop" in the group details also interrupt the subagent and ignore its later
+  completion notices (#701).
+- While a member is working in this group (including waiting for approval or running a subagent),
+  the title of the member list in the group details has a "Stop all" button. It stops the turn
+  running in this group and every member's work in this group in one go. Each stopped member leaves
+  a line in the group saying it was stopped. Their work in private chats and other groups goes on.
+  DSH's own stop stops only this turn; it cannot reach members still working after the turn has let
+  go. In the group details they can still be stopped one by one.
+- A group's work folder and shared permissions are group settings; see
+  [Roles and permissions](2026-10-07-roles-and-permissions.md).
+- A group's own Session is made of parts, like a Bot's private chat: the group's identity (the group
+  id) stays the same, and the current part is the latest one. When the group's work folder changes,
+  the group moves on its next turn to a part opened in the new folder, and the group's files panel
+  then shows the group folder. Earlier parts are archived and can still be read by scrolling back in
+  the group. In a group without its own folder, a folder a member switches to with
+  `working_directory` applies only to this group; it does not change this Bot's private chat or
+  other groups.
 
-### 群的设置
+### Group settings
 
-- 用户新建群且没有附第一句话时，管理员先发一句问候，问这个群要做什么。Main Bot 用工具建群时不发。
-- 群公告（最多 2000 字）放进每次发言的提示里。成员最多 12 个，群名不能重复（最长 60 字），没起名的群显示成员名。
-- Main Bot 能看到所有群；其他 Bot 只能看到自己所在的群。
-- 私聊里用 `message_bot` 发的消息只进对方的私聊；对方在群里的工作不受影响。
+- When the user creates a group without a first message, the admin first says hello and asks what
+  the group is for. Not when a Main Bot creates the group with a tool.
+- The group notice (at most 2000 characters) goes into the prompt for every reply. A group has at
+  most 12 members. Group names must be unique (at most 60 characters); a group without a name shows
+  its members' names.
+- A Main Bot can see every group; other Bots can see only the groups they are in.
+- A message sent with `message_bot` in a private chat goes only into the other Bot's private chat;
+  that Bot's work in groups is not affected.
 
-### 一件活只有一个地点
+### One piece of work has one place
 
-- 群里的活只留在群里。在群里用 `message_bot` 叫本群成员，和在回复里写 `@名字` 一样：这句话发到群里，对方在群里做，结果由派活的 Bot 接话，对方的私聊收不到。
-- 在群里用 `message_bot` 叫群外的 Bot，工具拒绝，并提示先把它拉进群（Main Bot 和管理员可以用 `update_group` 加人，群里看得到这一步）。
-- 私聊里用 `post_to_group` 点名了某个 Bot，同一回合再用 `message_bot` 给它派活，工具拒绝：同一件活只走一条路。
+- Work in a group stays in the group. Calling a member of this group with `message_bot` from the
+  group is the same as writing `@name` in a reply: the line is posted to the group, the member does
+  the work in the group, the Bot that handed out the work takes the result, and the member's private
+  chat gets nothing.
+- Calling a Bot outside the group with `message_bot` from a group is refused by the tool, with a hint
+  to add it to the group first (a Main Bot or the admin can add members with `update_group`, and the
+  group shows this step).
+- If a Bot names another Bot with `post_to_group` in a private chat and then hands it work with
+  `message_bot` in the same turn, the tool refuses: one piece of work takes one route.
 
-## 不做什么
+## Not done
 
-- 不并行发言后再检查冲突。
-- 不做「一直轮到没人说话为止」的多轮讨论：每条消息都要多跑一整轮跳过。需要讨论时用 `@` 接力。
-- 不让成员把长任务一直占着发言位：长活在后台做完再报到群里。
+- No speaking in parallel and checking for conflicts afterwards.
+- No multi-round discussion that "goes round until nobody speaks": every message would cost a whole
+  extra round of passes. When a discussion is needed, use an `@` relay.
+- A member does not hold the turn to speak during a long task: long work is done in the background
+  and reported to the group afterwards.
 
-## 已知限制
+## Known limits
 
-- DSH 的「对话」引用组仍会出现在 `@` 菜单里，群里打 `@名字` 直接回车可能选中它（C3）。
+- DSH's "conversation" quote group still shows in the `@` menu; typing `@name` in a group and
+  pressing Enter right away may pick it (C3).
 
-## 变更
+## Changes
 
-- 2026-10-08：普通消息默认先给管理员（少叫人），群有自己的 Session。
-- 2026-10-10：提及只认 `@名字`；新建群管理员先问候。
-- 2026-10-11：`@` 菜单 Bot 优先，引用对话移到「+」（PR #19）。
-- 2026-10-12：群里的审批、状态胶囊、超时只算无动静的时间、迟到回复补发（PR #79）。
-- 2026-10-13：全团队 Bot 消息上限 40 条（#129）。
-- 2026-10-14：干活中的进度发到群里，结果由派活的 Bot 接话（PR #175）；群的统一权限（PR #180）。
-- 2026-10-16：群里的活只留在群里：群里的 `message_bot` 只叫本群成员，等同 `@名字`（#165）。
-- 2026-10-16：去掉 Bot 在一个群里 3 轮和全团队 40 条的上限；要回报的发帖进派活树（#262）。
-- 2026-10-18：其他成员也能往自己所在的群发帖，只叫 `@` 点到的成员（#198）。
-- 2026-10-22：去掉群里每人每轮、每轮总数和迟到 10 次的上限；Bot 之间接力到群的上限时暂停，用户点「继续」或发言后接着跑，用户的 @ 一定有人回应（#395）。
-- 2026-10-29：群的停止按钮一次停掉本群的一轮和所有成员在本群的工作，放在群详情的成员列表标题旁，不放在状态胶囊旁（#592，PR #616）。
-- 2026-10-30：去掉 Bot 之间接力的上限、群设置里的这一项和「继续」按钮；以前停在上限的叫人在群的下一轮接着跑（#655）。
-- 2026-10-30：同一条消息点到的成员同时开工，`@` 一发出来就生效，一轮中用户的话和 Bot 的帖马上交给该叫的人；只有全员轮流的普通消息还按顺序（#726）。
-- 2026-10-31：派活按批次收回并等同一批全部落地后统一叫醒派活 Bot（#619）；只回「收到/开工」未调工具的回合自动续推一次（#469）；连续 6 轮 0 工具重复或客套空转自动暂停；运行中已吸收的群帖不再塞进群 Session 待发队列（#663）；群成员派出的 DSH 子代理并入群忙碌状态与停止控制（#701）。
-- 2026-11-01：群自己的 Session 也按段换，换群文件夹时换到群文件夹里的新一段；成员在群里换的文件夹只作用于这个群（#277）。
-- 2026-11-03：派活的 Bot 还在自己回合里时，批次落地后等它这回合结束再叫它；去掉按「需要拍板」字样叫管理员；续推可以回 `[PASS]`，说已经做完的话不再续推；空转守卫停下的叫人只在用户发言后继续，提示说清是来回没有进展（#872）。
-- 2026-11-07：不 @ 人、不带工具的「暂无待办 / 待命 / 静候下一步」等状态帖计入空转守卫；计数按群累计，每个 Bot 的一次 0 工具回合计一次、开轮帖不另计，满 6 次后群不再自动开轮；停下期间被压掉的叫人（含 @all）全部 park 到用户发言，只有用户发言解封；群里留一行停下原因（#853）。
-- 2026-11-10：群里的每条消息先写进群的账本，界面、成员和记忆整理都从账本读；派活批次存盘，重启不丢（[消息账本](2026-11-10-message-ledger.md)，#1316）。
-- 2026-11-10：一轮由 DS Bot 自己跑，不再在 `group_relay` 调用里跑；轮次进行中用户发的消息加入这一轮；旧 PTC 群不再有一轮约 10 分钟的上限（[消息账本](2026-11-10-message-ledger.md)，#1316）。
+- 2026-10-08: A plain message goes to the admin first by default (fewer members called); a group has
+  its own Session.
+- 2026-10-10: Mentions only count as `@name`; in a new group the admin says hello first.
+- 2026-10-11: The `@` menu lists Bots first; quoting conversations moved under "+" (PR #19).
+- 2026-10-12: Approvals in groups, the status pill, the timeout counts only time without activity,
+  late replies are still posted (PR #79).
+- 2026-10-13: A limit of 40 Bot messages across the team (#129).
+- 2026-10-14: Progress during work goes to the group, and the Bot that handed out the work takes the
+  result (PR #175); shared permissions for a group (PR #180).
+- 2026-10-16: Work in a group stays in the group: `message_bot` in a group only calls members of this
+  group and is the same as `@name` (#165).
+- 2026-10-16: Removed the limits of 3 turns per Bot in a group and 40 messages across the team; posts
+  that must report back go into the handoff tree (#262).
+- 2026-10-18: Other members can also post to the groups they are in, calling only the members they
+  `@` (#198).
+- 2026-10-22: Removed the limits per member per turn, per turn in total and of 10 late replies in a
+  group. A relay between Bots pauses at the group's limit and goes on when the user clicks "Continue"
+  or writes; a user's `@` always gets an answer (#395).
+- 2026-10-29: A group's stop button stops this group's turn and all members' work in this group in
+  one go. It sits beside the title of the member list in the group details, not beside the status
+  pill (#592, PR #616).
+- 2026-10-30: Removed the limit on relays between Bots, its group setting and the "Continue" button;
+  calls that had stopped at the limit go on in the group's next turn (#655).
+- 2026-10-30: Members named in the same message start at the same time, an `@` takes effect as soon
+  as it is posted, and during a turn the user's messages and Bot posts go to the right members at
+  once. Only plain messages for everyone in turn still go in order (#726).
+- 2026-10-31: Handed-out work is collected per batch, and the Bot that handed it out is woken once
+  when the whole batch has landed (#619). A turn that only says "got it / starting" without calling
+  tools gets one automatic push (#469). 6 rounds in a row of 0-tool repeats or polite idling pause the
+  group automatically. Group posts already taken in during a turn are no longer added to the group
+  Session's outgoing queue (#663). DSH subagents started by group members count in the group's busy
+  state and stop controls (#701).
+- 2026-11-01: A group's own Session also moves on in parts; changing the group folder moves to a new
+  part in the group folder. A folder a member switches to in a group applies only to that group
+  (#277).
+- 2026-11-03: If the Bot that handed out the work is still in its own turn when the batch lands, it is
+  called when that turn ends. Removed calling the admin on words like "needs a decision". A push can
+  be answered with `[PASS]`, and a line that says the work is done gets no push. Calls stopped by the
+  idle guard go on only after the user writes, and the notice says the Bots went back and forth
+  without progress (#872).
+- 2026-11-07: Status posts that `@` nobody and carry no tools, such as "nothing pending / standing by
+  / waiting for the next step", count for the idle guard. The count is per group: each 0-tool turn
+  of a Bot counts once, and the post that opens a turn does not count on its own. After 6 the group
+  no longer starts turns on its own. All calls suppressed while it is stopped (including `@all`) are
+  parked until the user writes, and only the user's message releases them. The group shows a line
+  with the reason it stopped (#853).
+- 2026-11-10: Every message in a group is first written to the group's ledger, and the interface,
+  the members and memory upkeep all read from the ledger. Work batches are saved to disk and survive
+  a restart ([Message ledger](2026-11-10-message-ledger.md), #1316).
+- 2026-11-10: DS Bot runs a turn itself, no longer inside the `group_relay` call. Messages the user
+  sends during a turn join that turn. Old PTC groups no longer have a limit of about 10 minutes per
+  turn ([Message ledger](2026-11-10-message-ledger.md), #1316).

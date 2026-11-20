@@ -1,66 +1,103 @@
-# 记忆的四种读法
+# Four ways to read memory
 
-- 日期：2026-11-09
-- 相关：#797（群记忆很快满）、#925（上限写死）、#453 和 #214（已开着的会话看不到新记忆）、#1185（群整理跳过滚出日志的行）
-- 代码：`ds-bot/src/host/memory.js`、`memory-entries.js`、`memory-copy.js`、`memory-review.js`、`memory-search.js`、`memory-tidy.js`、`group-log.js`
+- Date: 2026-11-09
+- Related: #797 (group memory fills up fast), #925 (hard-coded limits), #453 and #214 (an open Session does not see new memory), #1185 (group tidying skips lines that scrolled out of the log)
+- Code: `ds-bot/src/host/memory.js`, `memory-entries.js`, `memory-copy.js`, `memory-review.js`, `memory-search.js`, `memory-tidy.js`, `group-log.js`
 
-## 为什么
+## Why
 
-作用域原来同时决定谁能读和每次注入什么，`MEMORY.md` 同时是仓库和工作台。于是能读的内容每次都进上下文，放不下的新事实存不进去。两个问题同一个根因，只调大上限会让每个会话带上更多用不上的内容。
+Scope used to decide both who can read and what is injected every time, and `MEMORY.md`
+was both the store and the workbench. So everything a Bot could read went into the
+context every time, and new facts that did not fit could not be saved. Both problems have
+the same root cause; only raising the limit would make every Session carry more content it
+does not use.
 
-## 已定的行为
+## Decided behavior
 
-### 读
+### Read
 
-| 读法 | 内容 | 什么时候 |
+| Way | Content | When |
 |---|---|---|
-| 常驻 | 自己、团队、群的 `MEMORY.md` | 一段开始时冻结，段内提示词逐字节不变 |
-| 增量 | 别人（别的会话、整理、用户）改动的 `MEMORY.md` 条目 | 下一步之前，一条消息追加在对话末尾；没有改动就不放 |
-| 自动召回 | 主题里和用户刚说的话相关的少量条目 | 回合第一步；没命中就不放；同一段不重复；设置里可关 |
-| 按需 | 所有条目、主题全文、别的 Bot 的记忆、群的原文 | Bot 调 `recall`、`read_group_chat` |
+| Always loaded | Own, team and group `MEMORY.md` | Frozen when a part starts; the prompt stays byte-for-byte the same within the part |
+| Delta | `MEMORY.md` entries changed by others (other Sessions, tidying, the user) | Before the next step, one message appended at the end of the conversation; nothing when there are no changes |
+| Auto recall | A few entries from topics that relate to what the user just said | First step of a turn; nothing when there is no match; not repeated within a part; can be turned off in settings |
+| On demand | All entries, full topic text, other Bots' memory, the group's original messages | The Bot calls `recall`, `read_group_chat` |
 
-- 先按作用域过滤，再排序。排序在内存里算 BM25，因为聊天索引的 trigram 匹配不了两个字的中文词。
-- 普通 Bot 可以用 `recall` 读公开 Bot 的记忆，不注入。隐私 Bot 的记忆只有它自己和用户能读。
+- Filter by scope first, then rank. Ranking computes BM25 in memory, because the chat
+  index's trigram match cannot match two-character Chinese words.
+- An ordinary Bot can read a public Bot's memory with `recall`; it is not injected. A
+  private Bot's memory can be read only by itself and the user.
 
-### 写
+### Write
 
-- 写入不因额度失败。`MEMORY.md` 到额度时，同一次写入把最旧、没固定的条目移到主题 `earlier`，到期的先移，并告诉 Bot。主题满了接着写 `<主题>-2`。Bot 和群的主题数到上限时写进 `MEMORY.md`。团队的按需条目继续写入主题。
-- 整理先做删除和修改，再做新增。
-- 额度只算条目正文，不算元数据。默认：群 12,000、Bot 8,000、团队 4,000 字符，设置里可改。每层进提示词时不超过模型可用窗口的 2%，超出的留最新和固定的，并写明还有多少条。
-- 提示词里每条只带短 id 和日期，完整来源用 `recall` 取。
+- A write never fails because of the quota. When `MEMORY.md` reaches its quota, the same
+  write moves the oldest unpinned entries to the topic `earlier` (expired ones first) and
+  tells the Bot. When a topic is full, writing continues in `<topic>-2`. When a Bot or
+  group reaches its topic limit, the write goes into `MEMORY.md`. Team on-demand entries
+  keep going into topics.
+- Tidying does deletes and edits first, then additions.
+- The quota counts only entry text, not metadata. Defaults: group 12,000, Bot 8,000, team
+  4,000 characters, changeable in settings. Each layer takes at most 2% of the model's
+  usable window in the prompt; beyond that the newest and pinned entries are kept, with a
+  note of how many entries remain.
+- In the prompt each entry carries only a short id and a date; the full source comes from
+  `recall`.
 
-### 团队记忆
+### Team memory
 
-- 团队的 `MEMORY.md` 每个 Bot 每次都读，只由用户明确要求（`remember` 的 `always`）或记忆面板写入。
-- 其余写团队的内容进主题 `shared`，用 `recall` 或自动召回读到。团队主题在提示词里只显示主题名。
-- 自动整理不改团队 `MEMORY.md`。Main Bot 的整理可以写给某个 Bot，群管理员的整理可以写给自己所在的群。只属于一个项目的规则不进记忆，走 AGENTS.md。
-- 群就是项目边界，不设项目记忆。
+- Every Bot reads the team `MEMORY.md` every time. It is written only on the user's
+  explicit request (`always` in `remember`) or from the memory panel.
+- Other team writes go into the topic `shared` and are read through `recall` or auto
+  recall. Team topics show only their names in the prompt.
+- Automatic tidying does not change the team `MEMORY.md`. A Main Bot's tidying can write
+  for a given Bot; a group admin's tidying can write for the group it is in. Rules that
+  belong to one project do not go into memory; they go into AGENTS.md.
+- A group is the project boundary; there is no project memory.
 
-### 条目
+### Entries
 
-- 格式兼容 Agent Memory Repo：`- 正文 [id: 7f3a; source: …; by: …; added: …; until: …; pinned: user]`。没有 id 的旧条目由正文算出。
-- `until` 过后不进提示词和自动召回。`pinned` 由用户设，自动整理和腾位置都不动。
+- The format is compatible with Agent Memory Repo:
+  `- text [id: 7f3a; source: …; by: …; added: …; until: …; pinned: user]`. Old entries
+  without an id get one computed from their text.
+- After `until`, an entry no longer goes into the prompt or auto recall. `pinned` is set
+  by the user; automatic tidying and making room leave it alone.
 
-### 定期整理
+### Regular tidying
 
-- 后台任务，不占 Bot 名册。有改动的记忆每天最多整理一次。
-- 顺序：先判矛盾，再合并重复，再处理过期状态，最后把细节移到主题。
-- 一次最多改五分之一的条目。到期条目不占这个额度。团队只整理主题。
-- 只软归档：离开的条目写进同目录的 `retired.jsonl`。每次整理是一批，记忆面板显示结果，整批可撤销；之后文件又变过就不能撤销。
+- A background task that does not take a place in the Bot roster. Changed memory is tidied
+  at most once a day.
+- Order: resolve contradictions first, then merge duplicates, then handle expired status,
+  and last move details into topics.
+- One run changes at most one fifth of the entries. Expired entries do not count against
+  this quota. For the team, only topics are tidied.
+- Only soft archiving: entries that leave are written to `retired.jsonl` in the same
+  directory. Each tidying is one batch; the memory panel shows the result, and the whole
+  batch can be undone. Once the file has changed again, it can no longer be undone.
 
-### 群的证据
+### Group evidence
 
-每条群消息都在群的账本里（[消息账本](2026-11-10-message-ledger.md)），整理从这里读，不再跳过滚出 60 行窗口的消息。群记忆的来源写成 `group "群名" #序号`，`read_group_chat` 按序号打开，也能按词搜索。
+Every group message is in the group's ledger ([message ledger](2026-11-10-message-ledger.md)).
+Tidying reads from there and no longer skips messages that scrolled out of the 60-line
+window. The source of a group memory is written as `group "group name" #number`;
+`read_group_chat` opens it by number and can also search by words.
 
-## 不做什么
+## Not done
 
-向量库、git、独立服务、知识图谱、多种记忆类型、作用域树。
+Vector store, git, a separate service, a knowledge graph, several memory types, a scope
+tree.
 
-## 已知限制
+## Known limits
 
-- 窗口大小在第一步之前才知道。新 Bot 的第一次冻结可能不受 2% 约束，下一段起生效。
-- 自动召回只匹配词，不懂同义。
-- 升级后已有的团队条目留在 `MEMORY.md`，由用户在记忆面板移到「需要时才读」。
-- 一条记忆放错了级别，用户在记忆面板把它移到团队、别的 Bot 或群。条目带着 id、有效期和固定状态走；进团队时放主题 `shared`，要不要常驻另外选。先写新位置再删旧位置，中断时最多两处都有，不会丢。只有面板能移动，模型没有这个工具。
+- The window size is known only before the first step. A new Bot's first freeze may not
+  respect the 2% limit; it applies from the next part on.
+- Auto recall matches words only and does not understand synonyms.
+- After an upgrade, existing team entries stay in `MEMORY.md`; the user moves them to
+  "Only when needed" in the memory panel.
+- When a memory is at the wrong level, the user moves it in the memory panel to the team,
+  another Bot or a group. The entry keeps its id, expiry and pinned state. When it moves to
+  the team it goes into the topic `shared`, and whether it is always loaded is a separate
+  choice. The new location is written before the old one is deleted, so an interruption
+  leaves it in both places at most, never lost. Only the panel can move entries; the model
+  has no tool for it.
 
-## 变更
+## Changes

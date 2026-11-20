@@ -1,182 +1,214 @@
-# 发版前真机检查
+# Pre-release checks on real machines
 
-CI 只跑单元测试和 Linux 上的测试台。窗口外框、输入法、高 DPI、安装方式、Desktop 和 Web 同时开这些，只有真机能测。每次发版前，维护者在 Windows 上做一遍；改动涉及 macOS 时，在 macOS 上也做一遍。
+CI runs only the unit tests and the test bench on Linux. The window frame, input methods, high DPI,
+install methods and running Desktop and Web at the same time can only be tested on real machines. Before
+every release, the maintainer goes through this list on Windows; when a change touches macOS, also on
+macOS.
 
-每一项记「通过 / 不通过 / 备注」。不通过的截图，抄下错误原文，开 Issue。结果贴在 Release PR 的评论里。
+Record "pass / fail / note" for every item. For a failure, take a screenshot, copy the exact error text
+and open an issue. Post the results as a comment on the release pull request.
 
-## 准备
+## Prepare
 
-- Windows 10 / 11 x64，或 macOS（Apple 芯片）。
-- 官方的 DSH Desktop，版本和 README 里写的一致（现在是 `0.2.2-rc.1`）。只从 DeepSeek Harness 官方渠道下载。
-- 要发的包：在 `ds-bot/` 里运行 `npm pack`，得到 `ds-bot-<版本>.tgz`。
-- 桌面应用的安装包：在 `app/` 里运行 `npm run dist`，得到 `app/dist-pack/DS-Bot-<版本>-win-x64.exe`。`app/package.json` 和 `ds-bot/package.json` 的版本号要一样。
-- 也可以用发版工作流的试运行：在 GitHub 的 Actions 里选 Release → Run workflow，勾着 dry run 运行。跑完后在这次运行的页面下载 Windows 安装包和两个 Mac 的 zip（保留 7 天）。它们和 Release 里的文件在同样的 runner 上、用同样的方法打包，不发布任何东西。
-- 一个能用的模型（DeepSeek API key 或账号）。测试里要填的密钥都用**假值**。
-- 想保留现有数据，先备份数据目录：Windows 是 `C:\Users\<用户名>\.dsh\`，macOS 是 `~/.dsh/`。最好用一台没有自己团队数据的机器或账户来测。
+- Windows 10 / 11 x64, or macOS (Apple silicon).
+- The official DSH Desktop, at the version in the README (now `0.2.2-rc.1`). Download it only from
+  official DeepSeek Harness channels.
+- The package to release: run `npm pack` in `ds-bot/` to get `ds-bot-<version>.tgz`.
+- The desktop app installer: run `npm run dist` in `app/` to get
+  `app/dist-pack/DS-Bot-<version>-win-x64.exe`. The version numbers in `app/package.json` and
+  `ds-bot/package.json` must match.
+- You can also use a dry run of the release workflow: in GitHub Actions choose Release → Run workflow and
+  run it with dry run ticked. When it is done, download the Windows installer and the two Mac zips from
+  the page of that run (kept for 7 days). They are built on the same runners in the same way as the
+  files in a Release, and nothing is published.
+- A working model (a DeepSeek API key or account). Use **fake values** for every secret the tests ask
+  for.
+- To keep your existing data, back up the data folder first: `C:\Users\<user name>\.dsh\` on Windows,
+  `~/.dsh/` on macOS. Best use a machine or user account without your own team data.
 
-## 1. 安装 DSH Desktop
+## 1. Install DSH Desktop
 
-| # | 步骤 | 期望 | 结果 |
+| # | Step | Expected | Result |
 |---|---|---|---|
-| 1.1 | 安装并启动，完成欢迎页 | 主窗口打开，普通对话能收到回复 | |
+| 1.1 | Install and start it, finish the welcome page | The main window opens; a normal chat gets a reply | |
 
-## 2. 安装插件
+## 2. Install the plugin
 
-每种方式用一个干净的 profile，或者装完一种先卸载再装下一种。
+Use a clean profile for each method, or uninstall after one method before you try the next.
 
-| # | 方式 | 步骤 | 期望 | 结果 |
+| # | Method | Step | Expected | Result |
 |---|---|---|---|---|
-| 2.1 | `.tgz` | 插件 → 添加插件 → 填 `.tgz` 的完整路径（去掉引号）→ 安装 → 立即启用 | 装好；需要时提示重启 | |
-| 2.2 | `.tgz` 的路径 | 用系统「复制为路径 / 拷贝路径名」得到的路径直接填；路径里有空格、中文时也试一次 | 能装 | |
-| 2.3 | npm（发布后） | 填 `ds-bot`；再用「中国大陆镜像源」装一次 | 两种安装源都能装，版本是新版 | |
-| 2.4 | GitHub（发布后，需要 Git） | 填 `github:Fei2411/DS-Bot#v<版本>&path:/ds-bot` | 能装；没装 Git 时记下错误信息 | |
-| 2.5 | 命令行 | 应用菜单 → 管理 dsh 命令 → 安装；退出 Desktop；新开终端运行 `dsh --version`、`dsh plugin --profile desktop add <tgz 路径>` | 能装；重启 Desktop 后生效 | |
-| 2.6 | 重启 | 完全退出（Windows：托盘图标 → 退出；macOS：⌘Q）再打开 | 团队界面出现 | |
-| 2.7 | 恢复（可选） | 故意装坏一次，看恢复对话框里的「禁用第三方插件」 | 能回到普通 DSH | |
+| 2.1 | `.tgz` | Plugins → Add plugin → enter the full path of the `.tgz` (without quotes) → Install → Enable now | Installed; asks for a restart when needed | |
+| 2.2 | Path of the `.tgz` | Enter the path exactly as the system's "Copy as path" (Windows) or "Copy as Pathname" (macOS) gives it; also try once with spaces and Chinese characters in the path | Installs | |
+| 2.3 | npm (after publishing) | Enter `ds-bot`; install once more from "Mainland China mirror" | Both sources install it, at the new version | |
+| 2.4 | GitHub (after publishing, needs Git) | Enter `github:Fei2411/DS-Bot#v<version>&path:/ds-bot` | Installs; without Git, write down the error message | |
+| 2.5 | Command line | App menu → Manage dsh Command → Install; quit Desktop; in a new terminal run `dsh --version` and `dsh plugin --profile desktop add <tgz path>` | Installs; takes effect after Desktop restarts | |
+| 2.6 | Restart | Quit completely (Windows: tray icon → Quit; macOS: ⌘Q) and open again | The team interface appears | |
+| 2.7 | Recovery (optional) | Break an install on purpose and look at "Disable third-party plugins" in the recovery dialog | Gets back to plain DSH | |
 
-已知的坑：
+Known pitfalls:
 
-- 以前用 `link:` 按路径装过、之后又移动或删除了源码目录：DSH 卸载插件时不删 profile 里 `node_modules/ds-bot` 这个失效的链接，再装 `.tgz` 会报没有写入权限（详情里是 `EPERM … rename … node_modules\ds-bot`）。退出 Desktop，只删掉这个链接，再装一次。Windows：`cmd /c rmdir "%USERPROFILE%\.dsh\profiles\desktop\node_modules\ds-bot"`。这是 DSH 的问题，正常安装的用户不会遇到。
-- 2.5 要用 Desktop 自己装的 `dsh`。npm 全局装的 `dsh` 改不了 Desktop 的 profile（`profile "desktop" is managed exclusively by the Electron application`）。两个都装了时，先用 `where.exe dsh`（macOS：`which -a dsh`）看用的是哪一个。
+- If you once installed by path with `link:` and later moved or deleted the source folder: when DSH
+  uninstalls the plugin, it does not delete this broken link at `node_modules/ds-bot` in the profile, and
+  installing the `.tgz` then fails with no write permission (the details say
+  `EPERM … rename … node_modules\ds-bot`). Quit Desktop, delete only this link, and install again. On
+  Windows: `cmd /c rmdir "%USERPROFILE%\.dsh\profiles\desktop\node_modules\ds-bot"`. This is a DSH
+  problem; users who install normally do not run into it.
+- 2.5 needs the `dsh` that Desktop installs itself. A `dsh` installed globally with npm cannot change
+  Desktop's profile (`profile "desktop" is managed exclusively by the Electron application`). When both
+  are installed, first check which one is used with `where.exe dsh` (macOS: `which -a dsh`).
 
-## 3. 窗口外框
+## 3. Window frame
 
-| # | 检查 | 期望 | 结果 |
+| # | Check | Expected | Result |
 |---|---|---|---|
-| 3.1 | 窗口按钮（Windows 右上角，macOS 左上角） | 都能点；没有被插件的按钮、地球按钮、抽屉盖住 | |
-| 3.2 | 打开右侧详情抽屉或 Bot 浏览器后再看 3.1 | 按钮仍然能点；面板让出标题栏 | |
-| 3.3 | 拖动区 | 按住顶部空白处能拖动窗口；双击能最大化 / 还原 | |
-| 3.4 | 顶部的标题、搜索、新建按钮 | 能点，不会变成拖动 | |
-| 3.5 | 把窗口拖窄（约 900 px，或分屏） | 侧栏、标题、按钮不重叠；侧栏收起后还能召回 | |
-| 3.6 | 高 DPI（125%、150% 缩放） | 文字和图标清楚，位置不偏 | |
-| 3.7 | 深色主题（设置 → General → Theme） | 外框按钮和插件颜色都看得清 | |
-| 3.8 | 从 Bot 模式切回 Agent 模式，再切回来 | 两边界面都完整，没有残留另一边的样式 | |
+| 3.1 | Window buttons (top right on Windows, top left on macOS) | All clickable; not covered by plugin buttons, the globe button or a drawer | |
+| 3.2 | Open the right details drawer or the Bot browser, then check 3.1 again | The buttons still work; the panel leaves the title bar free | |
+| 3.3 | Drag area | Holding the empty area at the top drags the window; double-click maximizes / restores | |
+| 3.4 | The title, search and new buttons at the top | Clickable; they do not turn into drag areas | |
+| 3.5 | Drag the window narrow (about 900 px, or split screen) | Sidebar, title and buttons do not overlap; a collapsed sidebar can be brought back | |
+| 3.6 | High DPI (125%, 150% scale) | Text and icons are sharp and in the right place | |
+| 3.7 | Dark theme (Settings → General → Theme) | Frame buttons and plugin colors are all easy to see | |
+| 3.8 | Switch from Bot mode to Agent mode and back | Both interfaces are complete, with no styles left over from the other | |
 
-## 4. 快捷键和输入
+## 4. Shortcuts and input
 
-| # | 按键 | 期望 | 结果 |
+| # | Key | Expected | Result |
 |---|---|---|---|
-| 4.1 | 点一下侧栏，然后直接打字 | 打开搜索，打的字在搜索框里 | |
-| 4.2 | 输入框里 `Enter` / `Shift+Enter` | 发送 / 换行 | |
-| 4.3 | 中文输入法打字时按 `Enter` 选字 | 只选字，不发送 | |
-| 4.4 | `Esc` | 关掉对话框、菜单、抽屉 | |
-| 4.5 | 复制粘贴（`Ctrl` / `⌘` + `C` / `V`） | 在对话和输入框里都能用 | |
-| 4.6 | Bot 提问时（问题卡片在输入框上方）按字母键 | 选中对应字母的选项 | |
-| 4.7 | 应用菜单里列出的 DSH 自带快捷键 | 在团队界面里也能用；被插件挡住的记下来 | |
+| 4.1 | Click the sidebar once, then type | Search opens with the typed text in the search box | |
+| 4.2 | `Enter` / `Shift+Enter` in the input box | Send / new line | |
+| 4.3 | Press `Enter` to pick a character while typing with a Chinese input method | Only picks the character, does not send | |
+| 4.4 | `Esc` | Closes dialogs, menus and drawers | |
+| 4.5 | Copy and paste (`Ctrl` / `⌘` + `C` / `V`) | Works in chats and in the input box | |
+| 4.6 | Press a letter key when a Bot asks a question (question card above the input box) | Selects the option with that letter | |
+| 4.7 | DSH's own shortcuts listed in the app menu | Also work in the team interface; write down the ones the plugin blocks | |
 
-## 5. 团队
+## 5. Team
 
-| # | 检查 | 期望 | 结果 |
+| # | Check | Expected | Result |
 |---|---|---|---|
-| 5.1 | 第一次打开 | 让你给 Main Bot「Chief」选模型，选好后它打招呼 | |
-| 5.2 | 让 Chief 建一个 Bot | 新 Bot 出现在侧栏，并打招呼 | |
-| 5.3 | 在 Bot 详情里换模型、改思考强度 | 下一条消息用新设置 | |
-| 5.4 | 设置 → General | 主题列表里有 Mono，强调色能选 | |
-| 5.5 | 设置 → Bots → 换一个 Main Bot | 新的 Main Bot 排在侧栏最上面；原来的不再是 Main Bot | |
-| 5.6 | 侧栏右键一个 Bot 或群 → Pin，再 Unpin；把侧栏拖窄再看一次 | 置顶后出现小图钉，取消后消失；窄栏时图钉在头像右上角 | |
-| 5.7 | 设置 → Usage | 有总量、走势、Bot 和模型排行、活跃度；切换时间范围，数字跟着变；点一个 Bot 打开它的页面，返回箭头回到总览 | |
-| 5.8 | Bot 详情 → 记忆 | 能看到、改、删记忆；让 Bot「记住」一件事后这里出现 | |
+| 5.1 | First open | Asks you to choose a model for the Main Bot "Chief"; after that it says hello | |
+| 5.2 | Ask Chief to create a Bot | The new Bot appears in the sidebar and says hello | |
+| 5.3 | Change the model and the thinking effort in Bot details | The next message uses the new settings | |
+| 5.4 | Settings → General | The theme list has Mono; an accent color can be chosen | |
+| 5.5 | Settings → Bots → make another Bot a Main Bot | The new Main Bot is at the top of the sidebar; the old one is no longer a Main Bot | |
+| 5.6 | Right-click a Bot or group in the sidebar → Pin, then Unpin; drag the sidebar narrow and check again | A small pin appears after pinning and goes after unpinning; in the narrow sidebar the pin is at the top right of the avatar | |
+| 5.7 | Settings → Usage | Shows totals, trend, Bot and model rankings, activity; switching the time range changes the numbers; clicking a Bot opens its page, and the back arrow returns to the overview | |
+| 5.8 | Bot details → Memory | Memory can be viewed, edited and deleted; after you ask the Bot to "remember" something, it shows up here | |
 
-## 6. 群聊
+## 6. Group chats
 
-| # | 检查 | 期望 | 结果 |
+| # | Check | Expected | Result |
 |---|---|---|---|
-| 6.1 | 建一个三人群，设管理员，发一句话 | 管理员回复，需要时把活派给成员 | |
-| 6.2 | `@` 一个成员 | 被 `@` 的成员直接回复 | |
-| 6.3 | 让一个成员干一件要用工具的活 | 群里、侧栏和它自己的聊天里能看到进度；做完后结果回到群里 | |
-| 6.4 | 设置 → Group chats → 点一个群 | 能改名、公告、谁来回答、成员和管理员、工作文件夹、置顶、删除 | |
-| 6.5 | 两个群同时干活 | 各群的消息和进度不串到另一个群 | |
+| 6.1 | Create a group of three, set an admin, send a message | The admin replies and hands work to members when needed | |
+| 6.2 | `@` a member | The member who was `@`-mentioned replies directly | |
+| 6.3 | Ask a member to do a task that needs tools | Progress shows in the group, in the sidebar and in its own chat; when done, the result comes back to the group | |
+| 6.4 | Settings → Group chats → click a group | Name, announcement, who answers, members and admins, work folder, pin and delete can all be changed | |
+| 6.5 | Two groups working at the same time | Messages and progress of one group do not leak into the other | |
 
-## 7. 能力和连接器
+## 7. Capabilities and connectors
 
-| # | 检查 | 期望 | 结果 |
+| # | Check | Expected | Result |
 |---|---|---|---|
-| 7.1 | 设置 → Capabilities：给一个 Bot 启用一项能力 | 从它下一条消息开始生效 | |
-| 7.2 | 让 Bot 加一个本地 MCP 命令 | 运行前先请你批准 | |
-| 7.3 | 设置 → Connectors → GitHub（用一个只读的测试 token） | 连接后显示账号；断开后状态回到 off | |
+| 7.1 | Settings → Capabilities: enable a capability for a Bot | Takes effect from its next message | |
+| 7.2 | Ask a Bot to add a local MCP command | It asks for your approval before it runs | |
+| 7.3 | Settings → Connectors → GitHub (with a read-only test token) | Shows the account after connecting; after disconnecting, the status goes back to off | |
 
-## 8. 密钥
+## 8. Secrets
 
-| # | 检查 | 期望 | 结果 |
+| # | Check | Expected | Result |
 |---|---|---|---|
-| 8.1 | 在一个 Bot 的私聊里说「用 request_secret 要一个叫 TEST_TOKEN 的密钥」 | 出现密钥卡片；输入内容被遮住 | |
-| 8.2 | 填一个 8 位以上的假值，选「只给这个 Bot」，保存 | 卡片变成已保存；对话里看不到值 | |
-| 8.3 | 让 Bot 在终端里打印这个变量（Windows：`echo $env:DSH_SECRET_TEST_TOKEN`；macOS：`echo $DSH_SECRET_TEST_TOKEN`） | 工具结果里是 `[secret:TEST_TOKEN]`，不是原值 | |
-| 8.4 | 再要一个 `TEST_PIN`，填 4 位假数字，让 Bot 打印 `pin` 加这个变量 | 能保存；结果是 `pin [secret:TEST_PIN]`；别处含这 4 位数字的长数字不受影响 | |
-| 8.5 | 设置 → Secrets | 列出 TEST_TOKEN；能改范围、换值、删除 | |
-| 8.6 | 看数据目录里的 `bot/secrets.json` 的权限（Windows：右键 → 属性 → 安全；macOS：`ls -l`） | 记下哪些用户能读 | |
+| 8.1 | In a Bot's private chat say `用 request_secret 要一个叫 TEST_TOKEN 的密钥` ("use request_secret to ask for a secret called TEST_TOKEN") | A secret card appears; the input is masked | |
+| 8.2 | Enter a fake value of 8 or more characters, choose "This Bot", save | The card turns to saved; the value does not show in the chat | |
+| 8.3 | Ask the Bot to print this variable in the terminal (Windows: `echo $env:DSH_SECRET_TEST_TOKEN`; macOS: `echo $DSH_SECRET_TEST_TOKEN`) | The tool result shows `[secret:TEST_TOKEN]`, not the real value | |
+| 8.4 | Ask for another one, `TEST_PIN`, enter 4 fake digits, ask the Bot to print `pin` followed by this variable | It saves; the result is `pin [secret:TEST_PIN]`; long numbers elsewhere that contain these 4 digits are not affected | |
+| 8.5 | Settings → Secrets | Lists TEST_TOKEN; its scope can be changed, its value replaced, and it can be deleted | |
+| 8.6 | Look at the permissions of `bot/secrets.json` in the data folder (Windows: right-click → Properties → Security; macOS: `ls -l`) | Write down which users can read it | |
 
-## 9. Bot 浏览器
+## 9. Bot browser
 
-DSH Desktop 和桌面应用各做一遍。
+Do this once in DSH Desktop and once in the desktop app.
 
-| # | 检查 | 期望 | 结果 |
+| # | Check | Expected | Result |
 |---|---|---|---|
-| 9.1 | 私聊标题栏右侧的地球按钮 | 打开这个 Bot 的浏览器面板 | |
-| 9.2 | 地址栏输入一个 https 网页 | 能打开；后退、前进、刷新能用 | |
-| 9.3 | 让 Bot「读一下我打开的页面」 | Bot 用 `read_browser` 读出标题和正文 | |
-| 9.4 | 选中一段文字，再让 Bot 读 | Bot 读到选中的文字 | |
-| 9.5 | 拖面板左边缘 | 能调宽度；关掉再开，宽度保留 | |
-| 9.6 | 切到另一个 Bot | 面板换成那个 Bot 的；登录状态互不相通 | |
-| 9.7 | 在一个要登录的网站登录，退出再开 | 记住的地址还在；DSH Desktop 里要重新登录，桌面应用里还是登录状态 | |
+| 9.1 | The globe button at the right of the private chat title bar | Opens this Bot's browser panel | |
+| 9.2 | Type an https page in the address bar | It opens; back, forward and reload work | |
+| 9.3 | Ask the Bot `读一下我打开的页面` ("read the page I opened") | The Bot uses `read_browser` and reads out the title and body | |
+| 9.4 | Select some text, then ask the Bot to read | The Bot reads the selected text | |
+| 9.5 | Drag the left edge of the panel | The width changes; after closing and opening, the width is kept | |
+| 9.6 | Switch to another Bot | The panel switches to that Bot's; sign-in states are not shared | |
+| 9.7 | Sign in on a site that needs a login, quit and open again | The remembered address is still there; in DSH Desktop you sign in again, in the desktop app you are still signed in | |
 
-## 10. Desktop 和 Web 同时开
+## 10. Desktop and Web at the same time
 
-| # | 步骤 | 期望 | 结果 |
+| # | Step | Expected | Result |
 |---|---|---|---|
-| 10.1 | Desktop 开着；另开终端运行 `npx @deepseek-ai/dsh@<DSH 版本> plugin --profile web add <tgz 路径>`，再 `npx @deepseek-ai/dsh@<DSH 版本> web` | Web 能打开 | |
-| 10.2 | 在 Web 里看团队 | 同一个团队；Bot 列表上方有只读说明 | |
-| 10.3 | 在 Web 里改一个 Bot 的名字 | 被拒绝，提示 open in another dsh | |
-| 10.4 | 在 Desktop 里改名 | Web 几秒内跟着变 | |
-| 10.5 | 退出 Desktop，在 Web 里再改名 | Web 接手，改名成功 | |
-| 10.6 | 重新打开 Desktop | Desktop 变成只读，显示说明 | |
+| 10.1 | With Desktop open, in another terminal run `npx @deepseek-ai/dsh@<DSH version> plugin --profile web add <tgz path>`, then `npx @deepseek-ai/dsh@<DSH version> web` | Web opens | |
+| 10.2 | Look at the team in Web | The same team; a read-only notice above the Bot list | |
+| 10.3 | Rename a Bot in Web | Refused, with the message open in another dsh | |
+| 10.4 | Rename in Desktop | Web follows within a few seconds | |
+| 10.5 | Quit Desktop and rename again in Web | Web takes over and the rename succeeds | |
+| 10.6 | Open Desktop again | Desktop becomes read-only and shows the notice | |
 
-## 11. 卸载和升级
+## 11. Uninstall and upgrade
 
-| # | 步骤 | 期望 | 结果 |
+| # | Step | Expected | Result |
 |---|---|---|---|
-| 11.1 | 插件页卸载 `ds-bot`，重启 | 回到普通 DSH；数据目录里的 `bot/` 还在 | |
-| 11.2 | 重新安装 | 原来的团队、对话、记忆、密钥都在 | |
-| 11.3 | 从上一个发布版本升级到这一版 | 团队、主题、颜色、浏览器宽度和标签页都保留 | |
+| 11.1 | Uninstall `ds-bot` on the plugins page and restart | Back to plain DSH; `bot/` is still in the data folder | |
+| 11.2 | Install it again | The team, chats, memory and secrets are all still there | |
+| 11.3 | Upgrade from the previous release to this one | Team, theme, colors, browser width and tabs are all kept | |
 
-## 12. 桌面应用（Windows）
+## 12. Desktop app (Windows)
 
-发布 Release 时不勾「Set as the latest release」。工作流的最后一个任务「Download table, checksums and Latest」等所有安装包都传完，最后一步才把它标为 Latest。工作流跑完后确认：Release 里有 `SHA256SUMS.txt` 和不带版本号的文件（如 `DS-Bot-win-x64.exe`），说明开头是「下载 / Download」表，Release 标着「Latest」。有任务失败时，在这次运行里重跑失败的任务（Re-run failed jobs）；不要手动标为 Latest，那样 Release 就没有校验和和下载表。
+When publishing the Release, do not tick "Set as the latest release". The workflow's last job, "Download
+table, checksums and Latest", waits until all installers are uploaded, and only its last step marks the
+Release as Latest. When the workflow is done, check that the Release has `SHA256SUMS.txt` and files
+without a version number (such as `DS-Bot-win-x64.exe`), that the notes start with the
+`Download / 下载` (Download) table, and that the Release is marked "Latest". When a job fails, re-run the
+failed jobs in that run (Re-run failed jobs). Do not mark it as Latest by hand: then the Release has no
+checksums and no download table.
 
-12.7 和 12.8 要等整个 Release 工作流跑完、Release 页上显示「Latest」之后再做：Windows 的自动更新只看标为 Latest 的 Release，在那之前它会一直说没有新版本。Release 里还要有安装包、它的 `.blockmap` 和 `latest.yml`。上一个发布版本没有安装包时，跳过这两项。
+Do 12.7 and 12.8 only after the whole Release workflow is done and the Release page shows "Latest":
+Windows auto-update looks only at the Release marked Latest, and until then it keeps saying there is no
+new version. The Release must also have the installer, its `.blockmap` and `latest.yml`. When the
+previous release has no installer, skip these two items.
 
-| # | 步骤 | 期望 | 结果 |
+| # | Step | Expected | Result |
 |---|---|---|---|
-| 12.1 | 运行安装包，选安装位置，安装 | 不要管理员权限；只装给当前用户；开始菜单里有 DS Bot | |
-| 12.2 | 第一次打开：启动窗口出现（盘够时没有位置行）；有 DSH 团队时选复制 | 团队、对话、模型设置都在；DSH 里原来的团队不变 | |
-| 12.3 | 给一个 Bot 发消息；再打开设置 → 关于 DS Bot | 收到回复；DS Bot 一行写「随 DS Bot 应用一起更新。」 | |
-| 12.4 | 看窗口：拖标题栏，双击标题栏，点最小化、最大化、关闭；切换浅色和深色 | 没有系统边框；拖得动，双击会最大化，最大化后顶部没有缝；三个按钮都能用，底色和下面的界面一样；Windows 11 上侧栏透出 Mica，Windows 10 上标题栏和侧栏同色 | |
-| 12.5 | 按 `Ctrl+Alt+B` | 侧栏收起，再按一次展开 | |
-| 12.6 | 设置 → 通用 →「位置」：把总工作区换到另一个文件夹，给 Bot 发消息；再把数据位置换到一个空文件夹 | 总工作区换完，Bot 的下一轮在新文件夹里；数据复制完 App 自己重启，团队和对话都在，「位置」里是新的数据位置，旧文件夹还在 | |
-| 12.7 | 装上一个发布版本的 App，打开它，等它提示新版本已经下载好，选「立即重启」 | App 关掉后自己装好新版并重新打开；关于页里是新版本号；团队都在 | |
-| 12.8 | 再装一次上一个版本，等下载好的提示，选「先不重启」，从托盘退出 App，等半分钟再打开 | 打开的是新版 | |
+| 12.1 | Run the installer, choose an install location, install | No administrator rights; installs only for the current user; DS Bot is in the Start menu | |
+| 12.2 | First open: the start window appears (no location line when there is enough disk space); with a DSH team, choose to copy it | Team, chats and model settings are all there; the original team in DSH is unchanged | |
+| 12.3 | Send a message to a Bot; then open Settings → About DS Bot | A reply comes; the DS Bot line says "Updates come with the DS Bot app." | |
+| 12.4 | Check the window: drag the title bar, double-click the title bar, click minimize, maximize and close; switch between light and dark | No system frame; it drags, double-click maximizes, and a maximized window has no gap at the top; all three buttons work and have the same background as the interface under them; on Windows 11 the sidebar shows Mica, on Windows 10 the title bar has the same color as the sidebar | |
+| 12.5 | Press `Ctrl+Alt+B` | The sidebar collapses; press again and it expands | |
+| 12.6 | Settings → General → "Location": move the team workspace to another folder and send a message to a Bot; then move the data location to an empty folder | After the team workspace change, the Bot's next turn runs in the new folder; after the data is copied, the app restarts on its own, the team and chats are all there, "Location" shows the new data location, and the old folder is still there | |
+| 12.7 | Install the previous release of the app, open it, wait until it says the new version has downloaded, choose "Restart now" | The app closes, installs the new version and opens again; the About page shows the new version number; the team is all there | |
+| 12.8 | Install the previous version once more, wait for the downloaded notice, choose "Not now", quit the app from the tray, wait half a minute and open it | The new version opens | |
 
-## 13. 桌面应用（macOS）
+## 13. Desktop app (macOS)
 
-13.2–13.6 在 Apple 芯片和 Intel Mac 上分别做一次。13.6 要上一个发布版本有这台 Mac 的 zip；没有时跳过。
+Do 13.2–13.6 once on an Apple silicon Mac and once on an Intel Mac. 13.6 needs a zip for this Mac in the
+previous release; skip it when there is none.
 
-| # | 步骤 | 期望 | 结果 |
+| # | Step | Expected | Result |
 |---|---|---|---|
-| 13.1 | 发布 Release，等工作流传完文件 | Release 里有 arm64 和 x64 两个 zip | |
-| 13.2 | 用 Safari 从 Release 页下载这台 Mac 的 zip（Safari 会自动解压），把 DS Bot 拖到「应用程序」，第一次打开 | Gatekeeper 拦下，不说「已损坏」；到「系统设置 → 隐私与安全性」点「仍要打开」后能打开 | |
-| 13.3 | 第一次打开：启动窗口出现（盘够时没有位置行）；有 DSH 团队时选复制；给一个 Bot 发消息 | 团队、对话、模型设置都在；收到回复；关于页写「随 DS Bot 应用一起更新。」 | |
-| 13.4 | 设置 → 通用 →「位置」：把总工作区换到另一个文件夹，给 Bot 发消息；再把数据位置换到一个空文件夹 | 总工作区换完，Bot 的下一轮在新文件夹里；数据复制完 App 自己重启，团队和对话都在，「位置」里是新的数据位置，旧文件夹还在 | |
-| 13.5 | 关闭窗口，再从托盘或 Dock 重新打开；最后从托盘选「退出 DS Bot」 | 第一次关窗提示留在托盘继续运行，确认后窗口隐藏、引擎照常；点 Dock 图标或托盘「打开 DS Bot」窗口回来；托盘「退出 DS Bot」才完全退出 | |
-| 13.6 | 装上一个发布版本的 App 并打开，等新版提示后点「下载」 | 打开这次 Release 的发布页；应用不自己安装新版 | |
+| 13.1 | Publish the Release and wait for the workflow to upload the files | The Release has two zips, arm64 and x64 | |
+| 13.2 | With Safari, download the zip for this Mac from the Release page (Safari unzips it), drag DS Bot to Applications, open it for the first time | Gatekeeper blocks it but does not say it is "damaged"; after "Open Anyway" in "System Settings → Privacy & Security" it opens | |
+| 13.3 | First open: the start window appears (no location line when there is enough disk space); with a DSH team, choose to copy it; send a message to a Bot | Team, chats and model settings are all there; a reply comes; the About page says "Updates come with the DS Bot app." | |
+| 13.4 | Settings → General → "Location": move the team workspace to another folder and send a message to a Bot; then move the data location to an empty folder | After the team workspace change, the Bot's next turn runs in the new folder; after the data is copied, the app restarts on its own, the team and chats are all there, "Location" shows the new data location, and the old folder is still there | |
+| 13.5 | Close the window, open it again from the tray or the Dock; finally choose "Quit DS Bot" in the tray | The first close shows a notice that the app stays in the tray and keeps running; after confirming, the window hides and the engine keeps running; clicking the Dock icon or "Open DS Bot" in the tray brings the window back; only "Quit DS Bot" in the tray quits completely | |
+| 13.6 | Install the previous release of the app and open it; when the new version notice comes, click "Download" | Opens the release page of this Release; the app does not install the new version itself | |
 
-## 14. 手机 App（Android）
+## 14. Phone app (Android)
 
-APK 用上传密钥签名，密钥放在仓库的 `ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS` 三个 secret 里。以后的每个 APK 都要用同一把密钥，否则 Android 不让覆盖安装。缺 secret 时 Release 的「Phone app (Android)」任务会失败。
+The APK is signed with an upload key. The key is in three repository secrets: `ANDROID_KEYSTORE_BASE64`,
+`ANDROID_KEYSTORE_PASSWORD` and `ANDROID_KEY_ALIAS`. Every future APK must use the same key, or Android
+does not allow installing over the old one. Without these secrets, the Release's "Phone app (Android)"
+job fails.
 
-| # | 步骤 | 期望 | 结果 |
+| # | Step | Expected | Result |
 |---|---|---|---|
-| 14.1 | 发布 Release，等工作流传完文件 | Release 里有 `DS-Bot-<版本>-android.apk`，下载表里有 Android 一行 | |
-| 14.2 | 在电脑的 DS Bot 里打开 设置 → 手机，打开「手机访问」 | 服务器是 `wss://relay.dsbot.app/v1/link`，状态变成已开 | |
-| 14.3 | 在一台没装过 DS Bot 的 Android 手机上，从 Release 页下载 APK 并安装，打开后用相机扫电脑上的二维码 | 能装上；扫码后配对成功，进入团队 | |
-| 14.4 | 关掉 Wi-Fi，用移动数据给一个 Bot 发消息；打开一张聊天里的照片 | 收到回复；照片先显示预览，点开后显示原图 | |
-| 14.5 | 装着上一个发布版本的 APK 时，装这一版 | 直接覆盖安装，配对还在 | |
+| 14.1 | Publish the Release and wait for the workflow to upload the files | The Release has `DS-Bot-<version>-android.apk`, and the download table has an Android row | |
+| 14.2 | In DS Bot on the computer, open Settings → Phone and turn on "Phone access" | The server is `wss://relay.dsbot.app/v1/link`, and the status turns to on | |
+| 14.3 | On an Android phone that never had DS Bot, download the APK from the Release page and install it; open it and scan the QR code on the computer with the camera | It installs; after the scan, pairing succeeds and the team opens | |
+| 14.4 | Turn off Wi-Fi and send a message to a Bot over mobile data; open a photo in a chat | A reply comes; the photo shows a preview first, and the full image after a tap | |
+| 14.5 | With the previous release's APK installed, install this one | It installs over the old one, and the pairing is still there | |

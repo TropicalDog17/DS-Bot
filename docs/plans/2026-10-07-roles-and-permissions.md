@@ -1,50 +1,50 @@
-# 角色与权限
+# Roles and permissions
 
-- 日期：2026-10-07 定下三级角色；2026-10-11 加 Bot 的权限预设；2026-10-14 加群的统一权限
-- 相关：PR #180（群的统一权限），PR #154（每个 Bot 能改自己的设置）
+- Date: 2026-10-07 set the three role levels; 2026-10-11 added permission presets for Bots; 2026-10-14 added a shared permission for groups
+- Related: PR #180 (shared permission for groups), PR #154 (each Bot can change its own settings)
 
-## 为什么
+## Why
 
-团队要能自己组织起来：Main Bot 负责建 Bot、建群、调度，群管理员管自己的群，其他 Bot 专心做事。同时，越权的动作（删 Bot、改别人的设置、放开沙盒权限）必须有明确的边界，否则一个 Bot 的错误判断会波及整个团队。
+The team must be able to organize itself: a Main Bot creates Bots, creates groups and dispatches work, a group admin manages its own group, and the other Bots focus on their work. At the same time, actions beyond a Bot's rights (removing a Bot, changing another Bot's settings, opening up sandbox permissions) need a clear boundary. Otherwise one Bot's wrong judgment can affect the whole team.
 
-这里有两层权限，互相独立：
+There are two layers of permissions, independent of each other:
 
-- **角色权限**：谁能管理 Bot、群和团队记忆。由 DS Bot 自己检查。
-- **沙盒权限**：一个 Bot 的工具能碰到什么（读文件、改文件、跑命令）。用 DSH 提供的权限预设，由 DSH 执行。
+- **Role permissions**: who can manage Bots, groups and team memory. DS Bot checks them itself.
+- **Sandbox permissions**: what a Bot's tools can reach (read files, change files, run commands). These use the permission presets that DSH provides, and DSH enforces them.
 
-## 已定的行为
+## Decided behavior
 
-### 角色权限
+### Role permissions
 
-| 谁 | 范围 | 能做什么 |
+| Who | Scope | What it can do |
 |---|---|---|
-| 用户 | 全部 | 一切操作，包括设置、取消 Main Bot，开启或关闭隐私 Bot，设置 Bot 和群的沙盒权限 |
-| Main Bot | 整个团队（隐私 Bot 除外） | 建 Bot（`create_bot`）、改任何非隐私 Bot（`update_bot`）、停止别的非隐私 Bot 正在跑的回合（`stop_bot`）；建群、改任何群、删群、往任何群发言、推进任何群的 Goal（`group_goal`）；写团队记忆，按用户要求读写某个非隐私 Bot 的记忆；给任何非隐私 Bot 挂、摘能力 |
-| 群管理员 | 自己管的群 | 改自己的群（改名、公告、成员、管理员、回答方式），设定和推进自己群的 Goal（`group_goal`），往自己的群发言，写团队记忆。不能删群，不能改群的工作文件夹 |
-| 普通 Bot | 自己 | 改自己的名字、角色、颜色、模型、思考强度、工作文件夹、指令；给自己挂、摘能力；在群里发言、用 `@` 点名、查看群的 Goal；往自己所在的群发帖（只叫 `@` 点到的成员）；在私聊里用 `message_bot` 给任何非隐私 Bot 发消息（在群里只能叫本群成员，见 [群聊](2026-10-07-group-chat.md)）；在群里读写这个群的记忆（见 [上下文与记忆](2026-10-09-context-and-memory.md)）。用户设为隐私的 Bot 另有单向隔离边界，见 [隐私 Bot](2026-10-27-private-bots.md) |
+| User | Everything | Every action, including setting and removing a Main Bot, turning a private Bot on or off, setting the sandbox permissions of Bots and groups |
+| Main Bot | The whole team (except private Bots) | Create Bots (`create_bot`), change any non-private Bot (`update_bot`), stop the running turn of another non-private Bot (`stop_bot`); create groups, change any group, remove groups, post in any group, advance the Goal of any group (`group_goal`); write team memory, and read or write the memory of a non-private Bot when the user asks; add and remove capabilities on any non-private Bot |
+| Group admin | The groups it manages | Change its own group (name, notice, members, admin, reply mode), set and advance its own group's Goal (`group_goal`), post in its own group, write team memory. It cannot remove the group or change the group's work folder |
+| Regular Bot | Itself | Change its own name, role, color, model, thinking effort, work folder and instructions; add and remove its own capabilities; speak in groups, call on members with `@`, view the group's Goal; post in the groups it is in (only the members it calls with `@` are called); in its own chat, message any non-private Bot with `message_bot` (in a group it can only call members of that group, see [Group chat](2026-10-07-group-chat.md)); in a group, read and write that group's memory (see [Context and memory](2026-10-09-context-and-memory.md)). A Bot that the user sets as private has an extra one-way isolation boundary, see [Private Bots](2026-10-27-private-bots.md) |
 
-- 可以有多个 Main Bot，至少保留一个。只有用户能设置或取消 Main Bot。
-- Main Bot 不能直接删除，要先取消它的 Main Bot 角色。
-- 每个群最多一个管理员，必须是群成员。管理员不能直接退群，也不能把群设成没有管理员，要先移交。Main Bot 建群时默认自己当管理员。删除一个 Bot 时，它管的群变成没有管理员。
-- 越权的工具调用会被拒绝，并告诉 Bot 该怎么办（例如「只有 Main Bot 能创建 Bot，请让 Main Bot 来做」），让 Bot 能自己改道。
+- There can be more than one Main Bot, and at least one stays. Only the user can set or remove a Main Bot.
+- A Main Bot cannot be removed directly. Remove its Main Bot role first.
+- Each group has at most one admin, and the admin must be a group member. The admin cannot leave the group directly or leave the group without an admin; it hands over first. When a Main Bot creates a group, it is the admin by default. When a Bot is removed, the groups it managed have no admin.
+- A tool call beyond a Bot's rights is refused, and the refusal tells the Bot what to do instead (for example "Only a Main Bot can create Bots; ask a Main Bot to do it"), so the Bot can change course on its own.
 
-### 沙盒权限
+### Sandbox permissions
 
-- 每个 Bot 有自己的权限预设（DSH 提供的：仅可查看 / 工作区内修改 / 完全权限），存在 Bot 上，用于它的私聊、它所在的群，以及之后的新对话段。没设时用 DSH 的默认预设。
-- **只有用户能设**。Bot 发起的修改一律拒绝，`update_bot` 和 `update_group` 都没有这个参数。
-- 选「完全权限」要再确认一次，界面上这几个字一直是红色。
-- 群可以设一个统一的预设（「全员统一」），覆盖成员自己的：立即作用于所有成员在这个群里的会话，之后成员在群里新开的会话、群里换段后的新段也用它。成员改自己的预设，不影响设了统一预设的群。关掉后，每个成员回到自己的预设。
+- Each Bot has its own permission preset (the ones DSH provides: Read only / Workspace / Full access). It is stored on the Bot and used for its own chat, the groups it is in, and later new conversation parts. When it is not set, the DSH default preset applies.
+- **Only the user can set it.** Every change a Bot starts is refused; neither `update_bot` nor `update_group` has this parameter.
+- Choosing "Full access" asks for a second confirmation, and the label always shows in red.
+- A group can set one shared preset ("Same for every member") that overrides each member's own. It applies at once to all members' Sessions in that group, and also to new Sessions members open in the group later and to the new part after the group moves to a new part. A member that changes its own preset does not affect a group with a shared preset. When the shared preset is turned off, each member goes back to its own preset.
 
-## 不做什么
+## Not done
 
-- 不做细粒度的角色权限表（谁能 `@` 全员、谁能读群聊等），界面上也不展示一张权限矩阵。
-- 不让 Bot 提升自己或别人的沙盒权限。
-- 群的统一权限不能交给 DSH 的自动审核（Auto review 只针对单个会话）。
+- No fine-grained table of role permissions (who can `@` everyone, who can read group chats, and so on), and no permission matrix in the interface.
+- Bots cannot raise their own or another Bot's sandbox permissions.
+- A group's shared permission cannot be handed to DSH's automatic review (Auto review works only on a single Session).
 
-## 已知限制
+## Known limits
 
-- DSH 的「+」和「/」菜单里仍有权限入口，用户在 Bot 会话里用它改了，会绕过 Bot 上的设置（见 [DSH 让步总账](2026-10-13-dsh-concessions.md) C4）。
+- The DSH "+" and "/" menus still have a permission entry. If the user changes the permission there in a Bot Session, it bypasses the setting on the Bot (see [DSH concessions](2026-10-13-dsh-concessions.md) C4).
 
-## 变更
+## Changes
 
-- 2026-10-14：群的统一权限，PR #180。
+- 2026-10-14: shared permission for groups, PR #180.

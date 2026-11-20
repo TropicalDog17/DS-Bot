@@ -1,103 +1,170 @@
-# 群聊 Goal
+# Group chat Goal
 
-- 日期：2026-11-01
-- 相关：#791；群聊设计 [2026-10-07-group-chat](2026-10-07-group-chat.md)、Bot 交接 [2026-10-16-bot-handoffs](2026-10-16-bot-handoffs.md)
+- Date: 2026-11-01
+- Related: #791; group chat design [2026-10-07-group-chat](2026-10-07-group-chat.md), Bot handoffs
+  [2026-10-16-bot-handoffs](2026-10-16-bot-handoffs.md)
 
-## 为什么
+## Why
 
-一个群要完成一件大事时，单靠聊天容易散：做到哪一步、谁负责哪部分、做完没有，都只能翻聊天记录去猜；长任务中途也容易跑偏。
+When a group has to finish something big, chat alone falls apart easily: which step the work is at,
+who owns which part and whether it is done can only be guessed from the chat history, and a long
+task easily drifts along the way.
 
-群聊 Goal 把「一件要做完的事」变成群的一等状态：管理员先和用户对齐，写出带验收方法的 Goal，拆成阶段、把每个阶段的任务分给成员；每个阶段验收通过才进下一阶段，直到整个 Goal 验收完成。用户随时能暂停、纠偏、继续或终止。
+A group chat Goal makes "one thing to get done" first-class state of the group. The admin first
+aligns with the user, writes a Goal with a way to check it, splits it into stages and hands each
+stage's tasks to members. Each stage must pass its check before the next one starts, until the whole
+Goal passes its final check. The user can pause, correct course, resume or stop at any time.
 
-Goal 属于群，存在 DS Bot 自己的状态里（`room.goal`），不用 DSH 的会话级 Goal：群自身的会话不调模型，成员的群会话会换段，会话级 Goal 跨不过这两件事。
+The Goal belongs to the group and lives in DS Bot's own state (`room.goal`), not in DSH's
+Session-level Goal: the group's own Session does not call the model, and members' group Sessions
+move on to new parts. A Session-level Goal cannot survive either of these.
 
-## 已定的行为
+## Decided behavior
 
-### 状态
+### States
 
-`room.goal` 一次只有一个。状态：
+There is only one `room.goal` at a time. States:
 
-| 状态 | 含义 |
+| State | Meaning |
 |---|---|
-| `drafting` | 管理员在和用户对齐，还没写成 Goal |
-| `active` | 在执行；`current` 指向当前阶段 |
-| `paused` | 用户或管理员暂停：不推进阶段、不自动唤醒管理员；已在做的工作照常做完 |
-| `complete` | 全部阶段通过，管理员做完总验收 |
-| `stopped` | 终止 |
+| `drafting` | The admin is aligning with the user; the Goal is not written yet |
+| `active` | Running; `current` points to the current stage |
+| `paused` | Paused by the user or the admin: no stage moves forward and the admin is not woken automatically; work already started finishes as usual |
+| `complete` | All stages passed and the admin did the final check |
+| `stopped` | Stopped |
 
-`complete` 和 `stopped` 留在群里，直到用户清除或开始新的 Goal；旧 Goal 移进 `room.pastGoals`（保留最近 5 个）。
+`complete` and `stopped` stay in the group until the user clears them or starts a new Goal; the old
+Goal moves into `room.pastGoals` (the last 5 are kept).
 
-Goal 的内容：标题、目标（objective）、总验收方法（acceptance：怎么检查已经做完——命令、测试、要看的文件和证据）、约束（constraints，包括用户中途的纠偏），和阶段列表。每个阶段有标题、阶段验收方法、任务列表；每个任务分给一个成员。任务状态：`pending`（未开始）→ `working`（管理员已 @ 它）→ `reported`（它交回了结果）→ `done`（阶段通过）。阶段状态：`pending` → `active` → `passed`。
+A Goal has: a title, an objective, a final check (acceptance: how to check it is done, such as
+commands, tests, files and evidence to look at), constraints (including the user's corrections along
+the way) and a list of stages. Each stage has a title, a stage check and a list of tasks; each task
+goes to one member. Task states: `pending` (not started) → `working` (the admin has `@`ed the member)
+→ `reported` (the member handed in its result) → `done` (the stage passed). Stage states: `pending`
+→ `active` → `passed`.
 
-### 谁能改
+### Who can change it
 
-- 群管理员和 Main Bot 用 `group_goal` 工具写和推进 Goal；普通成员只能 `show` 查看，要改就在群里告诉管理员。
-- 没有管理员的群不能开 Goal：先用 `update_group` 设管理员。
-- 用户在界面上暂停、继续、终止、清除，也可以在群里直接说，由管理员调用工具。
+- The group admin and a Main Bot write and advance the Goal with the `group_goal` tool. Other members
+  can only look at it with `show`; to change it, they tell the admin in the group.
+- A group without an admin cannot start a Goal: set an admin with `update_group` first.
+- The user pauses, resumes, stops and clears in the interface, or says so in the group, and the admin
+  calls the tool.
 
-### 对齐（写 Goal 之前）
+### Aligning (before the Goal is written)
 
-两个入口：
+Two ways in:
 
-1. 用户在群里对管理员说要达成什么。
-2. 用户在群详情或输入框「+」里点「设定目标」，写一句话。这句话作为用户消息进群，Goal 进入 `drafting`。
+1. The user tells the admin in the group what to achieve.
+2. The user clicks "Set a goal" in the group details or under "+" in the input box and writes one
+   line. This line goes into the group as a user message, and the Goal enters `drafting`.
 
-`drafting` 时管理员按随附技能 `goal-grill` 对齐：能从文件、代码、记录里查到的事实自己查，或 @ 成员去查，不拿去问用户；只把真正要用户拍板的分叉整理成一轮编号问题，每题给推荐答案；用户答完再写 Goal。需求已经清楚时可以直接写。
+During `drafting` the admin aligns with the user by the bundled skill `goal-grill`. Facts that can be
+found in files, code or records it looks up itself, or `@`s a member to look up, instead of asking
+the user. Only the forks that really need the user's decision are put into one round of numbered
+questions, each with a recommended answer. When the user has answered, the admin writes the Goal.
+When the request is already clear, it can write the Goal right away.
 
-### 执行
+### Running
 
-- `start` 之后第一个阶段成为当前阶段。管理员在回复里用 `@成员` 分派本阶段的任务，同一条消息里点名的成员同时开工。
-- 成员都交回后（群聊的派活汇聚：最后一个交回时唤醒管理员一次），管理员对照阶段验收方法检查结果，也可以 @ 负责审查的成员核验。
-  - 通过：`pass`，必须附上证据（测试输出、改了哪些文件、检查结果），没有证据工具会拒绝。下一阶段成为当前阶段，管理员在同一条回复里分派下一阶段。
-  - 不通过：`rework`，写明缺什么，任务回到未开始，管理员重新 @ 成员。
-- 最后一个阶段通过后，管理员对照总验收方法检查，`complete` 时附上证据和给用户的总结。
+- After `start`, the first stage becomes the current stage. The admin hands out this stage's tasks
+  with `@member` in its reply, and the members named in the same message start at the same time.
+- When all members have handed in (the group chat's work batch: the admin is woken once, when the
+  last one hands in), the admin checks the results against the stage check, and can also `@` a
+  reviewing member to verify them.
+  - Passed: `pass`, which must carry evidence (test output, which files changed, check results); the
+    tool refuses it without evidence. The next stage becomes the current stage, and the admin hands
+    out the next stage in the same reply.
+  - Not passed: `rework`, saying what is missing. The tasks go back to not started, and the admin
+    `@`s the members again.
+- After the last stage passes, the admin checks against the final check, and `complete` carries the
+  evidence and a summary for the user.
 
-### 持续对齐
+### Staying aligned
 
-每次成员在群里开口，这一轮的提示里都带一段 `<group_goal>`：
+Every time a member speaks in the group, the prompt for that turn carries a `<group_goal>` block:
 
-- 管理员：完整账本——目标、总验收方法、约束、每个阶段和任务的状态、最近的返工意见和纠偏，以及当前该做什么。
-- 其他成员：目标、约束、当前阶段和它的验收方法、分给它自己的任务；要求交回结果时附上证据。
+- The admin: the full ledger: objective, final check, constraints, the state of every stage and
+  task, the latest rework notes and corrections, and what to do now.
+- Other members: objective, constraints, the current stage and its check, and the tasks given to
+  that member; they are asked to hand in results with evidence.
 
-这段在每轮的群消息里，不在系统提示里，所以不影响提示前缀缓存。
+This block is in each turn's group message, not in the system prompt, so it does not affect the
+prompt prefix cache.
 
-用户纠偏时，管理员先用 `revise` 改 Goal（写明原因）再继续；已通过的阶段保留，从当前阶段起的阶段可以重排、改派。
+When the user corrects course, the admin first changes the Goal with `revise` (giving the reason)
+and then goes on. Stages already passed are kept; stages from the current one on can be reordered
+and reassigned.
 
-### 自动推进
+### Moving forward on its own
 
-一轮结束时，如果 Goal 在执行、群里没有成员或子代理还在工作，DS Bot 唤醒管理员一次（「Goal 检查」），让它走下一步：分派未做的任务、验收已交回的阶段，或者总验收。
+When a turn ends, if the Goal is running and no member or subagent in the group is still working,
+DS Bot wakes the admin once (a "Goal check") to take the next step: hand out tasks not yet done,
+check a stage that was handed in, or do the final check.
 
-- 管理员在等用户时回复 `[PASS]`，Goal 标成「等你」，不再唤醒。
-- 连续两次唤醒都没有进展（Goal 没变、没有成员动工具、用户没说话），也标成「等你」。
-- 用户在群里说话、或 Goal 有变化，就清掉「等你」，恢复自动推进。
-- 暂停时不唤醒；用户点「继续」时唤醒管理员一次。
+- When the admin is waiting for the user, it replies `[PASS]`. The Goal is marked "waiting for you"
+  and the admin is not woken again.
+- After two wake-ups in a row without progress (the Goal did not change, no member used tools, the
+  user said nothing), the Goal is also marked "waiting for you".
+- When the user says something in the group, or the Goal changes, "waiting for you" is cleared and
+  automatic progress resumes.
+- No wake-ups while paused; when the user clicks "Resume", the admin is woken once.
 
-### 暂停与终止
+### Pause and stop
 
-- 暂停只停推进：管理员不再分派、不再过阶段；已在跑的成员回合照常做完。暂停面板上另有「同时停止当前工作」，等于群详情的「全部停止」。
-- 暂停期间用户在群里说的话照常交给管理员，管理员用 `revise` 把纠偏写进 Goal。
-- 终止：Goal 标成 `stopped`，同时停止群里所有正在进行的工作。
+- Pausing only stops progress: the admin no longer hands out work or passes stages; member turns
+  already running finish as usual. The pause panel also has "Stop current work too", which is the
+  same as "Stop all" in the group details.
+- What the user says in the group while paused still goes to the admin, and the admin writes the
+  correction into the Goal with `revise`.
+- Stop: the Goal is marked `stopped`, and all work in progress in the group stops too.
 
-### 界面
+### Interface
 
-- 群聊顶部的「灵动岛」（会话头胶囊）就是 Goal 的状态屏：有 Goal 时，胶囊变长，平时显示 Goal 的简短标题和「当前阶段/总数」；鼠标移上去（或键盘聚焦）才换回群名和打开详情的箭头。
-- 胶囊下方吊着一体的吊舱，和胶囊同宽、连成一个表面：显示当前阶段的标题（或「对齐中」「已暂停 · 阶段名」「验收中 · 阶段名」「等你 · 阶段名」「已达成」「已终止」「总验收」）、阶段进度条和本阶段成员的头像状态；面板打开时进度条和头像收起，只留圆点、标题和箭头。
-- 点吊舱，同一个表面用弹簧展开成面板，聚焦选中的阶段：顶部一行步骤点，每个阶段一个圆点（已过的绿勾、当前的描边数字、未到的空心），点一个阶段，下面就只显示它的验收方法、返工记录、证据和分工；选中别的阶段时标题行给出「回到当前阶段」。底部一行：左边「目标与验收」展开 Goal 全文、总验收方法和约束，右边是按钮——进行中是暂停 / 终止（再点一次确认），暂停时多个「同时停止当前工作」和继续，完成或终止后是清除，对齐中是取消。
-- 阶段不再逐个画卡片：状态只用图形表达（步骤点颜色），任务状态只在头像上（在做的转圈、已交回的绿勾、未开始的半透明）。
-- 群里的对话流用事件行记录 Goal 的变化：设定、阶段通过、返工、修改、暂停、继续、完成、终止。
+- The "dynamic island" at the top of the group chat (the pill in the conversation header) is the
+  Goal's status screen. When there is a Goal, the pill grows longer and normally shows the Goal's
+  short title and "current stage/total". Only on hover (or keyboard focus) does it switch back to the
+  group name and the arrow that opens the details.
+- Below the pill hangs a pod of one piece with it, as wide as the pill and forming one surface. It
+  shows the current stage's title (or "Setting a goal", "Paused · stage name", "Checking · stage
+  name", "Waiting for you · stage name", "Goal reached", "Stopped", "Final check"), a stage progress
+  bar and the avatar states of this stage's members. When the panel is open, the progress bar and
+  avatars fold away, leaving only the dot, the title and the arrow.
+- Clicking the pod springs the same surface open into a panel focused on the selected stage. At the
+  top is a row of step dots, one per stage (a green check for passed, an outlined number for the
+  current one, hollow for ones not reached). Clicking a stage shows only its check, rework history,
+  evidence and assignments below; when another stage is selected, the title row offers "Back to
+  current stage". The bottom row has "Goal and checks" on the left, which expands the full Goal, the
+  final check and the constraints, and buttons on the right: pause / stop while running (click again
+  to confirm), plus "Stop current work too" and resume while paused, clear after completion or stop,
+  and cancel while aligning.
+- Stages are no longer drawn as separate cards: state is shown only by shape (the color of the step
+  dots), and task state only on the avatars (spinning while working, a green check when handed in,
+  half-transparent when not started).
+- The group's conversation records Goal changes as event lines: set, stage passed, rework, revised,
+  paused, resumed, complete, stopped.
 
-## 不做什么
+## Not done
 
-- 不做单 Bot 私聊里的 Goal（数据结构不排除以后做）。
-- Bot 会话不跑 DSH 的会话级 Goal；桌面应用启动时去掉预设里的 goal 命令和工具（输入框上的 goal 条保留，以前留下的 DSH goal 还能暂停和清除）；插件版的「/」菜单里 `/goal` 还在（DSH 没有按会话去掉命令的接口），用了会被挡下并提示用「设定目标」。
-- 不设轮数或时长上限；防空转只靠「没有进展就停下等用户」。
-- 阶段按顺序推进，不做阶段间的并行；同一阶段里的任务可以同时做。
+- No Goal in a single Bot's private chat (the data structure does not rule it out later).
+- Bot Sessions do not run DSH's Session-level Goal. When the desktop app starts, it removes the goal
+  command and tools from the preset (the goal bar above the input box stays, and DSH goals left from
+  before can still be paused and cleared). In the plugin, `/goal` is still in the "/" menu (DSH has
+  no interface to remove a command per Session); using it is blocked with a hint to use "Set a goal".
+- No limit on rounds or duration; the only guard against idling is "stop and wait for the user when
+  there is no progress".
+- Stages move forward in order, with no parallel stages; tasks in the same stage can run at the same
+  time.
 
-## 已知限制
+## Known limits
 
-- 证据由管理员和审查成员核对，DS Bot 不自己运行验收命令。
-- DSH 重启后，Goal 不会自己恢复推进：下一次有人在群里说话、或被打断的工作恢复后，自动推进照常接上。
+- The admin and the reviewing members check the evidence; DS Bot does not run the check commands
+  itself.
+- After DSH restarts, the Goal does not resume progress on its own: the next time someone speaks in
+  the group, or the interrupted work resumes, automatic progress picks up as usual.
 
-## 变更
+## Changes
 
-- 2026-11-01：面板改成聚焦单个阶段（步骤点 + 选中阶段 + 底行按钮），去掉面板头部和彩色标签；桌面应用启动时去掉 DSH 的 goal 命令和工具，插件的 `/goal` 提示改用「设定目标」。
+- 2026-11-01: The panel now focuses on one stage (step dots + selected stage + bottom-row buttons);
+  removed the panel header and colored labels. When the desktop app starts, it removes DSH's goal
+  command and tools; the plugin's `/goal` hint now points to "Set a goal".

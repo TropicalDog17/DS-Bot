@@ -1,67 +1,67 @@
-# 长消息
+# Long messages
 
-- 日期：2026-10-16
-- 相关：#206；PR #258（state.json 只存开头），PR #259（超长消息转成文件），PR #261（聊天里折叠长消息）；#256（输入框粘贴变卡片）
+- Date: 2026-10-16
+- Related: #206; PR #258 (state.json stores only the start), PR #259 (very long messages become files), PR #261 (fold long messages in the chat); #256 (a paste in the input box becomes a card)
 
-## 为什么
+## Why
 
-Bot 之间的消息和群记录原来整段存进 `state.json`，而 `state.json` 每次保存都整份重写：一条 500 万字的 `message_bot` 让它涨到 6.5 MB，之后改个颜色也要重写这么多。一条消息还会整段进收件人的上下文，群里的一行会整段进每个成员的提示。PTC 程序可以把整个文件交给 `message_bot`，长度不受模型输出上限的限制。
+Messages between Bots and group records used to be stored whole in `state.json`, and `state.json` is rewritten in full on every save: one `message_bot` of 5 million characters grew it to 6.5 MB, and after that even changing a color rewrote that much. A message also went whole into the recipient's context, and a group line went whole into every member's prompt. A PTC program can hand a whole file to `message_bot`, so the length is not bounded by the model's output limit.
 
-取舍：
+Trade-offs:
 
-- 热文件只放有上限的数据。全文留在已经存它的地方（送达的会话），或者放进只写一次的文件。
-- 模型一次读不下的内容换成文件，让模型需要时用文件工具读，不在消息里截断。
-- 用 DSH 自己的附件库（`ctx.attachments`），不往用户的工作文件夹里写文件。
+- Hot files hold only bounded data. The full text stays where it is already stored (the Session it was delivered to), or goes into a file written once.
+- Content too long for the model to read at once becomes a file, which the model reads with file tools when needed; messages are not truncated.
+- Use DSH's own attachment store (`ctx.attachments`), and do not write files into the user's work folder.
 
-## 已定的行为
+## Decided behavior
 
 ### state.json
 
-- 往来消息存前 2,000 字、总长度，以及全文在哪：送达的会话，或者附件。
-- 群记录的一行存前 2,000 字和总长度。全文在群的账本里（[消息账本](2026-11-10-message-ledger.md)），成员读到至多 20,000 字。
-- 写盘不缩进。
-- 旧数据载入时同样截短；群记录的全文先进群的账本，只由正在写数据的那个 DSH 写。
+- A message between Bots stores the first 2,000 characters, the total length, and where the full text is: the Session it was delivered to, or an attachment.
+- A group record line stores the first 2,000 characters and the total length. The full text is in the group's ledger ([Message ledger](2026-11-10-message-ledger.md)); members read at most 20,000 characters.
+- It is written without indentation.
+- Old data is shortened the same way when loaded; the full text of group records goes into the group's ledger first, and only the DSH that is writing the data writes it.
 
-### Bot 发出的消息
+### Messages a Bot sends
 
-- `message_bot` 和 `post_to_group` 拒绝空消息和纯空白消息。
-- 不超过 20,000 字的消息照常放在消息里。
-- 超过 20,000 字的消息原样存成 DSH 附件（内容寻址，相同内容只存一份）。消息里只留一句说明、开头 1,000 字和一个文件块；DSH 发给模型时把文件块换成只读路径。说明要求动手前先读完全文；有一行超过 2,000 字时，说明里再加一句：这些行用 shell 命令读。
-- DSH 不能存文件时，超长消息不发；工具告诉发件的 Bot 写进工作文件夹，再发路径。
-- 群里的长帖子：文件跟着这一行走，每个看到这一行的成员随提示收到文件块（和 #241 里用户发的文件一样）。
+- `message_bot` and `post_to_group` refuse empty messages and messages that are only whitespace.
+- A message up to 20,000 characters stays in the message as usual.
+- A message over 20,000 characters is stored as is as a DSH attachment (content-addressed, so the same content is stored once). The message keeps only one sentence of explanation, the first 1,000 characters and a file block; when DSH sends it to the model, the file block becomes a read-only path. The explanation asks the Bot to read the full text before acting; when a line is longer than 2,000 characters, the explanation adds that these lines should be read with shell commands.
+- When DSH cannot store files, a very long message is not sent; the tool tells the sending Bot to write it into the work folder and send the path.
+- A long post in a group: the file travels with the line, and every member that sees the line gets the file block with its prompt (the same as files the user sends in #241).
 
-### 成员读群记录
+### Members reading group records
 
-- 提示里每行最多 20,000 字，超出部分写成 `… (cut; N characters in all)`。
-- `read_group_chat` 每行最多 2,000 字，被截的行给出 seq；带上 `seq` 读整行（至多 20,000 字）。
+- In the prompt each line has at most 20,000 characters; the rest is written as `… (cut; N characters in all)`.
+- `read_group_chat` gives each line at most 2,000 characters and gives the seq of cut lines; passing `seq` reads the whole line (at most 20,000 characters).
 
-### 界面
+### Interface
 
-- 超过 1,500 字或 25 行的消息折叠显示：前 10 行（至多 600 字，切在行尾；Markdown 里被切开的代码块补上结束标记），下面是「显示全部 · N 字」，展开后可以「收起」。用户自己发的消息、群里的消息、往来记录弹窗都这样。
-- Bot 在自己的聊天里给用户的回复，超过 20,000 字才折叠：用户就是来读它的，只有整段渲染会拖慢聊天时才折叠。
-- 正在流式输出的消息不折叠。
-- 只存了开头的消息（往来记录里超过 2,000 字的，转成文件的群帖子）总是折叠。「显示全部」从送达的会话或附件读回，最多显示 200,000 字；读不全时注明。
-- 转成文件的消息，开头那句写给模型的说明不显示。
-- 复制、下载用的是整条消息；读回全文后用读回的全文。
-- 输入框里粘贴超过 1,500 字（和上面消息折叠的阈值一样）：不显示整段文字，显示一张卡片「Pasted text · N characters」。卡片「Put back」把文字放回输入框（可以继续编辑、撤销），「×」丢掉这次粘贴。文字在这期间作为 DSH 附件随消息发出去，所以直接按发送也带全文。新建对话对话框里的输入框同样处理，文字原样随消息发出（对话框不产生附件）。
+- A message over 1,500 characters or 25 lines is folded: the first 10 lines (at most 600 characters, cut at a line end; a code block cut open in Markdown gets its closing fence), and below that "Show all · N characters"; once expanded, "Show less" folds it again. This applies to the user's own messages, group messages and the message history dialog.
+- A Bot's reply to the user in its own chat is folded only above 20,000 characters: the user is there to read it, so it folds only when rendering it whole would slow down the chat.
+- A message that is still streaming is not folded.
+- A message of which only the start is stored (a message between Bots over 2,000 characters, a group post turned into a file) is always folded. "Show all" reads it back from the Session it was delivered to or from the attachment, and shows at most 200,000 characters; when it cannot read all of it, it says so.
+- For a message turned into a file, the opening sentence written for the model is not shown.
+- Copy and download use the whole message; after the full text is read back, they use that.
+- A paste of more than 1,500 characters into the input box (the same threshold as message folding above) does not show the whole text but a card "Pasted text · N characters". The card's "Put back" puts the text back in the input box (where it can be edited further or undone), and "×" drops the paste. Meanwhile the text is sent with the message as a DSH attachment, so pressing send right away also carries the full text. The input box in the new conversation dialog works the same way, and the text is sent with the message as is (the dialog makes no attachment).
 
-### 实测
+### Tested
 
-- DSH 0.2.0-rc.2 + mock 模型：Bot 在 `read-only`、`workspace-write`、`danger-full-access` 三种权限预设下读附件路径，都不弹审批。
+- DSH 0.2.0-rc.2 + mock model: a Bot reads attachment paths under all three permission presets, `read-only`, `workspace-write` and `danger-full-access`, without an approval prompt.
 
-## 不做什么
+## Not done
 
-- 不截断、不改写消息内容。附件原样保存，包括很长的行。
-- 用户在群里发的超长消息，成员读前 20,000 字。
-- Bot 回合里的回复（模型自己的输出）不转成文件。
+- Message content is not truncated or rewritten. Attachments are stored as is, including very long lines.
+- For a very long message the user sends in a group, members read the first 20,000 characters.
+- Replies within a Bot's turn (the model's own output) are not turned into files.
 
-## 已知限制
+## Known limits
 
-- DSH 不删除附件（DSH 写明的现有限制），记入 DSH 让步总账。只有超过 20,000 字的 Bot 消息会产生附件，相同内容只存一份。
-- DSH 的 `read` 工具每行最多显示 2,000 字，一行之内不能分页，只能靠说明提示模型用 shell 读。
-- DSH 的通用文件卡片不能打开，所以「显示全部」由 DS Bot 自己读附件。
+- DSH does not delete attachments (a current limit that DSH documents); this is recorded in the DSH concessions ledger. Only Bot messages over 20,000 characters make attachments, and the same content is stored once.
+- DSH's `read` tool shows at most 2,000 characters per line and cannot page within a line, so only the explanation can tell the model to read with the shell.
+- DSH's generic file card cannot be opened, so DS Bot reads the attachment itself for "Show all".
 
-## 变更
+## Changes
 
-- 2026-11-10：群记录的全文改存在群的账本里，不再写 `group-lines/`（#1316）。
-- 2026-11-10：输入框里的长粘贴收成卡片（#256）：卡片是 DS Bot 的，文字作为 DSH 附件随消息发出，DSH 自己画的文件卡片被隐藏。
+- 2026-11-10: the full text of group records is stored in the group's ledger and no longer written to `group-lines/` (#1316).
+- 2026-11-10: a long paste in the input box folds into a card (#256): the card belongs to DS Bot, the text is sent with the message as a DSH attachment, and the file card DSH draws itself is hidden.

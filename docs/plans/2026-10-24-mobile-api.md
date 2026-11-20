@@ -1,110 +1,189 @@
-# 移动端客户端 API
+# Mobile client API
 
-- 日期：2026-10-24
-- 相关：dsh-go（Android 上的 DSH 客户端）的 Bot 页；[桌面应用](2026-10-16-desktop-app.md)「界面」、[群聊](2026-10-07-group-chat.md)
+- Date: 2026-10-24
+- Related: the Bot page of dsh-go (the DSH client on Android); [Desktop app](2026-10-16-desktop-app.md),
+  "Interface"; [Group chat](2026-10-07-group-chat.md)
 
-## 为什么
+## Why
 
-网页版和桌面应用的界面都是 DSH 网页前端加 `ds-bot` 插件：群聊的历史靠插件在浏览器里拆 `group_relay` 的结果，进行中的一轮靠每秒轮询 `room-progress`，别的状态靠轮询 `state`。手机不一样：
+The interface of both the web version and the desktop app is the DSH web front end plus the `ds-bot`
+plugin: group chat history comes from the plugin splitting `group_relay` results in the browser, a round
+in progress comes from polling `room-progress` every second, and other status comes from polling
+`state`. A phone is different:
 
-1. **自己画界面。** 手机客户端（dsh-go）用原生控件画 Bot、群聊和详情，不跑 DSH 网页前端，也不跑插件的界面代码。群聊怎么从会话里拆出发言人，这条规则只能有一份，放在服务端。
-2. **会断线、会被挂到后台。** SSE 连接在后台会被系统掐断，回来时要知道错过了什么：哪个 Bot 说了话、群里谁交了活、哪张卡在等人。
-3. **两边各自升级。** 手机上的 App、手机里装的 `ds-bot`、NAS 上 Docker 里的 `ds-bot` 版本不会一致，需要一个握手说清楚彼此会什么。
-4. **流量和体积。** Bot 的头像照片是 data URL，每次 `state` 都带全部照片，手机远程连接时太重。
+1. **It draws its own interface.** The phone client (dsh-go) draws Bots, group chats and details with
+   native controls; it runs neither the DSH web front end nor the plugin's interface code. There can be
+   only one copy of the rule for how a group chat is split into speakers from the Session, and it lives on
+   the server.
+2. **It drops connections and gets sent to the background.** The system cuts SSE connections in the
+   background, and on return the client needs to know what it missed: which Bot spoke, who in a group
+   finished their work, which card waits for someone.
+3. **The two sides upgrade separately.** The app on the phone, the `ds-bot` installed on the phone and the
+   `ds-bot` in Docker on a NAS will not be at the same version, so a handshake is needed to state what
+   each side can do.
+4. **Traffic and size.** Bot avatar photos are data URLs, and every `state` carries all photos, which is
+   too heavy for a phone on a remote connection.
 
-取舍：
+Trade-offs:
 
-- **传输与 Remote 方法。** 本地 / LAN / SSH 仍走 `POST api/bot` 和 `GET api/bot/feed`，使用 DSH 会话 cookie 鉴权，和桌面应用的窗口一样。当客户端只能经由转发 DSH Typert Gateway Remote 方法的链路到达主机时，插件额外以源码模式注册两个 Gateway Remote 方法复用同一通道与事件流（纯 JS 插件不带 Typert 生成器）：`dsBot/call { endpoint, payload }` 返回与 `POST api/bot` 相同的 `{ ok, value | error }`（和手机配对链路一样，拒绝仅限电脑本机执行的 `phone-*` 配对管理与 `folder-pick` 原生弹窗，`bot/refused`），`dsBot/feed {}` 以流的形式推送 `{ event, data }`（首条为 `hello`）。代价：若中继自身带有接口允许列表（如 `ds-harness-remote`），需同时放行 `dsBot/call` 与 `dsBot/feed`，见「已知限制」。
-- **显示用的条目，不是原始事件。** 群聊和 Bot 私聊都给「谁、说了什么、什么时候」的条目，客户端不需要懂 DSH 的会话事件和 DS Bot 的内部来源标记。
-- **提醒放内存。** 提醒只是「回来时补上」的索引，不是记录本身；真正的内容还在会话和 `state.json` 里。所以不落盘，重启后从头计数（`boot` 变了），客户端重新读一遍团队即可。
+- **Transport and Remote methods.** Local / LAN / SSH still use `POST api/bot` and `GET api/bot/feed`,
+  authenticated with the DSH Session cookie, like the desktop app's window. When the client can reach the
+  host only through a link that forwards DSH Typert Gateway Remote methods, the plugin also registers two
+  Gateway Remote methods in source mode that reuse the same channel and event stream (a pure-JS plugin
+  has no Typert generator): `dsBot/call { endpoint, payload }` returns the same `{ ok, value | error }`
+  as `POST api/bot` (like the phone pairing link, it refuses the `phone-*` pairing management and the
+  `folder-pick` native dialog, which run only on the computer itself, with `bot/refused`), and
+  `dsBot/feed {}` pushes `{ event, data }` as a stream (the first item is `hello`). The cost: if the relay
+  itself has an interface allow list (such as `ds-harness-remote`), it must allow both `dsBot/call` and
+  `dsBot/feed`; see "Known limits".
+- **Display entries, not raw events.** Group chats and Bot own chats both give "who, said what, when"
+  entries, so the client need not understand DSH Session events or DS Bot's internal source markers.
+- **Notices are kept in memory.** A notice is only an index for "catch up on return", not the record
+  itself; the real content is still in the Sessions and `state.json`. So notices are not saved to disk,
+  and after a restart the count starts over (`boot` changes), and the client reads the team again.
 
-## 已定的行为
+## Decided behavior
 
-### 版本和握手
+### Versions and handshake
 
-- `hello`：`{ client?: { name, version, platform }, api?: [1] }` → `{ api, apiMin, apiMax, plugin: { name, version }, capabilities, boot, seq, revision, readOnly, memory, feed, rpc? }`。
-  - `api` 是双方都会的最高版本；客户端不传时是服务端当前版本；没有交集时是 `null`，客户端提示更新。
-  - `capabilities` 列出服务端会的东西（`room-chat`、`notices`、`avatar`、`memory-edit`、`usage-summary`，挂载 Gateway Remote 时含 `rpc` 等）。
-  - 当宿主挂载 DSH Typert Gateway 且 `dsBot/call`、`dsBot/feed` 就绪时，带 `rpc: { call: 'dsBot/call', feed: 'dsBot/feed' }`；未挂载时不返回 `rpc` 与 `rpc` 能力。
-  - `boot` 每次 DSH 启动都换；`seq` 是最新一条提醒的序号。
-- 版本规则：
-  - 只加东西（新接口、新字段、新的条目或提醒种类、新的 feed 事件）不升 `api`，写进 `capabilities`。客户端跳过不认识的字段、种类和事件。
-  - 旧客户端会读错的改动才升 `api`；服务端在 `apiMin..apiMax` 之间都照常回答。
-- 没有 `hello` 的旧 `ds-bot` 回 `bot/not-found`，客户端据此判断版本太旧。
+- `hello`: `{ client?: { name, version, platform }, api?: [1] }` →
+  `{ api, apiMin, apiMax, plugin: { name, version }, capabilities, boot, seq, revision, readOnly, memory, feed, rpc? }`.
+  - `api` is the highest version both sides support; when the client sends none, it is the server's
+    current version; with no overlap it is `null`, and the client asks for an update.
+  - `capabilities` lists what the server supports (`room-chat`, `notices`, `avatar`, `memory-edit`,
+    `usage-summary`, `rpc` when Gateway Remote is mounted, and others).
+  - When the host mounts the DSH Typert Gateway and `dsBot/call` and `dsBot/feed` are ready, it includes
+    `rpc: { call: 'dsBot/call', feed: 'dsBot/feed' }`; when it is not mounted, neither `rpc` nor the
+    `rpc` capability is returned.
+  - `boot` changes on every DSH start; `seq` is the sequence number of the latest notice.
+- Version rules:
+  - Additions only (new endpoints, new fields, new entry or notice kinds, new feed events) do not raise
+    `api`; they go into `capabilities`. Clients skip fields, kinds and events they do not know.
+  - Only changes that old clients would read wrongly raise `api`; the server answers normally for any
+    version in `apiMin..apiMax`.
+- An old `ds-bot` without `hello` answers `bot/not-found`, from which the client knows the version is too
+  old.
 
-### 团队和头像
+### Team and avatars
 
-- `state` 照旧。加 `avatars: 'ref'` 时，每张照片换成 `avatar.imageRef`（照片内容的 SHA-256 前 16 位），其他不变。
-- 手机经 link 的 `bot` 调用（`{ endpoint, payload }`）可以再带一个 `state` 字段，内容就是发给 `state` 接口的请求体：写入成功且团队版本变了时，回包里多一个 `state`，等于当场问一遍 `state` 的回答。读取、版本没变的写入、失败的写入都不带。
-- `avatar`：`{ botId }` → `{ botId, ref, image }`，没有照片时 `ref` 和 `image` 都是 `null`。客户端按 `ref` 缓存，`ref` 变了再取。
-- 角色形象（`avatar.shape`）和默认颜色照旧由客户端按 Bot id 算（`characters.js` 的 `defaultColor`）。
+- `state` as before. With `avatars: 'ref'`, each photo is replaced by `avatar.imageRef` (the first 16
+  characters of the SHA-256 of the photo content); nothing else changes.
+- A phone's `bot` call over the link (`{ endpoint, payload }`) can carry an extra `state` field, whose
+  content is the request body for the `state` endpoint: when a write succeeds and the team revision
+  changed, the response has an extra `state`, equal to the answer of asking `state` on the spot. Reads,
+  writes that did not change the revision, and failed writes do not include it.
+- `avatar`: `{ botId }` → `{ botId, ref, image }`; with no photo, `ref` and `image` are both `null`. The
+  client caches by `ref` and fetches again when `ref` changes.
+- The character shape (`avatar.shape`) and default color are still computed by the client from the Bot id
+  (`defaultColor` in `characters.js`).
 
-### 私聊
+### Own chat
 
-- `chat`、`send`、feed 的 `message` 和 `stream` 照旧（见 `feed.js`）。`chat` 的用户消息同样带 `images` / `imageRefs`。
-- `image`：`{ sessionId, attachmentId }` → `{ mime, data }`，`data` 是图片字节的 base64。`sessionId` 只认团队的会话（Bot 自己的私聊段、群的会话、换段留下的旧段），其它回 `bot/not-found`；附件不在会话里也是 `bot/not-found`。需要 `images` 能力。加 `preview: true` 时，长边超过 512 像素、文件超过 100 KB 的 JPEG 和 PNG 换成长边 512 的 JPEG 预览，回 `{ mime: 'image/jpeg', data, preview: true }`；其它照旧回原图。聊天里用预览，点开再取原图。需要 `image-preview` 能力。
+- `chat`, `send`, and the feed's `message` and `stream` as before (see `feed.js`). User messages in
+  `chat` also carry `images` / `imageRefs`.
+- `image`: `{ sessionId, attachmentId }` → `{ mime, data }`, where `data` is the image bytes in base64.
+  `sessionId` accepts only team Sessions (a Bot's own chat parts, group Sessions, old parts left by part
+  switches); others answer `bot/not-found`; an attachment that is not in the Session is also
+  `bot/not-found`. Needs the `images` capability. With `preview: true`, JPEG and PNG images whose long
+  side is over 512 pixels and whose file is over 100 KB are replaced by a JPEG preview with a long side
+  of 512, answering `{ mime: 'image/jpeg', data, preview: true }`; others still return the original. The
+  chat uses previews and fetches the original when opened. Needs the `image-preview` capability.
 
-### Bot 浏览器
+### Bot browser
 
-- `state.browserHolds`：每个 Bot 的浏览器现在被谁拿着（`holdSnapshot()` 的形状）：Bot 请用户接手（带 `callId`、`reason`、`note`），或用户接管。
-- `browser-frame`：`{ botId }` → `{ mime, data, url, title }`，Bot 浏览器当前页的截图（JPEG，base64）。这台机器不开 Bot 浏览器回 `bot/browser-off`，这个 Bot 没有打开的浏览器回 `bot/not-found`。
-- 接管、交还、停下照旧用 `browser-takeover`、`browser-give-back`、`browser-stop`。
+- `state.browserHolds`: who holds each Bot's browser right now (the shape of `holdSnapshot()`): the Bot
+  asked the user to take over (with `callId`, `reason`, `note`), or the user took over.
+- `browser-frame`: `{ botId }` → `{ mime, data, url, title }`, a screenshot of the Bot browser's current
+  page (JPEG, base64). If this machine does not run the Bot browser it answers `bot/browser-off`; if this
+  Bot has no open browser, `bot/not-found`.
+- Take over, give back and stop still use `browser-takeover`, `browser-give-back` and `browser-stop`.
 
-### 群聊
+### Group chat
 
-- `room-chat`：`{ roomId, cursor? }` → `{ roomId, items, cursor, running, speaking }`，从新到旧分页，每页最多 60 条消息，页内从旧到新。
-- 条目：
-  - `{ id, kind: 'user', text, images?, imageRefs?, time }`：用户的消息，包括一轮进行中插进来的。`images` 是图片张数，`imageRefs` 是每张的 `{ attachmentId, mime?, name? }`，用 `image` 取内容。
-  - `{ id, kind: 'bot', botId, name, color?, text, time, duration?, whole?, live? }`：成员的发言，或 Bot 从群外发进来的帖子。`whole: { length, file }` 表示帖子太长、转成了文件，用 `file-text` 读全文。
-  - `{ id, kind: 'event', event, botId?, name?, text?, code?, time }`：一轮里的事件，`event` 是 `working`、`approval`、`done`、`stopped`、`failed`、`missed`、`lookup`、`resumed`、`cut`，或定时任务的 `schedule`。
-- 一轮进行中时，最新一页在这轮的位置放上目前为止的发言（`live: true`），`running` 为真，`speaking` 是正在说话的成员。这轮结束后，同一条发言的 `id` 不变（`<callId>:<序号>`），客户端可以直接替换。
-- 发消息照旧用 `send`（`sessionId` 是群的 id）；停下成员的活照旧用 `stop-member-work`；群里成员的审批照旧用 `approval-answer`。
+- `room-chat`: `{ roomId, cursor? }` → `{ roomId, items, cursor, running, speaking }`, paged from newest
+  to oldest, at most 60 messages per page, oldest to newest within a page.
+- Entries:
+  - `{ id, kind: 'user', text, images?, imageRefs?, time }`: a user message, including ones inserted
+    during a round in progress. `images` is the number of images, `imageRefs` is a
+    `{ attachmentId, mime?, name? }` for each; fetch the content with `image`.
+  - `{ id, kind: 'bot', botId, name, color?, text, time, duration?, whole?, live? }`: a member's
+    message, or a post a Bot sent in from outside the group. `whole: { length, file }` means the post was
+    too long and was turned into a file; read the full text with `file-text`.
+  - `{ id, kind: 'event', event, botId?, name?, text?, code?, time }`: an event in a round; `event` is
+    `working`, `approval`, `done`, `stopped`, `failed`, `missed`, `lookup`, `resumed`, `cut`, or
+    `schedule` for a scheduled task.
+- While a round is in progress, the newest page holds the messages so far at that round's position
+  (`live: true`), `running` is true, and `speaking` is the member who is speaking. After the round ends,
+  the same message keeps the same `id` (`<callId>:<index>`), so the client can replace it directly.
+- Sending still uses `send` (`sessionId` is the group's id); stopping a member's work still uses
+  `stop-member-work`; approvals for members in a group still use `approval-answer`.
 
-### 提醒
+### Notices
 
-- 种类：
-  - `message`：Bot 在自己的私聊里说了话（Bot 之间的隐藏回合和换段时的固定回复不算）。
-  - `group`：成员在群里发言。
-  - `done`：成员做完了派给它的活。
-  - `question`、`view`：Bot 的私聊里有提问卡、视图卡在等用户。
-  - `approval`：Bot 在等用户批准（在群里时带群）。
-- 每条：`{ seq, kind, botId, name, roomId?, title?, sessionId?, text, time }`。`name` 是 Bot 现在的名字，`title` 是群名，`text` 最多 300 字、压成一行。
-- `notices`：`{ boot?, since? }` → `{ boot, seq, reset, notices }`。`boot` 不一致（重启过）或者 `since` 之后的提醒已经被挤掉时，`reset` 为真，客户端重读团队。内存里最多留 200 条。
-- 提醒只说「有事」，不记已读。已读和通知怎么弹由客户端决定。
+- Kinds:
+  - `message`: a Bot said something in its own chat (hidden turns between Bots and the fixed replies of
+    part switches do not count).
+  - `group`: a member spoke in a group.
+  - `done`: a member finished the work handed to it.
+  - `question`, `view`: a question card or view card in a Bot's own chat waits for the user.
+  - `approval`: a Bot waits for user approval (with the group when in a group).
+- Each one: `{ seq, kind, botId, name, roomId?, title?, sessionId?, text, time }`. `name` is the Bot's
+  current name, `title` is the group name, `text` is at most 300 characters, squeezed into one line.
+- `notices`: `{ boot?, since? }` → `{ boot, seq, reset, notices }`. When `boot` does not match (there was
+  a restart) or notices after `since` have already been pushed out, `reset` is true and the client reads
+  the team again. At most 200 notices are kept in memory.
+- A notice only says "something happened"; it does not record read state. Read state and how
+  notifications pop up are up to the client.
 
-### 直播（feed）
+### Live stream (feed)
 
-- `hello` 多带 `api`、`boot`、`seq`，重连后客户端先用 `notices` 补上。
-- 新事件 `notice`：一条提醒，内容同上。
-- 新事件 `room`：`{ roomId }`，群里有了新的一行、一轮开始或结束，150 毫秒内的合并成一条。客户端重新读这个群的第一页。
-- `dsBot/feed` 流每次订阅先送一条 `hello`，随后转发所有实时事件；插件卸载重载或单条订阅积压满 512 条未消费事件时当即结束订阅（不排空旧积压），由客户端重连后用 `hello` 与 `notices` 补齐。
+- `hello` also carries `api`, `boot` and `seq`; after reconnecting, the client first catches up with
+  `notices`.
+- New event `notice`: one notice, with the content above.
+- New event `room`: `{ roomId }`, a new line in a group, or a round started or ended; events within 150
+  milliseconds are merged into one. The client reads the first page of that group again.
+- Each subscription to the `dsBot/feed` stream first sends a `hello`, then forwards all live events; when
+  the plugin is unloaded and reloaded, or a single subscription has 512 unconsumed events backed up, the
+  subscription ends at once (the old backlog is not drained), and the client reconnects and catches up
+  with `hello` and `notices`.
 
-### 记忆
+### Memory
 
-- `memory-add`：`{ botId | roomId, scope?, topic?, text }`，`memory-edit`：`{ botId | roomId, scope?, topic?, text, next }`。用户自己写的条目，不经模型；检查和工具一样（长度、像密钥的内容拒绝，`bot/invalid`）。都返回和 `memory-view` 一样的结果。删除照旧用 `memory-forget`。
+- `memory-add`: `{ botId | roomId, scope?, topic?, text }`; `memory-edit`:
+  `{ botId | roomId, scope?, topic?, text, next }`. Entries the user writes themselves, without the
+  model; the checks are the same as for the tools (length, and content that looks like a key is refused
+  with `bot/invalid`). Both return the same result as `memory-view`. Removal still uses `memory-forget`.
 
-### 用量
+### Usage
 
-- `usage-summary`：`{ botId, timeZone? }` → `{ botId, day, week, month, models, scanning }`。`day`、`week`、`month` 是最近 24 小时、7 天、30 天的 `{ input, cacheRead, cacheWrite, output, calls }`；`models` 是最近 30 天按模型分的同样数字。
+- `usage-summary`: `{ botId, timeZone? }` → `{ botId, day, week, month, models, scanning }`. `day`,
+  `week` and `month` are `{ input, cacheRead, cacheWrite, output, calls }` for the last 24 hours, 7 days
+  and 30 days; `models` is the same numbers for the last 30 days, per model.
 
-### 只读的 DSH
+### Read-only DSH
 
-- `hello`、`notices`、`avatar`、`room-chat`、`usage-summary` 在只读的 DSH 上也回答；`memory-add`、`memory-edit` 和其他改动一样拒绝（`bot/read-only`）。
+- `hello`, `notices`, `avatar`, `room-chat` and `usage-summary` also answer on a read-only DSH;
+  `memory-add` and `memory-edit` are refused like other changes (`bot/read-only`).
 
-## 不做什么
+## Not done
 
-- 不把已读状态存在服务端：每台设备各看各的。
-- 不推送到手机系统（FCM 之类）：客户端连着时才收得到，后台靠客户端自己的保活。
-- 不给群聊单独算用量：成员在群里的用量记在成员自己名下。
-- 不改网页版和桌面应用用的接口和事件。
+- No read state stored on the server: each device keeps its own.
+- No push to the phone system (FCM and the like): the client receives notices only while connected, and
+  relies on its own keep-alive in the background.
+- No separate usage for group chats: a member's usage in a group counts under the member itself.
+- No change to the endpoints and events used by the web version and the desktop app.
 
-## 已知限制
+## Known limits
 
-- 若远程中继（如 `ds-harness-remote`）维护自身的 Remote 接口允许列表，需该中继允许列表包含 `dsBot/call` 与 `dsBot/feed` 后才能通过中继使用；SSH 隧道、局域网直连和本机不受此限制。
-- 旧群（PTC 预设下建的）一轮跑在 `run_code` 里，`room-chat` 认不出这种轮次的发言。
-- 提醒不落盘：DSH 重启前没送到的提醒就丢了，客户端只能重读团队。
+- If a remote relay (such as `ds-harness-remote`) keeps its own allow list of Remote interfaces, it can
+  be used through the relay only after its allow list includes `dsBot/call` and `dsBot/feed`; SSH
+  tunnels, direct LAN connections and the local machine are not affected.
+- In old groups (created under the PTC preset) a round runs inside `run_code`, and `room-chat` cannot
+  recognize the messages of such rounds.
+- Notices are not saved to disk: notices not delivered before DSH restarts are lost, and the client can
+  only read the team again.
 
-## 变更
+## Changes
 
 
 ## File download chunks

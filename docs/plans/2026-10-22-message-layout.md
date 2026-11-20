@@ -1,51 +1,51 @@
-# 消息布局和宽度
+# Message layout and width
 
-- 日期：2026-10-22
-- 相关：#380、#446
+- Date: 2026-10-22
+- Related: #380, #446
 
-## 为什么
+## Why
 
-Bot 回复的气泡最宽写死在 560px。宽屏下正文列是 960px，Bot 气泡只占 58%，比用户气泡（列宽的 70.2%，674px）还窄。长回答、代码块和表格因此被挤成一窄条，频繁换行。#380 希望能调宽度；也有用户习惯另一种读法：Bot 的话不套气泡，像文档一样整列铺开，每条上面写着是谁、什么时候说的。
+The widest Bot reply bubble was fixed at 560px. On a wide screen the text column is 960px, so a Bot bubble took only 58% of it, narrower than the user's bubble (70.2% of the column, 674px). Long answers, code blocks and tables were squeezed into a narrow strip and wrapped often. #380 asks for an adjustable width; some users also prefer another way of reading: Bot messages without a bubble, laid out across the whole column like a document, each with who said it and when above it.
 
-取舍：
+Trade-offs:
 
-- 宽度用滑块按正文列的百分比调，不填像素：换窗口大小、打开右侧面板时仍然成比例。三档太粗，滑块能调到每个人顺手的宽度。
-- 两种布局可切换：气泡和平铺。平铺时 Bot 的话没有容器，宽度和气泡共用一个值的话，气泡顺手的 80% 放到平铺里只会右边空一块，看着像没底色的气泡。所以平铺的 Bot 正文单独一个宽度，默认铺满整列。
-- 和主题、强调色、Bot 动画一样存在团队设置里，所有设备共用。
-- 不改正文列本身（960px，见 #28）。
+- Width is set with a slider as a percentage of the text column, not in pixels, so it stays proportional when the window size changes or the right panel opens. Three steps would be too coarse; a slider reaches the width each person likes.
+- The two layouts can be switched: bubble and flat. In the flat layout Bot messages have no container, so if it shared one value with the bubble width, the 80% that suits bubbles would only leave an empty strip on the right in the flat layout, which looks like a bubble without a background. So the flat Bot text has its own width, which fills the whole column by default.
+- Like the theme, accent color and Bot animation, it is stored in the team settings and shared by all devices.
+- The text column itself is not changed (960px, see #28).
 
-## 已定的行为
+## Decided behavior
 
-- 设置 → 通用 → 外观：
-  - 「消息布局」：气泡 / 平铺的分段按钮，默认气泡，点了马上生效。
-  - 「正文宽度」：只在平铺布局下出现，滑块 50%–100%，默认 100%。
-  - 「气泡宽度」：滑块 50%–100%，默认 80%。
-  - 「显示思考过程」开关：默认关。关着时对话里不显示思考过程，Bot 在想的时候只有活动行；开着时思考过程照旧显示在回复上方。
-  - 两个滑块每格 5%，旁边显示当前百分比。拖动停下 350ms 后保存（和自定义强调色一样）；还没保存就关掉设置，也照样保存。
-- 宽度都是正文列宽的百分比，私聊、群聊、Bot 之间的对话框都一样：
-  - 气泡宽度管所有气泡：气泡布局里的 Bot 气泡和思考过程（开着显示思考过程时），以及两种布局里的用户气泡。
-  - 正文宽度管平铺布局里 Bot 的正文和思考过程（开着显示思考过程时）。
-- 气泡布局：Bot 气泡右侧总是留出 82px 给悬停工具栏（6px 间距，加上三个 24px 按钮和它们之间 2px 的间隔），所以宽度调到 100% 时，Bot 气泡是整列宽减 82px。群聊里带头像的消息按（列宽 − 30px）的比例算，再加上 30px 的头像列。
-- 平铺布局：
-  - Bot 的话上面有一行：头像、名字（正文色，加粗）、时间；群聊里还有管理员标签和用时。正文在下面，从头像的左边开始，没有底色和内边距。
-  - 私聊里每一轮回复出一次这一行，放在这一轮最先出现的地方：先出思考过程就在它上面（开着显示思考过程时），先出正文就在正文上面；更早的分段里的回复也一样。群聊和 Bot 之间的对话里，同一个 Bot 连着的几条消息共用一行，之间隔 10px。
-  - 悬停工具栏浮在消息的右上角，不占宽度。
-  - 用户消息仍是靠右的气泡。
-- 服务端只收这些值：`layout` 为 `bubble` 或 `flat`；`width` 和 `flatWidth` 为 50–100 的整数；`thinking` 为 `true` 或 `false`。`layout`、宽度的其他值报错，`thinking` 的其他值忽略；默认值（`bubble`、`80`、`100`、`false`）不存。页面认不出的值按默认处理。
-- 布局写在 `body[data-bt-layout]` 上，两个宽度写成 `body` 上的 `--bt-msg-w` 和 `--bt-flat-w`（0.5–1）。拿到团队状态之前，先用本机缓存的上一次设置，避免先闪一下默认样式。
+- Settings → General → Appearance:
+  - "Message layout": a segmented button Bubble / Flat, Bubble by default, which takes effect at once.
+  - "Text width": shown only in the flat layout, a slider from 50% to 100%, 100% by default.
+  - "Bubble width": a slider from 50% to 100%, 80% by default.
+  - "Show thinking" switch: off by default. When off, the conversation does not show the thinking process, and while the Bot is thinking there is only the activity line; when on, the thinking process shows above the reply as before.
+  - Both sliders move in steps of 5%, with the current percentage shown beside them. The value is saved 350ms after dragging stops (as with the custom accent color); closing Settings before it is saved still saves it.
+- Widths are always a percentage of the text column width, the same in a Bot's own chat, group chats and the dialog of a conversation between Bots:
+  - Bubble width controls every bubble: Bot bubbles and the thinking process in the bubble layout (when Show thinking is on), and user bubbles in both layouts.
+  - Text width controls the Bot text and the thinking process in the flat layout (when Show thinking is on).
+- Bubble layout: a Bot bubble always leaves 82px on its right for the hover toolbar (6px gap, plus three 24px buttons with 2px between them), so at 100% a Bot bubble is the column width minus 82px. In group chats a message with an avatar is sized as a proportion of (column width − 30px), plus the 30px avatar column.
+- Flat layout:
+  - A Bot message has one line above it: avatar, name (text color, bold), time; in group chats also the admin label and the time taken. The text is below, starting at the avatar's left edge, with no background and no padding.
+  - In a Bot's own chat this line appears once per reply turn, at whatever comes first in the turn: above the thinking process if that comes first (when Show thinking is on), above the text if the text comes first; replies in earlier parts work the same way. In group chats and conversations between Bots, consecutive messages from the same Bot share one line, with 10px between them.
+  - The hover toolbar floats at the message's top right and takes no width.
+  - User messages stay as bubbles on the right.
+- The server accepts only these values: `layout` is `bubble` or `flat`; `width` and `flatWidth` are integers from 50 to 100; `thinking` is `true` or `false`. Other values of `layout` and the widths are errors, other values of `thinking` are ignored; default values (`bubble`, `80`, `100`, `false`) are not stored. The page treats values it does not recognize as the default.
+- The layout is written on `body[data-bt-layout]`, and the two widths as `--bt-msg-w` and `--bt-flat-w` (0.5–1) on `body`. Before the team state arrives, the page uses the last settings cached on this machine, to avoid a flash of the default style.
 
-## 不做什么
+## Not done
 
-- 不提供像素宽度。
-- 拖动时不实时改聊天区的样式；松手后保存，再跟着团队状态变化。
-- 不改正文列宽，也不恢复 DSH 的拖动把手（#28）。
-- 不按设备分开保存。
+- No pixel widths.
+- Dragging does not change the chat area's style live; the value is saved on release and then follows the team state.
+- The text column width is not changed, and DSH's drag handle is not brought back (#28).
+- Not saved separately per device.
 
-## 已知限制
+## Known limits
 
-- 平铺布局里，悬停工具栏会盖住第一行最后几个字，鼠标移开就没了。
-- 气泡布局里，Bot 气泡最宽到整列宽减 82px：960px 的列大约在 91% 封顶，再往右拖只有用户气泡还在变宽。手机这类窄屏上更早封顶。
+- In the flat layout the hover toolbar covers the last few characters of the first line; it goes away when the mouse moves off.
+- In the bubble layout a Bot bubble is at most the column width minus 82px: a 960px column tops out at about 91%, and dragging further right only widens user bubbles. On narrow screens such as phones it tops out earlier.
 
-## 变更
+## Changes
 
-- 2026-10-23：加「显示思考过程」开关，默认关；Bot 对话不再显示上下文行（#465）。
+- 2026-10-23: added the "Show thinking" switch, off by default; Bot conversations no longer show the context line (#465).

@@ -1,567 +1,567 @@
-# DS Bot UI 设计标准
+# DS Bot UI design standard
 
-版本：草案 0.2（2026-10-15，对照 `dev` `2f9300d` 复核；0.1 为 2026-10-11）。适用于 `ds-bot/src/client/` 里的全部界面。
+Version: draft 0.2 (2026-10-15, checked against `dev` `2f9300d`; 0.1 was 2026-10-11). It applies to every interface in `ds-bot/src/client/`.
 
-## 0. 怎么用这份标准
+## 0. How to use this standard
 
-- **等级**：「必须」不能违反；「应该」默认照做，有理由可以例外，例外写进代码注释；「可以」是推荐做法。
-- **数值来源**：所有数值都取自当前代码（主题、样式和动效模块），不是凭空定的。每一节末尾的「现状偏差」列出代码里和标准不一致的地方，统一时以标准为准。
-- **标杆界面**：顶部胶囊（「灵动岛」）和设置里的用量页。新界面的动效以这两处为准。
-- **方向**：固化现状。数值以现有代码为准，只消除不一致，不重新定视觉；长期逐步形成 DS Bot 自己的设计语言。
-- **有取舍时**：不自行决定。做两种做法的对比预览，由维护者选；选定后写进第 14 节「决定记录」，以后按记录执行。
-- **硬规则**（来自 `AGENTS.md`）：只用原创素材，不复制其他产品的代码、图标、图形；界面文案的源语言是英文，中文在 `i18n.js`；不改 DSH 本身。
+- **Levels**: "must" cannot be broken; "should" is the default, with exceptions allowed for a reason, and the exception goes into a code comment; "may" is a recommended practice.
+- **Where the values come from**: every value is taken from the current code (the theme, style and motion modules), not made up. The "Current deviations" list at the end of each section names the places where the code does not match the standard. When the code is unified, the standard wins.
+- **Reference interfaces**: the top pill and the usage page in settings. The motion of a new interface follows these two.
+- **Direction**: fix the current state in place. Values follow the existing code; the work only removes inconsistencies and does not set a new visual design. Over time this grows into DS Bot's own design language.
+- **When there is a trade-off**: do not decide on your own. Build a side-by-side preview of the two options and let the maintainer choose; once chosen, record it in section 14, "Decision record", and follow the record from then on.
+- **Hard rules** (from `AGENTS.md`): only original material, no code, icons or graphics copied from other products; the source language of interface text is English, and the Chinese is in `i18n.js`; do not change DSH itself.
 
-## 1. 设计原则
+## 1. Design principles
 
-1. **一个表面在变形。** 状态切换时，同一个表面改变大小和内容，不是一个元素消失、另一个元素出现。顶部胶囊是范例。
-2. **形状只用弹簧。** 尺寸、位置、圆角的变化必须用第 9 节的弹簧；只有颜色和透明度可以用固定时长。
-3. **有进就有出。** 弹出层、对话框、菜单关闭时必须播放退场动画，不能直接卸载。
-4. **没事就安静。** 头像和界面只在状态变化或用户操作时动。持续的环境动画只出现在「活泼」档（第 8.4 节）。
-5. **内容等表面到位。** 表面在变形时，里面的内容不重排；大块内容在变形结束后再填入。
-6. **文案只写用户需要的信息。** 不写开发讨论、计划、过程，见第 11 节。
-7. **颜色全部来自主题。** 组件里不写死颜色，见第 2 节。
+1. **One surface changes shape.** When the state changes, the same surface changes its size and content; one element does not disappear while another appears. The top pill is the example.
+2. **Shapes use springs only.** Changes in size, position and corner radius must use the springs in section 9; only color and opacity may use a fixed duration.
+3. **What comes in goes out.** Popovers, dialogs and menus must play an exit animation when they close; they cannot just unmount.
+4. **Quiet when nothing happens.** Avatars and the interface move only when the state changes or the user acts. Continuous ambient animation appears only at the "Lively" level (section 8.4).
+5. **Content waits for the surface.** While a surface changes shape, its content does not reflow; large content fills in after the change ends.
+6. **Text says only what the user needs.** No development discussion, plans or process; see section 11.
+7. **All colors come from the theme.** Components do not hard-code colors; see section 2.
 
-## 2. 颜色
+## 2. Color
 
-### 2.1 主题
+### 2.1 Themes
 
-一个主题为浅色和深色各定义 8 个基础色。所有 `--bt-*` 变量都从这 8 个色推导，换主题就能给整个团队界面换色（`themes.js`）。
+A theme defines 8 base colors each for light and dark. Every `--bt-*` variable is derived from these 8 colors, so changing the theme recolors the whole team interface (`themes.js`).
 
-| 基础色 | 含义 |
+| Base color | Meaning |
 |---|---|
-| `bg` | 主区背景 |
-| `sidebar` | 侧栏、设置导航背景 |
-| `bubble` | Bot 消息气泡 |
-| `card` | 卡片、输入框、弹出卡 |
-| `text` | 正文 |
-| `user` / `userText` | 用户气泡和它的文字 |
-| `accent` | 强调色 |
+| `bg` | Main area background |
+| `sidebar` | Sidebar and settings navigation background |
+| `bubble` | Bot message bubble |
+| `card` | Cards, input boxes, popover cards |
+| `text` | Body text |
+| `user` / `userText` | User bubble and its text |
+| `accent` | Accent color |
 
-内置主题：
+Built-in themes:
 
-| 主题 | 浅色 bg / text / accent | 深色 bg / text / accent |
+| Theme | Light bg / text / accent | Dark bg / text / accent |
 |---|---|---|
-| DeepSeek（默认） | `#fcfcfc` / `#141414` / `#4d6bfe` | `#141414` / `#f2f2f2` / `#5b7bff` |
+| DeepSeek (default) | `#fcfcfc` / `#141414` / `#4d6bfe` | `#141414` / `#f2f2f2` / `#5b7bff` |
 | Mono | `#ffffff` / `#0d0d0d` / `#0d0d0d` | `#0f0f0f` / `#f4f4f4` / `#f4f4f4` |
 | Paper | `#faf9f5` / `#1f1e1b` / `#d97757` | `#1f1e1b` / `#f3f0e8` / `#e08a6d` |
 | Moonlight | `#f7f9fc` / `#121826` / `#1e86ff` | `#0b1020` / `#e8edf7` / `#4f9dff` |
 
-用户可以在设置 → 通用里覆盖强调色（7 种预设或自选）。预设色在浅色界面用 `INKS[ink][0]`，深色界面用 `INKS[ink][1]`；自选颜色两种界面同一个值。深色模式由 DSH 在 `body` 上标 `data-ds-dark-theme`。
+The user can override the accent color in Settings → General (7 presets or a custom color). A preset uses `INKS[ink][0]` in the light interface and `INKS[ink][1]` in the dark interface; a custom color has the same value in both. DSH marks dark mode with `data-ds-dark-theme` on `body`.
 
-### 2.2 语义变量
+### 2.2 Semantic variables
 
-组件必须只用这些变量，不能直接写色值。
+Components must use only these variables, never raw color values.
 
-| 变量 | 推导 | 用途 |
+| Variable | Derived from | Use |
 |---|---|---|
-| `--bt-ink` | `text` | 正文、图标 |
-| `--bt-ink-2` | `text` 60% | 次要文字、说明、默认图标 |
-| `--bt-ink-3` | `text` 36% | 弱文字、占位、空状态 |
-| `--bt-main` | `bg` | 主区、菜单、对话框背景 |
-| `--bt-sidebar` | `sidebar` | 侧栏、设置导航；徽标描边 |
-| `--bt-card` | `card` | 卡片、输入框 |
-| `--bt-bubble` | `bubble` | Bot 气泡 |
-| `--bt-line` | `text` 8% | 卡片、输入框边框（1px），分隔线 |
-| `--bt-line-2` | `text` 15% | 浮起表面的发丝边（.5px） |
-| `--bt-hover` | 浅色 `rgba(119,119,119,.09)`，深色 `rgba(160,160,160,.12)` | 悬停底色；次按钮底色 |
-| `--bt-active` | 浅色 `.17`，深色 `.2` | 选中、按下底色 |
-| `--bt-accent` / `--bt-accent-ink` | `accent`；文字色取 `#141414` 和白色里对比度高的一个（2026-10-16 定） | 主按钮、开关、焦点环、未读点、「New」分隔线、新消息胶囊 |
-| `--bt-user` / `--bt-user-ink` | `user` / `userText` | 用户气泡 |
-| `--bt-tag-bg` / `--bt-tag-ink` | `text` 6%（深色 9%） / 58% | 标签 |
+| `--bt-ink` | `text` | Body text, icons |
+| `--bt-ink-2` | `text` 60% | Secondary text, descriptions, default icons |
+| `--bt-ink-3` | `text` 36% | Faint text, placeholders, empty states |
+| `--bt-main` | `bg` | Main area, menu and dialog backgrounds |
+| `--bt-sidebar` | `sidebar` | Sidebar, settings navigation; badge outline |
+| `--bt-card` | `card` | Cards, input boxes |
+| `--bt-bubble` | `bubble` | Bot bubble |
+| `--bt-line` | `text` 8% | Card and input box borders (1px), dividers |
+| `--bt-line-2` | `text` 15% | Hairline edge of raised surfaces (.5px) |
+| `--bt-hover` | Light `rgba(119,119,119,.09)`, dark `rgba(160,160,160,.12)` | Hover background; secondary button background |
+| `--bt-active` | Light `.17`, dark `.2` | Selected and pressed background |
+| `--bt-accent` / `--bt-accent-ink` | `accent`; the text color is whichever of `#141414` and white has the higher contrast (decided 2026-10-16) | Primary button, switch, focus ring, unread dot, "New" divider, new-message pill |
+| `--bt-user` / `--bt-user-ink` | `user` / `userText` | User bubble |
+| `--bt-tag-bg` / `--bt-tag-ink` | `text` 6% (dark 9%) / 58% | Labels |
 
-### 2.3 状态色
+### 2.3 Status colors
 
-| 状态 | 值 | 用途 |
+| Status | Value | Use |
 |---|---|---|
-| 强调 | `--bt-accent` | 主操作、选中、焦点 |
-| 成功 / 工作中 | `--bt-green`（`#00c972`） | 工作中徽标、完成对勾 |
-| 主 Bot | `--bt-star`（`#ff9800`） | 主 Bot 星标 |
-| 危险 | `--bt-danger`（`#e02135`，基础样式表设一次，两种界面同一个值） | 删除、错误文字、确认态底色（`color-mix` 10%） |
-| 警告 / 等你回答 | 未定（见现状偏差） | 等你回答的点、需要注意的提示 |
-| 提示点 / 录音 | 未定（见现状偏差） | 更新提示点、录音中的麦克风 |
+| Accent | `--bt-accent` | Primary action, selection, focus |
+| Success / working | `--bt-green` (`#00c972`) | Working badge, done check mark |
+| Main Bot | `--bt-star` (`#ff9800`) | Main Bot star |
+| Danger | `--bt-danger` (`#e02135`, set once in the base style sheet, the same value in both interfaces) | Delete, error text, confirm-state background (`color-mix` 10%) |
+| Warning / waiting for your answer | Not decided (see current deviations) | Waiting-for-your-answer dot, notices that need attention |
+| Notice dot / recording | Not decided (see current deviations) | Update notice dot, microphone while recording |
 
-状态徽标的底色应该和侧栏底色混合约 80%，让它柔和（`color-mix(in srgb, <色> 80%, var(--bt-sidebar))`）。
+A status badge's background should mix about 80% with the sidebar background to soften it (`color-mix(in srgb, <color> 80%, var(--bt-sidebar))`).
 
-### 2.4 角色色
+### 2.4 Character colors
 
-Bot 形象用的颜色（`inks.js`），每种都有浅色、深色两个值：
+Colors for Bot characters (`inks.js`), each with a light and a dark value:
 
-- 形象可选 12 色：black、brown、red、orange、yellow、green、cyan、blue、violet、magenta、gray，加一个渐变 aurora。
-- 强调色预设 7 色：deepseek、charcoal、graphite、rose、sky、tangerine、cobalt。
-- 新 Bot 没选颜色时，从去掉 black、gray、brown 和渐变后的颜色里，按 Bot id 确定地取一个。
-- 第一个主 Bot 固定是 deepseek 蓝的鲸鱼。
+- 12 colors to choose for a character: black, brown, red, orange, yellow, green, cyan, blue, violet, magenta, gray, plus one gradient, aurora.
+- 7 accent presets: deepseek, charcoal, graphite, rose, sky, tangerine, cobalt.
+- When a new Bot has no color chosen, one is picked deterministically from its Bot id, out of the colors left after removing black, gray, brown and the gradient.
+- The first Main Bot is always the deepseek-blue whale.
 
-Bot 名字、提及用同一个颜色写字；纯黑读起来像标题，所以写字时改用灰色。
+Bot names and mentions are written in the same color; pure black reads like a heading, so text uses gray instead.
 
-### 2.5 规则
+### 2.5 Rules
 
-- 必须：只用第 2.2 节的变量和第 2.3 节的状态色。
-- 必须：新颜色先加进主题推导（`themeVars`），再在组件里用变量。
-- 应该：强调色只用在主操作、选中状态、焦点环、未读提示上，一屏不超过两处大面积强调色。
-- 应该：浮起表面（胶囊、菜单、对话框）用 `.5px var(--bt-line-2)` 发丝边；平面卡片和输入框用 `1px var(--bt-line)`。
+- Must: use only the variables in section 2.2 and the status colors in section 2.3.
+- Must: add a new color to the theme derivation (`themeVars`) first, then use the variable in the component.
+- Should: use the accent color only on primary actions, selected states, focus rings and unread notices, with no more than two large accent areas on one screen.
+- Should: raised surfaces (pill, menus, dialogs) use a `.5px var(--bt-line-2)` hairline edge; flat cards and input boxes use `1px var(--bt-line)`.
 
-**现状偏差**（`2f9300d`）：
+**Current deviations** (`2f9300d`):
 
-- 红色有 4 个值：`#e02135`（17 处，危险）、`#c21d2e`（5 处：菜单危险项、Bot 设置危险区、模型缺失、文件夹和更新的错误文字）、`#E5484D`（2 处：更新提示点、连接警告点）、`#ff3e51`（录音中的麦克风、结束语音，另在自选色轮里）。统一为 `--bt-danger`；提示点和录音是否另设一个变量，待定。
-- 警告色没有定义，代码里有两套：`#e3a008`（4 处：等你回答的点、反馈的警告级、关于页星标）配文字色 `#b7791f` / 深色 `#f0b84a`（`member-status.js`）；密钥卡片另用 `#b25e09` / `#f59e0b`。统一为 `--bt-warn`（+ 文字色）。
-- 成功色除了 `--bt-green`，密钥卡片还写死了 `#16a34a`，并给 `--bt-green` 设了不同的后备值 `#22a06b`。
-- 除去主题文件和变量定义，组件里写死的十六进制色约 80 处，分布在 15 个文件（近一半在 `styles.js`）。白色、黑色用在强调色上的文字和图标时，应改用 `--bt-accent-ink`。
+- Red has 4 values: `#e02135` (17 places, danger), `#c21d2e` (5 places: menu danger items, the danger zone in Bot settings, missing model, error text for folders and updates), `#E5484D` (2 places: update notice dot, connection warning dot), `#ff3e51` (microphone while recording, end voice, and also in the custom color wheel). Unify as `--bt-danger`; whether the notice dot and recording get a separate variable is not decided.
+- No warning color is defined, and the code has two sets: `#e3a008` (4 places: waiting-for-your-answer dot, warning level in feedback, star on the about page) with text color `#b7791f` / dark `#f0b84a` (`member-status.js`); the secret card uses `#b25e09` / `#f59e0b` instead. Unify as `--bt-warn` (plus a text color).
+- Besides `--bt-green`, the secret card hard-codes `#16a34a` as a success color and gives `--bt-green` a different fallback, `#22a06b`.
+- Leaving out the theme files and variable definitions, components hard-code about 80 hex colors across 15 files (nearly half in `styles.js`). Where white or black is used for text and icons on the accent color, use `--bt-accent-ink` instead.
 
-## 3. 字体
+## 3. Type
 
-### 3.1 字族
+### 3.1 Font families
 
-- 界面：`var(--bt-font)`，即 DSH 的正文字体 `--dsw-font-family`（用户在 DSH 里设了正文字体就用它）；没有 DSH 主题时退回 `-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`。
-- 代码、密钥、路径：`ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`。
-- 对话内容的字号跟随 DSH 的 `--dsh-content-font-size`（默认 14px）。
-- 中文字体不点名：桌面应用把 DSH 的内置字体换成一份不写中文字体的（`app/src/fonts.css`），中文交给系统回退（macOS 经 `-apple-system` 是苹方，Linux 由 fontconfig 选，Windows 用系统或用户装的中文字体）；DSH Desktop / Web 里跟随 DSH。
+- Interface: `var(--bt-font)`, which is DSH's body font `--dsw-font-family` (if the user set a body font in DSH, that one is used); without a DSH theme it falls back to `-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`.
+- Code, secrets, paths: `ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`.
+- The font size of conversation content follows DSH's `--dsh-content-font-size` (default 14px).
+- No Chinese font is named: the desktop app replaces DSH's built-in fonts with a version that names no Chinese font (`app/src/fonts.css`) and leaves Chinese to the system fallback (PingFang on macOS through `-apple-system`, fontconfig's choice on Linux, the system or user-installed Chinese font on Windows); in DSH Desktop / Web it follows DSH.
 
-### 3.2 字号档
+### 3.2 Type scale
 
-必须只用下表的字号。
+Must use only the sizes in the table below.
 
-| 档 | 字号 / 行高 | 字重 | 用途 | 例子 |
+| Step | Size / line height | Weight | Use | Example |
 |---|---|---|---|---|
-| 图表 | 10 / 12 | 400 | 只用于图表刻度 | 用量热力图月份 |
-| 注释 | 11 / 16 | 400–500 | 计数、时间、小芯片 | `.bt-chip` |
-| 小 | 12 / 16 | 400–500 | 标签、说明、小按钮、错误 | `.bt-tag`、`.bt-note`、`.bt-soft-sm` |
-| 正文 | 13 / 18 | 400 | 设置行、菜单项、面板正文、列表 | `.bt-set-row`、`.bt-menu button` |
-| 内容 | 14 / 22 | 400 | 输入框、主按钮 | `.bt-soft` |
-| 气泡 | 14 / 24 | 400 | 对话气泡的正文；行高是字号 + 10，跟随 --dsh-content-font-size | `.bt-bubble`、`.bt-ububble` |
-| 胶囊 | 14 / 20 | 400 | 顶部胶囊 | `.bt-pill` |
-| 小标题 | 15 / 20 | 600 | 对话框标题、卡片标题 | `.bt-settings-head h2`、`.bt-q-title` |
-| 标题 | 17 / 24 | 500 | 详情面板里的 Bot 名 | `.bt-drawer-name` |
-| 数字 | 22、34 | 600 | 用量页的大数字 | `.bt-us-stat-value` |
+| Chart | 10 / 12 | 400 | Chart ticks only | Months on the usage heatmap |
+| Caption | 11 / 16 | 400–500 | Counts, times, small chips | `.bt-chip` |
+| Small | 12 / 16 | 400–500 | Labels, descriptions, small buttons, errors | `.bt-tag`, `.bt-note`, `.bt-soft-sm` |
+| Body | 13 / 18 | 400 | Settings rows, menu items, panel body text, lists | `.bt-set-row`, `.bt-menu button` |
+| Content | 14 / 22 | 400 | Input boxes, primary buttons | `.bt-soft` |
+| Bubble | 14 / 24 | 400 | Body text of conversation bubbles; the line height is the font size + 10 and follows --dsh-content-font-size | `.bt-bubble`, `.bt-ububble` |
+| Pill | 14 / 20 | 400 | Top pill | `.bt-pill` |
+| Subheading | 15 / 20 | 600 | Dialog titles, card titles | `.bt-settings-head h2`, `.bt-q-title` |
+| Heading | 17 / 24 | 500 | Bot name in the details panel | `.bt-drawer-name` |
+| Figures | 22, 34 | 600 | Large figures on the usage page | `.bt-us-stat-value` |
 
-- 字重只用 400、500、600。分区标题 13/600（`.bt-set-section h3`）。
-- 数字列应该用等宽数字（`font-variant-numeric: tabular-nums`）。
+- Weights are only 400, 500 and 600. Section headings are 13/600 (`.bt-set-section h3`).
+- Number columns should use tabular figures (`font-variant-numeric: tabular-nums`).
 
-**现状偏差**（`2f9300d`）：
+**Current deviations** (`2f9300d`):
 
-- 12.5px 5 处（`browser-pane.js` 3、`sidebar.js` 2：浏览器标签和卡片、更新卡片）改为 12 或 13；11.5px 1 处（`secret-card.js`，密钥说明里的代码）改为 11 或 12。
-- 16px 3 处（`about.js:114`、`styles.js:198`、`styles.js:529`）和 18px 1 处（`styles.js:561`）不在档位里，逐个归入相邻档或写明是图形。
-- 字重 700 1 处（`styles.js:151`，连接警告点里的「!」），属于图形，可以保留。
-- 行高另有 17、19、21、26、28px 等约 10 种不在档位里的值（约 35 处），有一部分是为了让单行控件垂直居中。
-- 8.5px 只用在状态徽标的「?」里，属于图形，保留。
+- 12.5px in 5 places (3 in `browser-pane.js`, 2 in `sidebar.js`: browser tabs and cards, the update card) becomes 12 or 13; 11.5px in 1 place (`secret-card.js`, code in the secret description) becomes 11 or 12.
+- 16px in 3 places (`about.js:114`, `styles.js:198`, `styles.js:529`) and 18px in 1 place (`styles.js:561`) are not on the scale; move each to the nearest step or note that it is a graphic.
+- Weight 700 in 1 place (`styles.js:151`, the "!" in the connection warning dot) is a graphic and may stay.
+- Line heights have about 10 more values off the scale, such as 17, 19, 21, 26 and 28px (about 35 places); some of them center single-line controls vertically.
+- 8.5px is used only in the "?" of the status badge; it is a graphic and stays.
 
-## 4. 间距与尺寸
+## 4. Spacing and size
 
-### 4.1 间距
+### 4.1 Spacing
 
-以 4px 为基本单位，允许 2 和 6 作为半步。
+The base unit is 4px, with 2 and 6 allowed as half steps.
 
-| 值 | 用途 |
+| Value | Use |
 |---|---|
-| 2 | 同组按钮之间、列表行之间、菜单项之间 |
-| 4 | 图标和文字之间（紧凑） |
-| 6 | 标签和字段之间、菜单容器内边距 |
-| 8 | 最常用的组内间距；图标和文字之间（常规） |
-| 10 / 12 | 卡片内边距、设置行内边距（10 × 12） |
-| 16 | 对话框内边距、面板边距 |
-| 20 / 24 | 分区之间 |
+| 2 | Between buttons in a group, between list rows, between menu items |
+| 4 | Between icon and text (compact) |
+| 6 | Between label and field, menu container padding |
+| 8 | The most common spacing within a group; between icon and text (regular) |
+| 10 / 12 | Card padding, settings row padding (10 × 12) |
+| 16 | Dialog padding, panel margin |
+| 20 / 24 | Between sections |
 
-### 4.2 控件高度
+### 4.2 Control heights
 
-| 高度 | 控件 |
+| Height | Control |
 |---|---|
-| 20 | 开关 |
-| 28 | 小按钮、图标按钮、对话里的发送键 |
-| 32 | 紧凑输入框、标签条里的项 |
-| 36 | 标准按钮、圆形按钮、输入框、侧栏行头像 |
-| 40 | 顶部胶囊、主按钮（大） |
-| 44 | 输入框卡片最小高度、面板标签条 |
+| 20 | Switch |
+| 28 | Small button, icon button, send button in the conversation |
+| 32 | Compact input box, items in a tab strip |
+| 36 | Standard button, round button, input box, sidebar row avatar |
+| 40 | Top pill, primary button (large) |
+| 44 | Minimum height of the input card, panel tab strip |
 
-可点击区域必须不小于 28 × 28。
+Clickable areas must be at least 28 × 28.
 
-### 4.3 布局尺寸
+### 4.3 Layout sizes
 
-| 区域 | 尺寸 |
+| Area | Size |
 |---|---|
-| 设置对话框 | 宽 `min(1100px, 100vw - 48px)`，高 `min(780px, …)`，所有页面同一尺寸（和用量页一致），切换页面时不变；左侧导航 198px |
-| 记忆对话框 | 宽 `min(680px, 100vw - 48px)`，高 `min(760px, …)` |
-| 右侧面板 | 详情 320px；浏览器默认 520px，可拖动，最小 360px，对话列至少保留 420px |
-| 左侧栏 | 和右侧面板一样不被挤窄。拖右边缘调宽度，264–420px；拖到 176px 以下松手，吸附成 88px 头像窄栏（头像 44px），从窄栏往外拖回到完整栏。左上角的开关（和快捷键）整列收起、再次点击恢复。窗口变窄时先收起右侧面板（放得下时自动回来），再把左侧栏收成头像窄栏；窄时打开面板，左侧栏先收成窄栏让位，仍放不下才盖住对话。Windows、macOS、网页都一样。桌面应用最小窗口宽 508px（窄栏 + 420） |
-| 气泡 | Bot 气泡最宽 `min(var(--bt-msg-w) × 100%, 100% - 82px)`，用户气泡最宽 `var(--bt-msg-w) × 100%`；`--bt-msg-w` 是设置里的气泡宽度（50%–100%，默认 80%） |
-| 输入框卡片 | 最宽 `min(992px, 100%)` |
-| 主 Bot 卡片 | 宽 95px |
+| Settings dialog | Width `min(1100px, 100vw - 48px)`, height `min(780px, …)`, the same size for every page (matching the usage page) and unchanged when switching pages; left navigation 198px |
+| Memory dialog | Width `min(680px, 100vw - 48px)`, height `min(760px, …)` |
+| Right panel | Details 320px; browser 520px by default, resizable, minimum 360px, and the conversation column keeps at least 420px |
+| Left sidebar | Like the right panel, it is not squeezed narrower. Drag the right edge to set the width, 264–420px; release below 176px and it snaps to an 88px avatar rail (44px avatars); drag out from the rail to get the full sidebar back. The toggle in the top-left corner (and its shortcut) collapses the whole column, and another click restores it. When the window gets narrower, the right panel collapses first (and comes back when it fits), then the left sidebar collapses to the avatar rail; when a panel opens in a narrow window, the left sidebar first collapses to the rail to make room, and the panel covers the conversation only if it still does not fit. Windows, macOS and the web all behave the same. The desktop app's minimum window width is 508px (rail + 420) |
+| Bubbles | Bot bubble at most `min(var(--bt-msg-w) × 100%, 100% - 82px)` wide, user bubble at most `var(--bt-msg-w) × 100%`; `--bt-msg-w` is the bubble width setting (50%–100%, default 80%) |
+| Input card | At most `min(992px, 100%)` wide |
+| Main Bot card | 95px wide |
 
-### 4.4 头像尺寸
+### 4.4 Avatar sizes
 
-| 尺寸 | 位置 |
+| Size | Where |
 |---|---|
-| 20 | 密钥卡片里的 Bot |
-| 22 | 对话里消息旁边 |
-| 24 | 顶部胶囊、命令面板 |
-| 28 | 设置里的 Bot 列表、动作行（「X 正在…」） |
-| 36 | 侧栏行 |
-| 48 | 浏览器空状态 |
-| 60 | 侧栏主 Bot 卡片 |
-| 64 | 详情面板 |
+| 20 | Bot in the secret card |
+| 22 | Next to messages in the conversation |
+| 24 | Top pill, command palette |
+| 28 | Bot list in settings, activity row ("X is …") |
+| 36 | Sidebar row |
+| 48 | Browser empty state |
+| 60 | Main Bot card in the sidebar |
+| 64 | Details panel |
 
-## 5. 圆角
+## 5. Corner radius
 
-必须只用下表的圆角。
+Must use only the radii in the table below.
 
-| 值 | 用途 |
+| Value | Use |
 |---|---|
-| 4 | 标签、芯片 |
-| 6 | 菜单项、迷你按钮 |
-| 8 | 输入框、下拉框、分段按钮里的项 |
-| 10 | 分段控件外框、侧栏行 |
-| 12 | 卡片、菜单、主 Bot 卡片、Toast、命令面板、设置卡片 |
-| 16 | 设置对话框 |
-| 18 | 气泡 |
-| 20 | 记忆对话框 |
-| 22 | 输入框卡片（写成多行或带附件时 18） |
-| 999px | 胶囊形：标准按钮、标签页、顶部胶囊、开关 |
-| 50% | 圆形：头像、圆形按钮、徽标、色块 |
+| 4 | Labels, chips |
+| 6 | Menu items, mini buttons |
+| 8 | Input boxes, dropdowns, items in a segmented button |
+| 10 | Segmented control frame, sidebar rows |
+| 12 | Cards, menus, Main Bot card, toast, command palette, settings cards |
+| 16 | Settings dialog |
+| 18 | Bubbles |
+| 20 | Memory dialog |
+| 22 | Input card (18 when it has several lines or attachments) |
+| 999px | Pill shape: standard buttons, tabs, top pill, switch |
+| 50% | Circle: avatars, round buttons, badges, swatches |
 
-**真圆**：DSH 给所有元素设了 `corner-shape: superellipse(1.5)`，`border-radius: 50%` 会画成圆角方块。要真圆的地方（徽标、状态点）必须加 `corner-shape: round`。桌面应用自己的页面不在 DSH 里：启动窗口（`start.css`）和页内卡片、选择器（`page-card.css`，卡片的 `all:unset` 也会清掉它）自己设同样的 `superellipse(1.5)`，所以 999px 的按钮和插件里一样，是顶部胶囊那样的圆角矩形。
+**True circles**: DSH sets `corner-shape: superellipse(1.5)` on every element, so `border-radius: 50%` draws a rounded square. Places that need a true circle (badges, status dots) must add `corner-shape: round`. The desktop app's own pages are not inside DSH: the start window (`start.css`) and the in-page cards and pickers (`page-card.css`, where the card's `all:unset` also clears it) set the same `superellipse(1.5)` themselves, so a 999px button looks the same as in the plugin, a rounded rectangle like the top pill.
 
-**现状偏差**（`2f9300d`）：不在档位里的圆角约 20 处，集中在 `browser-pane.js`（9、7、5、3、2px，共 8 处）和 `usage-page.js`（9、5、3、14px、30%，共 7 处）；另有 `sidebar.js` 14px、`secret-card.js` 5px、`member-status.js` 13px、`styles.js` 1px 和 `9999px` ×2。9 → 8 或 10；9999px → 999px；其余就近归入上表。用量页的图表元素（条、格）可以例外，写进注释。
+**Current deviations** (`2f9300d`): about 20 radii are off the scale, mostly in `browser-pane.js` (9, 7, 5, 3, 2px, 8 places in all) and `usage-page.js` (9, 5, 3, 14px, 30%, 7 places in all); there are also 14px in `sidebar.js`, 5px in `secret-card.js`, 13px in `member-status.js`, 1px in `styles.js` and `9999px` ×2. 9 → 8 or 10; 9999px → 999px; the rest go to the nearest value in the table. Chart elements on the usage page (bars, cells) may be exceptions, noted in a comment.
 
-## 6. 阴影与层级
+## 6. Shadows and layers
 
-### 6.1 高度档
+### 6.1 Elevation levels
 
-| 档 | 阴影 | 边 | 用途 |
+| Level | Shadow | Edge | Use |
 |---|---|---|---|
-| 0 平面 | 无 | `1px var(--bt-line)` | 卡片、输入框 |
-| 1 浮起 | `0 2px 8px -1px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04)` | `.5px var(--bt-line-2)` | 顶部胶囊；输入框卡片用同形的 `.05 / .03` 再加一圈 1px 外环 |
-| 2 弹出 | `0 10px 20px -3px rgba(0,0,0,.1), 0 4px 6px -4px rgba(0,0,0,.1)` | `.5px var(--bt-line-2)` | 菜单、下拉、弹出卡 |
-| 3 提示 | `0 8px 28px rgba(0,0,0,.14)` | `1px var(--bt-line-2)` | Toast |
-| 4 对话框 | `0 24px 80px rgba(0,0,0,.24)` | `.5px var(--bt-line-2)` | 设置、记忆；遮罩 `rgba(0,0,0,.32)` |
+| 0 flat | None | `1px var(--bt-line)` | Cards, input boxes |
+| 1 raised | `0 2px 8px -1px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04)` | `.5px var(--bt-line-2)` | Top pill; the input card uses the same shape with `.05 / .03` plus a 1px outer ring |
+| 2 popover | `0 10px 20px -3px rgba(0,0,0,.1), 0 4px 6px -4px rgba(0,0,0,.1)` | `.5px var(--bt-line-2)` | Menus, dropdowns, popover cards |
+| 3 toast | `0 8px 28px rgba(0,0,0,.14)` | `1px var(--bt-line-2)` | Toast |
+| 4 dialog | `0 24px 80px rgba(0,0,0,.24)` | `.5px var(--bt-line-2)` | Settings, memory; scrim `rgba(0,0,0,.32)` |
 
 ### 6.2 z-index
 
-| 值 | 层 |
+| Value | Layer |
 |---|---|
-| 0–8 | 页面内的局部叠放 |
-| 30 | 顶部胶囊的通知 |
-| 40 | 右侧面板 |
-| 45 | 拖动遮挡层、侧栏弹出窗格 |
-| 60 | 菜单、设置对话框、表情条、更新卡片 |
-| 61 | 记忆对话框 |
-| 70 | 头像编辑器、提示气泡、命令面板 |
+| 0–8 | Local stacking within the page |
+| 30 | Top pill notifications |
+| 40 | Right panel |
+| 45 | Drag shield, sidebar pop-out pane |
+| 60 | Menus, settings dialog, emoji bar, update card |
+| 61 | Memory dialog |
+| 70 | Avatar editor, tooltip bubble, command palette |
 | 1000 | Toast |
 
-**现状偏差**（`2f9300d`）：代码里有 41 种阴影写法（10-11 时约 20 种），和 6.1 节第 1–4 档完全一致的只有 4 种。例如命令面板 `.bt-palette` 的 `0 24px 48px -12px rgba(0,0,0,.25)`、头像编辑器 `.bt-avedit` 的 `0 12px 40px rgba(0,0,0,.18)`、用量页日期选择 `.bt-us-pick` 的 `0 22px 50px -18px rgba(0,0,0,.32),…`。统一归入五档；描边类的 `inset 0 0 0 1px var(--bt-line)` 和徽标的底色描边环不算阴影档，单独列出。
+**Current deviations** (`2f9300d`): the code has 41 different shadow values (about 20 on 10-11), and only 4 of them exactly match levels 1–4 in section 6.1. Examples: the command palette `.bt-palette` uses `0 24px 48px -12px rgba(0,0,0,.25)`, the avatar editor `.bt-avedit` uses `0 12px 40px rgba(0,0,0,.18)`, and the usage page date picker `.bt-us-pick` uses `0 22px 50px -18px rgba(0,0,0,.32),…`. Unify them into the five levels; outline rings such as `inset 0 0 0 1px var(--bt-line)` and the badge's background-colored ring are not shadow levels and are listed separately.
 
-## 7. 图标
+## 7. Icons
 
-- 必须：自绘，不用其他产品的图标。官方 DSH 鲸鱼（`FishLogo`）只用来表示 DSH Agent。
-- 画布：`viewBox="0 0 20 20"`，只描边不填充，`stroke="currentColor"`，圆头圆角（`stroke-linecap/linejoin: round`）。
-- 线宽：15px 图标 1.5；16–18px 图标 1.6；箭头可以 1.8。
-- 尺寸：菜单和行内 14–15px；按钮里 16px；加号这类主操作 18px。
-- 颜色跟随文字（`currentColor`），默认 `--bt-ink-2`，悬停变 `--bt-ink`。
-- 现有图标在 `icons.js`：加号、搜索、人、上箭头、麦克风、声波、分享、关闭、左右箭头、云下载、笑脸、回复、更多、对勾、下箭头、下载、仪表、插头、日历、连接器、切换、回形针、时钟、齿轮、图钉、未读、铅笔、星、复制、隐藏、删除、复制一份、滑杆、记忆、群聊。浏览器面板另有地球、前进、后退、刷新、锁（`browser-pane.js`）。
+- Must: draw them ourselves; do not use other products' icons. The official DSH whale (`FishLogo`) is used only to stand for the DSH Agent.
+- Canvas: `viewBox="0 0 20 20"`, stroke only with no fill, `stroke="currentColor"`, round caps and joins (`stroke-linecap/linejoin: round`).
+- Stroke width: 1.5 for 15px icons; 1.6 for 16–18px icons; arrows may use 1.8.
+- Size: 14–15px in menus and inline; 16px in buttons; 18px for primary actions like the plus.
+- Color follows the text (`currentColor`), `--bt-ink-2` by default and `--bt-ink` on hover.
+- The current icons are in `icons.js`: plus, search, person, up arrow, microphone, sound wave, share, close, left and right arrows, cloud download, smiley, reply, more, check mark, down arrow, download, gauge, plug, calendar, connector, switch, paper clip, clock, gear, pin, unread, pencil, star, copy, hide, delete, duplicate, sliders, memory, group chat. The browser panel also has globe, forward, back, reload and lock (`browser-pane.js`).
 
-## 8. Bot 形象
+## 8. Bot characters
 
-### 8.1 形象
+### 8.1 Characters
 
-- 20 个原创形象，用 `dev/characters.mjs` 生成：每个是一个小 3D 模型，从固定的三分之四视角描成平面层（身体、贴花、背光阴影、受光高光），放在 100 单位的画布里。
-- 眼睛是从所有层上挖掉的洞，所以能透出背后的颜色。眼睛的位置和倾斜随表面变化，近眼比远眼宽。
-- 形象列表：whale、star、moon、wave、squircle、zed、hex、gumdrop、peanut、saucer、bunny、kitty、beacon、plus、magnet、acorn、pebbles、cushion、ring、gem。
-- 必须：新形象从生成器加，不手改 `characters.js` 里的数据；不能用任何厂商标志做贴花。
-- 用户也可以上传照片代替形象（圆形裁切）。
+- 20 original characters, generated with `dev/characters.mjs`: each is a small 3D model traced from a fixed three-quarter view into flat layers (body, decal, shadow away from the light, highlight toward the light), placed on a 100-unit canvas.
+- The eyes are holes cut out of every layer, so the color behind shows through. The eyes' position and tilt follow the surface, and the near eye is wider than the far eye.
+- Character list: whale, star, moon, wave, squircle, zed, hex, gumdrop, peanut, saucer, bunny, kitty, beacon, plus, magnet, acorn, pebbles, cushion, ring, gem.
+- Must: add new characters through the generator, not by editing the data in `characters.js` by hand; never use any vendor's logo as a decal.
+- The user can also upload a photo in place of a character (cropped to a circle).
 
-### 8.2 徽标
+### 8.2 Badges
 
-- 圆形徽标：直径 12px（工作中 8px），右下角贴边，`1.5px` 侧栏底色描边，`corner-shape: round`。工作中是绿点，等你回答是强调色的「?」。
-- 主 Bot：一颗实心大星，大小随头像（头像的 36%，14–22px），用侧栏底色描边隔开。
-- 群管理员：小圆底星（`AdminStar`），用在群成员、群设置和新建群聊里。同一个 Bot 在群里既是主 Bot 又是管理员时，显示管理员小星。
-- 详情面板和顶部胶囊里的大头像不显示徽标。
+- Round badge: 12px across (8px while working), flush with the bottom-right corner, a `1.5px` outline in the sidebar background color, `corner-shape: round`. Working is a green dot; waiting for your answer is a "?" in the accent color.
+- Main Bot: one large solid star, sized with the avatar (36% of the avatar, 14–22px), separated by an outline in the sidebar background color.
+- Group admin: a small star on a round base (`AdminStar`), used in group members, group settings and new group chat. When the same Bot in a group is both a Main Bot and an admin, the small admin star is shown.
+- The large avatars in the details panel and the top pill show no badge.
 
-### 8.3 状态动作
+### 8.3 Status motions
 
-| 状态 | 身体 | 眼睛 |
+| Status | Body | Eyes |
 |---|---|---|
-| 空闲 | 不动（活泼档另见 8.4） | 不动 |
-| 思考 | 歪头慢慢起伏 2.2s | 眯眼 |
-| 搜索 | 左右探 1s | 左右扫视 |
-| 工作中 | 上下晃 1.6s（不同形状有晃、摇、压扁三种） | 眨眼 |
-| 发消息 | 向前冲 1.1s | — |
-| 等你回答 | 问题到达时跳两下 | — |
-| 完成 | 压扁回弹一次 1.8s | — |
+| Idle | Still (for the Lively level see 8.4) | Still |
+| Thinking | Head tilted, slow rise and fall, 2.2s | Squint |
+| Searching | Peeks left and right, 1s | Glance left and right |
+| Working | Bobs up and down, 1.6s (three kinds by shape: bob, sway, squash) | Blink |
+| Sending a message | Lunges forward, 1.1s | — |
+| Waiting for your answer | Jumps twice when the question arrives | — |
+| Done | One squash and rebound, 1.8s | — |
 
-### 8.4 动画三档
+### 8.4 Three animation levels
 
-设置 → Bot → 动画，对整个团队生效（`body[data-bt-motion]`）。
+Settings → Bots → Animation, applied to the whole team (`body[data-bt-motion]`).
 
-| 档 | 内容 |
+| Level | Content |
 |---|---|
-| 安静 | 只有 8.3 的状态动作 |
-| 正常（默认） | 安静 + 互动：悬停头像时蹭、点击大头像转圈、眼睛跟随指针 |
-| 活泼 | 正常 + 空闲时偶尔眨眼和小动作（跳、摇、伸懒腰、张望，每个 Bot 一种，9 秒一轮，彼此错开）；等你回答时一直跳，「?」移到头顶 |
+| Quiet | Only the status motions in 8.3 |
+| Normal (default) | Quiet + interaction: nuzzle on avatar hover, spin when the large avatar is clicked, eyes follow the pointer |
+| Lively | Normal + occasional blinks and small moves while idle (jump, sway, stretch, look around; one kind per Bot, a 9-second cycle, staggered between Bots); while waiting for your answer it keeps jumping and the "?" moves above its head |
 
-### 8.5 抚摸
+### 8.5 Petting
 
-- 只在头像上，或头像外一圈（宽度为头像尺寸的 20%）触发。
-- 动作：弹簧歪向指针 8°，然后来回蹭（到 14°，周期 0.78s），持续到指针离开；离开后从当前姿势弹回。
-- 眼睛：胶囊眼收起，换成「^ ^」闭眼弧。
-- 只对空闲和等你回答的 Bot 生效。
+- Triggers only on the avatar, or in a ring around it (20% of the avatar size wide).
+- Motion: a spring tilt of 8° toward the pointer, then nuzzling back and forth (up to 14°, a 0.78s period) until the pointer leaves; after it leaves, it springs back from its current pose.
+- Eyes: the capsule eyes fold away and become closed `^ ^` arcs.
+- Works only for Bots that are idle or waiting for your answer.
 
-## 9. 动效
+## 9. Motion
 
-### 9.1 弹簧
+### 9.1 Springs
 
-所有弹簧都由 `springEasing(刚度, 阻尼)` 采样成 CSS `linear()` 曲线（`motion.js`），CSS 过渡和 WAAPI 都能用。必须用下表的常量，不能在组件里自己定参数。
+Every spring is sampled by `springEasing(stiffness, damping)` into a CSS `linear()` curve (`motion.js`), usable by both CSS transitions and WAAPI. You must use the constants in the table below and must not set your own parameters in a component.
 
-| 常量 | ω / ζ | 时长约 | 过冲 | 用途 |
+| Constant | ω / ζ | About | Overshoot | Use |
 |---|---|---|---|---|
-| `SPRING_SHAPE` | 20 / 0.78 | 420ms | 2% | 表面变形、对话框、页面、开关滑块 |
-| `SPRING_TAP` | 30 / 0.8 | 290ms | 1.5% | 按压、弹出层入场 |
-| `SPRING_LIST` | 22 / 0.8 | 190ms | 0 | 列表重排 |
-| `SPRING_STRETCH` | 18 / 0.56 | 560ms | 12% | 拉长展开的表面（胶囊里的「记忆已更新」） |
-| `SPRING_POP` | 22 / 0.49 | 430ms | 17% | 小标记弹出（对勾、图标） |
-| `SPRING_LEAD` / `SPRING_TRAIL` | 28 / 0.86，17 / 0.86 | 约 0.3s | ≈0 | 滑块的前沿 / 后沿 |
-| `QUICK_EDGES` | 30 / 0.85，20 / 0.85 | 约 0.3–0.45s | ≈0 | 跟随键盘和指针的高亮 |
-| 布局滑动（未提成常量） | 31.6 / 1.0（`springEasing(1000, 63)`） | 约 0.3s | 0 | 侧栏行重排。现在只写在 `sidebar.js:214` 的 `GLIDE` 里，应该提到 `motion.js` 作为共用常量 |
+| `SPRING_SHAPE` | 20 / 0.78 | 420ms | 2% | Surface shape changes, dialogs, pages, switch thumb |
+| `SPRING_TAP` | 30 / 0.8 | 290ms | 1.5% | Press, popover entrance |
+| `SPRING_LIST` | 22 / 0.8 | 190ms | 0 | List reordering |
+| `SPRING_STRETCH` | 18 / 0.56 | 560ms | 12% | Surfaces that stretch open ("Memory updated" in the pill) |
+| `SPRING_POP` | 22 / 0.49 | 430ms | 17% | Small marks popping in (check marks, icons) |
+| `SPRING_LEAD` / `SPRING_TRAIL` | 28 / 0.86, 17 / 0.86 | about 0.3s | ≈0 | Leading / trailing edge of a slider |
+| `QUICK_EDGES` | 30 / 0.85, 20 / 0.85 | about 0.3–0.45s | ≈0 | Highlights that follow the keyboard and pointer |
+| Layout glide (not yet a constant) | 31.6 / 1.0 (`springEasing(1000, 63)`) | about 0.3s | 0 | Sidebar row reordering. It is now written only in `GLIDE` in `sidebar.js:214` and should move into `motion.js` as a shared constant |
 
-`spring(曲线, 属性…)` 生成 transition 字符串，例如 `spring(SPRING_TAP, 'scale')`。
+`spring(curve, property…)` builds the transition string, for example `spring(SPRING_TAP, 'scale')`.
 
-### 9.2 固定时长
+### 9.2 Fixed durations
 
-只用于颜色、透明度和不涉及形状的变化：
+Only for color, opacity and changes that do not involve shape:
 
-| 时长 | 用途 |
+| Duration | Use |
 |---|---|
-| .12s ease | 悬停底色、文字颜色、边框（默认） |
-| .16s | 退场淡出 |
-| .22s ease-out | 内容模糊淡入（`bt-veil-in`）、遮罩淡入 |
-| `cubic-bezier(.22,1,.36,1)` | 用量页的级联入场、数字滚动（只在用量页） |
+| .12s ease | Hover background, text color, border (default) |
+| .16s | Exit fade-out |
+| .22s ease-out | Content blur fade-in (`bt-veil-in`), scrim fade-in |
+| `cubic-bezier(.22,1,.36,1)` | Cascading entrance and rolling numbers on the usage page (usage page only) |
 
-1 秒以上的时长是头像的循环动作（第 8.3 节），毫秒级的是错开延迟，都不受这张表限制。
+Durations of 1 second or more are the avatars' looping motions (section 8.3), and millisecond values are stagger delays; neither is limited by this table.
 
-**现状偏差**（`2f9300d`）：
+**Current deviations** (`2f9300d`):
 
-- 1 秒以内的固定时长，除了 .12、.16、.22s，还有 .1、.13、.14、.15、.18、.2、.24、.25、.28、.3、.32、.36、.4、.45s 等约 20 种，约 80 处。
-- `cubic-bezier` 曲线有 10 种，共 40 处。其中 `(.34,1.56,.64,1)` 带过冲，有 6 处，属于形状变化，应改用 `SPRING_POP`；`(.22,1,.36,1)` 在用量页以外也在用（`group-settings.js`、`schedules.js`、`secret-card.js`、`styles.js`）。
+- Fixed durations under 1 second include, besides .12, .16 and .22s, about 20 more such as .1, .13, .14, .15, .18, .2, .24, .25, .28, .3, .32, .36, .4 and .45s, in about 80 places.
+- There are 10 `cubic-bezier` curves in 40 places. Of these, `(.34,1.56,.64,1)` overshoots and is used in 6 places for shape changes; it should become `SPRING_POP`. `(.22,1,.36,1)` is also used outside the usage page (`group-settings.js`, `schedules.js`, `secret-card.js`, `styles.js`).
 
-### 9.3 共用件
+### 9.3 Shared parts
 
-| 名字 | 作用 | 用在 |
+| Name | What it does | Used in |
 |---|---|---|
-| `useGlide` | 一个滑块滑到选中项；前沿快、后沿慢，所以移动时拉长、到位收回；中途改目标保留速度 | 设置导航、分段控件、各处标签页、命令面板高亮 |
-| `Segmented` | 带 `useGlide` 滑块的一排按钮（`aria-pressed`） | 动画三档、群聊「谁来回答」 |
-| `useFlip` | 列表项从旧位置滑到新位置，新项从模糊中清晰 | 命令面板结果、新对话下拉 |
-| `useMorph` | 容器高度跟着内容走弹簧 | 新对话下拉、连接器展开、「显示更多」 |
-| `useLinger` | 关闭后保留一会儿，播完退场再卸载 | 设置、记忆、菜单、模型菜单 |
-| `bt-veil-in` | 透明度 + 模糊 6px → 0，.22s | 所有入场的内容层 |
-| 按压 | 独立的 `scale` 属性走 `SPRING_TAP` | 文字按钮 .96，图标按钮 .9 |
+| `useGlide` | Slides a thumb to the selected item; the leading edge is fast and the trailing edge slow, so it stretches while moving and contracts on arrival; a target change midway keeps the velocity | Settings navigation, segmented controls, tabs everywhere, command palette highlight |
+| `Segmented` | A row of buttons with a `useGlide` thumb (`aria-pressed`) | The three animation levels, "Who answers" in group chats |
+| `useFlip` | List items slide from their old position to the new one, and new items sharpen out of a blur | Command palette results, new conversation dropdown |
+| `useMorph` | The container height follows its content on a spring | New conversation dropdown, connector expansion, "Show more" |
+| `useLinger` | Keeps an element for a moment after closing and unmounts it after the exit plays | Settings, memory, menus, model menu |
+| `bt-veil-in` | Opacity + blur 6px → 0, .22s | Every entering content layer |
+| Press | The separate `scale` property on `SPRING_TAP` | Text buttons .96, icon buttons .9 |
 
-### 9.4 入场和退场
+### 9.4 Entrance and exit
 
-| 表面 | 入场 | 退场 |
+| Surface | Entrance | Exit |
 |---|---|---|
-| 菜单、下拉（向下展开） | `bt-pop-drop`：上移 4px、缩到 .96 → 原位，`SPRING_TAP` | `bt-pop-out`：淡出、缩到 .97、模糊 2px，.12s |
-| 向上展开的弹出层 | `bt-pop-lift`：下移 4px → 原位 | 同上 |
-| 对话框 | `bt-dialog-rise`：下移 12px、缩到 .96 → 原位，`SPRING_SHAPE`；内容 `bt-veil-in` | `bt-dialog-sink`：下沉 6px、缩到 .975、模糊 3px、淡出，.16s |
-| 设置里的页面 | 进一层从右（18px），退一层从左，同层从下（10px） | — |
-| Toast | 从下方 16px、缩到 .94 升起 | 淡出 |
+| Menus, dropdowns (opening downward) | `bt-pop-drop`: up 4px, scaled to .96 → in place, `SPRING_TAP` | `bt-pop-out`: fade out, scale to .97, blur 2px, .12s |
+| Popovers opening upward | `bt-pop-lift`: down 4px → in place | Same as above |
+| Dialogs | `bt-dialog-rise`: down 12px, scaled to .96 → in place, `SPRING_SHAPE`; content `bt-veil-in` | `bt-dialog-sink`: sink 6px, scale to .975, blur 3px, fade out, .16s |
+| Pages in settings | Going one level in comes from the right (18px), going one level out from the left, the same level from below (10px) | — |
+| Toast | Rises from 16px below, scaled to .94 | Fade out |
 
-- 必须：弹出层的关键帧只动独立的 `translate` / `scale` 属性，不碰 `transform`，这样已经用 `transform` 定位的元素不用改。
-- 必须：关闭时用 `useLinger` 保留到退场结束。
+- Must: popover keyframes animate only the separate `translate` / `scale` properties and never touch `transform`, so elements already positioned with `transform` need no change.
+- Must: on close, use `useLinger` to keep the element until the exit ends.
 
-### 9.5 性能
+### 9.5 Performance
 
-- 必须：逐帧动画只动 `transform`、`translate`、`scale`、`rotate`、`opacity`。
-- 必须：无限循环的动画（头像的状态动作、扫光文字）只在看得见时动：页面隐藏、窗口 30 秒没人操作、元素在视口外时暂停，有操作或回到视口时接着动（`motion-rest.js`）。只要有一个循环在动，窗口就每帧重绘。
-- 必须：不逐帧动画会引起大面积重排的属性（`width`、`height`、`margin`）。确实要变宽高时：
-  - 表面变形期间，里面的内容固定为最终尺寸，只让边缘移动（右侧面板这样做）。
-  - 旁边的大块内容（对话列）只重排一次：表面变大时立刻让位，变小时等表面收完再收回。
-- 应该：模糊只用在小面积的层上。整个面板、整个页面不加模糊。
-- 应该：大块内容等外框变形结束后再渲染，用 `startTransition` 让出主线程。
+- Must: frame-by-frame animations animate only `transform`, `translate`, `scale`, `rotate` and `opacity`.
+- Must: infinitely looping animations (avatar status motions, shimmering text) run only while visible: they pause when the page is hidden, when the window has had no input for 30 seconds or when the element is outside the viewport, and resume on input or when back in the viewport (`motion-rest.js`). As long as one loop is running, the window repaints every frame.
+- Must: do not animate frame by frame the properties that cause large reflows (`width`, `height`, `margin`). When width or height really must change:
+  - While the surface changes shape, its content is fixed at the final size and only the edge moves (the right panel does this).
+  - Large content next to it (the conversation column) reflows only once: it makes room at once when the surface grows, and takes the space back after the surface has finished shrinking.
+- Should: use blur only on small layers. No blur on a whole panel or a whole page.
+- Should: render large content after the frame has finished changing shape, and use `startTransition` to yield the main thread.
 
-### 9.6 减少动态效果
+### 9.6 Reduced motion
 
-系统打开「减少动态效果」时（`prefers-reduced-motion: reduce`）：
+When the system has "Reduce motion" turned on (`prefers-reduced-motion: reduce`):
 
-- 必须：头像的所有动作停止。
-- 必须：滑块直接跳到终点；对话框只淡入；其他新增动画关闭。
-- `reducedMotion()` 在 `motion.js`，JS 动画启动前必须先检查。
+- Must: all avatar motion stops.
+- Must: sliders jump straight to the end; dialogs only fade in; other added animations are turned off.
+- `reducedMotion()` is in `motion.js`, and a JS animation must check it before it starts.
 
-**现状偏差**（`2f9300d`，仍在）：
+**Current deviations** (`2f9300d`, still present):
 
-- `browser-pane.js:31` 里有自己的一份 `SPRING_LEAD` / `SPRING_TRAIL`（ω 24 / 12），和 `motion.js` 的共用值（ω 28 / 17）不同，改为引用 `motion.js`。`sidebar.js:214` 的 `GLIDE`（ω≈31.6、ζ=1）数值本身是对的，只是没有放进 `motion.js`；提成共用常量，数值不变。
-- 关键帧 99 个，有些只差一个数值。例如单纯的淡入就有 `bt-fade`、`bt-fade-in`、`bt-blur-in`、`bt-veil-in`、`bt-us-fade` 几个。归并到第 9.4 节的几类。
+- `browser-pane.js:31` has its own copy of `SPRING_LEAD` / `SPRING_TRAIL` (ω 24 / 12), different from the shared values in `motion.js` (ω 28 / 17); change it to reference `motion.js`. The values of `GLIDE` in `sidebar.js:214` (ω≈31.6, ζ=1) are correct but not in `motion.js`; move it into a shared constant with the same values.
+- There are 99 keyframes, and some differ by only one value. For example, a plain fade-in exists as `bt-fade`, `bt-fade-in`, `bt-blur-in`, `bt-veil-in` and `bt-us-fade`. Merge them into the kinds in section 9.4.
 
-## 10. 组件
+## 10. Components
 
-每个组件写明：用途、尺寸、状态、动效。类名是当前代码里的类名。
+Each component states its use, size, states and motion. Class names are the ones in the current code.
 
-### 10.1 按钮
+### 10.1 Buttons
 
-| 种类 | 类名 | 尺寸 | 外观 | 用途 |
+| Kind | Class | Size | Look | Use |
 |---|---|---|---|---|
-| 主按钮 | `.bt-send` | 高 40（小号 28），胶囊形 | 强调色底，`--bt-accent-ink` 字 | 每个界面最多一个：发送、创建、保存 |
-| 次按钮 | `.bt-soft` / `.bt-soft-sm` | 高 36 / 28，胶囊形，左右 16 / 12 | `--bt-hover` 底 | 其他操作 |
-| 圆形按钮 | `.bt-round` | 36 × 36 | 1px `--bt-line` 边，`--bt-main` 底 | 侧栏顶部的搜索、新建 |
-| 图标按钮 | `.bt-icon-btn` | 28 × 28，圆形 | 透明底，`--bt-ink-2` 图标，悬停加底色 | 工具条、关闭 |
-| 迷你按钮 | `.bt-mini` | 字号 12，圆角 6 | 透明底 | 行内的小操作（复制、更多） |
+| Primary button | `.bt-send` | Height 40 (small 28), pill shape | Accent background, `--bt-accent-ink` text | At most one per interface: send, create, save |
+| Secondary button | `.bt-soft` / `.bt-soft-sm` | Height 36 / 28, pill shape, 16 / 12 left and right | `--bt-hover` background | Other actions |
+| Round button | `.bt-round` | 36 × 36 | 1px `--bt-line` edge, `--bt-main` background | Search and new at the top of the sidebar |
+| Icon button | `.bt-icon-btn` | 28 × 28, round | Transparent background, `--bt-ink-2` icon, background on hover | Toolbars, close |
+| Mini button | `.bt-mini` | Font size 12, radius 6 | Transparent background | Small inline actions (copy, more) |
 
-- 状态：悬停换底色（.12s）；按下 `scale` .96（图标按钮 .9），`SPRING_TAP`；禁用 `opacity: .35`，不响应按压。
-- 危险操作：文字用危险色，放在菜单最后，前面加分隔线；不可撤销的操作要求再点一次确认。
+- States: hover changes the background (.12s); press is `scale` .96 (icon button .9) on `SPRING_TAP`; disabled is `opacity: .35` with no press response.
+- Dangerous actions: text in the danger color, placed last in the menu after a divider; actions that cannot be undone need a second click to confirm.
 
-### 10.2 输入
+### 10.2 Input
 
-| 种类 | 类名 | 尺寸 |
+| Kind | Class | Size |
 |---|---|---|
-| 输入框 | `.bt-input` | 高 36，圆角 8，1px `--bt-line` 边，`--bt-card` 底，字号 13 |
-| 下拉框 | `.bt-select` | 高 34，圆角 8 |
-| 多行输入 | `.bt-input-area` | 最小高 80 |
-| 字段 | `.bt-field` | 标签（12，`--bt-ink-2`）在上，间距 6 |
+| Input box | `.bt-input` | Height 36, radius 8, 1px `--bt-line` edge, `--bt-card` background, font size 13 |
+| Dropdown | `.bt-select` | Height 34, radius 8 |
+| Multi-line input | `.bt-input-area` | Minimum height 80 |
+| Field | `.bt-field` | Label (12, `--bt-ink-2`) on top, spacing 6 |
 
-### 10.3 选择
+### 10.3 Selection
 
-| 种类 | 类名 / 组件 | 规格 |
+| Kind | Class / component | Spec |
 |---|---|---|
-| 分段控件 | `Segmented`（`.bt-seg`） | 外框圆角 10、内边距 2、`--bt-hover` 底；按钮高 30、圆角 8；滑块用 `useGlide`，选中项 `--bt-card` 底加轻阴影 |
-| 开关 | `.bt-switch` | 36 × 20，圆形滑块 16；打开时强调色；滑块走 `SPRING_SHAPE`；按住时滑块拉长到 21px |
-| 色块 | `.bt-swatch` | 22 × 22 圆形，选中时 2px 描边 |
+| Segmented control | `Segmented` (`.bt-seg`) | Frame radius 10, padding 2, `--bt-hover` background; buttons 30 high, radius 8; the thumb uses `useGlide`, and the selected item has a `--bt-card` background with a light shadow |
+| Switch | `.bt-switch` | 36 × 20, round thumb 16; accent color when on; the thumb runs on `SPRING_SHAPE`; while held, the thumb stretches to 21px |
+| Swatch | `.bt-swatch` | 22 × 22 circle, 2px outline when selected |
 
-两到四个互斥选项用分段控件；开 / 关用开关；更多选项用下拉框。
+Use a segmented control for two to four mutually exclusive options, a switch for on / off, and a dropdown for more options.
 
-### 10.4 标签与徽标
+### 10.4 Labels and badges
 
-| 种类 | 类名 | 规格 |
+| Kind | Class | Spec |
 |---|---|---|
-| 标签 | `.bt-tag` | 字号 12，左右 6，圆角 4，`--bt-tag-bg` 底，最宽 96px，超出省略 |
-| 芯片 | `.bt-chip` | 字号 11，圆角 4，1px 边 |
-| 状态徽标 | `.bt-badge-*` | 见 8.2 |
+| Label | `.bt-tag` | Font size 12, 6 left and right, radius 4, `--bt-tag-bg` background, at most 96px wide with an ellipsis for overflow |
+| Chip | `.bt-chip` | Font size 11, radius 4, 1px edge |
+| Status badge | `.bt-badge-*` | See 8.2 |
 
-### 10.5 菜单
+### 10.5 Menus
 
-- `.bt-menu`：圆角 12，内边距 6，最小宽 200，`--bt-main` 底，第 2 档阴影。
-- 菜单项：最小高 30，圆角 6，内边距 6 × 8，字号 13；图标 16px；悬停 `--bt-hover`。
-- 分隔线 `.bt-menu-sep`；危险项放最后。
-- 动效：见 9.4。键盘：`Esc` 关闭；应该支持方向键在菜单项之间移动（现状偏差 #11）。
+- `.bt-menu`: radius 12, padding 6, minimum width 200, `--bt-main` background, level 2 shadow.
+- Menu item: minimum height 30, radius 6, padding 6 × 8, font size 13; 16px icons; `--bt-hover` on hover.
+- Divider `.bt-menu-sep`; danger items go last.
+- Motion: see 9.4. Keyboard: `Esc` closes; arrow keys should move between menu items (current deviation #11).
 
-### 10.6 对话框
+### 10.6 Dialogs
 
-- 结构：遮罩 `.bt-scrim` + 对话框。对话框圆角 16（记忆 20），第 4 档阴影。
-- 设置对话框：左侧导航 198px（`--bt-sidebar` 底，选中项用纵向 `useGlide` 滑块），右侧是页面。
-- 页面内容用「分区 + 卡片 + 行」：
-  - 分区标题 `h3`：13 / 600，下边距 8。
-  - 卡片 `.bt-set-card`：圆角 12，1px `--bt-line` 边，`--bt-card` 底。
-  - 行 `.bt-set-row`：内边距 10 × 12，左边是标签，右边是控件；行之间 1px 分隔线。
-  - 行默认不加说明文字（第 11 节）。
-- 关闭：右上角关闭按钮、`Esc`、点遮罩。
+- Structure: scrim `.bt-scrim` + dialog. The dialog has radius 16 (memory 20) and a level 4 shadow.
+- Settings dialog: 198px left navigation (`--bt-sidebar` background, the selected item uses a vertical `useGlide` thumb), with the page on the right.
+- Page content uses "section + card + row":
+  - Section heading `h3`: 13 / 600, bottom margin 8.
+  - Card `.bt-set-card`: radius 12, 1px `--bt-line` edge, `--bt-card` background.
+  - Row `.bt-set-row`: padding 10 × 12, label on the left, control on the right; a 1px divider between rows.
+  - Rows have no description text by default (section 11).
+- Close: the close button in the top-right corner, `Esc`, or a click on the scrim.
 
-### 10.7 右侧面板
+### 10.7 Right panel
 
-- 详情 320px；浏览器默认 520px，左边缘可拖动。
-- 顶部标签条高 44：Bot 自己是第一个标签，浏览器的每个页面一个标签，侧边对话每条一个标签；选中标签下有一个用前后沿弹簧移动的滑块。
-- 切换宽度时，标签条和视图固定为最终宽度、贴右边，只有面板左边缘在动（第 9.5 节）。
+- Details 320px; browser 520px by default, with a draggable left edge.
+- A 44-high tab strip at the top: the Bot itself is the first tab, each browser page has a tab, and each side conversation has a tab; under the selected tab is a thumb that moves on leading and trailing edge springs.
+- When the width changes, the tab strip and the view are fixed at the final width and pinned to the right, and only the panel's left edge moves (section 9.5).
 
-### 10.8 卡片
+### 10.8 Cards
 
-| 卡片 | 用途 | 规格 |
+| Card | Use | Spec |
 |---|---|---|
-| 设置卡片 | 设置页 | 见 10.6 |
-| 问题卡片 `.bt-q` | Bot 向用户提问 | 白底卡片，1px 内描边，内边距 14 × 16，间距 12；选项行圆角 12、内边距 10 × 8，选项之间有分隔线（2026-10-11 问题卡片打磨后的样子）。从下方弹簧升起，提交键弹入 |
-| 浏览器卡片 `.bt-bcard` | 详情里的打开页面 | 圆角 12，`.5px` 边，标题 + 文字预览 |
+| Settings card | Settings pages | See 10.6 |
+| Question card `.bt-q` | A Bot asks the user a question | White card, 1px inset outline, padding 14 × 16, spacing 12; option rows with radius 12 and padding 10 × 8, with dividers between options (as it looks after the question card polish of 2026-10-11). Rises from below on a spring, and the submit button pops in |
+| Browser card `.bt-bcard` | Open pages in details | Radius 12, `.5px` edge, title + text preview |
 
-### 10.9 反馈
+### 10.9 Feedback
 
-按问题的位置选：
+Choose by where the problem is:
 
-| 种类 | 类名 | 什么时候用 |
+| Kind | Class | When to use |
 |---|---|---|
-| 行内错误 | `.bt-error` | 某个字段或某个操作失败，错误写在它旁边 |
-| Toast | `.bt-toast` | 后台请求失败等不属于某个位置的消息；底部居中，圆角 12，第 3 档阴影，带「详情」链接 |
-| 空状态 | `.bt-empty` | 列表为空；13 / `--bt-ink-3`，居中，一句话 |
-| 骨架 | — | 加载时占位，不用转圈；内容到了用 `bt-veil-in` 替换 |
-| 流光 | — | 进行中的文字（「正在思考…」），文字上扫过一道光 |
+| Inline error | `.bt-error` | A field or an action failed; the error is written next to it |
+| Toast | `.bt-toast` | Messages that belong to no place, such as a failed background request; bottom center, radius 12, level 3 shadow, with a "Details" link |
+| Empty state | `.bt-empty` | An empty list; 13 / `--bt-ink-3`, centered, one sentence |
+| Skeleton | — | Placeholder while loading, no spinner; replaced with `bt-veil-in` when the content arrives |
+| Shimmer | — | Text for something in progress ("Thinking…"), with a light sweeping across the text |
 
-### 10.10 顶部胶囊（灵动岛）
+### 10.10 Top pill
 
-- 高 40，胶囊形，左边 24px 头像，第 1 档阴影。
-- 悬停弹出向右箭头（宽 0 → 18px，模糊淡入），点击打开右侧面板。
-- 有事件时（如「记忆已更新」）向右拉长（`SPRING_STRETCH`），图标弹出（`SPRING_POP`），然后收回（`SPRING_SHAPE`）。
-- 这是动效标杆：新的可变形表面都按它的方式做。
+- Height 40, pill shape, 24px avatar on the left, level 1 shadow.
+- On hover a right arrow pops out (width 0 → 18px, blur fade-in); a click opens the right panel.
+- When an event happens (such as "Memory updated"), it stretches to the right (`SPRING_STRETCH`), the icon pops in (`SPRING_POP`), and then it contracts (`SPRING_SHAPE`).
+- This is the motion reference: every new surface that changes shape works the same way.
 
-### 10.11 侧栏
+### 10.11 Sidebar
 
-- 主 Bot 卡片：宽 95，圆角 12，60px 头像 + 名字 + 角色标签。
-- 行：36px 头像 + 名字 + 一行预览；悬停 `--bt-hover`；选中 `--bt-active`；置顶的行在名字旁边显示小图钉。
-- 列表顺序变化时，行滑到新位置，用布局滑动弹簧（ω≈31.6、ζ=1）。现在这条弹簧只写在 `sidebar.js` 的 `GLIDE` 里，要提到 `motion.js`（现状偏差 #7）。
+- Main Bot card: width 95, radius 12, 60px avatar + name + role label.
+- Row: 36px avatar + name + one line of preview; `--bt-hover` on hover; `--bt-active` when selected; a pinned row shows a small pin next to the name.
+- When the list order changes, rows slide to their new positions on the layout glide spring (ω≈31.6, ζ=1). This spring is now written only in `GLIDE` in `sidebar.js` and should move into `motion.js` (current deviation #7).
 
-### 10.12 对话
+### 10.12 Conversation
 
-- 气泡：圆角 18，内边距 7 × 12；Bot 气泡 `--bt-bubble`，用户气泡 `--bt-user`。
-- 输入框卡片：最小高 44，圆角 22（写成多行或带附件时 18），内边距 7.5，第 1 档阴影的输入框变体；左边「+」，右边麦克风和发送键。
-- 动作行（「X 正在…」）：高 36，28px 头像 + 流光文字。入场是缩放 .9 → 1 加淡入（`SPRING_TAP`），退场 .14s 缩到 .92 加淡出和模糊。
-- 阅读胶囊 `.bt-reading`（[读长回复](../plans/2026-11-13-long-reply-reading.md)）：高 28，玻璃底，`.5px` 发丝边；按钮 24 高、字号 12、`--bt-ink-2`；入场 `bt-pop-drop`，退场 `bt-pop-out` .12s；目录菜单用 `.bt-menu`。
+- Bubbles: radius 18, padding 7 × 12; Bot bubble `--bt-bubble`, user bubble `--bt-user`.
+- Input card: minimum height 44, radius 22 (18 when it has several lines or attachments), padding 7.5, the input variant of the level 1 shadow; "+" on the left, microphone and send button on the right.
+- Activity row ("X is …"): height 36, 28px avatar + shimmer text. It enters with a scale of .9 → 1 plus a fade-in (`SPRING_TAP`) and exits in .14s, scaling to .92 with a fade-out and blur.
+- Reading pill `.bt-reading` ([Reading long replies](../plans/2026-11-13-long-reply-reading.md)): height 28, glass background, `.5px` hairline edge; buttons 24 high, font size 12, `--bt-ink-2`; enters with `bt-pop-drop`, exits with `bt-pop-out` .12s; the outline menu uses `.bt-menu`.
 
-## 11. 文案
+## 11. Text
 
-- 必须：只写用户需要的信息。不把会话里的讨论、计划、过程写进界面（例如「马上」「稍后」「下个版本」），用户亲自给的原文除外。
-- 必须：设置项默认不加说明文字。确实需要时只写一句中性的功能描述；不复述会话里的说法，不比较选项。拿不准就不写。
-- 必须：源文案写英文，中文写进 `i18n.js` 的 `ZH`；渲染时用 `t()` 查，不缓存翻译结果。
-- 应该：英文用句首大写（sentence case）；标签和按钮不加句号；按钮用动词开头（Create、Save、Delete）。
-- 应该：错误文案说清楚出了什么事和用户能做什么，放在出错的位置旁边。
-- 术语：
+- Must: write only what the user needs. Do not put the discussion, plans or process from a session into the interface (for example "right away", "later", "next version"), except for wording the user gave verbatim.
+- Must: settings have no description text by default. When one is really needed, write one neutral sentence about what the setting does; do not repeat the wording from a session, and do not compare options. If in doubt, leave it out.
+- Must: write the source text in English and the Chinese in `ZH` in `i18n.js`; look it up with `t()` at render time and do not cache the translated result.
+- Should: English uses sentence case; labels and buttons have no period; buttons start with a verb (Create, Save, Delete).
+- Should: error text says clearly what happened and what the user can do, placed next to where the error happened.
+- Terms:
 
-| 英文 | 中文 |
+| English | Chinese |
 |---|---|
 | Bot | Bot |
-| Main Bot | 主 Bot |
-| Group chat | 群聊 |
-| Group admin | 群管理员 |
+| Main Bot | `主 Bot` |
+| Group chat | `群聊` |
+| Group admin | `群管理员` |
 | DSH Agent | DSH Agent |
 | DeepSeek Harness / Harness | DeepSeek Harness / Harness |
-| Memory | 记忆 |
-| Connectors | 连接器 |
-| Scheduled tasks | 定时任务 |
-| Usage | 用量 |
+| Memory | `记忆` |
+| Connectors | `连接器` |
+| Scheduled tasks | `定时任务` |
+| Usage | `用量` |
 
-## 12. 可访问性
+## 12. Accessibility
 
-- 必须：图标按钮有 `aria-label`；菜单 `role="menu"`，对话框 `role="dialog"` + `aria-modal`，开关 `role="switch"` + `aria-checked`，分段控件 `role="group"` + 按钮的 `aria-pressed`。
-- 必须：键盘可用。`Esc` 关闭最上层；`Tab` 顺序和视觉顺序一致。
-- 必须：可聚焦的控件有焦点环：`2px solid var(--bt-accent)`，偏移 1–2px，只在 `:focus-visible` 时显示。
-- 必须：强调色上的文字和图标用 `--bt-accent-ink`。它取 `#141414` 和白色里对比度高的一个，不是按固定亮度阈值。
-- 必须：遵守第 9.6 节的减少动态效果。
+- Must: icon buttons have an `aria-label`; menus have `role="menu"`, dialogs `role="dialog"` + `aria-modal`, switches `role="switch"` + `aria-checked`, segmented controls `role="group"` + `aria-pressed` on the buttons.
+- Must: usable from the keyboard. `Esc` closes the top layer; the `Tab` order matches the visual order.
+- Must: focusable controls have a focus ring: `2px solid var(--bt-accent)`, offset 1–2px, shown only on `:focus-visible`.
+- Must: text and icons on the accent color use `--bt-accent-ink`. It is whichever of `#141414` and white has the higher contrast, not a fixed luminance threshold.
+- Must: follow the reduced motion rules in section 9.6.
 
-**现状偏差**（`2f9300d`）：`:focus-visible` 一共 10 处，只覆盖开关、模型选择、密钥选项、顶部胶囊、问题卡片选项、工具行、记忆删除键。按钮、菜单项、标签页、侧栏行要补上。菜单（右键菜单、模型菜单、文件夹菜单、账户菜单、「+」菜单）只支持 `Esc`，不支持方向键；方向键目前只在命令面板、新对话下拉、记忆面板和顶部胶囊里有。
+**Current deviations** (`2f9300d`): there are 10 `:focus-visible` rules in all, covering only switches, model selection, secret options, the top pill, question card options, tool rows and the memory delete button. Buttons, menu items, tabs and sidebar rows still need them. Menus (context menu, model menu, folder menu, account menu, "+" menu) support only `Esc`, not arrow keys; arrow keys work today only in the command palette, the new conversation dropdown, the memory panel and the top pill.
 
-## 13. 现状偏差汇总
+## 13. Summary of current deviations
 
-对照 `dev` `2f9300d`（2026-10-15）。括号里是 10-11 草案 0.1 时的情况。
+Checked against `dev` `2f9300d` (2026-10-15). In parentheses is the state at draft 0.1 on 10-11.
 
-| # | 项 | 现状 | 标准 |
+| # | Item | Current | Standard |
 |---|---|---|---|
-| 1 | 红色 | 4 个值：`#e02135`、`#c21d2e`、`#E5484D`、`#ff3e51`（0.1 时 2 个） | 一个 `--bt-danger` = `#e02135`（2026-10-15 定）。危险用途已统一（#268，2026-10-16）；提示点 `#E5484D` 和录音 `#ff3e51` 待定。注意：`#e02135` 在深色底上做文字只有 3.2–3.9:1，是否给深色界面另设一个值待定 |
-| 2 | 警告色、成功色 | 警告色未定义，代码里两套；成功色另有 `#16a34a`、`#22a06b`（0.1 未记） | `--bt-warn` + 文字色；只用 `--bt-green` |
-| 3 | 写死的颜色 | 组件里约 80 处十六进制色（0.1 未记） | 只用第 2.2、2.3 节的变量。未读点、「New」分隔线和新消息胶囊跟随强调色（2026-10-15 定） |
-| 4 | 字号、字重 | 12.5px ×5、11.5px ×1、16px ×3、18px ×1；行高约 10 种在档外 | 只用 3.2 节的档 |
-| 5 | 圆角 | 档外约 20 处，集中在浏览器面板和用量页 | 只用第 5 节的档 |
-| 6 | 阴影 | 41 种写法（0.1 时约 20 种） | 6.1 节五档 |
-| 7 | 自定弹簧 | `browser-pane.js` 的滑块弹簧和共用值不同；`sidebar.js` 的布局弹簧数值正确，只是没放进 `motion.js` | 都引用 `motion.js`；布局弹簧提成常量，数值不变 |
-| 8 | 固定时长、曲线 | 约 20 种时长、10 种 `cubic-bezier`，其中 6 处带过冲（0.1 未记） | 9.2 节三种时长；形状变化用弹簧 |
-| 9 | 关键帧 | 99 个（0.1 时约 100） | 归并到 9.4 节的几类 |
-| 10 | 焦点环 | `:focus-visible` 10 处（未变） | 所有可聚焦控件 |
-| 11 | 菜单键盘 | 5 种菜单只有 `Esc`（未变） | 方向键在菜单项之间移动 |
-| 12 | 未覆盖的新界面 | 0.1 之后新增或大改：文件夹菜单、权限选择、批准提示、群成员状态（`member-status.js`） | 补进第 10 节 |
-| 13 | 预设强调色在深色界面 | 7 个预设强调色存的是浅色值（`prefs.accent` = `INKS[ink][0]`），深色界面也用它。Charcoal `#141416` 在深色底 `#141414` 上 1.00:1，Graphite 1.34:1，Cobalt 2.48:1（2026-10-16 发现） | 已定（2026-10-16）：深色界面取 `INKS[ink][1]`，自定义颜色不变。修复见 #267 |
+| 1 | Red | 4 values: `#e02135`, `#c21d2e`, `#E5484D`, `#ff3e51` (2 at 0.1) | One `--bt-danger` = `#e02135` (decided 2026-10-15). Danger uses are unified (#268, 2026-10-16); the notice dot `#E5484D` and recording `#ff3e51` are not decided. Note: `#e02135` as text on a dark background reaches only 3.2–3.9:1; whether the dark interface gets a separate value is not decided |
+| 2 | Warning and success colors | No warning color defined, two sets in the code; success also has `#16a34a` and `#22a06b` (not recorded at 0.1) | `--bt-warn` + text color; only `--bt-green` |
+| 3 | Hard-coded colors | About 80 hex colors in components (not recorded at 0.1) | Only the variables in sections 2.2 and 2.3. The unread dot, "New" divider and new-message pill follow the accent color (decided 2026-10-15) |
+| 4 | Font sizes and weights | 12.5px ×5, 11.5px ×1, 16px ×3, 18px ×1; about 10 line heights off the scale | Only the steps in 3.2 |
+| 5 | Corner radius | About 20 off the scale, mostly in the browser panel and the usage page | Only the values in section 5 |
+| 6 | Shadows | 41 values (about 20 at 0.1) | The five levels in 6.1 |
+| 7 | Custom springs | The slider spring in `browser-pane.js` differs from the shared values; the layout spring in `sidebar.js` has correct values but is not in `motion.js` | Both reference `motion.js`; the layout spring becomes a constant with the same values |
+| 8 | Fixed durations and curves | About 20 durations, 10 `cubic-bezier` curves, 6 places with overshoot (not recorded at 0.1) | The three durations in 9.2; shape changes use springs |
+| 9 | Keyframes | 99 (about 100 at 0.1) | Merged into the kinds in 9.4 |
+| 10 | Focus ring | 10 `:focus-visible` rules (unchanged) | Every focusable control |
+| 11 | Menu keyboard | 5 kinds of menu have only `Esc` (unchanged) | Arrow keys move between menu items |
+| 12 | New interfaces not covered | Added or reworked since 0.1: folder menu, permission picker, approval prompt, group member status (`member-status.js`) | Add to section 10 |
+| 13 | Preset accent colors in the dark interface | The 7 preset accent colors store the light value (`prefs.accent` = `INKS[ink][0]`), and the dark interface uses it too. Charcoal `#141416` on the dark background `#141414` is 1.00:1, Graphite 1.34:1, Cobalt 2.48:1 (found 2026-10-16) | Decided (2026-10-16): the dark interface takes `INKS[ink][1]`, and custom colors are unchanged. Fixed in #267 |
 
-统一这些偏差会改动很多文件。建议分几次做，每次只改一项，每次都在 DSH 里对比截图。
+Unifying these deviations touches many files. It is best done in several passes, one item per pass, with a screenshot comparison in DSH each time.
 
-## 14. 决定记录
+## 14. Decision record
 
-做法有取舍、或曾有过两种候选的地方，维护者选定后记在这里。新的一条写日期、选了什么、依据或代价。
+Where a practice has a trade-off, or once had two candidates, the maintainer's choice is recorded here. A new entry gives the date, what was chosen, and the reason or the cost.
 
-| 日期 | 项 | 决定 |
+| Date | Item | Decision |
 |---|---|---|
-| 2026-10-10 | 设置对话框、详情标签页、菜单的动效 | 按顶部胶囊和用量页的手感：对话框弹簧升起和下沉，标签页有滑块，菜单弹簧弹出、0.12s 退场。结构、尺寸、配色不变 |
-| 2026-10-15 | 标准的方向 | 固化现状，不重新定视觉。做法不一致时做对比预览，由维护者定 |
-| 2026-10-15 | 设置对话框尺寸 | 所有页面统一用用量页的尺寸（`min(1100px, 100vw - 48px)` × `min(780px, …)`），切到用量页不再变大。两个候选尺寸（800 × 620、900 × 700）都不选。外观（圆角 16、.5px 边、遮罩、导航、卡片）保持现在。#224 |
-| 2026-10-15 | 未读点、「New」分隔线、新消息胶囊 | 跟随强调色，不再固定用蓝色（`#1084fe`、`#0c64c1`）。#225 |
-| 2026-10-15 | 危险色 | 统一为 `#e02135`（`--bt-danger`） |
-| 2026-10-15 | 保持现在的几项 | 第三级文字 36%；深色底色 `#141414` 系、保留阴影；活动行（弹簧入场、满 1 分钟显示「· 1m」）；用户气泡一律 18px；群聊名字直接用形象色；提示气泡用原生 title |
-| 2026-10-16 | 强调色上的字色 | 取 `#141414` 和白色里对比度高的一个，不再用亮度 > 0.45 才用黑字。旧规则在 15 个强调色里有 8 个选了对比度低的一边，如 Tangerine 白字 2.89:1、黑字 6.38:1。代价：DeepSeek 深色、Moonlight、Paper 主题的发送键图标变成深色。改动在 #225 |
-| 2026-10-16 | 预设强调色在深色界面（现状偏差 #13） | 预设色深色界面用它的深色值 `INKS[ink][1]`，和 Bot 名字的颜色一致；自定义颜色两种界面同一个值。和预设浅色值完全相等才算预设（和设置页的判断一样）。深色底上对比度：Charcoal 1.00 → 16.45，Graphite 1.34 → 12.71，Cobalt 2.48 → 4.90。代价：同一个预设色在两种界面里颜色不同（Charcoal 浅色近黑、深色近白），和 Mono 主题一样。改动在 #267 |
-| 2026-10-16 | 危险色落地（现状偏差 #1） | 基础样式表设 `--bt-danger:#e02135`，22 处危险色（17 处 `#e02135`、5 处 `#c21d2e`）改读它；确认态底色改 `color-mix`。反馈提示框带后备值 `var(--bt-danger,#e02135)`，因为界面组装失败时它在没有基础样式表的情况下也要显示。录音和提示点的红色不动（待定）。代价：原 `#c21d2e` 的 5 处在浅色界面对比度从 5.98 降到 4.73:1（白底），深色界面从 3.08 升到 3.89:1。#268 |
-| 2026-10-23 | 思考过程与上下文行 | 思考过程默认不显示，设置 → 通用 → 外观里可打开；Bot 对话不显示 DSH 的上下文行（如「工具已更新」）；活动行是唯一的进行中提示（照 Grok）。#465 |
+| 2026-10-10 | Motion of the settings dialog, details tabs and menus | Follow the feel of the top pill and the usage page: the dialog rises and sinks on a spring, tabs have a thumb, menus pop out on a spring and exit in 0.12s. Structure, sizes and colors stay the same |
+| 2026-10-15 | Direction of the standard | Fix the current state in place; do not set a new visual design. Where practices are inconsistent, build a comparison preview and let the maintainer decide |
+| 2026-10-15 | Settings dialog size | Every page uses the usage page size (`min(1100px, 100vw - 48px)` × `min(780px, …)`), so switching to the usage page no longer makes it larger. Neither candidate size (800 × 620, 900 × 700) is chosen. The look (radius 16, .5px edge, scrim, navigation, cards) stays as it is. #224 |
+| 2026-10-15 | Unread dot, "New" divider, new-message pill | Follow the accent color instead of a fixed blue (`#1084fe`, `#0c64c1`). #225 |
+| 2026-10-15 | Danger color | Unified as `#e02135` (`--bt-danger`) |
+| 2026-10-15 | Items kept as they are | Tertiary text at 36%; dark backgrounds in the `#141414` family, shadows kept; the activity row (spring entrance, "· 1m" shown after a full minute); user bubbles always 18px; group chat names use the character color directly; tooltips use the native title |
+| 2026-10-16 | Text color on the accent color | Whichever of `#141414` and white has the higher contrast, instead of black text only when luminance > 0.45. The old rule picked the lower-contrast side for 8 of the 15 accent colors, for example Tangerine with white text at 2.89:1 versus black at 6.38:1. Cost: the send button icon becomes dark in the DeepSeek dark, Moonlight and Paper themes. Changed in #225 |
+| 2026-10-16 | Preset accent colors in the dark interface (current deviation #13) | A preset uses its dark value `INKS[ink][1]` in the dark interface, matching the color of Bot names; a custom color has the same value in both interfaces. A color counts as a preset only if it exactly equals a preset's light value (the same test as the settings page). Contrast on the dark background: Charcoal 1.00 → 16.45, Graphite 1.34 → 12.71, Cobalt 2.48 → 4.90. Cost: the same preset looks different in the two interfaces (Charcoal is near black in light and near white in dark), as in the Mono theme. Changed in #267 |
+| 2026-10-16 | Danger color applied (current deviation #1) | The base style sheet sets `--bt-danger:#e02135`, and 22 danger colors (17 `#e02135`, 5 `#c21d2e`) now read it; the confirm-state background uses `color-mix`. The feedback notice box has the fallback `var(--bt-danger,#e02135)`, because when the interface fails to assemble it must still show without the base style sheet. The red of recording and the notice dot is unchanged (not decided). Cost: the 5 former `#c21d2e` places drop from 5.98 to 4.73:1 contrast in the light interface (on white) and rise from 3.08 to 3.89:1 in the dark interface. #268 |
+| 2026-10-23 | Reasoning and context rows | Reasoning is hidden by default and can be turned on in Settings → General → Appearance; Bot conversations do not show DSH's context rows (such as "Tools updated"); the activity row is the only in-progress indicator (following Grok). #465 |

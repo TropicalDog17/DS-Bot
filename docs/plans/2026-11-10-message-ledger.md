@@ -1,74 +1,129 @@
-# 消息账本
+# Message ledger
 
-- 日期：2026-11-10
-- 相关：#1316
+- Date: 2026-11-10
+- Related: #1316
 
-## 为什么
+## Why
 
-群聊的一条消息原来存好几份：界面读 `group_relay` 工具结果里的回复，成员读 `state.json` 里最近 60 行，记忆整理读 `group-logs`，长消息的全文另放 `group-lines`。几份由不同的代码分别写，漏写一处，界面和成员看到的就不一样。一轮的回复放在工具结果里，DSH 会截断超长的工具结果，所以超长的一轮刷新后回复可能不见（[DSH 让步总账](2026-10-13-dsh-concessions.md) C12）。
+One group chat message used to be stored several times: the interface read the replies in
+the `group_relay` tool result, members read the last 60 lines in `state.json`, memory
+tidying read `group-logs`, and the full text of long messages was kept apart in
+`group-lines`. Different code wrote each copy, and when one write was missed, the
+interface and the members saw different things. A round's replies lived in the tool
+result, and DSH truncates very long tool results, so after a refresh the replies of a very
+long round could disappear ([DSH concessions](2026-10-13-dsh-concessions.md) C12).
 
-DS Bot 自己记一本只追加的账本：消息先写进账本，其他地方都从账本读。
+DS Bot keeps its own append-only ledger: a message is written to the ledger first, and
+every other place reads from the ledger.
 
-## 已定的行为
+## Decided behavior
 
-### 账本
+### Ledger
 
-- 每个群一本账本：`bot/ledger/group-<群 id>.jsonl`。一行一条记录，按序号从旧到新，只追加，不改旧行。
-- 一条记录：序号、谁说的、说了什么（全文）、种类（消息、通知、查了自己的聊天、开始干活、等你批准、被打断后接着做、被停止、做完了）、时间，以及种类需要的字段。
-- 先写账本，再给别处用。群里说的每一句只走一个写入口。
-- 账本第一次用到时整本读进内存，之后的读都从内存来。写盘按顺序排队。
-- 只读窗口不写账本，账本文件变长时重新读。
-- 删群时账本一起删。不按条数或时间自动删。
+- One ledger per group: `bot/ledger/group-<group id>.jsonl`. One record per line, ordered
+  by sequence number from old to new, append-only; old lines are never changed.
+- A record has: sequence number, who spoke, what was said (full text), kind (message,
+  notice, searched its own chat, started work, waiting for your approval, resumed after an
+  interruption, stopped, done), time, and the fields the kind needs.
+- The ledger is written first, then used elsewhere. Everything said in a group goes
+  through one write path.
+- The first time a ledger is used, the whole ledger is read into memory; later reads come
+  from memory. Disk writes are queued in order.
+- A read-only window does not write the ledger, and reads it again when the file grows.
+- The ledger is deleted with the group. Nothing is deleted automatically by count or age.
 
-### 谁读什么
+### Who reads what
 
-- `state.json` 里群的最近 60 行是账本尾部的缓存，每行只存前 2,000 字和总长度。成员读一行时从账本取全文，至多 20,000 字。
-- 账本比保存的 `state.json` 新（保存之前进程退出了）时，群从账本最后一条接着编号，缺的行补进最近 60 行。
-- `read_group_chat`、记忆整理、IM 都从账本读。
-- 群聊页面：每次 `group_relay` 调用在账本里记一个锚点（有自己的 id），工具结果是锚点的序号（`from`）和 id。这次调用下面显示从它到账本里下一个锚点之前的行，所以用户下一条消息之后说的话显示在那条消息下面；两次调用之间没人说话时，前一格是空的。最新的一格在群干活时每秒刷新，群安静下来后只在团队数据变化时刷新。行从账本画，刷新后不变，工具结果不会再因为太长被截断。
-- 开启一轮的那条消息（用户发的、Bot 发帖开启的）由群自己的会话显示，不在行里重复。
+- A group's last 60 lines in `state.json` are a cache of the end of the ledger; each line
+  stores only its first 2,000 characters and the total length. When a member reads a line,
+  the full text comes from the ledger, up to 20,000 characters.
+- When the ledger is newer than the saved `state.json` (the process exited before it
+  saved), the group continues numbering from the last ledger record, and the missing lines
+  are added to the last 60 lines.
+- `read_group_chat`, memory tidying and IM all read from the ledger.
+- Group chat page: each `group_relay` call records an anchor in the ledger (with its own
+  id), and the tool result is the anchor's sequence number (`from`) and id. Below that call
+  the page shows the lines from it up to the next anchor in the ledger, so what is said
+  after the user's next message shows below that message; when nobody spoke between two
+  calls, the earlier slot is empty. The newest slot refreshes every second while the group
+  is working, and once the group is quiet it refreshes only when team data changes. Lines
+  are drawn from the ledger and do not change after a refresh, and the tool result is no
+  longer truncated for being too long.
+- The message that opens a round (sent by the user, or a Bot post that opens a round) is
+  shown by the group's own Session and is not repeated in the lines.
 
-### 一轮在 DS Bot 里跑
+### A round runs in DS Bot
 
-- `group_relay` 调用只记锚点，马上返回；一轮由 DS Bot 自己跑，不占着群的 DSH 会话。旧 PTC 群一轮最长约 10 分钟的限制没有了。
-- 一个群同时只跑一轮。一轮结束后还在收尾（目标检查、保存、回报）时，群仍算占着。轮次进行中用户又发了消息：这条消息加入正在跑的一轮，它点到的成员在这一轮里接着回答。目标消息、建群后的第一轮、带图片或引用对话的消息，以及收尾时进来的消息，等这一轮收完尾开下一轮。
-- 用户停止了这一轮：等着的消息不自动开新一轮，跟着群里下一条消息一起处理。
-- 一轮结束时，在账本里记一条：这一轮的范围、谁跳过、谁失败、是否被停止。
-- 停止一轮用群详情里的「全部停止」：停掉这一轮和它开始的成员回合。DSH 输入框旁的停止按钮不再对应一轮。插件卸载或退出时，正在跑的轮次一起停。
+- A `group_relay` call only records an anchor and returns at once; DS Bot runs the round
+  itself and does not hold the group's DSH Session. The limit of about 10 minutes per
+  round in old PTC groups is gone.
+- A group runs one round at a time. While a round is wrapping up after it ends (goal
+  check, save, report), the group still counts as busy. When the user sends another
+  message while a round is running, the message joins the running round, and the members
+  it names answer in this round. A goal message, the first round after a group is created,
+  a message with images or a quoted conversation, and a message that arrives during the
+  wrap-up wait until this round has wrapped up and then open the next round.
+- When the user stops the round, waiting messages do not open a new round by themselves;
+  they are handled with the group's next message.
+- When a round ends, a record goes into the ledger: the range of the round, who skipped,
+  who failed, and whether it was stopped.
+- A round is stopped with "Stop all" in the group details: it stops this round and the
+  member turns it started. The stop button next to the DSH input box no longer maps to a
+  round. When the plugin unloads or exits, a running round stops with it.
 
-### 群里派活的批次
+### Work batches in a group
 
-- 一个 Bot 在群里一次点名几个成员，是一个批次：等谁、谁做完了、结果是账本里的哪几条、有没有用工具干活、有没有人接话。批次和团队一起存在 `state.json` 的 `roomBatches` 里，重启不丢。
-- 重启后，先接着做被打断的回合；之后还不在干活的成员，这个批次就不再等它。批次里有人做完了活，派活的 Bot 被叫醒一次，带上已有的结果；没人做完的批次直接清掉，不叫任何人。
-- 批次单独存，不放进私聊的派活树：派活树的一个节点是「交给一个 Bot、答案往上交」，群里的批次是「一次点名几个人、做完叫醒派活人」，两者的规则不同。
+- When a Bot names several members at once in a group, that is a batch: who it waits for,
+  who has finished, which ledger records hold the results, whether tools were used for
+  work, and whether anyone followed up. Batches are stored with the team in `roomBatches`
+  in `state.json` and survive a restart.
+- After a restart, interrupted turns resume first; a member that is still not working
+  after that is no longer waited for in the batch. When someone in a batch has finished
+  work, the Bot that handed out the work is woken once, with the results so far; a batch
+  where nobody finished is cleared and nobody is woken.
+- Batches are stored separately, not in the handoff tree of the Bot's own chat: a node in
+  the handoff tree is "give to one Bot, the answer goes up", while a group batch is "name
+  several members at once, wake the Bot that handed out the work when they are done". The
+  two follow different rules.
 
-### Bot 之间的消息
+### Messages between Bots
 
-- 每两个 Bot 一本账本：`bot/ledger/pair-<id>-<id>.jsonl`（两个 id 排序后拼接）。
-- `message_bot` 的请求、回复和停止，先写进这本账本，再送进对方的会话。送达后再写一条「已送达」。
-- 往来对话框只列已送达的消息，全文从账本读；超过 2 万字、作为文件发出的消息照旧从文件读。
-- `state.json` 不再收集 Bot 之间的消息。一对 Bot 的账本第一次用到时，从 `state.json` 里以前的往来记录建起来。
+- One ledger per pair of Bots: `bot/ledger/pair-<id>-<id>.jsonl` (the two ids sorted and
+  joined).
+- The request, reply and stop of `message_bot` are written to this ledger first, then
+  delivered into the other Bot's Session. After delivery, a "delivered" record is written.
+- The exchange dialog lists only delivered messages, with full text read from the ledger;
+  messages over 20,000 characters that were sent as files are still read from the file.
+- `state.json` no longer collects messages between Bots. The first time a pair's ledger is
+  used, it is built from the earlier exchange records in `state.json`.
 
-### 旧数据
+### Old data
 
-- 账本不存在时，从以前的 `group-logs`、`state.json` 的最近 60 行和 `group-lines` 的全文建一本。只有正在写数据的那个 DSH 写这个文件。
-- 旧的 `group-logs` 和 `group-lines` 不再写；删群时一起删。
-- 账本出现之前的工具结果里带着回复本身，照旧显示。
+- When there is no ledger, one is built from the earlier `group-logs`, the last 60 lines
+  in `state.json` and the full text in `group-lines`. Only the DSH that is writing data
+  writes this file.
+- The old `group-logs` and `group-lines` are no longer written; they are deleted with the
+  group.
+- Tool results from before the ledger carry the replies themselves and still show as
+  before.
 
-## 不做什么
+## Not done
 
-- 不把用户和 Bot 的私聊搬进账本：那段对话就是 Bot 自己的 DSH 会话。
-- 不改 DSH。
-- 不设条数上限，不自动清理旧消息。
+- No moving the user's own chat with a Bot into the ledger: that conversation is the Bot's
+  own DSH Session.
+- No change to DSH.
+- No limit on the number of records, and no automatic cleanup of old messages.
 
-## 已知限制
+## Known limits
 
-- 用到的账本整本放在内存里；很长的群会多占一些内存。
-- 磁盘随消息增长，只在删群时释放。
+- A ledger in use is kept whole in memory; a very long group takes more memory.
+- Disk use grows with messages and is freed only when the group is deleted.
 
-## 变更
+## Changes
 
-- 2026-11-10：群聊消息进账本（#1316）。
-- 2026-11-10：群里派活的批次存盘，重启后接着等或叫醒派活人（#1316）。
-- 2026-11-10：Bot 之间的消息进两两一本的账本（#1316）。
-- 2026-11-10：一轮搬出 `group_relay`，由 DS Bot 自己跑；聊天按锚点分格（#1316）。
+- 2026-11-10: group chat messages go into the ledger (#1316).
+- 2026-11-10: work batches in a group are saved; after a restart they keep waiting or wake
+  the Bot that handed out the work (#1316).
+- 2026-11-10: messages between Bots go into one ledger per pair (#1316).
+- 2026-11-10: the round moves out of `group_relay` and DS Bot runs it itself; the chat is
+  split into slots by anchor (#1316).

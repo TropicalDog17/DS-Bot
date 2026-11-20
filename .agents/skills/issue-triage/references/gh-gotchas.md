@@ -1,31 +1,43 @@
-# gh 和 GitHub 的坑
+# gh and GitHub gotchas
 
-分诊时踩过的，动手前读一遍。
+Problems we ran into during triage. Read this before you start.
 
-## 标签
+## Labels
 
-- `gh issue edit --add-label P2` **不会**去掉原来的 `P3`。改优先级要写成 `--add-label P2 --remove-label P3`，改完按 SKILL 第 5 步回读。
-- 标签名区分大小写，`p1` 和 `P1` 是两个标签。只用已有的标签，不要临时新建。
+- `gh issue edit --add-label P2` does **not** remove the old `P3`. To change the priority, write
+  `--add-label P2 --remove-label P3`, then read back as in step 5 of the SKILL.
+- Label names are case-sensitive: `p1` and `P1` are two labels. Use only existing labels; do not create new
+  ones on the fly.
 
-## 关闭
+## Closing
 
-- `Fixes #N` 只在 PR 合进**默认分支 `main`** 时生效。合进 `dev` 的修复不会关 Issue，这是故意的：Issue 开着表示「`dev` 已修，等发版」。发版的 PR 要在正文里列出这一批所有的 `Fixes #N`。
-- 关闭原因只有两种：`completed`（修好了、答复了）和 `not planned`（重复、上游、不做、缺信息到期）。`gh issue close` 的 `--reason` 要加引号：`--reason "not planned"`。
+- `Fixes #N` works only when the pull request is merged into the **default branch `main`**. A fix merged into
+  `dev` does not close the issue, on purpose: an open issue means "fixed on `dev`, waiting for the release".
+  The release pull request lists every `Fixes #N` of the batch in its body.
+- There are only two close reasons: `completed` (fixed, answered) and `not planned` (duplicate, upstream, will
+  not do, missing information expired). Quote the `--reason` of `gh issue close`: `--reason "not planned"`.
 
-## 转讨论
+## Moving to Discussions
 
-- **Convert to discussion 只能在网页上点**。REST 和 `gh` 都没有这个操作。分诊时把要转的 Issue 列出来，请有写权限的人在 Issue 页面右侧栏点。
-- 转走之后，原来的 Issue 号会跳转到讨论帖，评论都会带过去。
+- **Convert to discussion is only a button on the web page.** Neither REST nor `gh` has this operation. During
+  triage, list the issues to move and ask someone with write access to click it in the issue page's right
+  sidebar.
+- After the move, the old issue number redirects to the discussion, and all comments move with it.
 
-## 中文和 Windows
+## Chinese text and Windows
 
-- 在 PowerShell 或 cmd 里直接把中文写进 `--body`、`--comment`，可能乱码或被截断。中文先写进 UTF-8 文件，再用 `--body-file` 或 `--comment-file`。
-- Git Bash 会把传给 Windows 程序的 `/tmp/...` 参数改写成 `%TEMP%\...`。`snapshot.mjs --out /tmp/triage` 实际写到了 `%TEMP%\triage`；之后在 node 里读文件，要用脚本最后打印的那个路径。
-- `--jq` 的字符串里不能写 `\s`、`\|` 这类转义，要写成 `[\n ]`、`[|]`。
-- `gh issue list --search` 对中文标题的匹配不可靠，可能漏结果。查重复时用 `--json number,title,body` 拉全量，在本地过滤。
+- In PowerShell or cmd, Chinese text passed directly in `--body` or `--comment` can be garbled or cut off.
+  Write Chinese text into a UTF-8 file first, then use `--body-file` or `--comment-file`.
+- Git Bash rewrites `/tmp/...` arguments passed to Windows programs into `%TEMP%\...`.
+  `snapshot.mjs --out /tmp/triage` really writes to `%TEMP%\triage`; when you then read the files in node, use
+  the path that the script prints at the end.
+- Strings in `--jq` cannot contain escapes like `\s` or `\|`; write `[\n ]` and `[|]` instead.
+- `gh issue list --search` does not match Chinese titles reliably and can miss results. To find duplicates,
+  fetch everything with `--json number,title,body` and filter locally.
 
-## 查询
+## Queries
 
-- `gh issue list` 默认只返回 30 条，要加 `--limit`。
-- `gh issue list --json comments` 会把全部评论拉下来，数量多时很慢；快照脚本只在需要时才这样拉。
-- 在 `--jq` 里过滤标签用 `[.labels[].name]`，不要用 `.labels.name`。
+- `gh issue list` returns only 30 items by default; add `--limit`.
+- `gh issue list --json comments` fetches all comments and is slow when there are many; the snapshot script
+  fetches them only when needed.
+- To filter labels in `--jq`, use `[.labels[].name]`, not `.labels.name`.
