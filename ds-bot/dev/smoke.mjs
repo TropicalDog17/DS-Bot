@@ -224,6 +224,24 @@ await step('the view answer reaches Writer and clears the card', () => {
     ?? expect(calls.some(call => call.last?.trimStart().startsWith('{"kind":"answer_to_pending_view"')), 'the answer did not arrive as the Bot\'s next message')
 })
 
+// Several decisions go on one card, and one answer settles them all.
+await step('Writer asks three questions on one card', () => send(botNamed('Writer').id, '多问'), () => {
+  const chat = botNamed('Writer').sessionId ?? botNamed('Writer').id
+  const card = state().questions?.[chat]
+  return expect(card?.questions?.length === 3, `no card with three questions (${JSON.stringify(state().questions)})`)
+    ?? expect(card.questions.map(question => question.header).join() === 'PR #1207,PR #1208,Release', 'the questions lost their headers')
+})
+await step('one answer settles the whole card', () => {
+  const chat = botNamed('Writer').sessionId ?? botNamed('Writer').id
+  const card = state().questions[chat]
+  const [first, , third] = card.questions
+  return api('answer-question', { sessionId: chat, questionId: card.id, answer: { answers: [{ id: first.id, selected: ['Merge'] }, { id: third.id, selected: ['Changelog', 'Email'] }] } })
+}, (_value, calls) => {
+  const chat = botNamed('Writer').sessionId ?? botNamed('Writer').id
+  return expect(state().questions?.[chat] === undefined, 'the card is still open')
+    ?? expect(calls.some(call => call.last?.trimStart().startsWith('{"kind":"answer_to_pending_question"')), 'the answer did not arrive as the Bot\'s next message')
+})
+
 // A display-only view just under the byte limit lives on the recorded call; re-reading
 // the part brings it back with its arguments.
 await step('Writer shows a view just under the byte limit', () => send(botNamed('Writer').id, '大视图'), (_value, calls) => {

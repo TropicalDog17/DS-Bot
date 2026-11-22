@@ -27,6 +27,7 @@ import { pageThinkingMs } from './thinking.js'
 import { viaOf } from '../shared/im-platforms.js'
 import { focusOpenPart, isOpenPart, ownChatSessions, pushThreadPart, startOpenPart, successorOfMovedPart, threadCurrent, threadCurrentOfPart, threadOf, threadOfPart } from './threads.js'
 import { checkShownView, normalizeView, readViewReply, viewCardText, viewReply, viewReplyText } from 'deep-view/core'
+import { questionTitle, questionsOf } from './question-card.js'
 
 // An ask_user card as the user saw it. The user's reply is often just an option label,
 // which means nothing without the card. Arguments the tool would refuse (no question,
@@ -36,13 +37,17 @@ export function cardText(args) {
   if (typeof card === 'string') {
     try { card = JSON.parse(card) } catch { return '' }
   }
-  const question = typeof card?.question === 'string' ? card.question.trim() : ''
-  const given = Array.isArray(card?.options) ? card.options : []
-  if (given.some(option => typeof option?.label !== 'string')) return ''
-  const options = given.map(option => option.label.trim()).filter(Boolean)
-  if (question === '' || options.length === 0) return ''
-  const detail = typeof card.detail === 'string' ? card.detail.trim() : ''
-  return `[Question card] ${question}${detail ? ` (${detail})` : ''}\nOptions: ${options.join(' / ')}`
+  const several = Array.isArray(card?.questions) && card.questions.length > 0
+  const lines = (several ? card.questions : [card]).map((asked) => {
+    const question = typeof asked?.question === 'string' ? asked.question.trim() : ''
+    const given = Array.isArray(asked?.options) ? asked.options : []
+    if (given.some(option => typeof option?.label !== 'string')) return ''
+    const options = given.map(option => option.label.trim()).filter(Boolean)
+    if (question === '' || options.length === 0) return ''
+    const detail = typeof asked.detail === 'string' ? asked.detail.trim() : ''
+    return `[Question card] ${questionTitle({ header: several ? asked.header : undefined, question })}${detail ? ` (${detail})` : ''}\nOptions: ${options.join(' / ')}`
+  })
+  return lines.includes('') ? '' : lines.join('\n')
 }
 
 // The card text and reply format live in the shared deep-view core.
@@ -56,23 +61,32 @@ export { viewCardText, viewReply }
 // answers to them.
 // The user's answer to an ask_user card. The message carries the question with the
 // answer, so the answer still makes sense after a checkpoint drops the card.
-export function questionReply(question, answer) {
-  const labels = new Set((question?.options ?? []).map(option => option.label))
-  const picked = (Array.isArray(answer?.selected) ? answer.selected : []).filter(label => typeof label === 'string' && labels.has(label))
-  const selected = question?.multiSelect === true ? [...new Set(picked)] : picked.slice(0, 1)
-  const custom = typeof answer?.custom === 'string' ? answer.custom.trim() : ''
-  if (selected.length === 0 && custom === '') return undefined
-  const callId = question.callId ?? question.id
-  const asked = {
+export function questionReply(card, answer) {
+  const asked = questionsOf(card)
+  if (asked.length === 0) return undefined
+  // An answer without a list is the one answer of a card with one question.
+  const given = Array.isArray(answer?.answers) ? answer.answers : [{ ...answer, id: asked[0].id }]
+  const answers = asked.map((question) => {
+    const mine = given.find(item => item?.id === question.id)
+    const labels = new Set((question.options ?? []).map(option => option.label))
+    const picked = (Array.isArray(mine?.selected) ? mine.selected : []).filter(label => typeof label === 'string' && labels.has(label))
+    const selected = question.multiSelect === true ? [...new Set(picked)] : picked.slice(0, 1)
+    const custom = typeof mine?.custom === 'string' ? mine.custom.trim() : ''
+    if (selected.length === 0 && custom === '') return { id: question.id, selected: [], skipped: true }
+    return { id: question.id, selected, ...(custom !== '' ? { custom } : {}) }
+  })
+  if (answers.every(item => item.skipped === true)) return undefined
+  const callId = card.callId ?? card.id
+  const questions = asked.map(question => ({
     id: question.id,
+    ...(question.header ? { header: question.header } : {}),
     question: question.question,
     ...(question.detail ? { detail: question.detail } : {}),
     options: question.options,
     multiSelect: question.multiSelect === true,
-  }
-  const given = { id: question.id, selected, ...(custom !== '' ? { custom } : {}) }
+  }))
   return {
-    text: JSON.stringify({ kind: 'answer_to_pending_question', tool: 'ask_user', callId, questions: [asked], answers: [given] }),
+    text: JSON.stringify({ kind: 'answer_to_pending_question', tool: 'ask_user', callId, questions, answers }),
     source: { kind: REPLY_KIND, callId, outcome: 'answered' },
   }
 }
@@ -129,7 +143,7 @@ export function replyText(text) {
   return reply.questions.map((question) => {
     const answer = reply.answers.find(item => item.id === question.id)
     const values = [...(answer?.selected ?? []), ...(answer?.custom ? [answer.custom] : [])]
-    return `[Answer to question card] ${question.question}\nAnswer: ${values.length > 0 ? values.join(', ') : '(skipped)'}`
+    return `[Answer to question card] ${questionTitle(question)}\nAnswer: ${values.length > 0 ? values.join(', ') : '(skipped)'}`
   }).join('\n\n')
 }
 
@@ -1762,7 +1776,16 @@ export function install(rt) {
           const callId = event.data?.callId ?? null
           const closed = callId === null ? undefined : rt.own(rt.own(state.closedCards, partId), callId)
           if (named === 'ask_user') {
-            if (closed !== undefined) items.push({ kind: 'closed', closed, question: { question: String(args?.question ?? ''), ...(args?.detail ? { detail: String(args.detail) } : {}), options: Array.isArray(args?.options) ? args.options : [], multiSelect: args?.multiSelect === true }, callId, time: event.time })
+            if (closed !== undefined) {
+              const asked = (Array.isArray(args?.questions) && args.questions.length > 0 ? args.questions : [args]).map(item => ({
+                ...(item?.header ? { header: String(item.header) } : {}),
+                question: String(item?.question ?? ''),
+                ...(item?.detail ? { detail: String(item.detail) } : {}),
+                options: Array.isArray(item?.options) ? item.options : [],
+                multiSelect: item?.multiSelect === true,
+              }))
+              items.push({ kind: 'closed', closed, question: asked[0], ...(asked.length > 1 ? { questions: asked } : {}), callId, time: event.time })
+            }
             continue
           }
           const view = normalizeView(args?.view)

@@ -916,6 +916,10 @@ test('a question or view card closed without an answer on it stays at its call, 
   // Without detail or options, no fold toggle is rendered.
   const bare = show(call('ask_user', 'q-bare', { args: bareAsked }), { roster })
   assert.equal(find(bare, node => node.type === 'button'), undefined)
+  // A card that asked several questions closes as one row for each.
+  const many = show(call('ask_user', 'q-replied', { args: { questions: [{ header: 'PR #1207', question: 'Merge?', options: [{ label: 'Merge' }] }, { header: 'PR #1208', question: 'Merge?', options: [{ label: 'Merge' }] }] } }), { roster })
+  assert.deepEqual(findAll(many, node => node.props?.className === 'bt-q-title').map(text), ['PR #1207 · Merge?', 'PR #1208 · Merge?'])
+  assert.deepEqual(findAll(many, node => node.props?.className === 'bt-q-badge').map(text), ['Answered by message', 'Answered by message'])
   const replied = show(call('ask_user', 'q-replied', { args: asked }), { roster })
   assert.equal(text(find(replied, node => node.props?.className === 'bt-q-badge')), 'Answered by message')
   // Answered on the card: the reply message carries the card, the call leaves no gap.

@@ -16308,6 +16308,18 @@ body[data-ds-dark-theme] .bt-q.bt-q-settled[data-expandable]:not([data-open]):ho
 .bt-q-raised .bt-q-body{padding:2px 6px 0}
 .bt-q-raised .bt-q-desc{color:color-mix(in srgb,var(--bt-ink) 61%,transparent)}
 .bt-q-ownrow{cursor:text}
+.bt-q-multi{gap:0}
+.bt-q-part{display:flex;flex-direction:column;gap:6px;min-width:0;padding:12px 0}
+.bt-q-part:first-child{padding-top:0}
+.bt-q-part+.bt-q-part{border-top:1px solid var(--bt-q-rule)}
+.bt-q-tag{align-self:flex-start;max-width:100%;margin-bottom:4px}
+.bt-q-multi .bt-q-opt[aria-pressed=true] .bt-q-label{color:var(--bt-ink)}
+.bt-q-multi .bt-q-custom{padding:2px 0}
+.bt-q-raised.bt-q-multi .bt-q-part{gap:0;padding:0}
+.bt-q-raised.bt-q-multi .bt-q-opt[aria-pressed=true]{background:var(--bt-active)}
+.bt-q-raised.bt-q-multi .bt-q-custom{padding:0 16px 10px 20px}
+.bt-q-raised.bt-q-multi .bt-q-foot{padding-top:8px;border-top:1px solid var(--bt-q-rule)}
+.bt-q-stack{flex-direction:column;gap:6px}
 .bt-q-ownrow .bt-q-input{color:var(--bt-ink)}
 .bt-q-raised .bt-q-foot{padding:0 8px 8px}
 @media (prefers-reduced-motion:reduce){.bt-q{animation:bt-fade .12s ease-out backwards}.bt-q-settled,.bt-q-submit,.bt-q-expand,.bt-q-dock[data-leaving]{animation:none}.bt-q-chevron{transition:none}}
@@ -18897,6 +18909,111 @@ function QuestionView({ question, onAnswer, onDismiss, onInteract, busy = false,
     foot
   );
 }
+var partsOf = (card) => Array.isArray(card?.questions) && card.questions.length > 1 ? card.questions : void 0;
+var titleOf = (question) => [question?.header, question?.question].filter((part) => typeof part === "string" && part.trim() !== "").join(" · ");
+function QuestionsView({ question: card, onAnswer, onDismiss, onInteract, busy = false, ownAnswer = false, raised = false }) {
+  const parts = partsOf(card);
+  const [picked, setPicked] = (0, import_react11.useState)({});
+  const [own, setOwn] = (0, import_react11.useState)({});
+  const baseId = (0, import_react11.useId)();
+  const answers = parts.map((question) => {
+    const custom = (own[question.id] ?? "").trim();
+    return { id: question.id, selected: picked[question.id] ?? [], ...custom !== "" ? { custom } : {} };
+  });
+  const canSubmit = answers.some((answer) => answer.selected.length > 0 || answer.custom !== void 0);
+  const choose = (question, label) => {
+    if (busy) return;
+    onInteract?.();
+    setPicked((current2) => {
+      const mine = current2[question.id] ?? [];
+      const next = question.multiSelect === true ? mine.includes(label) ? mine.filter((item) => item !== label) : [...mine, label] : mine.includes(label) ? [] : [label];
+      return { ...current2, [question.id]: next };
+    });
+  };
+  const submit = () => {
+    if (!canSubmit || busy) return;
+    onInteract?.();
+    onAnswer({ answers });
+  };
+  return (0, import_react11.createElement)(
+    "form",
+    {
+      className: raised ? "bt-q bt-q-raised bt-q-multi" : "bt-q bt-q-multi",
+      "aria-busy": busy || void 0,
+      onFocusCapture: onInteract,
+      onPointerDownCapture: onInteract,
+      onSubmit: (event) => {
+        event.preventDefault();
+        submit();
+      }
+    },
+    parts.map((question, at) => {
+      const titleId = `${baseId}-${at}`;
+      const mine = picked[question.id] ?? [];
+      return (0, import_react11.createElement)(
+        "div",
+        { key: question.id, className: "bt-q-part", role: "group", "aria-labelledby": titleId },
+        (0, import_react11.createElement)(
+          "div",
+          { className: "bt-q-head" },
+          (0, import_react11.createElement)(
+            "div",
+            { className: "bt-q-text" },
+            question.header ? (0, import_react11.createElement)("span", { className: "bt-tag bt-q-tag" }, question.header) : null,
+            (0, import_react11.createElement)("p", { className: "bt-q-title", id: titleId }, question.question),
+            question.detail ? (0, import_react11.createElement)("div", { className: "bt-q-detail" }, question.detail) : null,
+            question.multiSelect === true ? (0, import_react11.createElement)("div", { className: "bt-q-detail" }, t("Choose all that apply")) : null
+          ),
+          at === 0 ? (0, import_react11.createElement)("button", { type: "button", className: "bt-q-x", "aria-label": t("Dismiss question"), title: t("Dismiss"), onClick: onDismiss, disabled: busy }, (0, import_react11.createElement)(CloseIcon)) : null
+        ),
+        (0, import_react11.createElement)("div", { className: "bt-q-list", role: "group" }, optionsOf(question).map((option) => {
+          const selected = mine.includes(option.label);
+          return (0, import_react11.createElement)(
+            "button",
+            {
+              key: option.label,
+              type: "button",
+              className: "bt-q-opt",
+              disabled: busy,
+              "aria-pressed": selected,
+              onClick: () => choose(question, option.label)
+            },
+            (0, import_react11.createElement)(
+              "span",
+              { className: "bt-q-body" },
+              (0, import_react11.createElement)("span", { className: "bt-q-label" }, option.label),
+              option.description ? (0, import_react11.createElement)("span", { className: "bt-q-desc" }, option.description) : null
+            ),
+            selected ? (0, import_react11.createElement)("span", { className: "bt-q-check", title: t("Selected") }, (0, import_react11.createElement)(CheckIcon)) : null
+          );
+        })),
+        ownAnswer ? (0, import_react11.createElement)("div", { className: "bt-q-custom" }, (0, import_react11.createElement)("label", { className: "bt-q-field" }, (0, import_react11.createElement)("textarea", {
+          rows: 1,
+          value: own[question.id] ?? "",
+          readOnly: busy,
+          autoComplete: "off",
+          spellCheck: false,
+          className: "bt-q-input",
+          "aria-label": t("Your own answer"),
+          placeholder: t("Type your own answer"),
+          onChange: (event) => {
+            if (!busy) {
+              onInteract?.();
+              setOwn((current2) => ({ ...current2, [question.id]: event.target.value }));
+            }
+          }
+        }))) : null
+      );
+    }),
+    (0, import_react11.createElement)(
+      "div",
+      { className: "bt-q-foot" },
+      raised ? (0, import_react11.createElement)("button", { type: "button", className: "bt-q-btn", onClick: onDismiss, disabled: busy }, t("Skip")) : null,
+      (0, import_react11.createElement)("button", { type: "submit", className: "bt-q-submit", disabled: !canSubmit || busy }, t("Submit"))
+    )
+  );
+}
+var viewFor = (card) => partsOf(card) === void 0 ? QuestionView : QuestionsView;
 var closedLabel = (closed) => t(closed === "replied" ? "Answered by message" : "Dismissed");
 var JUST_ANSWERED_TTL = 2e3;
 var justAnswered = /* @__PURE__ */ new Map();
@@ -18983,7 +19100,7 @@ function useFoldCard(cardRef, bodyRef, hasDetail) {
 }
 function SettledQuestion({ question, answer, closed }) {
   const options = optionsOf(question);
-  const prompt = question?.question || question?.header || "";
+  const prompt = titleOf(question);
   const detail = typeof question?.detail === "string" ? question.detail.trim() : "";
   const selected = Array.isArray(answer?.selected) ? answer.selected : [];
   const custom = typeof answer?.custom === "string" ? answer.custom.trim() : "";
@@ -18997,7 +19114,7 @@ function SettledQuestion({ question, answer, closed }) {
   const bodyRef = (0, import_react11.useRef)(null);
   useAnswerMorph(cardRef, "question", question?.id);
   const fold = useFoldCard(cardRef, bodyRef, hasDetail);
-  const badge = answered ? null : (0, import_react11.createElement)("span", { className: "bt-q-badge" }, closedLabel(closed));
+  const badge = answered ? null : (0, import_react11.createElement)("span", { className: "bt-q-badge" }, closed === void 0 && answer?.skipped === true ? t("Skipped") : closedLabel(closed));
   const head = hasDetail ? (0, import_react11.createElement)(
     "button",
     {
@@ -19126,7 +19243,8 @@ function PendingQuestion({ sessionId, question, actions, inline, enterToSend = t
     if (busyRef.current) return;
     const height = boxRef.current?.firstElementChild?.offsetHeight || boxRef.current?.offsetHeight;
     if (inline) noteJustAnswered("question", question.id, height);
-    run2(() => actions.answerQuestion(sessionId, question.id, { selected: answer.selected ?? [], custom: answer.custom ?? "" }), {
+    const sent = Array.isArray(answer.answers) ? { answers: answer.answers } : { selected: answer.selected ?? [], custom: answer.custom ?? "" };
+    run2(() => actions.answerQuestion(sessionId, question.id, sent), {
       settle: true,
       onFail: () => clearJustAnswered("question", question.id)
     });
@@ -19135,7 +19253,7 @@ function PendingQuestion({ sessionId, question, actions, inline, enterToSend = t
   return (0, import_react11.createElement)(
     "div",
     { ref: boxRef, className: bare2 ? "bt-q-hold" : inline ? "bt-q-inline" : "bt-q-dock" },
-    (0, import_react11.createElement)(QuestionView, { key: question.id, question, onAnswer, onDismiss, onInteract: hold, busy, ownAnswer: question.allowCustom === true, raised: !inline, enterToSend })
+    (0, import_react11.createElement)(viewFor(question), { key: question.id, question, onAnswer, onDismiss, onInteract: hold, busy, ownAnswer: question.allowCustom === true, raised: !inline, enterToSend })
   );
 }
 function AskUserCell({ sessionId, callId, arg, argValue, roster, actions, heldCards }) {
@@ -19155,8 +19273,13 @@ function AskUserCell({ sessionId, callId, arg, argValue, roster, actions, heldCa
     );
   }
   if (closed === void 0) return (0, import_react11.createElement)(CellEmpty, { className: "bt-q-gone" });
-  const asked = { question: arg("question") ?? "", detail: arg("detail"), options: argValue("options") ?? [], multiSelect: argValue("multiSelect") === true };
-  return (0, import_react11.createElement)("div", { ref: cellRef, className: "bt-q-inline" }, (0, import_react11.createElement)(SettledQuestion, { question: asked, closed }));
+  const several = argValue("questions");
+  const asked = Array.isArray(several) && several.length > 0 ? several.map((item) => ({ header: item?.header, question: String(item?.question ?? ""), detail: item?.detail, options: Array.isArray(item?.options) ? item.options : [], multiSelect: item?.multiSelect === true })) : [{ question: arg("question") ?? "", detail: arg("detail"), options: argValue("options") ?? [], multiSelect: argValue("multiSelect") === true }];
+  return (0, import_react11.createElement)(
+    "div",
+    { ref: cellRef, className: asked.length > 1 ? "bt-q-inline bt-q-stack" : "bt-q-inline" },
+    asked.map((question2, at) => (0, import_react11.createElement)(SettledQuestion, { key: at, question: question2, closed }))
+  );
 }
 function QuestionDock({ sessionId, useRoster, useCards, useHeldCards, actions }) {
   const question = useRoster((value) => value.questions?.[sessionId]);
@@ -19188,7 +19311,7 @@ function QuestionDock({ sessionId, useRoster, useCards, useHeldCards, actions })
       return (0, import_react11.createElement)(
         "div",
         { className: "bt-q-dock", "data-leaving": "" },
-        (0, import_react11.createElement)(QuestionView, { key: exiting.id, question: exiting, busy: true, ownAnswer: exiting.allowCustom === true, raised: true, enterToSend })
+        (0, import_react11.createElement)(viewFor(exiting), { key: exiting.id, question: exiting, busy: true, ownAnswer: exiting.allowCustom === true, raised: true, enterToSend })
       );
     }
     return null;
@@ -19208,8 +19331,9 @@ function AnsweredCell({ node }) {
   if (questions.length === 0) {
     return data.text ? (0, import_react11.createElement)("div", { className: "bt-urow" }, (0, import_react11.createElement)("div", { className: "bt-ububble" }, data.text)) : (0, import_react11.createElement)(CellEmpty);
   }
-  const answers = Array.isArray(data.answers) ? data.answers : [];
-  return (0, import_react11.createElement)("div", { className: "bt-q-inline" }, questions.map((question) => (0, import_react11.createElement)(SettledQuestion, {
+  const given = Array.isArray(sent?.answers) ? sent.answers : [];
+  const answers = (Array.isArray(data.answers) ? data.answers : []).map((answer) => ({ ...answer, ...given.find((item) => item?.id === answer.id)?.skipped === true ? { skipped: true } : {} }));
+  return (0, import_react11.createElement)("div", { className: questions.length > 1 ? "bt-q-inline bt-q-stack" : "bt-q-inline" }, questions.map((question) => (0, import_react11.createElement)(SettledQuestion, {
     key: question.id,
     question,
     answer: answers.find((answer) => answer.id === question.id) ?? { selected: [] }
@@ -19218,7 +19342,7 @@ function AnsweredCell({ node }) {
 
 // src/client/handoff-card.js
 var import_react12 = require("react");
-var titleOf = (reason) => {
+var titleOf2 = (reason) => {
   switch (reason) {
     case "login":
       return t("Sign-in needed");
@@ -19283,7 +19407,7 @@ function PendingHandoff({ sessionId, bot, hold, hooks, actions, inline }) {
         (0, import_react12.createElement)(
           "div",
           { className: "bt-q-text" },
-          (0, import_react12.createElement)("p", { className: "bt-q-title", id: titleId }, titleOf(hold.reason)),
+          (0, import_react12.createElement)("p", { className: "bt-q-title", id: titleId }, titleOf2(hold.reason)),
           hold.note ? (0, import_react12.createElement)("div", { className: "bt-q-detail" }, hold.note) : null,
           host ? (0, import_react12.createElement)("div", { className: "bt-handoff-site" }, (0, import_react12.createElement)(GlobeIcon), (0, import_react12.createElement)("span", null, host)) : null,
           taken ? (0, import_react12.createElement)(
@@ -19330,7 +19454,7 @@ function HandoffDock({ sessionId, useRoster, useCards, useHeldCards, useBrowserH
 function SettledHandoff({ handoff }) {
   const skipped = handoff.outcome === "skipped";
   const returned = handoff.outcome === "returned";
-  const title = titleOf(handoff.reason);
+  const title = titleOf2(handoff.reason);
   return (0, import_react12.createElement)(
     "div",
     { className: "bt-q-inline" },
@@ -31973,7 +32097,7 @@ function tickOf(range, bucket) {
   if (range.unit === "month") return dates({ month: "short" }).format(bucket.start);
   return dates({ month: "numeric", day: "numeric" }).format(bucket.start);
 }
-function titleOf2(range, bucket) {
+function titleOf3(range, bucket) {
   if (range.unit === "hour") return `${dates({ month: "short", day: "numeric" }).format(bucket.start)} ${hourText(bucket.start)}–${hourText(bucket.start + HOUR_MS)}`;
   if (range.unit === "day") return dates({ month: "long", day: "numeric", weekday: "short" }).format(bucket.start);
   if (range.unit === "week") return spanText(dayKey(bucket.start), dayKey((bucket.end ?? bucket.start + 7 * DAY_MS) - DAY_MS));
@@ -32504,7 +32628,7 @@ function UsagePage({ roster, actions, focusId }) {
     const columns3 = part2.buckets.map((bucket) => {
       const parts = face2 ? [["all", bucket.sum.total]] : series2.map((entry) => [entry.key, entry.key === "more" ? [...bucket.stacks].filter(([key]) => key !== "rest" && !shownKeys.has(key)).reduce((sum, [, value]) => sum + value, 0) : bucket.stacks.get(entry.key) ?? 0]);
       const tip = face2 ? PARTS.map(([key]) => [key, bucket.sum[key]]) : parts;
-      return { key: bucket.key, tick: tickOf(range, bucket), title: titleOf2(range, bucket), total: bucket.sum.total, parts, tip };
+      return { key: bucket.key, tick: tickOf(range, bucket), title: titleOf3(range, bucket), total: bucket.sum.total, parts, tip };
     });
     return { faces: faces2, models: models2, ownerAt: ownerAt2, modelAt, face: face2, keep: keep2, all: all2, part: part2, series: series2, tipSeries: tipSeries2, fillOf: fillOf2, columns: columns3, ranked: ranked2, isBot: isBot2, activeDays: activeDays2, oldest: oldest2 };
   }, [view, rangeId, span, by, focusId, roster]);

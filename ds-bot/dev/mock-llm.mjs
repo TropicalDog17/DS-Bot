@@ -593,6 +593,17 @@ function decide(body) {
   }
   // Streams slowly, then checks the team: exercises the activity row stepping aside
   // for a streaming reply and coming back for the tool.
+  // "多问": one card that asks three questions, answered with one Submit.
+  if (/^\s*多问/.test(userText) && tools.has('ask_user')) {
+    return [text('三个 PR 都看过了，下面三件事等你定。'), tool('ask_user', {
+      allowCustom: /自填/.test(userText),
+      questions: [
+        { header: 'PR #1207', question: 'Merge the login fix?', detail: 'Tests pass; reviewed by Coder.', options: [{ label: 'Merge' }, { label: 'Not yet' }, { label: 'Review', description: 'Read the diff first' }] },
+        { header: 'PR #1208', question: 'Merge the cache change?', options: [{ label: 'Merge' }, { label: 'Not yet' }] },
+        { header: 'Release', question: 'Which notes go out?', multiSelect: true, options: [{ label: 'Changelog' }, { label: 'Blog post' }, { label: 'Email' }] },
+      ],
+    })]
+  }
   if (/^\s*慢慢说/.test(userText) && tools.has('list_bots')) {
     return [{ ...text('好，我一点一点说：先看目标，再看约束，然后定下一步，最后去问问团队现在各自在忙什么。'), slow: true }, tool('list_bots', {})]
   }

@@ -8,6 +8,7 @@ import { within } from './folders.js'
 import { missingFileRefs } from './claims.js'
 import { absoluteLinks } from './links.js'
 import { NAME_MAX } from './requests.js'
+import { cardFromArgs } from './question-card.js'
 import { unquote } from './text.js'
 import { isOpenPart, ownChatSessions } from './threads.js'
 import { mentionSpans } from '../shared/mentions.js'
@@ -837,27 +838,38 @@ export function install(rt) {
     },
   }))
 
+  const optionItems = {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      label: { type: 'string', required: true, description: 'Short answer shown on the option' },
+      description: { type: 'string', description: 'Optional one-line explanation under the label' },
+    },
+  }
   rt.teamTools.push(defineTool({
     name: 'ask_user',
-    description: 'Show the user a short multiple-choice question card in the chat (the user can also type their own answer). Calling it ends your turn; the chosen answer arrives later as the user\'s next message.',
+    description: 'Show the user a short multiple-choice question card in the chat (the user can also type their own answer). Give one question with `question` and `options`, or up to four with `questions`: when your reply ends with several decisions for the user, write the report first, then put every decision on one card, one question each, with short options such as Merge / Not yet / Review. The user answers them together. Calling it ends your turn; the chosen answer arrives later as the user\'s next message.',
     parameters: {
-      question: { type: 'string', required: true, description: 'One short question' },
-      options: {
+      question: { type: 'string', description: 'One short question. Leave it out when you give `questions`.' },
+      options: { type: 'array', description: 'Two to four answers to `question`', items: optionItems },
+      questions: {
         type: 'array',
-        required: true,
-        description: 'Two to four answers',
+        description: 'Instead of `question` and `options`: one to four decisions on one card, sent with one Submit. A question the user leaves blank comes back as skipped.',
         items: {
           type: 'object',
           additionalProperties: false,
           properties: {
-            label: { type: 'string', required: true, description: 'Short answer shown on the option' },
-            description: { type: 'string', description: 'Optional one-line explanation under the label' },
+            header: { type: 'string', required: true, description: 'Short tag of at most 16 characters shown before the question, such as "PR #1207"' },
+            question: { type: 'string', required: true, description: 'One short question' },
+            options: { type: 'array', required: true, description: 'Two to four answers', items: optionItems },
+            detail: { type: 'string', description: 'Optional one-line context shown under the question' },
+            multiSelect: { type: 'boolean', description: 'Allow choosing several options' },
           },
         },
       },
       detail: { type: 'string', description: 'Optional one-line context shown under the question' },
       multiSelect: { type: 'boolean', description: 'Allow choosing several options' },
-      allowCustom: { type: 'boolean', description: 'Also offer a field for an answer in the user\'s own words' },
+      allowCustom: { type: 'boolean', description: 'Also offer a field for an answer in the user\'s own words, under every question' },
     },
     output,
     async execute(args, exec) {
@@ -865,23 +877,13 @@ export function install(rt) {
       const id = exec.agent?.id
       if (rt.groupOwners.has(id)) return 'Question cards only work in your own chat. In a group, ask in your message instead.'
       if (!rt.chatOwners.has(id)) return `Only Bots on the team can use ask_user. Use ${BLOCKING_QUESTION_TOOL} if it is available in this session, or ask the user in your reply.`
-      const options = (Array.isArray(args.options) ? args.options : [])
-        .map(option => (typeof option === 'string' ? { label: option } : option ?? {}))
-        .map(option => ({
-          label: String(option.label ?? '').trim(),
-          ...(option.description ? { description: String(option.description).trim() } : {}),
-        }))
-        .filter(option => option.label !== '')
-        .slice(0, 6)
-      if (options.length === 0) return 'Give at least one option.'
+      const { card, error } = cardFromArgs(args)
+      if (error !== undefined) return error
+      const { id: cardId, ...asked } = card
       state.questions[id] = {
-        id: randomUUID(),
+        id: cardId,
         ...(exec.callId ? { callId: exec.callId } : {}),
-        question: String(args.question ?? '').trim(),
-        ...(args.detail ? { detail: String(args.detail).trim() } : {}),
-        options,
-        multiSelect: args.multiSelect === true,
-        ...(args.allowCustom === true ? { allowCustom: true } : {}),
+        ...asked,
         askedAt: Date.now(),
       }
       await rt.save()
