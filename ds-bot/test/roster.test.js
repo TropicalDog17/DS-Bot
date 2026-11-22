@@ -208,7 +208,7 @@ test('a first message from the user is helped with, not replaced by an opening q
   assert.doesNotMatch(text, /\b(?:ask_user(?:_question)?|allowCustom)\b/)
 })
 
-test('a group the user makes without a first message opens with its admin asking what it is for', async (t) => {
+test('a group the user makes without a first message opens with the Main Bot asking what it is for, as it takes plain messages', async (t) => {
   const { call, stop, sent, ctx, home } = start(undefined, { models: ['deepseek-v4-flash'] })
   t.after(stop)
   const chief = (await call('state', {})).value.mainBotId
@@ -220,7 +220,7 @@ test('a group the user makes without a first message opens with its admin asking
   const room = (await call('create-room', { members: [chief, writer.id], admin: writer.id, greet: true })).value
   assert.deepEqual(sent.map(entry => [entry.sessionId, entry.message.source.role]), [[room.id, 'kickoff']])
 
-  // The relay gives the admin alone a turn, and the cue adds no line to the group.
+  // The relay gives the Main Bot alone a turn, though Writer is the admin, and the cue adds no line to the group.
   for (const listener of ctx.listeners.get('session/event')) listener({ id: room.id }, { type: 'user/message', data: sent[0].message })
   const relay = rt.teamTools.find(d => d.name === 'group_relay').execute({}, { agent: { id: room.id }, callId: 'relay', signal: new AbortController().signal })
     .then(value => afterRound(rt, room.id, value))
@@ -233,9 +233,10 @@ test('a group the user makes without a first message opens with its admin asking
   assert.match(text, /^\[Group chat "[^"]+" · the group was just created\]\n/)
   assert.match(text, /The user just created this group/)
   assert.doesNotMatch(text, /This round so far|Nothing new in this round/)
-  assert.deepEqual(result.passed, ['Writer'])
+  assert.match(text, /You are the Main Bot: the user's plain messages in this group come to you first/)
+  assert.deepEqual(result.passed, ['Chief'])
   const saved = JSON.parse(readFileSync(join(home, 'state.json'), 'utf8')).rooms[room.id]
-  assert.equal(saved.sessions[writer.id], turns[0].sessionId)
+  assert.equal(saved.sessions[chief], turns[0].sessionId)
   assert.deepEqual(saved.log, [])
 })
 

@@ -1669,3 +1669,52 @@ test('a stopped notice during a round closing drain still logs into the draining
   assert.equal(stoppedRows.length, 1, 'stopped notice logs into the draining round without waiting for another message')
   assert.equal(sent.filter(entry => entry.sessionId === room.id && entry.message.source.role === 'post').length, 0)
 })
+
+// The Main Bot routes: in admin mode a plain message goes to it, not to the group's admin.
+test('in admin mode the Main Bot takes the user\'s plain message even when another Bot is the admin; @Name skips it', async (t) => {
+  const { call, emit, userMessage, relay, answer, stop, sent, rt } = start()
+  t.after(stop)
+  const chief = (await call('state', {})).value.mainBotId
+  const writer = (await call('create-bot', { name: 'Writer' })).value
+  const room = (await call('create-room', { name: 'R1', members: [chief, writer.id], admin: writer.id })).value
+  await call('update-room', { id: room.id, mode: 'admin' })
+  sent.length = 0
+
+  await emit(room.id, userMessage('Can someone draft the release notes?'))
+  const running = relay(room.id, 'relay')
+  const first = await turnFor(sent)
+  assert.equal(first.sessionId, rt.state.rooms[room.id].sessions[chief])
+  assert.match(first.message.content[0].text, /You are the Main Bot: the user's plain messages in this group come to you first/)
+  assert.doesNotMatch(first.message.content[0].text, /You are this group's admin/)
+  await answer(first.sessionId, first.message.source.exchangeId, '[PASS]', 1)
+  const result = JSON.parse(await running)
+  assert.deepEqual(result.passed, ['Chief'])
+  // Passing alone leaves the same notice an admin's pass did, naming the Main Bot.
+  assert.deepEqual(result.replies.filter(reply => reply.kind === 'admin-passed').map(reply => reply.name), ['Chief'])
+
+  await emit(room.id, userMessage('@Writer what do you think?'))
+  const next = relay(room.id, 'relay-2')
+  const second = await turnFor(sent, first)
+  assert.equal(second.sessionId, rt.state.rooms[room.id].sessions[writer.id])
+  // The admin keeps its other duties, but no longer takes plain messages first.
+  assert.match(second.message.content[0].text, /You are this group's admin\. "@all" calls every member/)
+  await answer(second.sessionId, second.message.source.exchangeId, 'Looks fine.', 2)
+  await next
+})
+
+test('without the Main Bot in the group, the admin takes plain messages as before', async (t) => {
+  const { call, emit, userMessage, relay, answer, stop, sent, rt } = start()
+  t.after(stop)
+  const writer = (await call('create-bot', { name: 'Writer' })).value
+  const editor = (await call('create-bot', { name: 'Editor' })).value
+  const room = (await call('create-room', { name: 'R2', members: [writer.id, editor.id], admin: editor.id })).value
+  await call('update-room', { id: room.id, mode: 'admin' })
+  sent.length = 0
+  await emit(room.id, userMessage('Status?'))
+  const running = relay(room.id, 'relay')
+  const first = await turnFor(sent)
+  assert.equal(first.sessionId, rt.state.rooms[room.id].sessions[editor.id])
+  assert.match(first.message.content[0].text, /Plain messages come to you first/)
+  await answer(first.sessionId, first.message.source.exchangeId, 'All good.', 1)
+  await running
+})

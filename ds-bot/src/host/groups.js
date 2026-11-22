@@ -180,12 +180,15 @@ const slotLabel = (slot, self) => {
   return slot.name
 }
 
-const adminNote = room => [
+const adminNote = (room, routed) => [
   'You are this group\'s admin.',
-  room.mode === 'admin' ? 'Plain messages come to you first: answer them, or call the members who should answer with @Name.' : '',
+  room.mode === 'admin' && !routed ? 'Plain messages come to you first: answer them, or call the members who should answer with @Name.' : '',
   '"@all" calls every member. When the user asks, change the group with update_group.',
   'When the user wants this group to reach a goal, set it with group_goal: align with the user first (goal-grill skill), then start it.',
 ].filter(Boolean).join(' ')
+
+// The Main Bot in a group routes the user's plain messages, as it does everywhere.
+const ROUTER_NOTE = 'You are the Main Bot: the user\'s plain messages in this group come to you first. Answer a quick question yourself. Hand a task on with board open (it reaches that Bot by itself), or call the member who should answer with @Name. Do not do the work yourself.'
 
 // The opening turn of a group the user just made without a first message.
 const roomKickoff = language => `The user just created this group and has not written yet. Greet the user in one short message and ask what they want this group to work on. Do not call members with @ yet, and do not reply [PASS]. No name prefix. Write in ${language ?? 'the user\'s language if known; otherwise Chinese'}.`
@@ -462,6 +465,9 @@ export function install(rt) {
     const peers = room.members.filter(id => id !== member.id).map(rt.botOf).filter(Boolean)
       .map(bot => `${bot.name}${rt.isAdminOf(room, bot.id) ? ' (admin)' : ''}`)
     const leads = rt.isAdminOf(room, member.id)
+    const routes = room.mode === 'admin' && rt.isMain(member.id)
+    const routed = room.mode === 'admin' && routerOf(room) !== undefined
+    const lead = [routes ? ROUTER_NOTE : '', leads ? adminNote(room, routed) : ''].filter(Boolean).join(' ')
     const lines = unseenLines(room, member.id)
     const earlier = lines.filter(line => line.seq < round.startSeq).slice(-ROOM_EARLIER_MAX)
     const current = lines.filter(line => line.seq >= round.startSeq)
@@ -469,7 +475,7 @@ export function install(rt) {
     const spokeThisRound = (room.seen[member.id] ?? 0) >= round.startSeq
     const members = `Members: the user${peers.length ? `, ${peers.join(', ')}` : ''} and you${leads ? ' (admin)' : ''}. ${ROOM_CALLS}`
     const notice = room.notice ? `Group notice (shared instructions for every member):\n${room.notice}` : ''
-    if (round.kickoff) return { text: [members, notice, leads ? adminNote(room) : '', roomKickoff(rt.uiLanguage?.())].filter(Boolean).join('\n\n'), images: [], files: [] }
+    if (round.kickoff) return { text: [members, notice, lead, roomKickoff(rt.uiLanguage?.())].filter(Boolean).join('\n\n'), images: [], files: [] }
     const goal = rt.goalBlock?.(room, member, { nudge: round.goalNudge === true, resume: round.goalResume === true }) ?? ''
     // Members answering in this round are named with the round below.
     const answering = new Set(round.slots.filter(other => other.status === 'speaking').map(other => other.id))
@@ -479,7 +485,7 @@ export function install(rt) {
       members,
       notice,
       goal,
-      leads ? adminNote(room) : '',
+      lead,
       earlier.length ? `Earlier in the group, before this round (context only):\n${transcript(earlier, memberText(room))}` : '',
       owed.length ? `Results of the work you asked for that the lines here leave out (oldest first):\n${owed.map(result => (result.line
         ? transcript([result.line], memberText(room))
@@ -1399,8 +1405,11 @@ export function install(rt) {
     // The admin alone with the user's message: when it passes, the round ends with
     // nothing said, and the group says so once.
     const admin = room.members.map(rt.botOf).filter(Boolean).find(bot => rt.isAdminOf(room, bot.id))
-    const soleAdmin = opener.botId === undefined && !opener.kickoff && opener.goal === undefined && room.mode === 'admin' && admin !== undefined
-      && speakers.length === 1 && speakers[0].id === admin.id
+    // The one who takes the user's plain messages: the Main Bot, else the admin in admin mode.
+    const first = room.mode === 'admin' ? (routerOf(room) ?? admin) : undefined
+    const soleAdmin = opener.botId === undefined && !opener.kickoff && opener.goal === undefined && first !== undefined
+      && speakers.length === 1 && speakers[0].id === first.id
+      ? first : undefined
     // A goal draft queued with another post still brings the admin in, on its note.
     const draftPost = posts.find(post => post.goal === 'draft' && post !== opener)
     if (draftPost !== undefined && admin !== undefined && !speakers.some(member => member.id === admin.id)) speakers.push(admin)
@@ -1430,7 +1439,7 @@ export function install(rt) {
         ...(wake !== undefined && member.id === opener.askedBy ? { finished: wake, ...(named.includes(member) ? {} : { note: finishedNote(wake.names) }) } : {}),
       })),
       batches: 1,
-      ...(soleAdmin ? { soleAdmin: { id: admin.id, name: admin.name, color: admin.color } } : {}),
+      ...(soleAdmin ? { soleAdmin: { id: soleAdmin.id, name: soleAdmin.name, color: soleAdmin.color } } : {}),
       from: startSeq,
       abort: holder.abort,
       passed: [],
@@ -1636,8 +1645,9 @@ export function install(rt) {
     },
   }))
 
-  // A Bot that posts never answers its own post. @mentions choose the speakers; else
-  // the admin answers alone in admin mode, or first of everyone. What a member posts
+  // A Bot that posts never answers its own post. @mentions choose the speakers; else in
+  // admin mode the Main Bot answers the user alone when it is in the group, or the admin
+  // does; in "everyone" mode the admin answers first of everyone. What a member posts
   // after its round moved on is answered by the member that asked for it; work the
   // user asked for is left for the user to read.
   // `ordered`: a plain message everyone answers in turn, admin first; any other call
@@ -1646,8 +1656,10 @@ export function install(rt) {
     const everyone = room.members.map(rt.botOf).filter(Boolean)
     const members = everyone.filter(bot => bot.id !== opener.botId)
     const admin = members.find(bot => rt.isAdminOf(room, bot.id))
+    // Admin mode is the routed one; in "everyone" mode the user asked for every member.
+    const router = opener.botId === undefined && room.mode === 'admin' ? routerOf(room) : undefined
     const at = speakers => ({ speakers, ordered: false })
-    if (opener.kickoff) return at(admin ? [admin] : [])
+    if (opener.kickoff) return at(router ? [router] : admin ? [admin] : [])
     if (opener.quiet) return at([])
     if (opener.done) return at(members.filter(bot => bot.id === opener.askedBy))
     // A goal post — the user's draft ask, an idle goal check, a resume — is the admin's alone.
@@ -1658,11 +1670,17 @@ export function install(rt) {
     if (opener.late) return at(found.length > 0 ? found : members.filter(bot => bot.id === opener.askedBy))
     if (opener.member) return at(found)
     if (found.length > 0 && !all) return at(found)
+    if (!all && router) return at([router])
     if (!all && room.mode === 'admin' && admin) return at([admin])
     const speakers = admin ? [admin, ...members.filter(bot => bot !== admin)] : members
     return { speakers, ordered: !all && speakers.length > 1 }
   }
   const openingSpeakers = (room, opener) => openingCall(room, opener).speakers
+  // The Main Bot, when it is in this group: it takes the user's plain messages there.
+  function routerOf(room) {
+    const id = (room.members ?? []).find(id => rt.isMain(id) && rt.botOf(id) !== undefined)
+    return id === undefined ? undefined : rt.botOf(id)
+  }
 
   // A Bot's post that lands while a round runs calls its members in that round at
   // once, as the relay it opens would. Returns whether it called anyone. A post that
