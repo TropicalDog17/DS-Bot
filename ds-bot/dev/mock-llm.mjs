@@ -118,8 +118,13 @@ function decide(body) {
   const messages = (body.messages ?? []).filter(m => m.role !== 'system').map(message => {
     if (message.role !== 'user') return message
     const isClock = value => value.startsWith('Current time: ') || value.startsWith('Time sampled while preparing turn ') || value.startsWith('## Group memory, shared by the members of this group chat')
-    const content = typeof message.content === 'string' ? (isClock(message.content) ? '' : message.content)
+    // DSH's runtime-context snapshot (the Main Bot's routing digest goes there) can follow
+    // the user's words in the same block.
+    const bare = value => value.split(/(?:^|\n)Current runtime context\. /)[0]
+    const content = typeof message.content === 'string' ? (isClock(message.content) ? '' : bare(message.content))
       : message.content.filter(block => block.type !== 'text' || !isClock(block.text))
+        .map(block => (block.type === 'text' ? { ...block, text: bare(block.text) } : block))
+        .filter(block => block.type !== 'text' || block.text.trim() !== '')
     return { ...message, content }
   }).filter(message => message.role !== 'user' || message.content.length > 0)
   const last = messages.at(-1)

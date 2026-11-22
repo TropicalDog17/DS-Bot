@@ -410,12 +410,13 @@ rmSync(project, { recursive: true, force: true })
 
 await step('pin Coder', () => api('set-flags', { id: botNamed('Coder').id, pinned: true }), () => expect(botNamed('Coder').pinned === true, 'not pinned'))
 
-await step('make Coder a Main Bot and back', async () => {
+// A team has one Main Bot: setting another moves the role.
+await step('hand the Main Bot role to Coder and back', async () => {
   await api('set-main', { id: botNamed('Coder').id, main: true })
-  const both = state().mainBotIds.length
-  await api('set-main', { id: botNamed('Coder').id, main: false })
-  return both
-}, both => expect(both === 2 && state().mainBotIds.length === 1, `main counts ${both}, ${state().mainBotIds.length}`))
+  const moved = [...state().mainBotIds]
+  await api('set-main', { id: chief().id, main: true })
+  return moved
+}, moved => expect(moved.join() === botNamed('Coder').id && state().mainBotIds.join() === chief().id, `main ${moved}, then ${state().mainBotIds}`))
 
 await step('duplicate Coder', () => api('duplicate-bot', { id: botNamed('Coder').id }), copy => expect(copy && state().bots[copy.id] && copy.id !== botNamed('Coder').id, 'no copy'))
 
