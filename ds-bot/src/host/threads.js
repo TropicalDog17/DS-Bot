@@ -66,20 +66,65 @@ export function pushThreadPart(bot, sessionId, freshId, segment) {
 // no earlier parts and no handoff note: the user asked for a new conversation.
 export function startOpenPart(bot, freshId, startedAt = Date.now()) {
   bot.openParts ??= []
-  bot.openParts.push({ sessionId: currentSession(bot), segments: bot.segments ?? [], startedAt })
+  bot.openParts.push({ sessionId: currentSession(bot), segments: bot.segments ?? [], startedAt, ...cardField(bot.currentCard) })
   bot.sessionId = freshId
   bot.segments = []
+  delete bot.currentCard
 }
+
+const cardField = card => (typeof card === 'string' ? { card } : {})
 
 // Makes a live background part current. Each chain travels with its parts.
 export function focusOpenPart(bot, sessionId) {
   const at = (bot.openParts ?? []).findIndex(part => part?.sessionId === sessionId)
   if (at === -1) return false
   const [target] = bot.openParts.splice(at, 1)
-  bot.openParts.push({ sessionId: currentSession(bot), segments: bot.segments ?? [] })
+  bot.openParts.push({ sessionId: currentSession(bot), segments: bot.segments ?? [], ...cardField(bot.currentCard) })
   bot.sessionId = target.sessionId
   bot.segments = target.segments ?? []
+  // A card thread stays the card's when the user opens it: the card goes with it.
+  if (typeof target.card === 'string') bot.currentCard = target.card
+  else delete bot.currentCard
   return true
+}
+
+// Card threads: one thread per open card, for that card's work only. A card thread is
+// an open part with `card`, or the current thread with `bot.currentCard` once the user
+// opened it.
+export function cardOfThread(bot, sessionId) {
+  const thread = threadOf(bot, sessionId)
+  if (thread === undefined) return undefined
+  return thread.thread === 'current' ? bot.currentCard : bot.openParts[thread.index].card
+}
+
+export function cardThreadSession(bot, cardId) {
+  if (bot === undefined || typeof cardId !== 'string') return undefined
+  if (bot.currentCard === cardId) return currentSession(bot)
+  return (bot.openParts ?? []).find(part => part?.card === cardId)?.sessionId
+}
+
+// A new card thread runs beside the Bot's chat: the current thread does not change.
+export function addCardThread(bot, freshId, cardId, startedAt = Date.now()) {
+  ;(bot.openParts ??= []).push({ sessionId: freshId, segments: [], startedAt, card: cardId })
+}
+
+// A closed card thread leaves the live threads and joins the Bot's closed card threads,
+// which stay readable. The current thread only loses its card: it is where the user
+// talks to the Bot now. Returns the closed record, or undefined.
+export const CLOSED_CARDS_MAX = 50
+export function closeCardThread(bot, cardId, closedAt = Date.now()) {
+  if (bot === undefined || typeof cardId !== 'string') return undefined
+  if (bot.currentCard === cardId) {
+    delete bot.currentCard
+    return undefined
+  }
+  const at = (bot.openParts ?? []).findIndex(part => part?.card === cardId)
+  if (at === -1) return undefined
+  const [part] = bot.openParts.splice(at, 1)
+  const closed = { card: cardId, sessionId: part.sessionId, segments: part.segments ?? [], closedAt }
+  ;(bot.closedCards ??= []).push(closed)
+  if (bot.closedCards.length > CLOSED_CARDS_MAX) bot.closedCards.splice(0, bot.closedCards.length - CLOSED_CARDS_MAX)
+  return closed
 }
 
 // Every session this Bot keeps outside its current thread, for cleanup, memory and the

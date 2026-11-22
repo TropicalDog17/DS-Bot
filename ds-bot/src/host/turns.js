@@ -1269,16 +1269,19 @@ export function install(rt) {
           }
         }
         // A companion (the board) hears the answer the user reads: in the Bot's own chat
-        // a turn the user opened, in a group any of the Bot's turns.
+        // a turn the user opened, in a group any of the Bot's turns, in a card thread
+        // every turn (that thread is the card's work and nothing else).
         if (watched && !retry && failure === undefined && reason?.kind === 'completed') {
           const roomId = rt.groupOwners.get(id)?.roomId
-          const toUser = roomId !== undefined || (owner !== undefined && (info === undefined || info.role === 'continue'))
+          const cardId = roomId === undefined ? rt.cardOfSession?.(id) : undefined
+          const toUser = roomId !== undefined || cardId !== undefined || (owner !== undefined && (info === undefined || info.role === 'continue'))
           const text = (wroteCall ? said.map(stripWrittenCalls) : said).join('\n\n').trim()
           if (toUser && text !== '') {
             const heard = takeHeard(id)
-            rt.botReplied?.({ botId: rt.selfOf(id), ...(roomId === undefined ? {} : { roomId }), text, since: began ?? Date.now(), ...(heard.length > 0 ? { heard } : {}) })
+            rt.botReplied?.({ botId: rt.selfOf(id), ...(roomId === undefined ? {} : { roomId }), ...(cardId === undefined ? {} : { cardId }), text, since: began ?? Date.now(), ...(heard.length > 0 ? { heard } : {}) })
           }
         }
+        rt.cardTurnEnded?.()
         const replyText = () => {
           const reply = (wroteCall ? texts.map(stripWrittenCalls) : texts).join('\n\n').trim()
           if (wroteCall && reply === '') return 'Tried to run a tool but wrote the call as text, so it did not run.'
