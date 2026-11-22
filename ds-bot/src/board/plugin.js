@@ -6,25 +6,48 @@
 // dsBotBridge (so a Bot on a local agent CLI gets the tool through DS Bot's MCP bridge).
 // While a card waits for its answer, the page also shows the Bot's reasoning and tool
 // calls, read from DSH's own Session events (live.js).
+// A card handed to another Bot starts that Bot's card thread (dsBotNotes startCard) and a
+// finished card closes it. The Main Bot's routing digest lists the open cards
+// (dsBotRoster addRoutingPart), the board's rules join every Bot's prompt, and what needs
+// the user goes to their phone (dsBotNotes push), with a watchdog for stuck cards.
 import { join } from 'node:path'
 import { defineTool } from '../host/tool-schema.js'
 import { dshHomeOf } from '../host/folders.js'
 import { ACTIONS, BOT_STATUSES, createBoard, isOpen } from './cards.js'
 import { LEVELS, createLive, levelOf } from './live.js'
 import { openBoardStore } from './store.js'
+import { WATCH_MS, pushFor, sweep } from './watch.js'
 
 export const ROUTE = '/api/ds-bot-board'
+// After DS Bot's own identity section (640), so the board rules read as part of it.
+const RULES_ORDER = 650
+const DIGEST_CARDS = 15
+const COLUMN_NAME = { todo: 'Todo', active: 'In progress', review: 'Review', blocked: 'Blocked' }
+const MAIN_BOARD_RULES = [
+  '## The board',
+  '- A task becomes a card: board open with a one-line title, the assignee (exact Bot name) and a brief with everything that Bot needs: the goal, the context, the limits and what done looks like. It cannot see this conversation.',
+  '- The card reaches that Bot by itself, in a conversation of its own for the card: do not also message_bot it. Tell the user in one line who has it and the card id.',
+  '- Something the user says about work already on a card goes to that card: board note with the card id and the text.',
+  '- A question is never a card. The open cards are in the team snapshot; board show lists the rest.',
+]
+const BOARD_RULES = [
+  '## The board',
+  '- Every task you take is a card. When the user asks you for one directly, open the card yourself (board open) and keep it moving.',
+  '- A card handed to you arrives in a conversation of its own that starts with "[Card …]". Do that card\'s work there: board update as it moves, board ask when the user must decide, then board complete with a one-line result or board cancel with the reason. Notes on the card arrive in the same conversation.',
+  '- A question the Main Bot passes on is not a card: just answer it.',
+]
 const output = { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: String(value) }] }
 
 export const boardFileOf = (config = {}, env = process.env) => config.file ?? join(dshHomeOf(env.DSH_HOME), 'bot-board', 'board.json')
 
-export function install(ctx, config, { identity, roster, notes, bridge, tools, connection, store = openBoardStore(boardFileOf(config), { warn: (...args) => ctx.logger?.warn?.(...args) }), now = Date.now }) {
+export function install(ctx, config, { identity, roster, notes, bridge, tools, connection, systemPrompt, store = openBoardStore(boardFileOf(config), { warn: (...args) => ctx.logger?.warn?.(...args) }), now = Date.now }) {
+  const warn = (...args) => ctx.logger?.warn?.(...args)
   const board = createBoard({ roster, now })
   const live = createLive({ identity, now })
 
   const tool = defineTool({
     name: 'board',
-    description: 'The user\'s work board, shared by the whole team. Put every piece of work you take on it so the user sees it without asking: open when you take it, update as it moves (status, progress, a PR link), complete with a one-line result, cancel with a reason. When you need the user to decide, ask with a question and the options: the card shows them as buttons and the pick comes back as a note. Works from any chat. show lists the board.',
+    description: 'The user\'s work board, shared by the whole team. Put every piece of work on it so the user sees it without asking: open when you take it (or hand it to another Bot with a brief), update as it moves (status, progress, a PR link), complete with a one-line result, cancel with a reason. When you need the user to decide, ask with a question and the options: the card shows them as buttons and the pick comes back as a note. note passes something on to a card\'s assignee. Works from any chat. show lists the board.',
     parameters: {
       action: { type: 'string', required: true, enum: ACTIONS, description: 'What to do' },
       id: { type: 'string', description: 'Card id or ticket key; default your newest open card' },
@@ -32,6 +55,8 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
       key: { type: 'string', description: 'Ticket key, e.g. LIFE-782' },
       url: { type: 'string', description: 'Ticket URL' },
       assignee: { type: 'string', description: 'open: exact Bot name, or "user"; default you' },
+      brief: { type: 'string', description: 'open for another Bot: everything it needs (goal, context, limits, what done looks like); it cannot see your conversation' },
+      text: { type: 'string', description: 'note: what to pass on to the card\'s assignee' },
       status: { type: 'string', enum: BOT_STATUSES, description: 'todo, active (in progress), review (waits for the user), blocked' },
       progress: { type: 'string', description: 'Latest progress, one line' },
       link: { type: 'string', description: 'A URL to attach, e.g. the PR' },
@@ -48,11 +73,52 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
       // The tool schema has already refused an unknown action or status and a field
       // that is not text.
       if (args.action === 'show') return board.show(store.read().cards, owner.botId)
-      const result = await store.change(data => board.bot(data.cards, args.action, owner.botId, owner.roomId, args))
+      let before
+      const result = await store.change((data) => {
+        const changed = board.bot(data.cards, args.action, owner.botId, owner.roomId, args)
+        before = changed.before
+        return changed
+      })
       if (result.error !== undefined) return result.error
-      return `${result.said}\n${board.line(result.card, owner.botId)}`
+      const after = await follow(result)
+      const push = pushFor(args.action, before, result.card, nameOf)
+      if (push !== undefined) void sendPush(result.card, push)
+      return [result.said, after, board.line(result.card, owner.botId)].filter(Boolean).join('\n')
     },
   })
+
+  const nameOf = id => (id === 'user' ? 'the user' : roster.bot(id)?.name ?? id)
+  const sendPush = (card, text) => Promise.resolve(notes.push?.({ cardId: card.id, botId: card.assignee, text }))
+    .catch(error => warn('ds-bot-board: push for %s failed: %s', card.id, error))
+  // What a change sets off outside the board: a card thread to start or close, a note to
+  // deliver. Returns a line for the Bot when something did not reach its Bot.
+  async function follow(result) {
+    if (result.start !== undefined) {
+      const started = await Promise.resolve(notes.startCard?.(result.start)).catch(error => ({ error: error?.message ?? String(error) }))
+      if (started === undefined || started.error !== undefined) {
+        // No card thread: the brief still reaches the Bot, in its own chat.
+        const sent = await notes.deliver({ botId: result.start.botId, cardId: result.start.cardId, text: result.start.text }).catch(error => ({ error: error?.message ?? String(error) }))
+        if (sent?.error !== undefined) return `The card is open, but ${nameOf(result.start.botId)} did not get it: ${sent.error}`
+      }
+    }
+    if (result.close !== undefined) {
+      await Promise.resolve(notes.closeCard?.(result.close)).catch(error => warn('ds-bot-board: closing the thread of %s failed: %s', result.close.cardId, error))
+    }
+    if (result.deliver !== undefined) {
+      const sent = await deliverNote(result.card.id, result.deliver)
+      if (sent?.error !== undefined) return `Saved on the card, but not sent: ${sent.error}`
+    }
+    return undefined
+  }
+  // A note reaches the Bot as the user's message; the card waits for the answer there.
+  async function deliverNote(id, deliver, requestId) {
+    const since = now()
+    const sent = await notes.deliver({ ...deliver, ...(requestId === undefined ? {} : { requestId }) }).catch(error => ({ error: error?.message ?? String(error) }))
+    if (sent?.error !== undefined) return sent
+    const roomId = sent?.where === 'group' ? deliver.roomId : undefined
+    const cardId = sent?.where === 'card' ? deliver.cardId : undefined
+    return store.change(data => board.user.sent(data.cards, id, { botId: deliver.botId, roomId, cardId, since, requestId: sent?.requestId }))
+  }
 
   // How much of a Bot's work the page shows and an answer keeps (live.js LEVELS).
   const level = () => levelOf(store.read().settings?.trace)
@@ -76,9 +142,9 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
       case 'state':
         return { value: view() }
       case 'add':
-        return store.change(data => board.user.add(data.cards, { title: body.title, key: body.key, url: body.url, assignee: body.assignee, status: body.status }))
+        return followed(await store.change(data => board.user.add(data.cards, { title: body.title, key: body.key, url: body.url, assignee: body.assignee, status: body.status, brief: body.brief })))
       case 'move':
-        return store.change(data => board.user.move(data.cards, String(body.id ?? ''), String(body.status ?? '')))
+        return followed(await store.change(data => board.user.move(data.cards, String(body.id ?? ''), String(body.status ?? ''))))
       case 'trace': {
         const trace = String(body.trace ?? '')
         if (!LEVELS.includes(trace)) return { error: 'Unknown level.', code: 'board/refused' }
@@ -87,28 +153,28 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
       case 'seen':
         return store.change(data => board.user.seen(data.cards, String(body.id ?? '')))
       case 'cancel':
-        return store.change(data => board.user.cancel(data.cards, String(body.id ?? ''), body.reason))
-      case 'note': {
-        const id = String(body.id ?? '')
-        const result = await store.change(data => board.user.note(data.cards, id, body.text))
-        if (result.error === undefined && result.deliver !== undefined) {
-          // The note is saved either way; a delivery that fails says so on the page.
-          const since = now()
-          const sent = await notes.deliver(result.deliver).catch(error => ({ error: error?.message ?? String(error) }))
-          if (sent?.error !== undefined) return { error: `Saved on the card, but not sent: ${sent.error}` }
-          // The Bot answers where the note went; that answer is copied onto the card.
-          const roomId = sent?.where === 'group' ? result.deliver.roomId : undefined
-          // The turn that reads the note names it in its answer, in the Bot's chat and
-          // in a group, where the round shows the note to the Bot.
-          const requestId = sent?.requestId
-          return store.change(data => board.user.sent(data.cards, id, { botId: result.deliver.botId, roomId, since, requestId }))
-        }
-        return result
-      }
+        return followed(await store.change(data => board.user.cancel(data.cards, String(body.id ?? ''), body.reason)))
+      case 'note':
+        return userNote(String(body.id ?? ''), body.text)
       default:
         return { error: 'Unknown board endpoint.', code: 'board/unknown' }
     }
   }
+  // The user's change, then its card thread started or closed; the page shows the board.
+  const followed = async (result) => {
+    if (result?.error === undefined) await follow(result)
+    return result
+  }
+  // A note from the page, or a Telegram reply to a push about the card (requestId: the
+  // reply's own, so the Bot's answer goes back to Telegram as well). The note is saved
+  // either way; a delivery that fails says so.
+  async function userNote(id, text, requestId) {
+    const result = await store.change(data => board.user.note(data.cards, id, text))
+    if (result.error !== undefined || result.deliver === undefined) return result
+    const sent = await deliverNote(id, result.deliver, requestId)
+    return sent?.error !== undefined ? { error: `Saved on the card, but not sent: ${sent.error}` } : sent
+  }
+
   const respond = (result) => {
     if (result?.error !== undefined) return { ok: false, error: { code: result.code ?? 'board/refused', message: result.error } }
     return { ok: true, value: result?.value ?? view() }
@@ -123,6 +189,14 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
     }),
     ctx.on?.('session/event', (session, event) => live.onEvent(session?.id, event)),
     ctx.on?.('agent/assistant-stream', ({ agent, frame } = {}) => live.onFrame(agent?.id, frame)),
+    notes.onCardNote?.(async ({ cardId, text, requestId }) => {
+      if (typeof cardId !== 'string' || store.read().cards[cardId] === undefined) return false
+      const result = await userNote(cardId, text, requestId)
+      return result?.error === undefined
+    }),
+    roster.addRoutingPart?.(() => openCardsDigest()),
+    systemPrompt?.section?.({ name: 'ds-bot-board-rules', order: RULES_ORDER, interpolate: false, text: context => rulesFor(context?.agent?.id) }),
+    watchdog(),
     tools.register(tool),
     bridge.share(tool.name),
     connection.fetch.register({
@@ -138,7 +212,49 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
       },
     }),
   ]
+  // The open cards, for the Main Bot's routing digest: the id to follow and who has it.
+  // No times: every change of this text adds a new snapshot to the Main Bot's context.
+  function openCardsDigest() {
+    const open = Object.values(store.read().cards).filter(isOpen).sort((a, b) => a.createdAt - b.createdAt)
+    if (open.length === 0) return 'Open cards: none.'
+    const shown = open.slice(-DIGEST_CARDS)
+    const rows = shown.map(card => `- ${card.id}${card.key ? ` · ${card.key}` : ''} · ${nameOf(card.assignee)} · ${COLUMN_NAME[card.status] ?? card.status} · ${card.title}`)
+    return [`Open cards${open.length > shown.length ? ` (newest ${shown.length} of ${open.length}; board show lists all)` : ''}:`, ...rows].join('\n')
+  }
+  function rulesFor(sessionId) {
+    const owner = identity.ownerOfSession(sessionId)
+    const bot = owner === undefined ? undefined : roster.bot(owner.botId)
+    if (bot === undefined) return ''
+    return (bot.main ? MAIN_BOARD_RULES : BOARD_RULES).join('\n')
+  }
+  // On a schedule, what needs the user: a card stuck in progress, a card left in Review,
+  // a card whose Bot is gone. Each is told once until the card changes.
+  function watchdog() {
+    const every = config.watchMs ?? WATCH_MS
+    if (!(every > 0)) return undefined
+    const timer = setInterval(() => { void watchOnce().catch(error => warn('ds-bot-board: watchdog failed: %s', error)) }, every)
+    timer.unref?.()
+    return () => clearInterval(timer)
+  }
+  async function watchOnce() {
+    if (store.readOnly()) return []
+    await roster.ready()
+    const alerts = sweep(store.read().cards, { now: now(), hasBot: id => roster.bot(id) !== undefined, nameOf, stuckMs: config.stuckMs, reviewMs: config.reviewMs })
+    if (alerts.length === 0) return []
+    await store.change((data) => {
+      for (const { card, kind } of alerts) {
+        if (data.cards[card.id] !== undefined) data.cards[card.id].alerted = { kind, updatedAt: card.updatedAt }
+      }
+      return {}
+    })
+    for (const { card, text } of alerts) await sendPush(card, text)
+    return alerts
+  }
+
   return {
+    watchOnce,
+    rulesFor,
+    openCardsDigest,
     handle: async (endpoint, payload) => respond(await handle(endpoint, payload)),
     tool,
     store,
