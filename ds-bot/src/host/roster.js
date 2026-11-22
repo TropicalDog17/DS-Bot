@@ -224,7 +224,8 @@ export function install(rt) {
         createdBy: createdBy ?? null,
         capabilities: [],
       }
-      if (main) state.mainBotIds.push(id)
+      // Exactly one Main Bot: a new one takes the role over.
+      if (main) state.mainBotIds = [id]
       const creator = rt.botOf(createdBy)
       const original = rt.botOf(copyOf)
       const language = rt.uiLanguage?.()
@@ -898,28 +899,19 @@ export function install(rt) {
     return removed
   }
 
-  // The first Main Bot is the sidebar tile. `replace` gives a Main Bot's place to
-  // another Bot in one step, so the team never has none; `primary` moves a Bot to the
-  // front and keeps the others.
-  async function setMain(id, main, { primary = false, replace } = {}) {
+  // A team has exactly one Main Bot: it takes every Request and hands it on. Making
+  // another Bot the Main Bot hands the role over in one step, so the team never has none
+  // and never two. `primary` and `replace` are kept for older clients and mean the same.
+  async function setMain(id, main) {
     const bot = liveBot(id)
     if (bot === undefined) throw new Error('Unknown Bot')
     if (main && bot.private === true) throw new Error(`${bot.name} is private, so it cannot be a Main Bot`)
-    const others = state.mainBotIds.filter(other => other !== id)
-    let next
     if (!main) {
       if (!rt.isMain(id)) return
-      if (others.length === 0) throw new Error('The team needs at least one Main Bot')
-      next = others
-    } else if (replace !== undefined && replace !== id) {
-      const at = others.indexOf(replace)
-      if (at === -1) throw new Error('Only a Main Bot can be replaced')
-      next = others.with(at, id)
-    } else if (primary) {
-      next = [id, ...others]
-    } else {
-      next = rt.isMain(id) ? state.mainBotIds : [...others, id]
+      throw new Error('The team needs a Main Bot; make another Bot the Main Bot instead')
     }
+    if (state.mainBotIds.length === 1 && state.mainBotIds[0] === id) return
+    const next = [id]
     // The sidebar shows every Main Bot, so a hidden Bot would vanish again once demoted.
     if (main) delete bot.hidden
     // A held setup greeting says "you are the Main Bot"; it must not go out after demotion.

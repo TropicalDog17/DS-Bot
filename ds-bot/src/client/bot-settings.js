@@ -210,7 +210,7 @@ export function BotSettingsForm({ bot, roster, actions, run }) {
     return () => clearTimeout(timer)
   }, [confirming])
   const isMainBot = isMainOf(roster, bot.id)
-  const onlyMain = isMainBot && (roster.mainBotIds ?? []).length === 1
+  const onlyMain = isMainBot
   const isTile = roster.mainBotId === bot.id
   const inGroup = (roster.rooms ?? []).some(room => room.members?.includes(bot.id))
   const privateHint = t('Other Bots cannot read its folder, memory or chats, and you approve what it shares with them.')
@@ -266,7 +266,7 @@ export function BotSettingsForm({ bot, roster, actions, run }) {
             h('button', { type: 'button', className: 'bt-soft bt-soft-sm', onClick: () => actions.openSettings('bots') }, t('Change')))
         : h(SwitchRow, {
           label: t('Main Bot'),
-          hint: bot.private === true ? t('A private Bot cannot be a Main Bot.') : t('Can create and change Bots, and runs every group chat.'),
+          hint: bot.private === true ? t('A private Bot cannot be a Main Bot.') : t('Takes every request and hands it to the right Bot. Turning this on hands the role over from the current Main Bot.'),
           on: isMainBot,
           disabled: bot.private === true,
           onChange: on => run(actions.setMain(bot.id, on)),

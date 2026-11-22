@@ -212,7 +212,6 @@ var JA = {
   "Edit Bot": "Bot を編集",
   "Give up waiting for {name}": "{name} を待たない",
   "Make Main Bot": "メイン Bot に設定",
-  "Remove Main Bot role": "メイン Bot を解除",
   "Create group chat": "グループチャットを作成",
   "Delete group": "グループを削除",
   "Open {name}'s chat": "{name} とのチャットを開く",
@@ -692,7 +691,7 @@ var JA = {
   "Replaces each member's own permissions in this group.": "このグループ内では各メンバー個別の権限より優先されます。",
   "The only Main Bot. To hand the role to another Bot, use Main Bot on the Bots page.": "唯一のメイン Bot です。別の Bot に役割を引き継ぐには、「Bot」ページのメイン Bot 設定から変更してください。",
   "Change": "変更",
-  "Can create and change Bots, and runs every group chat.": "Bot の作成・変更ができ、すべてのグループチャットを管理します。",
+  "Takes every request and hands it to the right Bot. Turning this on hands the role over from the current Main Bot.": "すべての依頼を受け取り、適切な Bot に渡します。オンにすると、現在のメイン Bot から役割を引き継ぎます。",
   "Sidebar": "サイドバー",
   "Kept above the other chats.": "他のチャットより上に固定されます。",
   "Search still finds it.": "非表示にしても検索からは見つけられます。",
@@ -810,12 +809,8 @@ var JA = {
   "Bot memory size": "Bot メモリの容量",
   "Team memory size": "チームメモリの容量",
   "Bots · {count}": "Bot · {count}",
-  "First in the sidebar. Pick another Bot to hand it the role; {name} then stops being a Main Bot.": "サイドバーの最上部に配置されます。別の Bot を選ぶとメイン Bot の役割を引き継ぎ、{name} はメイン Bot ではなくなります。",
+  "Takes every request and hands it to the right Bot. Pick another Bot to hand it the role; {name} then stops being the Main Bot.": "すべての依頼を受け取り、適切な Bot に渡します。別の Bot を選ぶと役割を引き継ぎ、{name} はメイン Bot ではなくなります。",
   "Choose a Bot…": "Bot を選択…",
-  "Also a Main Bot.": "メイン Bot でもあります。",
-  "Move to first": "先頭へ移動",
-  "Add a Main Bot": "メイン Bot を追加",
-  "Main Bots can create and change Bots, and run every group chat.": "メイン Bot は Bot の作成・変更ができ、すべてのグループチャットを管理します。",
   "Group chats · {count}": "グループチャット · {count}",
   "No group chats yet.": "グループチャットはまだありません。",
   "A group chat lets several Bots work on one thing with you.": "グループチャットでは、複数の Bot と一緒に 1 つのテーマに取り組めます。",
@@ -1742,7 +1737,7 @@ var JA = {
   "That group chat has been deleted": "そのグループチャットは削除されています",
   "Hand the admin role to another member instead of leaving the group without one": "グループを管理者なしにするのではなく、他のメンバーに管理者を引き継いでください",
   "Hand the admin role to another member before leaving the group": "グループから退出する前に、他のメンバーに管理者を引き継いでください",
-  "The team needs at least one Main Bot": "チームには少なくとも 1 つのメイン Bot が必要です",
+  "The team needs a Main Bot; make another Bot the Main Bot instead": "チームにはメイン Bot が必要です。代わりに別の Bot をメイン Bot にしてください",
   "Only a Main Bot can be replaced": "交代できるのはメイン Bot のみです",
   "A Main Bot cannot be deleted; remove its Main Bot role first": "メイン Bot は削除できません。先にメイン Bot の役割を解除してください",
   "Unknown theme": "不明なテーマです",
@@ -2638,7 +2633,6 @@ var KO = {
   "Edit Bot": "Bot 편집",
   "Give up waiting for {name}": "{name} 대기 중단",
   "Make Main Bot": "메인 Bot으로 지정",
-  "Remove Main Bot role": "메인 Bot 해제",
   "Create group chat": "그룹 채팅 만들기",
   "Delete group": "그룹 채팅 삭제",
   "Open {name}'s chat": "{name} 대화 열기",
@@ -3128,7 +3122,7 @@ var KO = {
   "Replaces each member's own permissions in this group.": "이 그룹 내에서 각 멤버의 개별 권한을 대체합니다.",
   "The only Main Bot. To hand the role to another Bot, use Main Bot on the Bots page.": "유일한 메인 Bot입니다. 다른 Bot에게 역할을 넘기려면 Bot 페이지의 메인 Bot 설정을 이용하세요.",
   Change: "변경",
-  "Can create and change Bots, and runs every group chat.": "Bot을 생성·수정하고 모든 그룹 채팅을 관리할 수 있습니다.",
+  "Takes every request and hands it to the right Bot. Turning this on hands the role over from the current Main Bot.": "모든 요청을 받아 알맞은 Bot에게 넘깁니다. 켜면 현재 메인 Bot에게서 역할을 넘겨받습니다.",
   Sidebar: "사이드바",
   "Kept above the other chats.": "다른 대화 위에 고정됩니다.",
   "Search still finds it.": "검색을 통해 계속 찾을 수 있습니다.",
@@ -3254,12 +3248,8 @@ var KO = {
   "Bot memory size": "Bot 메모리 용량",
   "Team memory size": "팀 메모리 용량",
   "Bots · {count}": "Bot · {count}",
-  "First in the sidebar. Pick another Bot to hand it the role; {name} then stops being a Main Bot.": "사이드바 맨 위에 표시됩니다. 다른 Bot을 선택하면 역할이 넘어가며 {name}은(는) 더 이상 메인 Bot이 아니게 됩니다.",
+  "Takes every request and hands it to the right Bot. Pick another Bot to hand it the role; {name} then stops being the Main Bot.": "모든 요청을 받아 알맞은 Bot에게 넘깁니다. 다른 Bot을 선택하면 역할이 넘어가며 {name}은(는) 더 이상 메인 Bot이 아니게 됩니다.",
   "Choose a Bot…": "Bot 선택…",
-  "Also a Main Bot.": "함께 지정된 메인 Bot입니다.",
-  "Move to first": "맨 위로 이동",
-  "Add a Main Bot": "메인 Bot 추가",
-  "Main Bots can create and change Bots, and run every group chat.": "메인 Bot은 Bot을 생성·수정하고 모든 그룹 채팅을 관리할 수 있습니다.",
   "Group chats · {count}": "그룹 채팅 · {count}",
   "No group chats yet.": "아직 그룹 채팅이 없습니다.",
   "A group chat lets several Bots work on one thing with you.": "그룹 채팅에서는 여러 Bot이 사용자와 함께 하나의 작업을 수행합니다.",
@@ -4210,7 +4200,7 @@ var KO = {
   "That group chat has been deleted": "이미 삭제된 그룹 채팅입니다",
   "Hand the admin role to another member instead of leaving the group without one": "그룹에 관리자가 없도록 비워 두는 대신 다른 멤버에게 관리자 역할을 넘기세요",
   "Hand the admin role to another member before leaving the group": "그룹을 나가기 전에 다른 멤버에게 관리자 역할을 넘기세요",
-  "The team needs at least one Main Bot": "팀에는 최소 하나의 메인 Bot이 필요합니다",
+  "The team needs a Main Bot; make another Bot the Main Bot instead": "팀에는 메인 Bot이 필요합니다. 대신 다른 Bot을 메인 Bot으로 지정하세요",
   "Only a Main Bot can be replaced": "메인 Bot만 교체할 수 있습니다",
   "A Main Bot cannot be deleted; remove its Main Bot role first": "메인 Bot은 삭제할 수 없습니다. 먼저 메인 Bot 역할을 해제하세요",
   "Unknown theme": "알 수 없는 테마",
@@ -5108,7 +5098,6 @@ var ES = {
   "Edit Bot": "Editar Bot",
   "Give up waiting for {name}": "Dejar de esperar a {name}",
   "Make Main Bot": "Hacer Bot principal",
-  "Remove Main Bot role": "Quitar rol de Bot principal",
   "Create group chat": "Crear chat grupal",
   "Delete group": "Eliminar grupo",
   "Open {name}'s chat": "Abrir el chat de {name}",
@@ -5598,7 +5587,7 @@ var ES = {
   "Replaces each member's own permissions in this group.": "Reemplaza los permisos propios de cada miembro en este grupo.",
   "The only Main Bot. To hand the role to another Bot, use Main Bot on the Bots page.": "Es el único Bot principal. Para ceder el rol a otro Bot, usa Bot principal en la página de Bots.",
   Change: "Cambiar",
-  "Can create and change Bots, and runs every group chat.": "Puede crear y modificar Bots, y gestiona todos los chats grupales.",
+  "Takes every request and hands it to the right Bot. Turning this on hands the role over from the current Main Bot.": "Recibe cada petición y la pasa al Bot adecuado. Al activarlo, el rol pasa desde el Bot principal actual.",
   Sidebar: "Barra lateral",
   "Kept above the other chats.": "Se mantiene por encima de los demás chats.",
   "Search still finds it.": "Aún aparece en la búsqueda.",
@@ -5724,12 +5713,8 @@ var ES = {
   "Bot memory size": "Tamaño de memoria del Bot",
   "Team memory size": "Tamaño de memoria del equipo",
   "Bots · {count}": "Bots · {count}",
-  "First in the sidebar. Pick another Bot to hand it the role; {name} then stops being a Main Bot.": "Primero en la barra lateral. Elige otro Bot para cederle el rol; {name} dejará entonces de ser Bot principal.",
+  "Takes every request and hands it to the right Bot. Pick another Bot to hand it the role; {name} then stops being the Main Bot.": "Recibe cada petición y la pasa al Bot adecuado. Elige otro Bot para cederle el rol; {name} dejará entonces de ser el Bot principal.",
   "Choose a Bot…": "Elegir un Bot…",
-  "Also a Main Bot.": "También es un Bot principal.",
-  "Move to first": "Mover al principio",
-  "Add a Main Bot": "Añadir un Bot principal",
-  "Main Bots can create and change Bots, and run every group chat.": "Los Bots principales pueden crear y modificar Bots, y gestionar todos los chats grupales.",
   "Group chats · {count}": "Chats grupales · {count}",
   "No group chats yet.": "Aún no hay chats grupales.",
   "A group chat lets several Bots work on one thing with you.": "Un chat grupal permite que varios Bots trabajen contigo en un mismo asunto.",
@@ -6680,7 +6665,7 @@ var ES = {
   "That group chat has been deleted": "Ese chat grupal ha sido eliminado",
   "Hand the admin role to another member instead of leaving the group without one": "Cede el rol de administrador a otro miembro en lugar de dejar el grupo sin administrador",
   "Hand the admin role to another member before leaving the group": "Cede el rol de administrador a otro miembro antes de salir del grupo",
-  "The team needs at least one Main Bot": "El equipo necesita al menos un Bot principal",
+  "The team needs a Main Bot; make another Bot the Main Bot instead": "El equipo necesita un Bot principal; haz Bot principal a otro Bot en su lugar",
   "Only a Main Bot can be replaced": "Solo se puede reemplazar un Bot principal",
   "A Main Bot cannot be deleted; remove its Main Bot role first": "Un Bot principal no se puede eliminar; quítale primero el rol de Bot principal",
   "Unknown theme": "Tema desconocido",
@@ -7577,7 +7562,6 @@ var FR = {
   "Edit Bot": "Modifier le Bot",
   "Give up waiting for {name}": "Ne plus attendre {name}",
   "Make Main Bot": "Définir comme Bot principal",
-  "Remove Main Bot role": "Retirer le rôle de Bot principal",
   "Create group chat": "Créer une discussion de groupe",
   "Delete group": "Supprimer le groupe",
   "Open {name}'s chat": "Ouvrir la discussion de {name}",
@@ -8057,7 +8041,7 @@ var FR = {
   "Replaces each member's own permissions in this group.": "Remplace les autorisations individuelles de chaque membre dans ce groupe.",
   "The only Main Bot. To hand the role to another Bot, use Main Bot on the Bots page.": "C’est le seul Bot principal. Pour confier ce rôle à un autre Bot, utilisez la section Bot principal sur la page Bots.",
   "Change": "Modifier",
-  "Can create and change Bots, and runs every group chat.": "Peut créer et modifier des Bots, et gère toutes les discussions de groupe.",
+  "Takes every request and hands it to the right Bot. Turning this on hands the role over from the current Main Bot.": "Reçoit chaque demande et la confie au bon Bot. L’activer reprend le rôle du Bot principal actuel.",
   "Sidebar": "Barre latérale",
   "Kept above the other chats.": "Affiché au-dessus des autres discussions.",
   "Search still finds it.": "Reste trouvable via la recherche.",
@@ -8175,12 +8159,8 @@ var FR = {
   "Bot memory size": "Capacité de mémoire du Bot",
   "Team memory size": "Capacité de mémoire d’équipe",
   "Bots · {count}": "Bots · {count}",
-  "First in the sidebar. Pick another Bot to hand it the role; {name} then stops being a Main Bot.": "En tête de la barre latérale. Choisissez un autre Bot pour lui confier ce rôle ; {name} cessera alors d’être Bot principal.",
+  "Takes every request and hands it to the right Bot. Pick another Bot to hand it the role; {name} then stops being the Main Bot.": "Reçoit chaque demande et la confie au bon Bot. Choisissez un autre Bot pour lui confier ce rôle ; {name} cessera alors d’être le Bot principal.",
   "Choose a Bot…": "Choisir un Bot…",
-  "Also a Main Bot.": "Également Bot principal.",
-  "Move to first": "Placer en premier",
-  "Add a Main Bot": "Ajouter un Bot principal",
-  "Main Bots can create and change Bots, and run every group chat.": "Les Bots principaux peuvent créer et modifier des Bots, et gérer toutes les discussions de groupe.",
   "Group chats · {count}": "Discussions de groupe · {count}",
   "No group chats yet.": "Aucune discussion de groupe pour le moment.",
   "A group chat lets several Bots work on one thing with you.": "Une discussion de groupe permet à plusieurs Bots de travailler ensemble avec vous sur un même sujet.",
@@ -9107,7 +9087,7 @@ var FR = {
   "That group chat has been deleted": "Cette discussion de groupe a été supprimée",
   "Hand the admin role to another member instead of leaving the group without one": "Confiez le rôle d’admin à un autre membre plutôt que de laisser le groupe sans admin",
   "Hand the admin role to another member before leaving the group": "Confiez le rôle d’admin à un autre membre avant de quitter le groupe",
-  "The team needs at least one Main Bot": "L’équipe a besoin d’au moins un Bot principal",
+  "The team needs a Main Bot; make another Bot the Main Bot instead": "L’équipe a besoin d’un Bot principal ; faites plutôt d’un autre Bot le Bot principal",
   "Only a Main Bot can be replaced": "Seul un Bot principal peut être remplacé",
   "A Main Bot cannot be deleted; remove its Main Bot role first": "Un Bot principal ne peut pas être supprimé ; retirez-lui d’abord le rôle de Bot principal",
   "Unknown theme": "Thème inconnu",
@@ -10003,7 +9983,6 @@ var DE = {
   "Edit Bot": "Bot bearbeiten",
   "Give up waiting for {name}": "Nicht mehr auf {name} warten",
   "Make Main Bot": "Zum Haupt-Bot machen",
-  "Remove Main Bot role": "Haupt-Bot-Rolle entfernen",
   "Create group chat": "Gruppenchat erstellen",
   "Delete group": "Gruppenchat löschen",
   "Open {name}'s chat": "Chat von {name} öffnen",
@@ -10493,7 +10472,7 @@ var DE = {
   "Replaces each member's own permissions in this group.": "Ersetzt in dieser Gruppe die individuellen Berechtigungen der Mitglieder.",
   "The only Main Bot. To hand the role to another Bot, use Main Bot on the Bots page.": "Der einzige Haupt-Bot. Um die Rolle an einen anderen Bot zu übergeben, nutze den Bereich „Haupt-Bot“ auf der Bot-Seite.",
   Change: "Ändern",
-  "Can create and change Bots, and runs every group chat.": "Kann Bots erstellen und ändern sowie alle Gruppenchats verwalten.",
+  "Takes every request and hands it to the right Bot. Turning this on hands the role over from the current Main Bot.": "Nimmt jede Anfrage an und gibt sie an den passenden Bot weiter. Einschalten übernimmt die Rolle vom bisherigen Haupt-Bot.",
   Sidebar: "Seitenleiste",
   "Kept above the other chats.": "Bleibt über den anderen Chats angeheftet.",
   "Search still finds it.": "Über die Suche weiterhin auffindbar.",
@@ -10619,12 +10598,8 @@ var DE = {
   "Bot memory size": "Kapazität des Bot-Gedächtnisses",
   "Team memory size": "Kapazität des Teamgedächtnisses",
   "Bots · {count}": "Bots · {count}",
-  "First in the sidebar. Pick another Bot to hand it the role; {name} then stops being a Main Bot.": "Steht ganz oben in der Seitenleiste. Wähle einen anderen Bot aus, um ihm die Rolle zu übergeben; {name} ist dann kein Haupt-Bot mehr.",
+  "Takes every request and hands it to the right Bot. Pick another Bot to hand it the role; {name} then stops being the Main Bot.": "Nimmt jede Anfrage an und gibt sie an den passenden Bot weiter. Wähle einen anderen Bot aus, um ihm die Rolle zu übergeben; {name} ist dann nicht mehr der Haupt-Bot.",
   "Choose a Bot…": "Bot auswählen…",
-  "Also a Main Bot.": "Ebenfalls ein Haupt-Bot.",
-  "Move to first": "Nach ganz oben verschieben",
-  "Add a Main Bot": "Haupt-Bot hinzufügen",
-  "Main Bots can create and change Bots, and run every group chat.": "Haupt-Bots können Bots erstellen und ändern sowie alle Gruppenchats verwalten.",
   "Group chats · {count}": "Gruppenchats · {count}",
   "No group chats yet.": "Noch keine Gruppenchats.",
   "A group chat lets several Bots work on one thing with you.": "In einem Gruppenchat arbeiten mehrere Bots gemeinsam mit dir an einer Aufgabe.",
@@ -11575,7 +11550,7 @@ var DE = {
   "That group chat has been deleted": "Dieser Gruppenchat wurde gelöscht",
   "Hand the admin role to another member instead of leaving the group without one": "Übergib die Admin-Rolle an ein anderes Mitglied, statt die Gruppe ohne Admin zu lassen",
   "Hand the admin role to another member before leaving the group": "Übergib die Admin-Rolle vor dem Verlassen der Gruppe an ein anderes Mitglied",
-  "The team needs at least one Main Bot": "Das Team benötigt mindestens einen Haupt-Bot",
+  "The team needs a Main Bot; make another Bot the Main Bot instead": "Das Team braucht einen Haupt-Bot; mache stattdessen einen anderen Bot zum Haupt-Bot",
   "Only a Main Bot can be replaced": "Nur ein Haupt-Bot kann ersetzt werden",
   "A Main Bot cannot be deleted; remove its Main Bot role first": "Ein Haupt-Bot kann nicht gelöscht werden; entferne zuerst seine Haupt-Bot-Rolle",
   "Unknown theme": "Unbekanntes Design",
@@ -12447,7 +12422,6 @@ var ZH = {
   "Edit Bot": "编辑 Bot",
   "Give up waiting for {name}": "不再等 {name}",
   "Make Main Bot": "设为主 Bot",
-  "Remove Main Bot role": "取消主 Bot",
   "Create group chat": "新建群聊",
   "Delete group": "删除群聊",
   "Open {name}'s chat": "打开 {name} 的对话",
@@ -12937,7 +12911,7 @@ var ZH = {
   "Replaces each member's own permissions in this group.": "在这个群里代替各成员自己的权限。",
   "The only Main Bot. To hand the role to another Bot, use Main Bot on the Bots page.": "这是唯一的主 Bot。要把主 Bot 交给别的 Bot，请到「Bot」页的主 Bot 里换。",
   Change: "更换",
-  "Can create and change Bots, and runs every group chat.": "可以创建和修改 Bot，并管理所有群聊。",
+  "Takes every request and hands it to the right Bot. Turning this on hands the role over from the current Main Bot.": "接收每个请求并交给合适的 Bot。打开后，主 Bot 的角色会从现在的主 Bot 转过来。",
   Sidebar: "侧栏",
   "Kept above the other chats.": "排在其他对话上面。",
   "Search still finds it.": "仍然可以搜索到。",
@@ -13063,12 +13037,8 @@ var ZH = {
   "Bot memory size": "Bot 记忆容量",
   "Team memory size": "团队记忆容量",
   "Bots · {count}": "Bot · {count}",
-  "First in the sidebar. Pick another Bot to hand it the role; {name} then stops being a Main Bot.": "排在侧栏最上面。选另一个 Bot 就会把主 Bot 交给它，{name} 随之不再是主 Bot。",
+  "Takes every request and hands it to the right Bot. Pick another Bot to hand it the role; {name} then stops being the Main Bot.": "接收每个请求并交给合适的 Bot。选另一个 Bot 就会把主 Bot 交给它，{name} 随之不再是主 Bot。",
   "Choose a Bot…": "选择一个 Bot…",
-  "Also a Main Bot.": "也是主 Bot。",
-  "Move to first": "移到最前",
-  "Add a Main Bot": "添加主 Bot",
-  "Main Bots can create and change Bots, and run every group chat.": "主 Bot 可以创建和修改 Bot，并管理所有群聊。",
   "Group chats · {count}": "群聊 · {count}",
   "No group chats yet.": "还没有群聊。",
   "A group chat lets several Bots work on one thing with you.": "在群聊里，几个 Bot 和你一起做一件事。",
@@ -14136,7 +14106,7 @@ var HOST_ZH = {
   "That group chat has been deleted": "这个群聊已经删除了",
   "Hand the admin role to another member instead of leaving the group without one": "请把管理员交给其他成员，不要让群聊没有管理员",
   "Hand the admin role to another member before leaving the group": "离开群聊前，请先把管理员交给其他成员",
-  "The team needs at least one Main Bot": "团队至少要有一个主 Bot",
+  "The team needs a Main Bot; make another Bot the Main Bot instead": "团队需要一个主 Bot，请把另一个 Bot 设为主 Bot",
   "Only a Main Bot can be replaced": "只能替换主 Bot",
   "A Main Bot cannot be deleted; remove its Main Bot role first": "主 Bot 不能删除，请先取消它的主 Bot 身份",
   "Unknown theme": "未知主题",
@@ -26097,7 +26067,7 @@ function BotSettingsForm({ bot, roster, actions, run: run2 }) {
     return () => clearTimeout(timer);
   }, [confirming]);
   const isMainBot = isMainOf(roster, bot.id);
-  const onlyMain = isMainBot && (roster.mainBotIds ?? []).length === 1;
+  const onlyMain = isMainBot;
   const isTile = roster.mainBotId === bot.id;
   const inGroup = (roster.rooms ?? []).some((room2) => room2.members?.includes(bot.id));
   const privateHint = t("Other Bots cannot read its folder, memory or chats, and you approve what it shares with them.");
@@ -26201,7 +26171,7 @@ function BotSettingsForm({ bot, roster, actions, run: run2 }) {
         (0, import_react28.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", onClick: () => actions.openSettings("bots") }, t("Change"))
       ) : (0, import_react28.createElement)(SwitchRow, {
         label: t("Main Bot"),
-        hint: bot.private === true ? t("A private Bot cannot be a Main Bot.") : t("Can create and change Bots, and runs every group chat."),
+        hint: bot.private === true ? t("A private Bot cannot be a Main Bot.") : t("Takes every request and hands it to the right Bot. Turning this on hands the role over from the current Main Bot."),
         on: isMainBot,
         disabled: bot.private === true,
         onChange: (on) => run2(actions.setMain(bot.id, on))
@@ -37176,9 +37146,7 @@ function LocationsSection({ actions, run: run2 }) {
   );
 }
 function MainBotsSection({ roster, actions, run: run2 }) {
-  const mains = (roster.mainBotIds ?? []).map((id) => roster.byId[id]).filter(Boolean);
-  const [first, ...others] = mains;
-  const candidates = roster.bots.filter((bot) => !isMainOf(roster, bot.id));
+  const main = roster.byId[(roster.mainBotIds ?? [])[0]];
   return (0, import_react52.createElement)(
     SetSection,
     { title: t("Main Bot") },
@@ -37186,33 +37154,15 @@ function MainBotsSection({ roster, actions, run: run2 }) {
       SetRow,
       {
         label: t("Main Bot"),
-        hint: first ? t("First in the sidebar. Pick another Bot to hand it the role; {name} then stops being a Main Bot.", { name: first.name }) : void 0
+        hint: main ? t("Takes every request and hands it to the right Bot. Pick another Bot to hand it the role; {name} then stops being the Main Bot.", { name: main.name }) : void 0
       },
       (0, import_react52.createElement)("select", {
         className: "bt-select",
         "aria-label": t("Main Bot"),
-        value: first?.id ?? "",
-        onChange: (event) => run2(actions.setMain(event.target.value, true, first ? { replace: first.id } : {}))
-      }, first ? null : (0, import_react52.createElement)("option", { value: "" }, t("Choose a Bot…")), roster.bots.map((bot) => (0, import_react52.createElement)("option", { key: bot.id, value: bot.id }, bot.name)))
-    ),
-    others.map((bot) => (0, import_react52.createElement)(
-      SetRow,
-      { key: bot.id, label: bot.name, hint: t("Also a Main Bot.") },
-      (0, import_react52.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", onClick: () => run2(actions.setMain(bot.id, true, { primary: true })) }, t("Move to first")),
-      (0, import_react52.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", onClick: () => run2(actions.setMain(bot.id, false)) }, t("Remove Main Bot role"))
-    )),
-    candidates.length > 0 ? (0, import_react52.createElement)(
-      SetRow,
-      { label: t("Add a Main Bot"), hint: t("Main Bots can create and change Bots, and run every group chat.") },
-      (0, import_react52.createElement)("select", {
-        className: "bt-select",
-        "aria-label": t("Add a Main Bot"),
-        value: "",
-        onChange: (event) => {
-          if (event.target.value) void run2(actions.setMain(event.target.value, true));
-        }
-      }, (0, import_react52.createElement)("option", { value: "" }, t("Choose a Bot…")), candidates.map((bot) => (0, import_react52.createElement)("option", { key: bot.id, value: bot.id }, bot.name)))
-    ) : null
+        value: main?.id ?? "",
+        onChange: (event) => run2(actions.setMain(event.target.value, true))
+      }, main ? null : (0, import_react52.createElement)("option", { value: "" }, t("Choose a Bot…")), roster.bots.filter((bot) => bot.private !== true).map((bot) => (0, import_react52.createElement)("option", { key: bot.id, value: bot.id }, bot.name)))
+    )
   );
 }
 var MOTIONS = [["quiet", "Quiet"], ["normal", "Normal"], ["lively", "Lively"]];
@@ -41132,7 +41082,6 @@ function ContextMenu({ menu, roster, actions, useWork, leaving = false }) {
   if (entry === void 0) return null;
   const isMainBot = isMainOf(roster, menu.id);
   const isTile = roster.mainBotId === menu.id;
-  const mainCount = (roster.mainBotIds ?? []).length;
   const groups = [
     [
       isTile ? null : [entry.pinned ? t("Unpin") : t("Pin"), PinIcon, () => actions.setFlags(menu.id, { pinned: !entry.pinned })],
@@ -41149,8 +41098,7 @@ function ContextMenu({ menu, roster, actions, useWork, leaving = false }) {
         const copy2 = await actions.duplicateBot(bot.id);
         actions.openSession(copy2.id);
       }] : null,
-      bot && !isMainBot ? [t("Make Main Bot"), StarLineIcon, () => actions.setMain(bot.id, true)] : null,
-      bot && isMainBot && mainCount > 1 ? [t("Remove Main Bot role"), StarLineIcon, () => actions.setMain(bot.id, false)] : null
+      bot && !isMainBot ? [t("Make Main Bot"), StarLineIcon, () => actions.setMain(bot.id, true)] : null
     ],
     [[t("Copy conversation ID"), CopyIcon, () => navigator.clipboard?.writeText(bot ? currentPart(bot) : menu.id)]],
     bot ? (waits?.waits ?? []).map((item) => [t("Give up waiting for {name}", { name: item.name ?? t("a Bot") }), SignOutIcon, () => actions.abandonWork(item.id)]) : [],
