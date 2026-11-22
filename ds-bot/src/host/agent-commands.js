@@ -36,8 +36,8 @@ export function install(rt) {
   const isGroup = sessionId => roomChat(sessionId)
   const refusal = (sessionId, name) => {
     const where = isGroup(sessionId) ? 'a group chat' : "a Bot's chat"
-    const goal = name === 'goal' && isGroup(sessionId) ? ' Use the group Goal in the group details panel instead.' : ''
-    return `The DSH /${name} command does not run in ${where}.${goal}`
+    return `The DSH /${name} command does not run in ${where}.`
+
   }
   const rowCopy = sessionId => isGroup(sessionId)
     ? 'Not available in a group chat — use the group’s own controls'

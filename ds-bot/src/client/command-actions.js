@@ -1,11 +1,8 @@
 // DS Bot's own actions in the `/` menu of a Bot's chat and a group chat. The DSH
 // command rows cannot be removed from that menu through the documented client API (the
 // `/` source registry is global and offers no per-Session filtering); the host module
-// `agent-commands.js` stops their execution there. This module only adds rows:
-//
-//   - Scheduled task (`/scheduled-task`) opens this chat's scheduled tasks.
-//   - In a group chat, a bare `/goal` opens DS Bot's group goal instead of DSH's goal
-//     command. The DSH row stays; the decoration replaces its bare invocation only.
+// `agent-commands.js` stops their execution there. This module only adds a row:
+// Scheduled task (`/scheduled-task`) opens this chat's scheduled tasks.
 //
 // "Reference a chat" stays in the composer's "+" menu: a command action receives the
 // Session only, never the composer's caret/insertion, and the reference menu opens at
@@ -39,17 +36,6 @@ export function commandEntries({ roster, actions }) {
         },
       },
     }],
-    decorations: [{
-      name: 'goal',
-      available: session => isRoom(session?.sessionId),
-      ui: {
-        kind: 'action',
-        run(session) {
-          const room = roster.getSnapshot().roomsById?.[session?.sessionId]
-          if (room !== undefined) actions.composeGoal(room.id)
-        },
-      },
-    }],
   }
 }
 
@@ -57,10 +43,8 @@ export function installCommandActions(ctx, { roster, actions }) {
   return ctx.inject(['commandUi'], (scope) => {
     scope.effect(() => {
       const entries = commandEntries({ roster, actions })
-      const disposers = [
-        ...entries.contributions.map(contribution => scope.commandUi.register(contribution)),
-        ...entries.decorations.map(decoration => scope.commandUi.decorate(decoration)),
-      ]
+      const disposers = entries.contributions.map(contribution => scope.commandUi.register(contribution))
+
       return () => {
         for (const dispose of disposers) {
           try { dispose?.() } catch { /* the fiber is going away */ }

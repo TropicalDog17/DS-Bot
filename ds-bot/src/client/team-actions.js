@@ -167,9 +167,6 @@ export function teamActions({ call, after, partFor, roster, ui, live, cards, hel
     setPrefs: prefs => after(call('set-prefs', prefs)),
     setMain: (id, main = true, options = {}) => after(call('set-main', { id, main, ...options })),
     updateRoom: (id, patch) => after(call('update-room', { id, ...patch })),
-    roomTodoCheck: (roomId, id, done) => after(call('room-todo', { roomId, id, done })),
-    roomTodoRemove: (roomId, id) => after(call('room-todo', { roomId, id, action: 'remove' })),
-    roomTodoClear: roomId => after(call('room-todo', { roomId, action: 'clear' })),
     send: (sessionId, text) => after(call('send', { sessionId: partFor(sessionId), text })),
     answerQuestion: (sessionId, questionId, answer) => after(call('answer-question', { sessionId: partFor(sessionId), questionId, answer })),
     dismissQuestion: sessionId => after(call('dismiss-question', { sessionId })),
@@ -207,18 +204,7 @@ export function teamActions({ call, after, partFor, roster, ui, live, cards, hel
       return after(call('stop-chat', { botId }))
     },
     stopRoomWork: roomId => after(call('stop-room-work', { roomId })),
-    goalDraft: (roomId, text) => after(call('goal-draft', { roomId, text })),
-    goalControl: (roomId, goalId, action, stopWork) => after(call('goal-control', { roomId, goalId, action, ...(stopWork ? { stopWork: true } : {}) })),
-    // The group task board: the user's note is kept on the task and posted to the
-    // group as a user message that calls its owner; cancelling is the panel's own.
-    taskNote: (roomId, id, text) => after(call('task-note', { roomId, id, text })),
-    taskCancel: (roomId, id) => after(call('task-cancel', { roomId, id })),
-    // The goal island: `goalCompose` holds the room whose draft form is open,
-    // `goalOpen` the room whose panel is open.
-    composeGoal: roomId => ui.set(state => ({ ...state, goalCompose: roomId, goalOpen: roomId })),
-    closeGoalCompose: () => ui.set(state => (state.goalCompose ? { ...state, goalCompose: null } : state)),
-    toggleGoal: roomId => ui.set(state => ({ ...state, goalOpen: state.goalOpen === roomId ? null : roomId })),
-    closeGoal: () => ui.set(state => (state.goalOpen ? { ...state, goalOpen: null } : state)),
+
     // Values go out in these requests and never come back in a response.
     secretSet: payload => after(call('secret-set', payload)),
     secretAllow: requestId => after(call('secret-allow', { requestId })),

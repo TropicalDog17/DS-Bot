@@ -834,7 +834,6 @@ export function install(rt) {
       && !stoppedSubagentParents.has(parentId) && !stoppedSubagents.has(info.id)) {
       noteSubagentFailure(parentId, info.id, { stopReason: info.stopReason, helper, closing: textOf(info?.lastAssistantMessage) })
     }
-    void rt.goalSettled?.(rt.roomOf(owner.roomId)).catch(error => rt.warn('ds-bot: goal settle failed: %s', error))
   })
 
   const laterTarget = (id) => {
@@ -954,7 +953,6 @@ export function install(rt) {
           // child active and preserves its label until it actually settles.
           if (source.kind === 'subagent-settled' && childId !== undefined) {
             noteSubagentEnd(childId)
-            if (rt.groupOwners.has(id)) void rt.goalSettled?.(rt.roomOf(rt.groupOwners.get(id).roomId)).catch(error => rt.warn('ds-bot: goal settle failed: %s', error))
           }
           if (stoppedSubagentParents.has(id) || (childId !== undefined && stoppedSubagents.has(childId))) {
             entry.suppressedSubagent = true
@@ -1032,14 +1030,6 @@ export function install(rt) {
           })
         } else if (source?.kind === SOURCE_KIND && source.role === 'kickoff' && rt.roomOf(id)) {
           queueRoomMessage(rt.roomOf(id).id, { text: '', kickoff: true })
-        } else if (source?.kind === SOURCE_KIND && source.role === 'goal' && rt.roomOf(id)) {
-          // A goal message — the user's draft ask, an idle goal check, a resume —
-          // opens a round of its own; the draft ask is the user's line.
-          queueRoomMessage(rt.roomOf(id).id, {
-            text: textOf(event.data.content).replace(/^\[(?:[^\r\n]*\]\r?\n|[^\]\r\n]*\])/, ''),
-            ...(source.goal !== undefined ? { goal: source.goal } : {}),
-            ...(source.goalId !== undefined ? { goalId: source.goalId } : {}),
-          })
         } else if (source?.kind === SOURCE_KIND) {
           if (entry.turn === undefined) {
             entry.pending = source
@@ -1364,8 +1354,8 @@ export function install(rt) {
             deferred: true,
           }).catch(error => rt.warn('ds-bot: deferred request delivery failed: %s', error))
         }
-        if (rt.groupOwners.has(id)) void rt.goalSettled?.(rt.roomOf(rt.groupOwners.get(id).roomId)).catch(error => rt.warn('ds-bot: goal settle in %s failed: %s', id, error))
         break
+
       }
     }
   })

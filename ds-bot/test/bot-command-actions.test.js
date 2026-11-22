@@ -30,13 +30,11 @@ const rosterOf = () => ({
 const calls = []
 const actions = {
   openSettings: (...args) => calls.push(['settings', ...args]),
-  composeGoal: id => calls.push(['goal', id]),
 }
 
 test('the scheduled-task action exists for a Bot chat and a group chat, and for nothing else', () => {
-  const { contributions, decorations } = commandEntries({ roster: rosterOf(), actions })
+  const { contributions } = commandEntries({ roster: rosterOf(), actions })
   assert.equal(contributions.length, 1)
-  assert.equal(decorations.length, 1)
   const [schedule] = contributions
   assert.equal(schedule.name, SCHEDULED_TASK)
   assert.equal(schedule.available({ sessionId: 'a' }), true)
@@ -56,19 +54,7 @@ test('picking the scheduled-task action opens this chat\u2019s scheduled tasks',
   assert.deepEqual(calls, [['settings', 'schedules', 'bot:a'], ['settings', 'schedules', 'room:r1']])
 })
 
-test('a bare /goal in a group chat opens the group goal, and a Bot chat is left to the host', () => {
-  calls.length = 0
-  const { decorations } = commandEntries({ roster: rosterOf(), actions })
-  const [goal] = decorations
-  assert.equal(goal.name, 'goal')
-  assert.equal(goal.available({ sessionId: 'r1' }), true)
-  assert.equal(goal.available({ sessionId: 'r1-part' }), true)
-  assert.equal(goal.available({ sessionId: 'a' }), false)
-  goal.ui.run({ sessionId: 'r1' })
-  assert.deepEqual(calls, [['goal', 'r1']])
-})
-
-test('the install registers one contribution and one decoration with the command surface', () => {
+test('the install registers one contribution with the command surface', () => {
   const registrations = []
   const ctx = {
     inject(services, callback) {
@@ -78,7 +64,6 @@ test('the install registers one contribution and one decoration with the command
         effect: execute => execute(),
         commandUi: {
           register: contribution => { registrations.push(['register', contribution.name]); return () => {} },
-          decorate: decoration => { registrations.push(['decorate', decoration.name]); return () => {} },
         },
       }
       callback(scope)
@@ -86,5 +71,5 @@ test('the install registers one contribution and one decoration with the command
     },
   }
   installCommandActions(ctx, { roster: rosterOf(), actions })
-  assert.deepEqual(registrations, [['register', 'scheduled-task'], ['decorate', 'goal']])
+  assert.deepEqual(registrations, [['register', 'scheduled-task']])
 })
