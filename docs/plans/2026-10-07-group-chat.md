@@ -27,7 +27,9 @@ Also, when a member gets a long task in a group, the user must not face a page t
 
 - A group has two answer modes:
   - **Admin answers first** (the default for a new group): a plain message without `@` goes only to
-    the admin, and the admin calls other members with `@name`.
+    the Main Bot when it is a member, which answers a quick question or hands the work on as a card
+    (see [Main Bot as the team's Router](2026-11-22-main-bot-router.md)). In a group without the Main Bot it goes to the admin, and the admin calls other
+    members with `@name`.
   - **Everyone in turn**: each member answers a plain message in order, the admin first.
   - A group without an admin answers as "everyone in turn".
 - `@name` calls only the named member. `@all`, `@everyone`, `@所有人` ("everyone") and `@全体` ("all")
@@ -231,3 +233,4 @@ Also, when a member gets a long task in a group, the user must not face a page t
 - 2026-11-10: DS Bot runs a turn itself, no longer inside the `group_relay` call. Messages the user
   sends during a turn join that turn. Old PTC groups no longer have a limit of about 10 minutes per
   turn ([Message ledger](2026-11-10-message-ledger.md), #1316).
+- 2026-11-23: in admin mode a plain message goes to the Main Bot when it is a member; the admin answers first only in groups without it ([Main Bot as the team's Router](2026-11-22-main-bot-router.md)).

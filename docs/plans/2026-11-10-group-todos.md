@@ -2,6 +2,7 @@
 
 - Date: 2026-11-10
 - Related: #326
+- Status: retired on 2026-11-23 by [Main Bot as the team's Router](2026-11-22-main-bot-router.md): `group_todo` is removed and to-dos become board cards
 
 ## Why
 
@@ -51,3 +52,4 @@ this is only a light list that belongs to the group.
 - 2026-11-12: added removing single items and clearing done items (group details and
   `group_todo`). When the list is full at 100 items, a new item is still refused with the
   reason; after items are removed, adding works again.
+- 2026-11-23: retired; `group_todo` is removed and to-dos become board cards ([Main Bot as the team's Router](2026-11-22-main-bot-router.md)).

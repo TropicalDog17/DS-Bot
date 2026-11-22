@@ -1,10 +1,10 @@
 # Main Bot as the team's Router
 
-- Date: 2026-11-22 (draft, under discussion)
+- Date: 2026-11-22
 - Related: DSH article "Exploring Super-agent Design" (DeepSeek Harness, 2026-11-01);
   [Board plugin](2026-11-19-board-plugin.md), [Two sessions of one Bot](2026-11-13-parallel-sessions.md),
   [IM](2026-11-04-im.md), [Roles and permissions](2026-10-07-roles-and-permissions.md)
-- Code: not started
+- Code: built on `feat/main-bot-router` (see As built)
 
 ## Why
 
@@ -123,6 +123,43 @@ source.
 3. Telegram push and reply-to routing.
 4. The board watchdog.
 
+## As built
+
+- Router Main Bot: `src/host/roster.js` keeps one Main Bot (a team saved with several keeps
+  the first). `src/host/routing.js` masks `bash`, `write` and `edit` on the Main Bot's chat
+  and group Sessions, and a tool guard refuses any other work tool (`apply_patch`, browser
+  actions) with a pointer to the board. The mask moves when the role is handed over. The
+  routing digest is a per-turn context only the Main Bot gets, and companions add lines to it
+  through `dsBotRoster.addRoutingPart` (the board adds the open cards).
+- Card threads: `src/host/threads.js` and `parts.js`. A card thread is an open part with the
+  card id. It closes on complete, cancel, the user's cancel or a move to Done; a close during
+  a running turn waits for that turn to end. Closed threads stay readable and searchable.
+  Seams: `dsBotNotes.startCard`, `closeCard`, and `deliver` with `cardId`.
+- Telegram: `dsBotNotes.push` sends to the Main Bot's own IM chats only. A reply to a pushed
+  message goes to the card (a note, then the card thread). A reply to a push about something
+  else goes to the Main Bot, marked as a reply.
+- Board: a card for another Bot needs a brief, and opening it starts the assignee's card
+  thread. `board note` passes the user's words on to a card. Pushes and the watchdog
+  (stuck 3h, Review 24h, no assignee) are in `src/board/watch.js`.
+- Groups: in admin mode (the default) a plain message goes to the Main Bot when it is a
+  member, otherwise to the admin as before. "Everyone" mode stays the user's explicit choice:
+  every member answers. `@name` goes to that Bot. A group without the Main Bot keeps its
+  admin first.
+- The group Goal, `group_task` and `group_todo` are removed.
+
+### Evaluation
+
+- Offline A/B: `ds-bot/dev/routing-prompt.mjs` prints the Main Bot's real prompt, digest and
+  tool set at any version, built from a fixed five-Bot team with the test fakes. The deploy
+  side runs a fixed set of 24 requests (16 tasks with the expected Bot, 8 questions) through
+  the same model at two versions, into the Langfuse dataset `ds-bot-routing`. Scores are
+  deterministic: right Bot reached, work done by the Main Bot itself, brief present, board
+  used, reply length.
+- Live: the per-release health trace adds the Main Bot's work-tool calls per turn, its median
+  reply length, cards opened and the share handed on to another Bot. Before this design
+  (release 0.3.8) the Main Bot made 0.55 work-tool calls per turn, with replies of about 140
+  words.
+
 ## Open questions
 
 - Whether a relayed question runs under a read-only preset, so a question can never change
@@ -161,3 +198,7 @@ This note changes earlier decisions; each needs its note updated in the same mer
 - Routing quality depends on the Bots' role descriptions; vague roles route badly.
 - One Main Bot is one queue: a burst of requests is batched into its next turn, not handled in
   parallel.
+- A card a Bot opens for itself stays in the thread where it was opened; only a card for
+  another Bot starts a card thread.
+- The live metrics count the Sessions of the Bot that is Main now; a team that moved the role
+  sees the old Main Bot's history under the new one.

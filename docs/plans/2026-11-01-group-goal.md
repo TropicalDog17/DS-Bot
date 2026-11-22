@@ -3,6 +3,7 @@
 - Date: 2026-11-01
 - Related: #791; group chat design [2026-10-07-group-chat](2026-10-07-group-chat.md), Bot handoffs
   [2026-10-16-bot-handoffs](2026-10-16-bot-handoffs.md)
+- Status: retired on 2026-11-23 by [Main Bot as the team's Router](2026-11-22-main-bot-router.md): the Main Bot does not break work into stages; every piece of work is a board card, and the Goal, its check and its wake-ups are removed
 
 ## Why
 
@@ -168,3 +169,4 @@ check a stage that was handed in, or do the final check.
 - 2026-11-01: The panel now focuses on one stage (step dots + selected stage + bottom-row buttons);
   removed the panel header and colored labels. When the desktop app starts, it removes DSH's goal
   command and tools; the plugin's `/goal` hint now points to "Set a goal".
+- 2026-11-23: retired; the Main Bot does not break work into stages; every piece of work is a board card, and the Goal, its check and its wake-ups are removed ([Main Bot as the team's Router](2026-11-22-main-bot-router.md)).
