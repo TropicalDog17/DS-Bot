@@ -457,23 +457,6 @@ export function install(rt) {
           })
           return ok({ room: view().rooms.find(entry => entry.id === room.id), changes })
         }
-        // The user ticks, removes, or clears completed shared to-dos in the group's
-        // details; members read and change the same list with the group_todo tool.
-        case 'room-todo': {
-          await rt.load()
-          const room = rt.roomOf(String(body.roomId ?? ''))
-          if (room === undefined) return fail('Unknown group chat', 'room/not-found')
-          if (body.action === 'clear') {
-            const removed = await rt.clearDoneRoomTodos(room.id)
-            return ok({ removed: removed.length, todos: room.todos ?? [] })
-          }
-          if (body.action === 'remove') {
-            const item = await rt.removeRoomTodo(room.id, String(body.id ?? ''))
-            return ok({ item, todos: room.todos ?? [] })
-          }
-          const item = await rt.setRoomTodoDone(room.id, String(body.id ?? ''), typeof body.done === 'boolean' ? body.done : undefined)
-          return ok({ item, todos: room.todos ?? [] })
-        }
         case 'folders':
         case 'folder-pick':
         case 'folder-list':
@@ -524,54 +507,11 @@ export function install(rt) {
         case 'approval-answer':
           rt.answerApproval(body.id, body.choice)
           return ok(true)
-        // A stop that fails partway still parks the goal, or it wakes the admin again.
         case 'stop-member-work':
-          try {
-            return ok(await rt.stopMemberWork(String(body.roomId ?? ''), String(body.botId ?? '')))
-          } finally {
-            rt.goalUserStopped?.(String(body.roomId ?? ''))
-          }
+          return ok(await rt.stopMemberWork(String(body.roomId ?? ''), String(body.botId ?? '')))
         case 'stop-room-work':
-          try {
-            return ok(await rt.stopRoomWork(String(body.roomId ?? '')))
-          } finally {
-            rt.goalUserStopped?.(String(body.roomId ?? ''))
-          }
-        case 'goal-draft': {
-          await rt.load()
-          const result = await rt.goalDraft(String(body.roomId ?? ''), body.text)
-          return result.error !== undefined ? fail(result.error, result.code ?? 'bot/refused') : ok(view())
-        }
-        case 'goal-control': {
-          await rt.load()
-          const result = await rt.goalControl(String(body.roomId ?? ''), body)
-          return result.error !== undefined ? fail(result.error, result.code ?? 'bot/refused') : ok(view())
-        }
-        // The task board's two panel actions. A note the user adds is kept on the task
-        // and posted into the group as the user's own message that calls its owner, so
-        // the Bot acts on it where the work runs, as if the user had typed it there.
-        case 'task-note': {
-          await rt.load()
-          const roomId = String(body.roomId ?? '')
-          const result = rt.taskNote(roomId, String(body.id ?? ''), body.text)
-          if (result.error !== undefined) return fail(result.error, 'bot/refused')
-          const bot = rt.botOf(result.task.botId)
-          await rt.save()
-          if (bot !== undefined) {
-            await rt.sendUser({
-              sessionId: roomId,
-              content: [{ type: 'text', text: `@${bot.name} ${result.task.notes.at(-1).text}` }],
-            })
-          }
-          return ok(view())
-        }
-        case 'task-cancel': {
-          await rt.load()
-          const result = rt.taskCancel(String(body.roomId ?? ''), String(body.id ?? ''))
-          if (result.error !== undefined) return fail(result.error, 'bot/refused')
-          await rt.save()
-          return ok(view())
-        }
+          return ok(await rt.stopRoomWork(String(body.roomId ?? '')))
+
         case 'stop-chat':
           return ok(await rt.stopChat(String(body.botId ?? '')))
         case 'dismiss-question':

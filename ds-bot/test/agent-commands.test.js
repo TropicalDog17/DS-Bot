@@ -152,7 +152,7 @@ test('two mounted agents are both shielded, each with its own Session\u2019s ref
   assert.equal(w.runs(), 0)
 })
 
-test('a group chat\u2019s own Session is covered and its /goal points at the group goal', async () => {
+test('a group chat\u2019s own Session is covered and its /goal is refused', async () => {
   const w = world()
   install(w.rt)
   w.rt.rooms.set('r1', { id: 'r1' })
@@ -162,7 +162,7 @@ test('a group chat\u2019s own Session is covered and its /goal points at the gro
   assert.match(w.service.find(room, 'goal').description, /group chat/)
   const { result } = await w.service.execute(room, '/goal 明天上线')
   assert.equal(result.kind, 'error')
-  assert.match(result.text, /Use the group Goal in the group details panel instead/)
+  assert.equal(result.text, 'The DSH /goal command does not run in a group chat.')
   assert.equal(w.runs(), 0)
 })
 

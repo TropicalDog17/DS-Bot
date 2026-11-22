@@ -2617,47 +2617,25 @@ test('a message sent while a round runs joins it, and the rows after it show und
   assert.deepEqual(logLines(host).map(line => line.who), ['User', 'User', 'Writer', 'Chief'])
 })
 
-// A post that waits for the next round (a goal post, an image, the greeting) does not
-// start one after the user stopped the group: it goes with the group's next message.
-test('a post waiting for the next round does not start one after the user stops the group', async (t) => {
-  const host = await start(t)
-  const first = host.round('c1', host.say('@Writer 整理一下'))
-  await settle(() => host.agentOf('gb').calls.length === 1)
-  host.begin('gb')
-  assert.equal((await host.call('goal-draft', { roomId: 'r1', text: 'Ship v1' })).ok, true)
-  const at = host.agentOf('r1').calls.findIndex(call => call.source?.role === 'goal')
-  const [draft] = host.agentOf('r1').calls.splice(at, 1)
-  host.round('c2', { content: draft.content, source: draft.source })
-  await settle(() => true)
-  rt.stopRoomRound('r1')
-  host.emit('gb', 'turn/end', { turn: 1, reason: { kind: 'aborted' } })
-  await settle(() => first() !== undefined)
-  assert.equal(host.agentOf('ga').calls.length, 0, 'nothing started after the stop')
-  assert.equal(rt.roomActive('r1'), false)
-  // The group's next message takes the draft with it: the admin is called for the goal.
-  host.round('c3', host.say('继续'))
-  await settle(() => host.agentOf('ga').calls.length === 1)
-  assert.match(text(host.agentOf('ga').calls[0]), /the user wants to set a goal/)
-  host.begin('ga')
-  host.finish('ga', '[PASS]')
-})
-
-// While a round finishes (goal check, save), the group is still taken: a message that comes
+// While a round finishes (save, reports), the group is still taken: a message that comes
 // in then opens the next round once this one is done, never a second round beside it.
 test('a message that comes in while a round finishes waits for it, and no two rounds run', async (t) => {
   const host = await start(t)
   let release
   const gate = new Promise((resolve) => { release = resolve })
-  const drive = rt.goalDrive
-  rt.goalDrive = async (...args) => { await gate; return drive?.(...args) }
+  const save = rt.save
+  let held = false
+  rt.save = async (...args) => { if (held) await gate; return save(...args) }
   const first = host.round('c1', host.say('@Writer 写一句'))
   await settle(() => host.agentOf('gb').calls.length === 1)
   host.begin('gb')
+  held = true
   host.finish('gb', '写好了。')
   await settle(() => rt.roomActive('r1') && [...rt.roomProgress.values()].every(round => round.roomId !== 'r1'))
   const second = host.round('c2', host.say('@Tester 看一下'))
   await settle(() => true)
   assert.equal(host.agentOf('gc').calls.length, 0, 'the finishing round still holds the group')
+  held = false
   release()
   await settle(() => host.agentOf('gc').calls.length === 1)
   assert.ok([...rt.roomProgress.values()].filter(round => round.roomId === 'r1').length <= 1)
@@ -2722,16 +2700,19 @@ test('stopping a group while its round finishes starts nothing afterwards', asyn
   const host = await start(t)
   let release
   const gate = new Promise((resolve) => { release = resolve })
-  const drive = rt.goalDrive
-  rt.goalDrive = async (...args) => { await gate; return drive?.(...args) }
+  const save = rt.save
+  let held = false
+  rt.save = async (...args) => { if (held) await gate; return save(...args) }
   const first = host.round('c1', host.say('@Writer 写一句'))
   await settle(() => host.agentOf('gb').calls.length === 1)
   host.begin('gb')
+  held = true
   host.finish('gb', '写好了。')
   await settle(() => rt.roomActive('r1') && [...rt.roomProgress.values()].every(round => round.roomId !== 'r1'))
   host.round('c2', host.say('@Tester 看一下'))
   await settle(() => true)
   assert.equal((await host.call('stop-room-work', { roomId: 'r1' })).value, true)
+  held = false
   release()
   await settle(() => first() !== undefined && !rt.roomActive('r1'))
   for (let i = 0; i < 20; i += 1) await new Promise(resolve => setImmediate(resolve))
