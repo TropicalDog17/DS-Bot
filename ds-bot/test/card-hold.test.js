@@ -670,3 +670,70 @@ test('settled question and settled view cards expand and collapse cleanly with l
   assert.equal(find(vTree, node => node.props?.className?.includes('bt-q-expand')), undefined)
   vInstance.unmount()
 })
+
+const several = {
+  id: 'card', question: 'Merge?', header: 'PR #1207', options: [{ label: 'Merge' }, { label: 'Not yet' }], multiSelect: false, allowCustom: true,
+  questions: [
+    { id: 'q1', header: 'PR #1207', question: 'Merge?', options: [{ label: 'Merge' }, { label: 'Not yet' }], multiSelect: false },
+    { id: 'q2', header: 'PR #1208', question: 'Merge?', detail: 'CI is red', options: [{ label: 'Merge' }, { label: 'Review' }], multiSelect: false },
+    { id: 'q3', header: 'Notes', question: 'Which notes?', options: [{ label: 'Short' }, { label: 'Full' }], multiSelect: true },
+  ],
+}
+const words = node => (Array.isArray(node) ? node.map(words).join('') : node && typeof node === 'object' ? words(node.props.children) : typeof node === 'string' ? node : '')
+
+test('a card with several questions keeps each pick and sends them all with one Submit', async () => {
+  const { actions } = lease()
+  const sent = []
+  actions.answerQuestion = (...args) => { sent.push(plain(args)); return Promise.resolve() }
+  const pending = mount(PendingQuestion, { actions, sessionId: 'chief', question: several, inline: false })
+  const card = childOf(pending.render())
+  const view = mount(card.type, card.props)
+  let form = view.render()
+  const submit = () => find(form, node => node.type === 'button' && node.props.type === 'submit')
+  const press = (at) => { options(form)[at].props.onClick(); form = view.render() }
+  const pressed = () => options(form).map(option => option.props['aria-pressed'])
+
+  // Each question is a group of its own, with its tag, and nothing sends on a tap.
+  assert.deepEqual(all(form, node => node.props.className === 'bt-q-part').map(part => words(find(part, node => node.props.className === 'bt-q-text'))), ['PR #1207Merge?', 'PR #1208Merge?CI is red', 'NotesWhich notes?Choose all that apply'])
+  assert.equal(options(form).length, 6)
+  assert.equal(all(form, node => node.type === 'textarea').length, 3)
+  assert.equal(all(form, node => node.props.className === 'bt-key').length, 0)
+  assert.equal(keys.size, 0)
+  assert.equal(submit().props.disabled, true)
+  form.props.onSubmit({ preventDefault() {} })
+
+  press(0)
+  assert.equal(submit().props.disabled, false)
+  press(1) // one choice: the second pick replaces the first
+  press(4)
+  press(5) // several choices: both stay
+  assert.deepEqual(pressed(), [false, true, false, false, true, true])
+  press(1) // a second tap takes the pick back
+  assert.deepEqual(pressed(), [false, false, false, false, true, true])
+  all(form, node => node.type === 'textarea')[1].props.onChange({ target: { value: '  after the fix  ' } })
+  form = view.render()
+  assert.equal(sent.length, 0)
+
+  form.props.onSubmit({ preventDefault() {} })
+  await tick()
+  assert.deepEqual(sent, [['chief', 'card', { answers: [
+    { id: 'q1', selected: [] },
+    { id: 'q2', selected: [], custom: 'after the fix' },
+    { id: 'q3', selected: ['Short', 'Full'] },
+  ] }]])
+  view.unmount()
+  pending.unmount()
+})
+
+test('an answered card with several questions shows each one, and a blank one as skipped', () => {
+  const questions = several.questions.slice(0, 2)
+  const text = JSON.stringify({ kind: 'answer_to_pending_question', tool: 'ask_user', callId: 'call-3', questions, answers: [{ id: 'q1', selected: ['Merge'] }, { id: 'q2', selected: [], skipped: true }] })
+  const cell = AnsweredCell({ node: { data: { callId: 'call-3', outcome: 'answered', text, questions: questions.map(({ id, header, question }) => ({ id, header, question })), answers: [{ id: 'q1', selected: ['Merge'] }, { id: 'q2', selected: [] }] } } })
+  assert.equal(cell.props.className, 'bt-q-inline bt-q-stack')
+  const [first, second] = [cell.props.children].flat(2).map(settled => mount(SettledQuestion, settled.props).render())
+  assert.equal(first.props.className, 'bt-q bt-q-settled bt-q-answered')
+  assert.equal(first.props['aria-label'], 'PR #1207 · Merge?')
+  assert.equal(find(first, node => node.props.className === 'bt-q-badge'), undefined)
+  assert.equal(second.props.className, 'bt-q bt-q-settled bt-q-dismissed')
+  assert.equal(words(find(second, node => node.props.className === 'bt-q-badge')), 'Skipped')
+})

@@ -140,6 +140,82 @@ function QuestionView({ question, onAnswer, onDismiss, onInteract, busy = false,
     foot)
 }
 
+// The questions of a card that asks several at once; a card with one has none here.
+const partsOf = card => (Array.isArray(card?.questions) && card.questions.length > 1 ? card.questions : undefined)
+const titleOf = question => [question?.header, question?.question].filter(part => typeof part === 'string' && part.trim() !== '').join(' · ')
+
+// A card with several questions keeps every pick on the card and sends them with one
+// Submit: a tap on an option cannot send, or the first decision would close the card
+// before the others are made. A question left blank goes out as skipped. Letter keys
+// are off, since the same letter would name an option under every question.
+function QuestionsView({ question: card, onAnswer, onDismiss, onInteract, busy = false, ownAnswer = false, raised = false }) {
+  const parts = partsOf(card)
+  const [picked, setPicked] = useState({})
+  const [own, setOwn] = useState({})
+  const baseId = useId()
+  const answers = parts.map((question) => {
+    const custom = (own[question.id] ?? '').trim()
+    return { id: question.id, selected: picked[question.id] ?? [], ...(custom !== '' ? { custom } : {}) }
+  })
+  const canSubmit = answers.some(answer => answer.selected.length > 0 || answer.custom !== undefined)
+  const choose = (question, label) => {
+    if (busy) return
+    onInteract?.()
+    setPicked((current) => {
+      const mine = current[question.id] ?? []
+      const next = question.multiSelect === true
+        ? (mine.includes(label) ? mine.filter(item => item !== label) : [...mine, label])
+        : (mine.includes(label) ? [] : [label])
+      return { ...current, [question.id]: next }
+    })
+  }
+  const submit = () => {
+    if (!canSubmit || busy) return
+    onInteract?.()
+    onAnswer({ answers })
+  }
+  return h('form', {
+    className: raised ? 'bt-q bt-q-raised bt-q-multi' : 'bt-q bt-q-multi',
+    'aria-busy': busy || undefined,
+    onFocusCapture: onInteract, onPointerDownCapture: onInteract,
+    onSubmit: (event) => { event.preventDefault(); submit() },
+  },
+  parts.map((question, at) => {
+    const titleId = `${baseId}-${at}`
+    const mine = picked[question.id] ?? []
+    return h('div', { key: question.id, className: 'bt-q-part', role: 'group', 'aria-labelledby': titleId },
+      h('div', { className: 'bt-q-head' },
+        h('div', { className: 'bt-q-text' },
+          question.header ? h('span', { className: 'bt-tag bt-q-tag' }, question.header) : null,
+          h('p', { className: 'bt-q-title', id: titleId }, question.question),
+          question.detail ? h('div', { className: 'bt-q-detail' }, question.detail) : null,
+          question.multiSelect === true ? h('div', { className: 'bt-q-detail' }, t('Choose all that apply')) : null),
+        at === 0 ? h('button', { type: 'button', className: 'bt-q-x', 'aria-label': t('Dismiss question'), title: t('Dismiss'), onClick: onDismiss, disabled: busy }, h(CloseIcon)) : null),
+      h('div', { className: 'bt-q-list', role: 'group' }, optionsOf(question).map((option) => {
+        const selected = mine.includes(option.label)
+        return h('button', {
+          key: option.label, type: 'button', className: 'bt-q-opt', disabled: busy, 'aria-pressed': selected,
+          onClick: () => choose(question, option.label),
+        },
+        h('span', { className: 'bt-q-body' },
+          h('span', { className: 'bt-q-label' }, option.label),
+          option.description ? h('span', { className: 'bt-q-desc' }, option.description) : null),
+        selected ? h('span', { className: 'bt-q-check', title: t('Selected') }, h(CheckIcon)) : null)
+      })),
+      ownAnswer ? h('div', { className: 'bt-q-custom' }, h('label', { className: 'bt-q-field' }, h('textarea', {
+        rows: 1, value: own[question.id] ?? '', readOnly: busy, autoComplete: 'off', spellCheck: false, className: 'bt-q-input',
+        'aria-label': t('Your own answer'), placeholder: t('Type your own answer'),
+        onChange: (event) => { if (!busy) { onInteract?.(); setOwn(current => ({ ...current, [question.id]: event.target.value })) } },
+      }))) : null)
+  }),
+  h('div', { className: 'bt-q-foot' },
+    raised ? h('button', { type: 'button', className: 'bt-q-btn', onClick: onDismiss, disabled: busy }, t('Skip')) : null,
+    h('button', { type: 'submit', className: 'bt-q-submit', disabled: !canSubmit || busy }, t('Submit'))))
+}
+
+// The pending card's view, in the form its question count asks for.
+const viewFor = card => (partsOf(card) === undefined ? QuestionView : QuestionsView)
+
 // How a card closed without an answer on it reads on its badge.
 export const closedLabel = closed => t(closed === 'replied' ? 'Answered by message' : 'Dismissed')
 
@@ -242,7 +318,7 @@ export function useFoldCard(cardRef, bodyRef, hasDetail) {
 // hidden detail or unchosen options expand smoothly on demand.
 export function SettledQuestion({ question, answer, closed }) {
   const options = optionsOf(question)
-  const prompt = question?.question || question?.header || ''
+  const prompt = titleOf(question)
   const detail = typeof question?.detail === 'string' ? question.detail.trim() : ''
   const selected = Array.isArray(answer?.selected) ? answer.selected : []
   const custom = typeof answer?.custom === 'string' ? answer.custom.trim() : ''
@@ -258,7 +334,7 @@ export function SettledQuestion({ question, answer, closed }) {
   const bodyRef = useRef(null)
   useAnswerMorph(cardRef, 'question', question?.id)
   const fold = useFoldCard(cardRef, bodyRef, hasDetail)
-  const badge = answered ? null : h('span', { className: 'bt-q-badge' }, closedLabel(closed))
+  const badge = answered ? null : h('span', { className: 'bt-q-badge' }, closed === undefined && answer?.skipped === true ? t('Skipped') : closedLabel(closed))
   const head = hasDetail
     ? h('button', {
       type: 'button', className: 'bt-q-head bt-q-fold',
@@ -365,14 +441,15 @@ export function PendingQuestion({ sessionId, question, actions, inline, enterToS
     if (busyRef.current) return
     const height = boxRef.current?.firstElementChild?.offsetHeight || boxRef.current?.offsetHeight
     if (inline) noteJustAnswered('question', question.id, height)
-    run(() => actions.answerQuestion(sessionId, question.id, { selected: answer.selected ?? [], custom: answer.custom ?? '' }), {
+    const sent = Array.isArray(answer.answers) ? { answers: answer.answers } : { selected: answer.selected ?? [], custom: answer.custom ?? '' }
+    run(() => actions.answerQuestion(sessionId, question.id, sent), {
       settle: true,
       onFail: () => clearJustAnswered('question', question.id),
     })
   }
   const onDismiss = () => run(() => actions.dismissQuestion(sessionId))
   return h('div', { ref: boxRef, className: bare ? 'bt-q-hold' : (inline ? 'bt-q-inline' : 'bt-q-dock') },
-    h(QuestionView, { key: question.id, question, onAnswer, onDismiss, onInteract: hold, busy, ownAnswer: question.allowCustom === true, raised: !inline, enterToSend }))
+    h(viewFor(question), { key: question.id, question, onAnswer, onDismiss, onInteract: hold, busy, ownAnswer: question.allowCustom === true, raised: !inline, enterToSend }))
 }
 
 // Inline ask_user call in the transcript: keeps a single wrapper across pending and
@@ -391,8 +468,12 @@ export function AskUserCell({ sessionId, callId, arg, argValue, roster, actions,
       h(PendingQuestion, { key: JSON.stringify([sessionId, question.id]), sessionId, question, actions, inline: true, enterToSend: sendsOnEnter(roster.prefs), bare: true }))
   }
   if (closed === undefined) return h(CellEmpty, { className: 'bt-q-gone' })
-  const asked = { question: arg('question') ?? '', detail: arg('detail'), options: argValue('options') ?? [], multiSelect: argValue('multiSelect') === true }
-  return h('div', { ref: cellRef, className: 'bt-q-inline' }, h(SettledQuestion, { question: asked, closed }))
+  const several = argValue('questions')
+  const asked = Array.isArray(several) && several.length > 0
+    ? several.map(item => ({ header: item?.header, question: String(item?.question ?? ''), detail: item?.detail, options: Array.isArray(item?.options) ? item.options : [], multiSelect: item?.multiSelect === true }))
+    : [{ question: arg('question') ?? '', detail: arg('detail'), options: argValue('options') ?? [], multiSelect: argValue('multiSelect') === true }]
+  return h('div', { ref: cellRef, className: asked.length > 1 ? 'bt-q-inline bt-q-stack' : 'bt-q-inline' },
+    asked.map((question, at) => h(SettledQuestion, { key: at, question, closed })))
 }
 
 // Questions asked by a tool call render inline at that call (see ToolCell); the dock
@@ -426,7 +507,7 @@ export function QuestionDock({ sessionId, useRoster, useCards, useHeldCards, act
   if (!visible) {
     if (question === undefined && exiting) {
       return h('div', { className: 'bt-q-dock', 'data-leaving': '' },
-        h(QuestionView, { key: exiting.id, question: exiting, busy: true, ownAnswer: exiting.allowCustom === true, raised: true, enterToSend }))
+        h(viewFor(exiting), { key: exiting.id, question: exiting, busy: true, ownAnswer: exiting.allowCustom === true, raised: true, enterToSend }))
     }
     return null
   }
@@ -446,8 +527,10 @@ export function AnsweredCell({ node }) {
   if (questions.length === 0) {
     return data.text ? h('div', { className: 'bt-urow' }, h('div', { className: 'bt-ububble' }, data.text)) : h(CellEmpty)
   }
-  const answers = Array.isArray(data.answers) ? data.answers : []
-  return h('div', { className: 'bt-q-inline' }, questions.map(question => h(SettledQuestion, {
+  // DSH keeps the picks of an answer; whether a question was skipped is in the payload.
+  const given = Array.isArray(sent?.answers) ? sent.answers : []
+  const answers = (Array.isArray(data.answers) ? data.answers : []).map(answer => ({ ...answer, ...(given.find(item => item?.id === answer.id)?.skipped === true ? { skipped: true } : {}) }))
+  return h('div', { className: questions.length > 1 ? 'bt-q-inline bt-q-stack' : 'bt-q-inline' }, questions.map(question => h(SettledQuestion, {
     key: question.id,
     question,
     answer: answers.find(answer => answer.id === question.id) ?? { selected: [] },

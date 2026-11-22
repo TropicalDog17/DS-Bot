@@ -367,6 +367,18 @@ body[data-ds-dark-theme] .bt-q.bt-q-settled[data-expandable]:not([data-open]):ho
 .bt-q-raised .bt-q-body{padding:2px 6px 0}
 .bt-q-raised .bt-q-desc{color:color-mix(in srgb,var(--bt-ink) 61%,transparent)}
 .bt-q-ownrow{cursor:text}
+.bt-q-multi{gap:0}
+.bt-q-part{display:flex;flex-direction:column;gap:6px;min-width:0;padding:12px 0}
+.bt-q-part:first-child{padding-top:0}
+.bt-q-part+.bt-q-part{border-top:1px solid var(--bt-q-rule)}
+.bt-q-tag{align-self:flex-start;max-width:100%;margin-bottom:4px}
+.bt-q-multi .bt-q-opt[aria-pressed=true] .bt-q-label{color:var(--bt-ink)}
+.bt-q-multi .bt-q-custom{padding:2px 0}
+.bt-q-raised.bt-q-multi .bt-q-part{gap:0;padding:0}
+.bt-q-raised.bt-q-multi .bt-q-opt[aria-pressed=true]{background:var(--bt-active)}
+.bt-q-raised.bt-q-multi .bt-q-custom{padding:0 16px 10px 20px}
+.bt-q-raised.bt-q-multi .bt-q-foot{padding-top:8px;border-top:1px solid var(--bt-q-rule)}
+.bt-q-stack{flex-direction:column;gap:6px}
 .bt-q-ownrow .bt-q-input{color:var(--bt-ink)}
 .bt-q-raised .bt-q-foot{padding:0 8px 8px}
 @media (prefers-reduced-motion:reduce){.bt-q{animation:bt-fade .12s ease-out backwards}.bt-q-settled,.bt-q-submit,.bt-q-expand,.bt-q-dock[data-leaving]{animation:none}.bt-q-chevron{transition:none}}
