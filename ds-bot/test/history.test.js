@@ -110,3 +110,46 @@ test('canonicalHeadings keeps a note whose known headings are repeated or out of
   assert.equal(canonicalHeadings(swapped, names), swapped)
   assert.equal(canonicalHeadings('## 目标\n- a\n## Progress\n- b\n## 决定\n- c', names), '## Goals\n- a\n## Progress\n- b\n## Decisions\n- c')
 })
+
+const SEVERAL = {
+  id: 'card', callId: 'call-9', question: 'Merge?', header: 'PR #1207', options: [{ label: 'Merge' }, { label: 'Not yet' }], multiSelect: false,
+  questions: [
+    { id: 'q1', header: 'PR #1207', question: 'Merge?', options: [{ label: 'Merge' }, { label: 'Not yet' }], multiSelect: false },
+    { id: 'q2', header: 'PR #1208', question: 'Merge?', detail: 'CI is red', options: [{ label: 'Merge' }, { label: 'Review' }], multiSelect: false },
+    { id: 'q3', header: 'Release', question: 'Which notes?', options: [{ label: 'Short' }, { label: 'Full' }], multiSelect: true },
+  ],
+}
+
+test('cardText shows every question of a card that asks several', () => {
+  const { questions } = SEVERAL
+  assert.equal(cardText(JSON.stringify({ questions })), [
+    '[Question card] PR #1207: Merge?\nOptions: Merge / Not yet',
+    '[Question card] PR #1208: Merge? (CI is red)\nOptions: Merge / Review',
+    '[Question card] Release: Which notes?\nOptions: Short / Full',
+  ].join('\n'))
+  assert.equal(cardText(JSON.stringify({ questions: [questions[0], { header: 'X', question: '', options: [{ label: 'A' }] }] })), '')
+})
+
+test('one answer carries every question of a card, and a blank one goes out as skipped', () => {
+  const reply = questionReply(SEVERAL, { answers: [
+    { id: 'q1', selected: ['Merge', 'Not yet'] },
+    { id: 'q3', selected: ['Short', 'Full', 'Nope'], custom: ' plus a link ' },
+  ] })
+  assert.deepEqual(reply.source, { kind: 'user-question-reply', callId: 'call-9', outcome: 'answered' })
+  const payload = JSON.parse(reply.text)
+  assert.deepEqual(payload.questions.map(question => [question.id, question.header]), [['q1', 'PR #1207'], ['q2', 'PR #1208'], ['q3', 'Release']])
+  assert.deepEqual(payload.answers, [
+    { id: 'q1', selected: ['Merge'] },
+    { id: 'q2', selected: [], skipped: true },
+    { id: 'q3', selected: ['Short', 'Full'], custom: 'plus a link' },
+  ])
+  assert.equal(replyText(reply.text), [
+    '[Answer to question card] PR #1207: Merge?\nAnswer: Merge',
+    '[Answer to question card] PR #1208: Merge?\nAnswer: (skipped)',
+    '[Answer to question card] Release: Which notes?\nAnswer: Short, Full, plus a link',
+  ].join('\n\n'))
+  // The single form answers the first question; nothing answered is no reply.
+  assert.deepEqual(JSON.parse(questionReply(SEVERAL, { selected: ['Not yet'] }).text).answers.map(answer => answer.selected), [['Not yet'], [], []])
+  assert.equal(questionReply(SEVERAL, { answers: [{ id: 'q2', selected: ['Nope'] }] }), undefined)
+  assert.equal(questionReply(SEVERAL, { answers: [] }), undefined)
+})

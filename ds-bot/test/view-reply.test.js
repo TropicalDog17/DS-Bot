@@ -330,3 +330,71 @@ test('a card carried from an earlier part records its close on the part that ask
   assert.equal(open.views['writer-now'], undefined)
   assert.deepEqual(open.closedCards, { 'writer-old': { 'q-old': 'replied', 'v-old': 'replied' } })
 })
+
+test('ask_user puts several questions on one card, and one answer settles them all', async (t) => {
+  const { call, team, sent, stop } = await start()
+  t.after(stop)
+  await rt.teamTools.find(d => d.name === 'list_bots').execute({}, { agent: { id: 'chief' } })
+  const tool = rt.teamTools.find(d => d.name === 'ask_user')
+  let concluded = 0
+  const ask = async args => (await tool.execute(args, { agent: { id: 'writer-now' }, callId: 'many-call', concludeTurn() { concluded++ } }))
+  const read = result => (typeof result === 'string' ? result : result?.content?.[0]?.text ?? result?.text)
+  const pr = (header, options = [{ label: 'Merge' }, { label: 'Not yet' }]) => ({ header, question: 'Merge?', options })
+
+  assert.match(read(await ask({ questions: [pr('1'), pr('2'), pr('3'), pr('4'), pr('5')] })), /^A card holds at most 4 questions\./)
+  assert.equal(read(await ask({ questions: [pr('PR #1207'), { header: 'PR #1208', question: 'Merge?', options: [] }] })), 'Question 2: give at least one option.')
+  assert.equal(read(await ask({ questions: [pr('PR #1207'), { header: 'PR #1208', question: ' ', options: [{ label: 'A' }] }] })), 'Question 2: write the question.')
+  assert.match(read(await ask({ questions: [pr('A header that is too long')] })), /^Question 1: the header "A header that is too long" is longer than 16 characters\./)
+  assert.equal(concluded, 0)
+  assert.equal((await team()).questions['writer-now'], undefined)
+
+  await ask({ questions: [pr('PR #1207'), { ...pr('PR #1208', [{ label: 'Merge' }, { label: 'Review', description: 'Read it first' }]), detail: 'CI is red' }, { header: 'Notes', question: 'Which notes?', options: [{ label: 'Short' }, { label: 'Full' }], multiSelect: true }], allowCustom: true })
+  assert.equal(concluded, 1)
+  const card = (await team()).questions['writer-now']
+  assert.equal(card.callId, 'many-call')
+  assert.equal(card.allowCustom, true)
+  // The first question is also the card's own, for a reader that knows one question.
+  assert.equal(card.question, 'Merge?')
+  assert.equal(card.header, 'PR #1207')
+  assert.deepEqual(card.questions.map(question => [question.header, question.question, question.multiSelect]), [['PR #1207', 'Merge?', false], ['PR #1208', 'Merge?', false], ['Notes', 'Which notes?', true]])
+  assert.deepEqual(card.questions[1].options, [{ label: 'Merge' }, { label: 'Review', description: 'Read it first' }])
+  assert.equal(new Set(card.questions.map(question => question.id)).size, 3)
+
+  const [first, second, third] = card.questions
+  const blank = await call('answer-question', { sessionId: 'writer-now', questionId: card.id, answer: { answers: [{ id: second.id, selected: ['Nope'] }] } })
+  assert.equal(blank.ok, false)
+  assert.equal((await team()).questions['writer-now'].id, card.id)
+  assert.equal(sent.length, 0)
+
+  const answered = await call('answer-question', { sessionId: 'writer-now', questionId: card.id, answer: { answers: [{ id: first.id, selected: ['Merge'] }, { id: third.id, selected: ['Short', 'Full'], custom: 'and a link' }] } })
+  assert.equal(answered.ok, true)
+  assert.equal((await team()).questions['writer-now'], undefined)
+  assert.equal(sent.length, 1)
+  assert.deepEqual(sent[0].message.source, { kind: 'user-question-reply', callId: 'many-call', outcome: 'answered' })
+  const payload = JSON.parse(sent[0].message.content[0].text)
+  assert.deepEqual(payload.answers, [
+    { id: first.id, selected: ['Merge'] },
+    { id: second.id, selected: [], skipped: true },
+    { id: third.id, selected: ['Short', 'Full'], custom: 'and a link' },
+  ])
+})
+
+test('ask_user still takes one question in its first form', async (t) => {
+  const { team, stop } = await start()
+  t.after(stop)
+  await rt.teamTools.find(d => d.name === 'list_bots').execute({}, { agent: { id: 'chief' } })
+  const tool = rt.teamTools.find(d => d.name === 'ask_user')
+  const exec = { agent: { id: 'writer-now' }, callId: 'one-call', concludeTurn() {} }
+  const read = result => (typeof result === 'string' ? result : result?.content?.[0]?.text ?? result?.text)
+  assert.equal(read(await tool.execute({ question: 'Ready?', options: [] }, exec)), 'Give at least one option.')
+  await tool.execute({ question: 'Ready?', detail: 'Last call', options: [{ label: 'Yes' }, { label: 'No', description: 'Wait' }], multiSelect: true }, exec)
+  const card = (await team()).questions['writer-now']
+  assert.equal(card.questions, undefined)
+  assert.deepEqual([card.question, card.detail, card.multiSelect, card.callId], ['Ready?', 'Last call', true, 'one-call'])
+  assert.deepEqual(card.options, [{ label: 'Yes' }, { label: 'No', description: 'Wait' }])
+  // One entry in `questions` is the same card.
+  await tool.execute({ questions: [{ header: 'Go', question: 'Ready?', options: [{ label: 'Yes' }] }] }, exec)
+  const single = (await team()).questions['writer-now']
+  assert.equal(single.questions, undefined)
+  assert.deepEqual([single.header, single.question], ['Go', 'Ready?'])
+})

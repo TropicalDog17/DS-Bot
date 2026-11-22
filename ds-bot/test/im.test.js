@@ -1937,3 +1937,27 @@ test('a failed update keeps the network reason and redacts a secret as it appear
     return true
   })
 })
+
+test('a card with several questions shows them in IM without buttons, and a number does not answer it', async (t) => {
+  const s = await start()
+  t.after(s.stop)
+  const conn = await add(s)
+  s.rt.state.im.connections[conn.id].paired.push({ id: 'u1', name: 'U1', at: 1 })
+  await s.rt.save()
+  await dm(s, 'u1', 'hi')
+  s.imTurn('a')
+  s.fake.sent.length = 0
+  const options = [{ label: 'Merge' }, { label: 'Not yet' }]
+  s.rt.state.questions.a = {
+    id: 'q1', header: 'PR #1207', question: 'Merge?', options,
+    questions: [{ id: 'p1', header: 'PR #1207', question: 'Merge?', options }, { id: 'p2', header: 'PR #1208', question: 'Merge?', options }],
+  }
+  await s.rt.save()
+  await s.flush()
+  const card = s.fake.sent.find(entry => /PR #1207/.test(entry.text ?? ''))
+  assert.ok(card, 'the card is sent')
+  assert.equal(card.buttons, undefined)
+  assert.match(card.text, /\n1\. PR #1207: Merge\? — Merge \/ Not yet\n2\. PR #1208: Merge\? — Merge \/ Not yet$/)
+  await s.fake.handlers.onAction({ chat: { key: 'dm-u1', kind: 'direct', title: 'U1' }, sender: { id: 'u1', name: 'U1' }, data: 'q:q1:0', messageId: card.messageId ?? 1 })
+  assert.ok(s.rt.state.questions.a !== undefined, 'a press on one option does not settle the card')
+})

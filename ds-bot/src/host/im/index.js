@@ -7,6 +7,7 @@ import { chmod, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { replaceFile } from '../files.js'
 import { viewCardText } from '../parts.js'
+import { questionTitle, questionsOf } from '../question-card.js'
 import { imPlatform, IM_PLATFORMS } from '../../shared/im-platforms.js'
 import { REPLY_KIND, SOURCE_KIND } from '../constants.js'
 import { adapters } from './platforms/index.js'
@@ -700,6 +701,8 @@ export function install(rt) {
       await sendCardReply(conn, chat, text('stale'))
       return 'stale'
     }
+    // A card with several questions is answered where it shows them all.
+    if (questionsOf(found.question).length > 1) return false
     const valid = labels.filter(label => (found.question.options ?? []).some(option => option.label === label))
     if (valid.length === 0) return false
     const requestId = `im:${conn.platform}:${randomUUID()}`
@@ -870,6 +873,10 @@ export function install(rt) {
   // ------------------------------------------------------------------ cards
   const cardText = {
     question: (bot, question) => {
+      const asked = questionsOf(question)
+      if (asked.length > 1) {
+        return [text('viewShow', { bot }), ...asked.map((item, index) => `${index + 1}. ${questionTitle(item)} — ${(item.options ?? []).map(option => option.label).join(' / ')}`)].join('\n')
+      }
       const options = (question.options ?? []).map((option, index) => `${index + 1}. ${option.label}${option.description ? ` — ${option.description}` : ''}`).join('\n')
       const hint = question.multiSelect === true ? text('numbersMulti') : text('numbers')
       return `${text('question', { bot })}${question.question}${question.detail ? `\n${question.detail}` : ''}\n${options}\n(${hint})`
@@ -877,7 +884,7 @@ export function install(rt) {
     approval: (bot, entry) => `${text('approval', { bot })}${entry.tool}${entry.reason ? ` — ${entry.reason}` : ''}${entry.detail?.text ? `\n${entry.detail.text}` : ''}${entry.detail?.code ? `\n${entry.detail.code}` : ''}`,
   }
   const cardButtons = {
-    question: (question) => (question.multiSelect === true ? undefined : (question.options ?? []).map((option, index) => ({ data: `q:${question.id}:${index}`, label: option.label }))),
+    question: (question) => (question.multiSelect === true || questionsOf(question).length > 1 ? undefined : (question.options ?? []).map((option, index) => ({ data: `q:${question.id}:${index}`, label: option.label }))),
     approval: (id) => [{ data: `a:${id}:allow`, label: text('allow') }, { data: `a:${id}:reject`, label: text('reject') }],
   }
 
