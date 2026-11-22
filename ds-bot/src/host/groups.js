@@ -494,7 +494,8 @@ export function install(rt) {
       ROOM_REPLY,
     ].filter(Boolean).join('\n\n')
     const shown = [...earlier, ...owed.flatMap(result => result.line ?? []), ...current]
-    return { text, images: shown.flatMap(line => line.images ?? []), files: shown.flatMap(line => line.files ?? []) }
+    // The user messages among the lines, by request id: the turn that reads them answers them.
+    return { text, images: shown.flatMap(line => line.images ?? []), files: shown.flatMap(line => line.files ?? []), requests: shown.flatMap(line => line.request ?? []) }
   }
 
   // The result lines a wake carries, oldest first, one per seq. A line that left the room's
@@ -745,7 +746,7 @@ export function install(rt) {
   // called it, which answers what the turn posts after the round moved on. What the
   // member writes before its last step is posted at once and collected in `said`, and
   // `heard` takes each such line once it is posted.
-  async function roomTurn(room, member, sessionId, { text, images = [], files = [] }, note, signal, round, by, said = [], heard = () => {}, onWork = () => {}) {
+  async function roomTurn(room, member, sessionId, { text, images = [], files = [], requests = [] }, note, signal, round, by, said = [], heard = () => {}, onWork = () => {}) {
     if (signal.aborted) return null
     const startedAt = Date.now()
     const exchangeId = randomUUID()
@@ -786,7 +787,7 @@ export function install(rt) {
       signal.addEventListener('abort', () => finish(null), { once: true })
     })
     try {
-      await rt.deliver({ fromId: undefined, toId: member.id, sessionId, role: 'room', roomId: room.id, exchangeId, note, text, images, files, steer: busy, ...(by ? { askedBy: by } : {}) })
+      await rt.deliver({ fromId: undefined, toId: member.id, sessionId, role: 'room', roomId: room.id, exchangeId, note, text, images, files, requests, steer: busy, ...(by ? { askedBy: by } : {}) })
       // The prompt reached the member: its read position moves on.
       room.seen[member.id] = seenAt
       // Still held by an earlier request: this turn cannot start until the user answers.
@@ -926,7 +927,7 @@ export function install(rt) {
       const content = Array.isArray(message.content) ? message.content : []
       const text = textOf(content)
       if (text === '' || content.some(block => block?.type !== 'text') || text.includes('dsh-session:')) break
-      lines.push({ id: message.id, text, ...(viaOf(message.source) ? { via: viaOf(message.source) } : {}) })
+      lines.push({ id: message.id, text, ...(viaOf(message.source) ? { via: viaOf(message.source) } : {}), ...(typeof message.source.rpcId === 'string' ? { request: message.source.rpcId } : {}) })
     }
     return lines
   })
@@ -945,7 +946,7 @@ export function install(rt) {
     rt.goalUserMessage?.(room.id)
     const members = room.members.map(rt.botOf).filter(Boolean)
     for (const line of lines) {
-      say(room, { who: 'User', text: line.text, ...(line.via ? { via: line.via } : {}) })
+      say(room, { who: 'User', text: line.text, ...(line.via ? { via: line.via } : {}), ...(line.request ? { request: line.request } : {}) })
       const { all, found } = mentionsIn(line.text, members)
       const note = all || found.length > 0 ? 'the user mentioned you' : 'new message from the user'
       const { speakers, ordered } = openingCall(room, { text: line.text })
@@ -1126,7 +1127,7 @@ export function install(rt) {
       markSlotWorked(room.id, slot)
     }
     const reply = await roomTurn(
-      room, member, session.id, { text, images: prompt.images, files: prompt.files }, slot.note ?? 'your turn', signal, round, slot.by, said,
+      room, member, session.id, { text, images: prompt.images, files: prompt.files, requests: prompt.requests }, slot.note ?? 'your turn', signal, round, slot.by, said,
       (line) => {
         posted.push(room.seq)
         callFrom(room, round, member, line, called, { worked, byBot: answeredBot })
@@ -1355,6 +1356,7 @@ export function install(rt) {
         ...(post.images === undefined ? {} : { images: post.images }),
         ...(post.files === undefined ? {} : { files: post.files }),
         ...(post.via === undefined ? {} : { via: post.via }),
+        ...(post.request === undefined ? {} : { request: post.request }),
         ...(post.claims === undefined ? {} : { claims: post.claims }),
         ...(post.changes === undefined ? {} : { changes: post.changes }),
         // The group's own Session shows the message; a goal draft's trigger it hides.
