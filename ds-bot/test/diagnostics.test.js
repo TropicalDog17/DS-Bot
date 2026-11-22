@@ -198,6 +198,18 @@ test('errorCode tells refusals from DS Bot faults', () => {
   assert.equal(errorCode(Object.assign(new Error('no'), { code: 'bot/read-only' })), 'bot/read-only')
 })
 
+test('turnFailure reads a usage limit a gateway wraps in another status as a quota failure', () => {
+  const session = '502: {"code":"502","message":"claude-code: You\'ve hit your session limit · resets 7:10am (UTC)","type":"upstream_error"}'
+  assert.deepEqual(turnFailure({ code: 'SERVER', status: 502, message: session }), { code: 'QUOTA', message: session, status: 502 })
+  assert.equal(turnFailure({ code: 'INVALID_REQUEST', status: 400, message: 'Budget has been exceeded! Current cost: 50.03, Max budget: 50' }).code, 'QUOTA')
+  assert.equal(turnFailure({ code: 'RATE_LIMIT', status: 429, message: 'gpt returned 429: The usage limit has been reached' }).code, 'QUOTA')
+  assert.equal(BLOCKING_CODES.has('QUOTA'), true)
+  // A plain server fault, a rate limit that passes, and a key failure keep their codes.
+  assert.equal(turnFailure({ code: 'SERVER', status: 502, message: 'bad gateway' }).code, 'SERVER')
+  assert.equal(turnFailure({ code: 'RATE_LIMIT', status: 429, message: 'slow down' }).code, 'RATE_LIMIT')
+  assert.deepEqual(turnFailure({ code: 'AUTH', status: 401, message: 'usage limit' }), { code: 'AUTH', message: '', status: 401 })
+})
+
 test('turnFailure drops AUTH messages and keeps the facts', () => {
   assert.deepEqual(turnFailure({ code: 'AUTH', message: 'bad key sk-12***34', status: 401 }), { code: 'AUTH', message: '', status: 401 })
   assert.deepEqual(turnFailure({ code: 'RATE_LIMIT', message: ' slow down ', requestId: 'r1' }), { code: 'RATE_LIMIT', message: 'slow down', requestId: 'r1' })

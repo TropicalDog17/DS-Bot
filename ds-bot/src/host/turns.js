@@ -28,6 +28,12 @@ const SIGN_IN_CODES = new Set(['ACCOUNT_SIGN_IN_REQUIRED', 'ACCOUNT_SIGNED_OUT',
 // code; the audit body and request id stay for the card and the diagnostics.
 const CONTENT_POLICY = /content[\s_-]?polic|content[\s_-]?violation|content[\s_-]?filter|内容审计|内容安全|风险规则/i
 const REQUEST_ID = /(?:request[-_ ]?id|x-request-id)["'\s:=]+([A-Za-z0-9._:-]{6,})/i
+// A gateway in front of the model passes a spent plan or budget on under its own
+// status: a 502 for the upstream's refusal, a 400 for its own budget, a 429 for a
+// usage limit. DSH reads those as a server fault, a bad request or a rate limit, but
+// only the user can fix them, by waiting for the reset, adding budget or changing model.
+const USAGE_LIMIT = /session limit|usage limit|budget has been exceeded|quota exceeded|exceeded your current quota|insufficient[\s_-]?quota/i
+const WRAPS_USAGE_LIMIT = new Set(['SERVER', 'INVALID_REQUEST', 'RATE_LIMIT', 'UNKNOWN'])
 
 const requestIdOf = (message) => {
   const found = REQUEST_ID.exec(message)
@@ -38,7 +44,8 @@ export function turnFailure(error) {
   const rawCode = typeof error?.code === 'string' && error.code !== '' ? error.code : 'UNKNOWN'
   const raw = typeof error?.message === 'string' ? error.message.trim() : ''
   const contentPolicy = rawCode === 'AUTH' && error?.status === 403 && CONTENT_POLICY.test(raw)
-  const code = contentPolicy ? 'CONTENT_POLICY' : rawCode
+  const usageLimit = WRAPS_USAGE_LIMIT.has(rawCode) && USAGE_LIMIT.test(raw)
+  const code = contentPolicy ? 'CONTENT_POLICY' : usageLimit ? 'QUOTA' : rawCode
   const message = code === 'AUTH' || raw === '' ? '' : cleanText(raw).slice(0, 500)
   const requestId = typeof error?.requestId === 'string' && error.requestId !== '' ? error.requestId : requestIdOf(raw)
   return {
