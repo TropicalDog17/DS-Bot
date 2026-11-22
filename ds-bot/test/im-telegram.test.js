@@ -112,6 +112,20 @@ test('private text, group mention and photo become adapter messages', async () =
   } finally { api.close() }
 })
 
+test('a reply carries the id of the message it answers', async () => {
+  const api = await fakeApi()
+  const got = []
+  try {
+    const handle = telegram.connect({ token: 'TOKEN' }, env(api.api), { onMessage: msg => got.push(msg), onAction: () => {}, onStatus: () => {} })
+    api.updates.push({ update_id: 1, message: { message_id: 21, chat: { id: 5, type: 'private' }, from: { id: 9, first_name: 'Ann' }, text: 'yes', reply_to_message: { message_id: 20, from: { id: 7, is_bot: true, username: 'fakebot' } } } })
+    api.updates.push({ update_id: 2, message: { message_id: 22, chat: { id: 5, type: 'private' }, from: { id: 9, first_name: 'Ann' }, text: 'plain' } })
+    await until(() => got.length >= 2)
+    assert.equal(got[0].replyTo, 20)
+    assert.equal('replyTo' in got[1], false)
+    handle.stop()
+  } finally { api.close() }
+})
+
 test('callback_query answers the query and reports the action', async () => {
   const api = await fakeApi()
   const got = { actions: [] }

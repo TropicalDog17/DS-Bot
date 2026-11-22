@@ -4,18 +4,29 @@
 //
 //   dsBotRoster  who is on the team: Bots (id, name, role, color, avatar, main) and group
 //                chats (id, name, members, admin). Copies, never the saved objects.
+//                addRoutingPart adds a companion's lines to the Main Bot's routing digest.
 //   dsBotNotes   one short note from the user to a Bot, through the same path as the
 //                user's own messages (channel.js sendUser): into a group the Bot is in,
 //                as the user's `@Bot` message, else into the Bot's own chat. onReply
 //                hears each answer a Bot then writes where the user reads it.
+//                startCard opens a card thread (a conversation of the Bot's own for one
+//                card) with the card's brief; deliver with a cardId reaches that thread;
+//                closeCard closes it once the card is finished. push sends a short line to
+//                the user's phone through the Main Bot's IM chat; onCardNote hears a reply
+//                there to a push about a card.
 //   dsBotBridge  the tools a Bot on a local agent CLI (Claude Code, Codex, ACP) may call
 //                through DS Bot's MCP bridge. Only the team tools cross by default; a
 //                companion names the tools it registers so those Bots get them too.
 import { randomUUID } from 'node:crypto'
+import { cardThreadSession } from './threads.js'
 
 export const NOTE_MAX = 2000
+// A card's brief keeps its lines: it is everything the assignee needs.
+export const BRIEF_MAX = 8000
+export const PUSH_MAX = 700
 
 const oneLine = (text, max) => String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, max)
+const keepLines = (text, max) => String(text ?? '').replace(/\r\n?/g, '\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, max)
 
 export function rosterService(rt) {
   const botView = bot => Object.freeze({
@@ -43,11 +54,23 @@ export function rosterService(rt) {
     findBot: ref => { const bot = typeof ref === 'string' ? rt.findBot(ref.trim()) : undefined; return bot === undefined ? undefined : botView(bot) },
     // Called after every save of the team; listeners re-read, they get no diff.
     subscribe: listener => rt.onSaved(listener),
+    // part(mainBotId) -> text for the Main Bot's routing digest (routing.js); returns the remover.
+    addRoutingPart: part => rt.routingParts?.(part) ?? (() => {}),
   })
 }
 
 export function notesService(rt) {
   const listeners = new Set()
+  const cardNotes = new Set()
+  // im/index.js calls this with a reply to a push about a card; false when no companion took it.
+  rt.cardNote = async (note) => {
+    for (const listener of cardNotes) {
+      try {
+        if (await listener(Object.freeze({ ...note })) === true) return true
+      } catch (error) { rt.warn?.('ds-bot: card note listener failed: %s', error) }
+    }
+    return false
+  }
   // turns.js calls this when a Bot's turn ends with text the user reads: its own chat,
   // answering the user, or any of its turns in a group chat.
   rt.botReplied = reply => {
@@ -61,20 +84,66 @@ export function notesService(rt) {
     // A roomId the Bot is not (or no longer) a member of falls back to its own chat.
     // requestId is the note's id as a user message: an answer in the Bot's own chat or
     // in the group lists it in `heard` once a turn read the note.
-    async deliver({ botId, roomId, text } = {}) {
+    // With a cardId whose card thread is open, the note goes there instead (where: 'card').
+    // A requestId of the caller's (an IM message's) takes the place of a new one, so the
+    // Bot's answer also goes back where that message came from.
+    async deliver({ botId, roomId, cardId, text, requestId: given } = {}) {
       await rt.load()
       const bot = typeof botId === 'string' ? rt.botOf(botId) : undefined
       if (bot === undefined) return { error: 'No such Bot.' }
       const line = oneLine(text, NOTE_MAX)
       if (line === '') return { error: 'Write a note first.' }
+      const thread = typeof cardId === 'string' ? cardThreadSession(bot, cardId) : undefined
+      const newId = () => (typeof given === 'string' && given !== '' ? given : randomUUID())
+      if (thread !== undefined) {
+        const requestId = newId()
+        await rt.sendUser({ sessionId: thread, content: [{ type: 'text', text: line }], requestId })
+        return { sessionId: thread, where: 'card', requestId }
+      }
       const room = typeof roomId === 'string' ? rt.roomOf(roomId) : undefined
       const inGroup = room !== undefined && (room.members ?? []).includes(bot.id)
       const target = inGroup ? { sessionId: room.id, text: `@${bot.name} ${line}`, where: 'group' } : { sessionId: bot.id, text: line, where: 'chat' }
-      const requestId = randomUUID()
+      const requestId = newId()
       await rt.sendUser({ sessionId: target.sessionId, content: [{ type: 'text', text: target.text }], requestId })
       return { sessionId: target.sessionId, where: target.where, requestId }
     },
-    // listener({ botId, roomId?, text, since, heard? }) once per finished answer; since is
+    // { botId, cardId, title?, text } -> { sessionId, requestId } | { error }. Opens the
+    // card's thread (or finds the open one) and sends the brief there as the user's
+    // message, so the Bot works on the card apart from its chat.
+    async startCard({ botId, cardId, title, text } = {}) {
+      await rt.load()
+      const bot = typeof botId === 'string' ? rt.botOf(botId) : undefined
+      if (bot === undefined) return { error: 'No such Bot.' }
+      if (typeof cardId !== 'string' || cardId === '') return { error: 'A card thread needs a card id.' }
+      const brief = keepLines(text, BRIEF_MAX)
+      if (brief === '') return { error: 'A card needs a brief.' }
+      if (typeof rt.openCardThread !== 'function') return { error: 'Card threads are not available.' }
+      const sessionId = await rt.openCardThread(bot.id, cardId, oneLine(title, 80))
+      const requestId = randomUUID()
+      await rt.sendUser({ sessionId, content: [{ type: 'text', text: brief }], requestId })
+      return { sessionId, requestId }
+    },
+    // { botId, cardId } -> { closed: true | 'later' | false }. 'later': the thread's turn
+    // still runs and it closes when that turn ends.
+    async closeCard({ botId, cardId } = {}) {
+      if (typeof botId !== 'string' || typeof cardId !== 'string' || typeof rt.closeCardThread !== 'function') return { closed: false }
+      return { closed: await rt.closeCardThread(botId, cardId) }
+    },
+    // { cardId?, botId?, text } -> { sent: number }. A short line to the user's phone: the
+    // Main Bot's own IM chats get it with no message of theirs having asked (im/index.js
+    // push). A reply to it there comes back through onCardNote.
+    async push({ cardId, botId, text } = {}) {
+      const line = oneLine(text, PUSH_MAX)
+      if (line === '' || typeof rt.imPush !== 'function') return { sent: 0 }
+      return { sent: await rt.imPush({ text: line, ...(typeof cardId === 'string' ? { cardId } : {}), ...(typeof botId === 'string' ? { botId } : {}) }) }
+    },
+    // listener({ cardId, text, requestId }) -> Promise<boolean>: true when it took the
+    // reply (the board saves it on the card and delivers it). Returns the unsubscribe.
+    onCardNote(listener) {
+      cardNotes.add(listener)
+      return () => { cardNotes.delete(listener) }
+    },
+    // listener({ botId, roomId?, cardId?, text, since, heard? }) once per finished answer; since is
     // when its turn started, heard the request ids of the user's messages it answers.
     // Returns the unsubscribe.
     onReply(listener) {

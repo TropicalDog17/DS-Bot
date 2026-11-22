@@ -174,6 +174,7 @@ export default {
           files,
           mentioned,
           messageId: message.message_id,
+          ...(message.reply_to_message?.message_id === undefined ? {} : { replyTo: message.reply_to_message.message_id }),
         })
         return
       }

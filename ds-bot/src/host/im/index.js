@@ -21,6 +21,8 @@ const RETRY_MAX_MS = 30_000
 const SEND_ATTEMPTS = 4
 const TYPING_MS = 4_000
 const NUMBERS = /^\s*\d+(\s+\d+)*\s*$/
+// Pushed messages about cards a connection remembers, for replies to them.
+const PUSHED_MAX = 200
 
 const secretField = key => key.replace(/[A-Z]/g, char => `_${char}`).toUpperCase()
 
@@ -218,6 +220,7 @@ export function install(rt) {
       data: {
         runtime: data?.runtime !== null && typeof data?.runtime === 'object' ? data.runtime : {},
         cards: data?.cards !== null && typeof data?.cards === 'object' ? data.cards : {},
+        pushed: data?.pushed !== null && typeof data?.pushed === 'object' ? data.pushed : {},
       },
       timer: undefined,
     }
@@ -655,6 +658,54 @@ export function install(rt) {
       queue.draining = false
     }
   }
+  // ------------------------------------------------------------------- push
+  // The one exception to "a reply goes only to the chat that asked": the board tells the
+  // user's phone what needs them (a card question, Review, done or stopped, a watchdog
+  // alert) through the Main Bot's own direct chats. A pushed message about a card is
+  // remembered, so a reply to it reaches that card (onMessage).
+  const rememberPush = async (id, messageId, entry) => {
+    if (messageId === undefined || messageId === null) return
+    const data = (await runtimeOf(id)).data
+    data.pushed[String(messageId)] = { ...entry, at: Date.now() }
+    const keys = Object.keys(data.pushed)
+    if (keys.length > PUSHED_MAX) {
+      for (const key of keys.sort((a, b) => data.pushed[a].at - data.pushed[b].at).slice(0, keys.length - PUSHED_MAX)) delete data.pushed[key]
+    }
+    scheduleWrite(id)
+  }
+  const imPush = async ({ text: body, cardId, botId }) => {
+    const main = rt.state.mainBotIds?.[0]
+    if (main === undefined || rt.botOf(main) === undefined) return 0
+    let sent = 0
+    for (const conn of Object.values(connections())) {
+      if (!runners.has(conn.id)) continue
+      for (const { chatKey, chat, target } of targetsOf(conn)) {
+        if (chat.kind !== 'direct' || target?.botId !== main) continue
+        sent += 1
+        const after = cardId === undefined ? undefined : (done) => { void rememberPush(conn.id, done?.messageId, { cardId, ...(botId === undefined ? {} : { botId }) }) }
+        sendTo(conn, chatKey, { key: chatKey, kind: chat.kind, title: chat.title }, body, undefined, after)
+      }
+    }
+    return sent
+  }
+  // A reply to a push about a card: the board takes it as a note on that card; without
+  // the board it goes straight into the card's thread. The answer comes back here.
+  const replyToPush = async (conn, msg, body) => {
+    if (msg.replyTo === undefined || msg.replyTo === null || body === '') return false
+    const pushed = (await runtimeOf(conn.id)).data.pushed[String(msg.replyTo)]
+    if (pushed === undefined) return false
+    const requestId = `im:${conn.platform}:${randomUUID()}`
+    rememberRequest(requestId, conn, msg.chat.key, msg.sender.id)
+    if (await rt.cardNote?.({ cardId: pushed.cardId, text: body, requestId }) === true) return true
+    const thread = rt.cardSession?.(pushed.botId, pushed.cardId)
+    if (thread !== undefined) {
+      await rt.sendUser({ sessionId: thread, content: [{ type: 'text', text: body }], requestId })
+      return true
+    }
+    requests.delete(requestId)
+    return pushed
+  }
+
   const sendText = (conn, chat, body, buttons, after) => enqueue(conn, chat.key, { chat, text: body, buttons, after })
   const sendTo = (conn, chatKey, chat, body, buttons, after) => enqueue(conn, chatKey, { chat, text: body, buttons, after })
 
@@ -785,6 +836,9 @@ export function install(rt) {
       await sendText(conn, msg.chat, text(stopped ? 'stopped' : 'idle'))
       return
     }
+    // The card is gone or closed: the Main Bot gets the reply, told which card it is about.
+    const aboutCard = await replyToPush(conn, msg, body)
+    if (aboutCard === true) return
     if (NUMBERS.test(body)) {
       const picked = body.trim().split(/\s+/).map(Number)
       const held = newestOpenCard(conn, msg.chat.key)
@@ -823,7 +877,7 @@ export function install(rt) {
       ? rt.chatOf(target.botId)
       : rt.sessionOfRoom(rt.roomOf(target.roomId))
     const content = []
-    if (body !== '') content.push({ type: 'text', text: body })
+    if (body !== '') content.push({ type: 'text', text: aboutCard === false ? body : `[A reply to your message about card ${aboutCard.cardId}] ${body}` })
     for (const image of msg.images ?? []) content.push({ type: 'image', mediaType: image.mediaType, data: image.data })
     const env = await envFor(conn)
     for (const file of msg.files ?? []) {
@@ -1498,9 +1552,12 @@ export function install(rt) {
     }
     const origin = originOf(session.id)
     if (origin === undefined) return
+    // A card thread answers on the Main Bot's chat, so its lines say whose and which card.
+    const cardId = rt.cardOfSession?.(session.id)
+    const label = cardId === undefined ? '' : `**${rt.botOf(botId)?.name ?? '?'} · ${cardId}**: `
     for (const item of rt.displayItems(session.id, [event])) {
       if (item.kind !== 'bot' && item.kind !== 'view') continue
-      const body = item.kind === 'bot' ? item.text : viewCardText({ title: item.title, view: item.view }) || (item.title ?? '')
+      const body = label + (item.kind === 'bot' ? item.text : viewCardText({ title: item.title, view: item.view }) || (item.title ?? ''))
       sendTo(origin.conn, origin.chatKey, { key: origin.chatKey, kind: origin.chat.kind, title: origin.chat.title }, body)
     }
   })
@@ -1562,5 +1619,5 @@ export function install(rt) {
     return [id, { state: status.state, ...(status.error !== undefined ? { error: status.error } : {}), at: status.at }]
   }))
 
-  Object.assign(rt, { imView, imStatusView, imViaView, imEndpoint, holdImOrigin, peekImOrigin, dropImOrigin })
+  Object.assign(rt, { imView, imStatusView, imViaView, imEndpoint, holdImOrigin, peekImOrigin, dropImOrigin, imPush })
 }
