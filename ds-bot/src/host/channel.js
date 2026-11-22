@@ -69,7 +69,7 @@ export function install(rt) {
     // `sessionId` is the Bot's current own-chat part; `parts` its earlier ones.
     // `waiting`: the Bot holds its greeting until the user picks its model or fixes
     // what failed it. `blocked`: the facts of a failure only the user can fix (turns.js).
-    bots: Object.values(state.bots).map(({ segments, kickoff, openParts, ...bot }) => {
+    bots: Object.values(state.bots).map(({ segments, kickoff, openParts, closedCards, ...bot }) => {
       const tail = rt.chatTail(rt.chatOf(bot.id))
       // `openParts` are the parts opened while the Bot was busy: live, with their own
       // earlier parts, and each one's run state read from the live turns.
@@ -77,10 +77,20 @@ export function install(rt) {
         sessionId: part.sessionId,
         startedAt: part.startedAt ?? 0,
         parts: (part.segments ?? []).map(segment => segment.sessionId),
+        // A card thread: the board card it works on.
+        ...(typeof part.card === 'string' ? { card: part.card } : {}),
+      }))
+      // Closed card threads stay readable: the card, its current part and earlier ones.
+      const closed = (closedCards ?? []).map(part => ({
+        card: part.card,
+        sessionId: part.sessionId,
+        closedAt: part.closedAt ?? 0,
+        parts: (part.segments ?? []).map(segment => segment.sessionId),
       }))
       return {
         ...bot, sessionId: rt.chatOf(bot.id), parts: (segments ?? []).map(segment => segment.sessionId),
-        ...(open.length > 0 ? { openParts: open } : {}), ...(kickoff ? { waiting: true } : {}),
+        ...(open.length > 0 ? { openParts: open } : {}), ...(closed.length > 0 ? { closedCards: closed } : {}),
+        ...(kickoff ? { waiting: true } : {}),
         // `engine` is the Bot's local-agent route, present only on abots.
         ...(rt.localAgentBadge?.(bot.model ?? bot.appliedModel) !== undefined ? { engine: rt.localAgentBadge(bot.model ?? bot.appliedModel) } : {}),
         ...(tail ? { lastAt: tail.lastAt, preview: tail.preview } : {}),

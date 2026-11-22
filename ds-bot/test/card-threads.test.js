@@ -24,6 +24,8 @@ async function setup({ state = team() } = {}) {
   const home = mkdtempSync(join(tmpdir(), 'ds-bot-card-threads-'))
   writeFileSync(join(home, 'state.json'), JSON.stringify(state))
   const ctx = fakeContext()
+  const register = ctx.connection.fetch.register
+  ctx.connection.fetch.register = (route) => { ctx.route = route; return register(route) }
   const prompts = []
   const archived = []
   const created = []
@@ -130,4 +132,18 @@ test('after a restart, open card threads are the Bot\'s again and closed ones st
   assert.equal(rt.chatOwners.get('card2'), 'writer')
   assert.equal(rt.cardOfSession('card2'), 'c_2')
   assert.deepEqual(rt.pastOwners.get('card1'), { botId: 'writer' })
+})
+
+test('the team view names the card of each open card thread and lists the closed ones', async (t) => {
+  const { ctx, rt, stop } = await setup()
+  t.after(stop)
+  const { notes } = rt.companions
+  await notes.startCard({ botId: 'writer', cardId: 'c_1', text: 'one' })
+  await notes.startCard({ botId: 'writer', cardId: 'c_2', text: 'two' })
+  await notes.closeCard({ botId: 'writer', cardId: 'c_1' })
+  const call = async endpoint => (await ctx.route.fetch(new Request('http://localhost/api/bot', { method: 'POST', body: JSON.stringify({ endpoint, payload: {} }) }))).json()
+  const writer = (await call('state')).value.bots.find(bot => bot.id === 'writer')
+  assert.deepEqual(writer.openParts.map(part => [part.sessionId, part.card]), [['card2', 'c_2']])
+  assert.deepEqual(writer.closedCards.map(part => [part.card, part.sessionId, part.parts]), [['c_1', 'card1', []]])
+  assert.equal(typeof writer.closedCards[0].closedAt, 'number')
 })
