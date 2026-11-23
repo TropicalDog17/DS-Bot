@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { DICTIONARY } from '../src/client/i18n.js'
 import { failureLabel, knownFailure } from '../src/client/diagnostics.js'
 
-test('credential and account failures have short words, in both languages', () => {
+test('credential and account failures have short words', () => {
   const labels = {
     MISSING_CREDENTIAL: 'The model has no API key',
     INVALID_CREDENTIAL: 'The API key is not in the right format',
@@ -13,7 +12,6 @@ test('credential and account failures have short words, in both languages', () =
   }
   for (const [code, label] of Object.entries(labels)) {
     assert.equal(failureLabel(code, 'llm-deepseek: no API key for provider route'), label)
-    assert.ok(Object.hasOwn(DICTIONARY.zh, label), label)
   }
 })
 

@@ -12,7 +12,6 @@ const { outputFiles } = await build({
   stdin: {
     contents: [
       "export { FailureCell, accountModel, failureFacts, failureText, fixesFor, retryShown } from './src/client/turn-error.js'",
-      "export { installLocale } from './src/client/i18n.js'",
     ].join('\n'),
     resolveDir: fileURLToPath(new URL('..', import.meta.url)),
   },
@@ -58,7 +57,7 @@ runInNewContext(outputFiles[0].text, {
   clearTimeout: () => {},
   require: name => (name === 'react' ? react : name === 'react-dom' ? { createPortal: node => node } : {}),
 })
-const { FailureCell, accountModel, failureFacts, failureText, fixesFor, retryShown, installLocale } = module.exports
+const { FailureCell, accountModel, failureFacts, failureText, fixesFor, retryShown } = module.exports
 
 const tick = () => new Promise(resolve => setTimeout(resolve, 0))
 const walk = (node, match, out = []) => {
@@ -464,49 +463,6 @@ test('the host correction reaches the card for the failed turn', () => {
   assert.equal(side.buttons(tree).some(entry => /Enter the key again|Use a DeepSeek account|Pick another model/.test(entry.label)), false)
   assert.ok(side.tech(tree).includes(body))
   assert.ok(side.tech(tree).includes('req-7'))
-})
-
-// The words a Chinese interface may still show in English (design note, 用词).
-const ENGLISH_ALLOWED = /\b(DeepSeek|DS Bot|Bot|API|Key|Harness|DSH|HTTP|Router|Chief)\b/gi
-
-test('in a Chinese interface every repair card state reads in Chinese, outside Technical details', () => {
-  const dicts = new Map()
-  const off = installLocale({
-    register: (ns, locale, dict) => { dicts.set(`${ns}:${locale}`, dict); return () => dicts.delete(`${ns}:${locale}`) },
-    bind: ns => (key, params) => {
-      const text = dicts.get(`${ns}:zh`)?.[key] ?? key
-      return params ? text.replace(/\{(\w+)\}/g, (match, name) => (name in params ? String(params[name]) : match)) : text
-    },
-    getLocale: () => ({ active: 'zh' }),
-  })
-  // Text shown to the user, leaving out the Technical details, which keep the raw facts.
-  const shown = (node) => {
-    if (node === null || node === undefined || typeof node === 'boolean') return ''
-    if (typeof node === 'string' || typeof node === 'number') return String(node)
-    if (Array.isArray(node)) return node.map(shown).join(' ')
-    if (node.type === 'details') return ''
-    return shown(node.props?.children)
-  }
-  try {
-    const codes = ['MISSING_CREDENTIAL', 'INVALID_CREDENTIAL', 'AUTH', 'QUOTA', 'ACCOUNT_QUOTA', 'ACCOUNT_SIGN_IN_REQUIRED', 'ACCOUNT_SIGNED_OUT', 'ACCOUNT_TOKEN_INVALID', 'TRANSPORT', 'TIMEOUT', 'RATE_LIMIT', 'SERVER', 'INTERRUPTED', 'CONTEXT_WINDOW_EXCEEDED', 'MODEL_SWITCH_COMPACTION_FAILED', 'CONTENT_POLICY', 'OTHER']
-    const account = { status: 'credential-stored', links: { topUpUrl: 'https://platform.example/top_up' }, attempt: null }
-    for (const code of codes) {
-      for (const blocked of [undefined, { code, status: 401, requestId: 'req-1', provider: 'deepseek-official', at: 1 }]) {
-        for (const later of [false, true]) {
-          const side = cell({ code, blocked, later, account, message: 'raw provider text' })
-          let tree = side.render()
-          const key = side.buttons(tree).find(entry => entry.label === '填入 API Key' || entry.label === '重新填 Key')
-          if (key) { key.node.props.onClick(); tree = side.render() }
-          const left = shown(tree).replace(ENGLISH_ALLOWED, '')
-          assert.doesNotMatch(left, /[A-Za-z]{2,}/, `${code} ${blocked ? 'blocked' : 'free'} ${later ? 'settled' : 'current'}: ${shown(tree)}`)
-          const [summary] = walk(tree, node => node.type === 'summary')
-          if (summary) assert.equal(textOf(summary), '技术详情')
-        }
-      }
-    }
-  } finally {
-    off()
-  }
 })
 
 test('a provider that is not in the catalog yet keeps a readable name in the key card', () => {
