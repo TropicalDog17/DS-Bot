@@ -33,15 +33,12 @@ unless they break the rule of their own layer; each change is listed in "Changes
 - All text in the shell that the user can see is in `TEXT` in `app/src/start/text.mjs`: the start
   page's, and that of the system dialogs attached to the start window or the main window (choose folder,
   move data, import, update). `first-run.mjs` and `updates.mjs` no longer have their own tables.
-- Chinese is the source, and English follows key by key. Both sides have the same key set and the same
-  placeholders (an existing test).
+- The copy is English only (it was Chinese first, with English key by key, until the interface became
+  English only).
 - Placeholders are `{name}`. Paths, sizes, names and versions are filled from the snapshot or the
   arguments and are not written in the table. English plurals are written in the placeholder:
-  `{bots|Bot|Bots}` fills as "1 Bot", "6 Bots" (`t()` picks by whether the value is 1). Chinese does not
-  use this.
-- There is one lookup function, `t(lang, key, vars)`. The language comes from `langOf(locale)` (`zh*` →
-  `zh`, everything else `en`); the page takes it from the snapshot, the main process uses
-  `app.getLocale()`.
+  `{bots|Bot|Bots}` fills as "1 Bot", "6 Bots" (`t()` picks by whether the value is 1).
+- There is one lookup function, `t(key, vars)`, for the page and the main process alike.
 - Product names are not copy: the dialog titles `DS Bot`, `DSH Desktop` and `DSH Web` are constants. They
   are not in the table and are not translated.
 - Outside the table there is no more Chinese or English text that the user can see. English error
