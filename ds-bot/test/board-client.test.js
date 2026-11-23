@@ -517,3 +517,38 @@ test('a card\'s links are drawn as the chat draws them, by a short name', () => 
   const tree = { type: CardDetail, props: { card: linked, roster: { byId: {}, bots: [], board: { cards: {} } }, actions: {} }, children: [] }
   assert.deepEqual(plain(all(tree, 'bt-board-link').map(text)), ['[o/r#7](<https://github.com/o/r/pull/7>)'])
 })
+
+test('a card that waits on the user leads with what the user must do; its steps and brief fold', () => {
+  const roster = { byId: {}, bots: [], board: { cards: {} } }
+  const view = c => ({ type: CardDetail, props: { card: c, roster, actions: {} }, children: [] })
+  const lines = tree => plain(all(tree, 'bt-board-line').map(text))
+  const log = [
+    { at: now - 3000, by: 'b', status: 'active', progress: 'starting' },
+    { at: now - 2000, by: 'b', status: 'active', progress: 'PR up' },
+    { at: now - 1000, by: 'b', status: 'review', progress: 'PR up' },
+  ]
+  const review = card('k', 'review', { progress: 'PR up', need: 'Merge o/r#7', log })
+  const need = find(view(review), 'bt-board-need')
+  assert.equal(need.props['data-status'], 'review')
+  assert.equal(text(need), 'Merge o/r#7')
+  assert.deepEqual(lines(view(review)), ['Merge o/r#7', 'PR up'])
+  // Before Bots said what the user must do, the progress line says it, once.
+  const older = card('k', 'blocked', { progress: 'Chờ duyệt: merge #1218' })
+  assert.equal(text(find(view(older), 'bt-board-need')), 'Chờ duyệt: merge #1218')
+  assert.deepEqual(lines(view(older)), ['Chờ duyệt: merge #1218'])
+  // A card at work shows no need, even one left behind.
+  assert.equal(find(view({ ...review, status: 'active' }), 'bt-board-need'), null)
+  // The earlier steps fold under a count; the newest is the progress itself.
+  const steps = find(view(review), 'bt-board-steps')
+  assert.equal(text(find(steps, 'bt-board-steps-toggle')), 'History (2)')
+  assert.equal(find(steps, 'bt-board-steps-list'), null)
+  assert.equal(find(view(card('k', 'active', { log: log.slice(0, 1) })), 'bt-board-steps'), null)
+  // A long brief folds; a short one shows whole.
+  const long = find(view(card('k', 'active', { brief: 'Goal.\nContext.\nLimits.\nDone when.\nMore.' })), 'bt-board-brief')
+  assert.equal(long.props['data-folded'], true)
+  assert.equal(text(find(long, 'bt-more')), 'Show more')
+  const short = find(view(card('k', 'active', { brief: 'Merge #1209.' })), 'bt-board-brief')
+  assert.equal(short.props['data-folded'], undefined)
+  assert.equal(find(short, 'bt-more'), null)
+  assert.equal(find(view(card('k', 'active')), 'bt-board-brief'), null)
+})

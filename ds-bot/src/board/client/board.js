@@ -244,6 +244,33 @@ function Thread({ notes, roster, awaiting, live, pick, busy }) {
         h('span', { className: 'bt-board-msg-text bt-board-dots', 'aria-hidden': true }, h('i'), h('i'), h('i')))) : null)
 }
 
+// The steps a card went through, newest first, under its progress. The newest step is
+// the progress itself, so only the earlier ones fold here.
+function Steps({ card, cards }) {
+  const [open, setOpen] = useState(false)
+  const earlier = (card.log ?? []).slice(0, -1).reverse()
+  if (earlier.length === 0) return null
+  return h('div', { className: 'bt-board-steps' },
+    h('button', { type: 'button', className: 'bt-more bt-board-steps-toggle', 'aria-expanded': open, onClick: () => setOpen(value => !value) },
+      open ? t('Hide history') : t('History ({count})', { count: earlier.length })),
+    open ? h('ol', { className: 'bt-board-steps-list' }, earlier.map((step, index) =>
+      h('li', { key: index, className: 'bt-board-step' },
+        h(Dot, { status: step.status }),
+        h('span', { className: 'bt-board-age' }, clockLabel(step.at ?? 0)),
+        step.progress ? h(BotText, { text: step.progress, cards, className: 'bt-board-step-text' }) : null))) : null)
+}
+
+// The brief the card started from: folded to a few lines until opened.
+const BRIEF_FOLD = 280
+function Brief({ text, cards }) {
+  const [open, setOpen] = useState(false)
+  const long = text.length > BRIEF_FOLD || text.split('\n').length > 4
+  return h('div', { className: 'bt-board-brief', 'data-folded': long && !open ? true : undefined },
+    h(BotText, { text, cards, className: 'bt-board-line' }),
+    long ? h('button', { type: 'button', className: 'bt-more', 'aria-expanded': open, onClick: () => setOpen(value => !value) },
+      open ? t('Show less') : t('Show more')) : null)
+}
+
 export function CardDetail({ card, roster, actions, live, onOpenCard }) {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
@@ -290,6 +317,12 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
   }
   const notes = card.notes ?? []
   const links = [...(card.url && !card.key ? [{ url: card.url }] : []), ...(card.links ?? [])]
+  const allCards = roster.board?.cards ?? {}
+  // A card that waits on the user leads with what the user must do; before Bots said
+  // so (need), its progress line says it.
+  const waitsOnUser = card.status === 'review' || card.status === 'blocked'
+  const need = waitsOnUser ? card.need || card.progress || '' : ''
+  const progress = need !== '' && !card.need ? '' : card.progress
   return h('div', { className: 'bt-board-sheet-body', 'data-status': card.status },
     h('div', { className: 'bt-board-detail', ref: scroller, onClick: cardLinkTap(onOpenCard) },
       card.key ? (card.url
@@ -307,12 +340,16 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
               value: card.status, disabled: busy, 'aria-label': t('Move to'),
               onChange: (event) => { if (event.target.value !== card.status) run(actions.boardMove(card.id, event.target.value)) },
             }, COLUMNS.map(([status, name]) => h('option', { key: status, value: status }, t(name))))),
-      card.progress ? h(BotText, { text: card.progress, cards: roster.board?.cards ?? {}, className: 'bt-board-line' }) : null,
+      need ? h('div', { className: 'bt-board-need', 'data-status': card.status, role: 'note' },
+        h(BotText, { text: need, cards: allCards, className: 'bt-board-line bt-board-strong' })) : null,
+      progress ? h(BotText, { text: progress, cards: allCards, className: 'bt-board-line' }) : null,
+      h(Steps, { card, cards: allCards }),
       card.result ? h(BotText, { text: card.result, cards: roster.board?.cards ?? {}, className: 'bt-board-line bt-board-strong' }) : null,
       card.reason ? h(BotText, { text: card.reason, cards: roster.board?.cards ?? {}, className: 'bt-board-line' }) : null,
       links.length > 0 ? h('div', { className: 'bt-board-links' },
         links.map(link => h('div', { key: link.url, className: 'bt-board-md bt-board-link', title: link.url },
           h(MarkdownText, { text: markdownLink(link.url), labels: mdLabels(), variant: 'compact' })))) : null,
+      card.brief ? h(Brief, { text: card.brief, cards: allCards }) : null,
       open ? h('button', {
         type: 'button', className: 'bt-board-cancel', 'data-confirm': confirming || undefined, disabled: busy,
         'aria-label': confirming ? t('Click again to cancel') : t('Cancel card'), onClick: cancel,
@@ -487,6 +524,16 @@ a.bt-board-key:hover{color:var(--bt-ink)}
 .bt-board-move::before{content:'';position:absolute;inset:0;border-radius:inherit}
 .bt-board-line{margin:0;font-size:14px;line-height:21px;color:var(--bt-ink-2);overflow-wrap:anywhere}
 .bt-board-strong{color:var(--bt-ink)}
+.bt-board-need{padding:12px 14px;border-radius:12px;corner-shape:round;background:color-mix(in srgb,var(--bt-star) 12%,transparent);box-shadow:inset 3px 0 0 var(--bt-star)}
+.bt-board-need[data-status=blocked]{background:color-mix(in srgb,var(--bt-danger) 10%,transparent);box-shadow:inset 3px 0 0 var(--bt-danger)}
+.bt-board-steps{display:flex;flex-direction:column;align-items:flex-start;gap:8px;margin-top:-8px}
+.bt-board-steps-list{display:grid;grid-template-columns:8px auto 1fr;column-gap:8px;row-gap:6px;margin:0;padding:0;list-style:none;align-self:stretch;font-size:13px;line-height:19px;color:var(--bt-ink-2)}
+.bt-board-step{display:contents}
+.bt-board-step .bt-board-dot{align-self:start;margin-top:5.5px}
+.bt-board-step .bt-board-age{white-space:nowrap}
+.bt-board-step-text{min-width:0;overflow-wrap:anywhere}
+.bt-board-brief{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding-top:12px;border-top:1px solid var(--bt-line)}
+.bt-board-brief[data-folded] .bt-board-md{max-height:84px;overflow:hidden;mask-image:linear-gradient(to bottom,#000 60%,transparent)}
 .bt-board-links{display:flex;flex-direction:column;gap:4px}
 .bt-board-link{min-width:0;min-height:28px;font-size:13px;line-height:28px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bt-board-link p{display:inline}

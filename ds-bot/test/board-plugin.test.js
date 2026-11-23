@@ -120,6 +120,39 @@ test('board opens a card from a Bot\'s own chat and moves it through every colum
   assert.match(await h.tool({ action: 'show' }), /Done \(latest 1 of 1\):\n- c_.* · LIFE-782 · Writer · Fix login/)
 })
 
+test('a card keeps the steps it went through, and what the user must do while it waits on them', async (t) => {
+  let clock = 1000
+  const h = host(t, { now: () => clock })
+  await h.tool({ action: 'open', brief: 'Do it.', title: 'Ship it', progress: 'starting' })
+  clock = 2000
+  await h.tool({ action: 'update', progress: 'PR up' })
+  clock = 3000
+  // Into Review without saying what the user must do: the Bot is told to say it.
+  assert.match(await h.tool({ action: 'update', status: 'review' }), /Say with need what the user must do/)
+  clock = 4000
+  assert.doesNotMatch(await h.tool({ action: 'update', need: 'Approve and merge [o/r#7](https://github.com/o/r/pull/7).' }), /Say with need/)
+  // A link alone is not a step.
+  await h.tool({ action: 'update', link: 'https://github.com/o/r/pull/7' })
+  const [card] = h.cards()
+  assert.equal(card.need, 'Approve and merge [o/r#7](https://github.com/o/r/pull/7).')
+  assert.deepEqual(card.log, [
+    { at: 1000, by: 'b', status: 'active', progress: 'starting' },
+    { at: 2000, by: 'b', status: 'active', progress: 'PR up' },
+    { at: 3000, by: 'b', status: 'review', progress: 'PR up' },
+  ])
+  assert.match(await h.tool({ action: 'show' }), /the user must: Approve and merge/)
+  // Back to work, the need goes; the user's own move is a step too.
+  clock = 5000
+  await h.post('move', { id: card.id, status: 'active' })
+  assert.equal(h.cards()[0].need, undefined)
+  assert.deepEqual(h.cards()[0].log.at(-1), { at: 5000, by: 'user', status: 'active', progress: 'PR up' })
+  // Blocked with a need; finishing drops it.
+  await h.tool({ action: 'update', status: 'blocked', need: 'Grant deploy access.' })
+  assert.equal(h.cards()[0].need, 'Grant deploy access.')
+  await h.tool({ action: 'complete', result: 'Shipped' })
+  assert.equal(h.cards()[0].need, undefined)
+})
+
 test('a group card remembers its group; a talk between Bots does not', async (t) => {
   const h = host(t)
   await h.tool({ action: 'open', brief: 'Do it.', title: 'Group work' }, 'gb')
