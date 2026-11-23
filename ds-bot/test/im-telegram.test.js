@@ -453,3 +453,50 @@ test('IM runtime forwards captionless video and notifies Bot when >20MB Telegram
   assert.match(prompts[1].content[0].text, /huge\.tar\.gz/)
   assert.match(prompts[1].content[0].text, /20 MB/)
 })
+
+// A fake fetch for the upload: the long poll waits until stop() aborts it.
+const uploadFetch = (calls, answer) => async (url, init) => {
+  const method = url.split('/').pop()
+  if (method === 'getUpdates') await new Promise((resolve, reject) => init.signal.addEventListener('abort', () => reject(init.signal.reason)))
+  calls.push({ method, init })
+  const body = method === 'getMe' ? { ok: true, result: { id: 7, username: 'fakebot' } } : answer()
+  return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } })
+}
+const quiet = { onStatus: () => {}, onMessage: async () => {}, onAction: async () => {} }
+
+test('sendFile posts sendDocument as multipart, and a refusal keeps the Bot API error', async () => {
+  const calls = []
+  let refuse = false
+  const fetch = uploadFetch(calls, () => refuse
+    ? { ok: false, error_code: 413, description: 'Request Entity Too Large' }
+    : { ok: true, result: { message_id: 77 } })
+  const handle = telegram.connect({ token: 'TOKEN' }, { ...env('https://api.telegram.org'), fetch }, quiet)
+  try {
+    assert.equal(handle.fileLimit, 50 * 1024 * 1024)
+    const sent = await handle.sendFile({ key: '5' }, { name: 'APP-INTEGRATION-782.md', data: Buffer.from('# Plan\n') })
+    assert.deepEqual(sent, { messageId: 77 })
+    const call = calls.find(entry => entry.method === 'sendDocument')
+    assert.ok(call.init.body instanceof FormData)
+    assert.equal(call.init.headers, undefined, 'fetch writes the multipart content type')
+    assert.equal(call.init.body.get('chat_id'), '5')
+    const document = call.init.body.get('document')
+    assert.equal(document.name, 'APP-INTEGRATION-782.md')
+    assert.equal(await document.text(), '# Plan\n')
+    assert.equal(call.init.body.get('caption'), null)
+
+    refuse = true
+    await assert.rejects(
+      handle.sendFile({ key: '5' }, { name: 'a.md', data: Buffer.from('x'), caption: 'Chief · c1' }),
+      error => error.status === 413 && error.permanent === true,
+    )
+    assert.equal(calls.at(-1).init.body.get('caption'), 'Chief · c1')
+  } finally {
+    handle.stop()
+  }
+})
+
+test('a local Bot API server takes larger uploads', () => {
+  const handle = telegram.connect({ token: 'TOKEN' }, { ...env('http://127.0.0.1:8081'), fetch: uploadFetch([], () => ({ ok: true, result: true })) }, quiet)
+  assert.equal(handle.fileLimit, 2000 * 1024 * 1024)
+  handle.stop()
+})
