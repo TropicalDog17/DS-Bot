@@ -552,3 +552,16 @@ test('a card that waits on the user leads with what the user must do; its steps 
   assert.equal(find(short, 'bt-more'), null)
   assert.equal(find(view(card('k', 'active')), 'bt-board-brief'), null)
 })
+
+test('a card with herdr panes offers its newest pane as a terminal, closed until opened', () => {
+  const roster = { byId: {}, bots: [], board: { cards: {} } }
+  const view = c => ({ type: CardDetail, props: { card: c, roster, actions: { boardPane: async () => ({}) } }, children: [] })
+  const panes = [{ id: 'w1:p2', at: now - 2000 }, { id: 'w1:p1T', at: now - 1000 }]
+  const box = find(view(card('k', 'active', { panes })), 'bt-board-panes')
+  const toggle = find(box, 'bt-board-pane-toggle')
+  assert.equal(toggle.props['aria-expanded'], false)
+  assert.equal(text(toggle), 'Terminalw1:p1T')
+  assert.equal(find(box, 'bt-board-term'), null)
+  assert.equal(find(box, 'bt-board-pane-pick'), null)
+  assert.equal(find(view(card('k', 'active')), 'bt-board-panes'), null)
+})

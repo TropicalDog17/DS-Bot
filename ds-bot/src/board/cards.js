@@ -34,6 +34,8 @@ export const WAITING_STATUSES = ['review', 'blocked']
 // The steps a card keeps: each column and progress it moved to, so it shows how the
 // work went and not only where it is.
 export const LOG_MAX = 40
+// The herdr panes a card's work runs in, newest last.
+export const PANES_MAX = 4
 // A card moved to its own conversation brings this much of its latest conversation along.
 const ADOPT_NOTES = 3
 const ADOPT_NOTE_MAX = 300
@@ -62,6 +64,12 @@ export function webUrl(text) {
   }
 }
 
+// A herdr pane: its id (w1:p1T) or an agent's name. It goes to herdr as one argument
+// (no shell), and never as a flag.
+export function paneTarget(text) {
+  const target = String(text ?? '').trim()
+  return /^[A-Za-z0-9][\w.:-]{0,63}$/.test(target) ? target : undefined
+}
 
 export const ACTIONS = ['open', 'update', 'ask', 'note', 'complete', 'cancel', 'show']
 export const BOT_STATUSES = ['todo', 'active', 'review', 'blocked']
@@ -96,6 +104,7 @@ export function createBoard({ roster, now = Date.now }) {
     const rows = [`- ${label(card)} · ${nameOf(card.assignee)} · ${card.title}${mine}`]
     if (card.progress) rows.push(`  progress: ${card.progress}`)
     if (card.need) rows.push(`  the user must: ${oneLine(card.need, NEED_MAX)}`)
+    if (card.panes?.length > 0) rows.push(`  herdr pane: ${card.panes.map(entry => entry.id).join(', ')}`)
     const note = (card.notes ?? []).at(-1)
     if (note !== undefined) rows.push(`  latest note from ${note.by === USER ? 'the user' : nameOf(note.by)}: ${note.text}${note.options ? ` (options: ${note.options.join(' / ')})` : ''}`)
     return rows.join('\n')
@@ -158,6 +167,12 @@ export function createBoard({ roster, now = Date.now }) {
   const dropNeed = (card) => { if (!WAITING_STATUSES.includes(card.status)) delete card.need }
   const addLink = (card, link) => {
     if (!(card.links ??= []).some(entry => entry.url === link)) card.links.push({ url: link, at: now() })
+  }
+  // A pane named again moves to the end: the newest is the one the page shows first.
+  const addPane = (card, id) => {
+    const panes = (card.panes ?? []).filter(entry => entry.id !== id)
+    panes.push({ id, at: now() })
+    card.panes = panes.slice(-PANES_MAX)
   }
 
   // Who may change a card: its assignee, the Bot that opened it, or a Main Bot.
@@ -264,6 +279,11 @@ export function createBoard({ roster, now = Date.now }) {
         if (link === undefined) return { error: 'link must be an http(s) address.' }
         if ((card.links ?? []).length >= LINKS_MAX && !card.links.some(entry => entry.url === link)) return { error: `A card keeps at most ${LINKS_MAX} links.` }
       }
+      let pane
+      if (args.pane !== undefined) {
+        pane = paneTarget(args.pane)
+        if (pane === undefined) return { error: 'pane is a herdr pane id (like w1:p1T) or an agent name.' }
+      }
       if (args.title !== undefined) {
         const title = oneLine(args.title, TITLE_MAX)
         if (title === '') return { error: 'A card needs a one-line title.' }
@@ -280,6 +300,7 @@ export function createBoard({ roster, now = Date.now }) {
       }
       dropNeed(card)
       if (link !== undefined) addLink(card, link)
+      if (pane !== undefined) addPane(card, pane)
       apply(card, ticket.fields)
       if (card.status !== before || card.progress !== progressBefore) logStep(card, self)
       touch(card)
@@ -489,5 +510,17 @@ export function createBoard({ roster, now = Date.now }) {
     return { card: answered[0] }
   }
 
-  return { show, line, label, adoptOf, bot: (cards, action, self, roomId, args) => botActions[action](cards, self, roomId, args), user, mirror }
+  // Panes the card's Bot drove from the card's thread (plugin.js reads them off its
+  // shell commands). Panes already the newest are no change, so nothing is written.
+  const panes = (cards, id, ids) => {
+    const card = own(cards, id)
+    if (card === undefined || !isOpen(card)) return { error: 'No such open card.' }
+    const fresh = ids.map(paneTarget).filter(pane => pane !== undefined)
+    const known = (card.panes ?? []).map(entry => entry.id)
+    if (fresh.length === 0 || fresh.join('\n') === known.slice(-fresh.length).join('\n')) return { error: 'No new pane.' }
+    for (const pane of fresh) addPane(card, pane)
+    return { card }
+  }
+
+  return { show, line, label, adoptOf, panes, bot: (cards, action, self, roomId, args) => botActions[action](cards, self, roomId, args), user, mirror }
 }

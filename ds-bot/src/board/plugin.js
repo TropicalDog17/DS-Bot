@@ -10,12 +10,15 @@
 // finished card closes it. The Main Bot's routing digest lists the open cards
 // (dsBotRoster addRoutingPart), the board's rules join every Bot's prompt, and what needs
 // the user goes to their phone (dsBotNotes push), with a watchdog for stuck cards.
+// Work a Bot hands to a herdr pane runs outside its turns; the card keeps the panes its
+// Bot drives and the page reads what they show (herdr.js).
 import { join } from 'node:path'
 import { defineTool } from '../host/tool-schema.js'
 import { dshHomeOf } from '../host/folders.js'
 import { ACTIONS, BOT_STATUSES, createBoard, isOpen } from './cards.js'
 import { LEVELS, createLive, levelOf } from './live.js'
 import { openBoardStore } from './store.js'
+import { createHerdr, herdrBinary, panesIn } from './herdr.js'
 import { WATCH_MS, pushFor, sweep } from './watch.js'
 
 export const ROUTE = '/api/ds-bot-board'
@@ -38,13 +41,24 @@ const BOARD_RULES = [
   '## The board',
   '- Every task you take is a card. When the user asks you for one directly, open the card yourself (board open) with a brief: its work runs in a conversation of its own for the card, so tell the user in one line that you took it and stop there. Do not open a card for a step of the card you are working on.',
   '- A card handed to you arrives in a conversation of its own that starts with "[Card …]". Do that card\'s work there: board update as it moves (when it waits on the user, review or blocked with need: what the user must do and the link to it), board ask when the user must choose, then board complete with a one-line result or board cancel with the reason. Notes on the card arrive in the same conversation.',
+  '- Work you run in a herdr pane shows on the card by itself when you drive the pane from the card\'s conversation. From anywhere else, board update with pane (its id, like w1:p1T) so the user can watch it.',
   '- A question the Main Bot passes on is not a card: just answer it.',
 ]
 const output = { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: String(value) }] }
 
+// The shell command of a call's arguments (JSON text or an object), or ''.
+export function commandOf(argumentsText) {
+  let args = argumentsText
+  if (typeof args === 'string') {
+    try { args = JSON.parse(args) } catch { return args }
+  }
+  const command = args?.command ?? args?.cmd
+  return typeof command === 'string' ? command : ''
+}
+
 export const boardFileOf = (config = {}, env = process.env) => config.file ?? join(dshHomeOf(env.DSH_HOME), 'bot-board', 'board.json')
 
-export function install(ctx, config, { identity, roster, notes, bridge, tools, connection, systemPrompt, store = openBoardStore(boardFileOf(config), { warn: (...args) => ctx.logger?.warn?.(...args) }), now = Date.now }) {
+export function install(ctx, config, { identity, roster, notes, bridge, tools, connection, systemPrompt, store = openBoardStore(boardFileOf(config), { warn: (...args) => ctx.logger?.warn?.(...args) }), herdr = createHerdr({ binary: herdrBinary(config) }), now = Date.now }) {
   const warn = (...args) => ctx.logger?.warn?.(...args)
   const board = createBoard({ roster, now })
   const live = createLive({ identity, now })
@@ -65,6 +79,7 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
       progress: { type: 'string', description: 'Latest progress, one line' },
       need: { type: 'string', description: 'update to review or blocked: what the user must do (approve, merge, answer) with the link to it; Markdown' },
       link: { type: 'string', description: 'A URL to attach, e.g. the PR' },
+      pane: { type: 'string', description: 'update: the herdr pane the work runs in (e.g. w1:p1T), so the card shows it' },
       result: { type: 'string', description: 'complete: the result, one line' },
       reason: { type: 'string', description: 'cancel: why it stops' },
       question: { type: 'string', description: 'ask: what the user decides; Markdown' },
@@ -164,6 +179,8 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
         return followed(await store.change(data => board.user.cancel(data.cards, String(body.id ?? ''), body.reason)))
       case 'note':
         return userNote(String(body.id ?? ''), body.text)
+      case 'pane':
+        return readPane(String(body.id ?? ''), String(body.pane ?? ''))
       default:
         return { error: 'Unknown board endpoint.', code: 'board/unknown' }
     }
@@ -183,6 +200,30 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
     return sent?.error !== undefined ? { error: `Saved on the card, but not sent: ${sent.error}` } : sent
   }
 
+  // What a card's pane shows now. Only a pane on the card is read: the page never names
+  // a pane of its own.
+  async function readPane(id, pane) {
+    const card = Object.hasOwn(store.read().cards, id) ? store.read().cards[id] : undefined
+    if (card === undefined) return { error: 'No such card.', code: 'board/refused' }
+    if (!(card.panes ?? []).some(entry => entry.id === pane)) return { error: 'That pane is not on the card.', code: 'board/refused' }
+    return { value: { pane, at: now(), ...await herdr.read(pane) } }
+  }
+  // A Bot's shell command that drives herdr panes, from a card's thread: the card keeps
+  // those panes.
+  async function notePanes(sessionId, event) {
+    if (event?.type !== 'tool/call') return
+    const ids = panesIn(commandOf(event.data?.arguments))
+    if (ids.length === 0) return
+    const owner = identity.ownerOfSession(sessionId)
+    if (owner === undefined || typeof notes.cardThread !== 'function') return
+    for (const card of Object.values(store.read().cards)) {
+      if (!isOpen(card) || card.assignee !== owner.botId) continue
+      if (await notes.cardThread({ botId: card.assignee, cardId: card.id }) !== sessionId) continue
+      await store.change(data => board.panes(data.cards, card.id, ids))
+      return
+    }
+  }
+
   const respond = (result) => {
     if (result?.error !== undefined) return { ok: false, error: { code: result.code ?? 'board/refused', message: result.error } }
     return { ok: true, value: result?.value ?? view() }
@@ -195,7 +236,10 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
       void store.change(data => board.mirror(data.cards, { ...reply, ...(trace === undefined ? {} : { trace }) }))
         .catch(error => ctx.logger?.warn?.('ds-bot-board: copying an answer failed: %s', error))
     }),
-    ctx.on?.('session/event', (session, event) => live.onEvent(session?.id, event)),
+    ctx.on?.('session/event', (session, event) => {
+      live.onEvent(session?.id, event)
+      void notePanes(session?.id, event).catch(error => warn('ds-bot-board: noting a herdr pane failed: %s', error))
+    }),
     ctx.on?.('agent/assistant-stream', ({ agent, frame } = {}) => live.onFrame(agent?.id, frame)),
     notes.onCardNote?.(async ({ cardId, text, requestId }) => {
       if (typeof cardId !== 'string' || store.read().cards[cardId] === undefined) return false

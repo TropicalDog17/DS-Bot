@@ -1,6 +1,8 @@
 // Korean (ko) localization for DS Bot client and DSH settings namespaces.
 
 export const KO = {
+  'Hide terminal': '터미널 숨기기',
+  'This pane is closed.': '이 창은 닫혔습니다.',
   'A new reply is waiting': "새 답변이 도착했습니다",
   'Opening…': '여는 중…',
   'Still opening…': '아직 여는 중…',

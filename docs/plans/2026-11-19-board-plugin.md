@@ -66,6 +66,16 @@ Cards are kept in `<DSH_HOME>/bot-board/board.json`. To keep them elsewhere:
   and who moved it, the last 40. The sheet shows the progress line and folds the earlier
   steps under History, so progress no longer overwrites how the work went.
 - The sheet shows the card's brief under its links, folded to a few lines when long.
+- Work a Bot hands to a [herdr](https://herdr.dev) pane runs outside its turns, so the
+  card's own trace goes quiet while the pane works. A card keeps the panes its work runs
+  in (`panes`, the newest 4): a shell command from the card's thread that drives herdr
+  (`herdr agent prompt w1:p1T …`) adds the panes it names, except `pane close`; from
+  anywhere else the Bot names one with `board update pane`. The sheet shows a Terminal
+  toggle under the steps; opened, it shows the newest pane's last 200 lines (`herdr pane
+  read --source recent-unwrapped`) and herdr's agent state, read again every 2 s while
+  open, through the route's `pane` endpoint. That endpoint reads only a pane on the
+  card, so the page cannot read any other pane. herdr is found at `config.herdr`, else
+  `~/.local/bin/herdr`, else on the PATH.
 - Storage is one JSON file, written whole (temp file, fsync, rename) through one queue.
   A second dsh on the same home reads it and refuses changes, using DS Bot's home lock
   on `board.lock`. A file that does not parse is kept beside it as `.broken-<time>`.

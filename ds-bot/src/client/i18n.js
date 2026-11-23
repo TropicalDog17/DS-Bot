@@ -857,6 +857,8 @@ const ZH = {
   'Message actions': '消息操作',
   Download: '下载',
   'Thought it through': '思考过程',
+  'Hide terminal': '收起终端',
+  'This pane is closed.': '这个窗格已关闭。',
   'Tool calls': '工具调用',
   'Earlier messages': '更早的消息',
   'Loading earlier messages…': '正在加载更早的消息…',
