@@ -68,8 +68,8 @@ nsis:
   allowElevation: false
   allowToChangeInstallationDirectory: true
   include: build/installer.nsh
-  installerLanguages: [zh_CN, en_US]
-  multiLanguageInstaller: true
+  installerLanguages: [en_US]
+  multiLanguageInstaller: false
 mac:
   # A zip, not a dmg: macOS 26 calls a downloaded unsigned dmg damaged and will not open it (#351).
   target: zip

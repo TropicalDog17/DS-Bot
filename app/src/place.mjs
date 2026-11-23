@@ -1,5 +1,5 @@
 // Where a first start puts the data: the line on the start page that says so (and when a later
-// start shows it again), and the root rule of 「换个位置…」 (windows-onboarding §3, 一个位置;
+// start shows it again), and the root rule of "Change the location…" (windows-onboarding §3, one location;
 // start-window §6). No Electron here, so the tests run without it.
 import { homedir } from 'node:os'
 import { basename, dirname, join, parse, resolve, sep } from 'node:path'
@@ -32,15 +32,14 @@ export function freeSpace(path) {
 
 /**
  * Bytes as the page shows them, in Explorer's units of 1024: whole GB from 10 up, else one
- * decimal, whole MB under 1 GB, and 「不到 1 MB」 under that (never 「0 MB」).
- * @param {string} [lang] 'en' or 'zh'
+ * decimal, whole MB under 1 GB, and "under 1 MB" under that (never "0 MB").
  */
-export function formatBytes(bytes, lang = 'zh') {
+export function formatBytes(bytes) {
   if (typeof bytes !== 'number' || !Number.isFinite(bytes) || bytes < 0) return undefined
   const gb = bytes / 2 ** 30
   if (gb >= 10) return `${String(Math.floor(gb))} GB`
   if (gb >= 1) return `${(Math.floor(gb * 10) / 10).toFixed(1)} GB`
-  if (bytes < 2 ** 20) return lang === 'en' ? 'under 1 MB' : '不到 1 MB'
+  if (bytes < 2 ** 20) return 'under 1 MB'
   return `${String(Math.floor(bytes / 2 ** 20))} MB`
 }
 
@@ -70,13 +69,13 @@ export function shortPath(path, home = homedir()) {
 /**
  * What the start page says about the place of the data: the drive and its free space on
  * Windows, the folder elsewhere.
- * @param {{ home?: string, free?: number, lang?: string }} what `free` from freeSpace(); none leaves it out
+ * @param {{ home?: string, free?: number }} what `free` from freeSpace(); none leaves it out
  * @returns {{ drive?: string, path?: string, free?: string }}
  */
-export function placeOf(dataDir, { home = homedir(), free, lang } = {}) {
+export function placeOf(dataDir, { home = homedir(), free } = {}) {
   const drive = driveOf(dataDir)
   const place = drive === undefined ? { path: shortPath(dataDir, home) } : { drive }
-  const text = formatBytes(free, lang)
+  const text = formatBytes(free)
   return text === undefined ? place : { ...place, free: text }
 }
 
@@ -106,7 +105,7 @@ export function isEmptyTree(folder) {
 const ownEmpty = folder => readdirSync(folder).every(name => [DATA_DIR, WORKSPACE_DIR].includes(name) && isEmptyTree(join(folder, name)))
 
 // OneDrive's folders: the roots it names in the environment, a folder called OneDrive or
-// 「OneDrive - <organisation>」, and macOS's Library/CloudStorage/OneDrive-<name>. A folder that
+// "OneDrive - <organisation>", and macOS's Library/CloudStorage/OneDrive-<name>. A folder that
 // only has OneDrive in its name (OneDrive-old) is not the cloud.
 function inOneDrive(path, env) {
   const roots = ['OneDrive', 'OneDriveConsumer', 'OneDriveCommercial'].map(name => env[name]).filter(value => typeof value === 'string' && value !== '')
@@ -118,7 +117,7 @@ function inOneDrive(path, env) {
 const sameFolder = (a, b) => within(a, b) && within(b, a)
 
 /**
- * The root R that a picked folder gives (windows-onboarding §3, 一个位置): the folder itself
+ * The root R that a picked folder gives (windows-onboarding §3, one location): the folder itself
  * when it is new, empty, or an empty root of the app's own; otherwise `DS Bot` inside it,
  * as inside a drive. The data goes to R\data and the Bots' files to R\workspace.
  * @param {string} picked

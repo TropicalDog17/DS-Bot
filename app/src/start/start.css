@@ -246,7 +246,7 @@ html[data-sheet=none] .sheet{pointer-events:none}
 .disclose svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;transition:rotate var(--spring-tap-ms) var(--spring-tap)}
 .disclose[aria-expanded=true] svg{rotate:180deg}
 
-/* The footer row: where the data goes, centred, with a grey 〔换个位置…〕 (a first start with a
+/* The footer row: where the data goes, centred, with a grey [Change the location…] (a first start with a
    place, a later start whose drive runs low). The button never gives way; the text is cut with
    an ellipsis when the two do not fit (English, a long folder). It ends 4 px under the sheet. */
 .footrow{position:absolute;left:calc(50% - 312px);right:calc(50% - 312px);top:calc(100% - 40px);display:flex;justify-content:center;font-size:13px;line-height:18px;color:var(--bt-ink-2)}

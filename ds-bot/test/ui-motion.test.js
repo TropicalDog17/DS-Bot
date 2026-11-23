@@ -9,7 +9,6 @@ import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
 import { apply } from '../index.js'
 import { effectsOf } from '../src/client/themes.js'
-import { toTraditional } from '../src/client/locales/zh-tw.js'
 import { fakeContext } from './fake-ctx.js'
 
 const PLUGIN = dirname(dirname(fileURLToPath(import.meta.url)))
@@ -197,13 +196,6 @@ test('botOwnCss preserves effects tokens, backdrop relief and off-tier rules whi
   assert.match(own, /\.bt-spin[^}]*animation-timing-function:steps\(8\)!important/)
   assert.doesNotMatch(own, /\[data-bt-effects=off\] \[class\*="_centerCol"\]/)
   assert.doesNotMatch(own, /\[class\^="bt-"\]/)
-})
-
-test('Traditional Chinese phrase mapping translates 界面动效 and its tier labels', () => {
-  assert.equal(toTraditional('界面动效'), '介面動效')
-  assert.equal(toTraditional('标准'), '標準')
-  assert.equal(toTraditional('精简'), '精簡')
-  assert.equal(toTraditional('无'), '無')
 })
 
 test('SettingsDialog renders Interface motion choices in General appearance and updates effects', () => {

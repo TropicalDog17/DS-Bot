@@ -5,7 +5,6 @@ import { BOT_SETTINGS_CSS } from '../../../ds-bot/src/client/bot-settings.js'
 import { FEEDBACK_CSS } from '../../../ds-bot/src/client/feedback.js'
 import { FOLDER_CSS } from '../../../ds-bot/src/client/folder-menu.js'
 import { GROUP_SETTINGS_CSS } from '../../../ds-bot/src/client/group-settings.js'
-import { installLocale } from '../../../ds-bot/src/client/i18n.js'
 import { MEMBER_CSS } from '../../../ds-bot/src/client/member-status.js'
 import { MODEL_CSS } from '../../../ds-bot/src/client/model-menu.js'
 import { PROVIDERS_CSS } from '../../../ds-bot/src/client/providers-page.js'
@@ -15,12 +14,10 @@ import { SECRET_CSS } from '../../../ds-bot/src/client/secret-card.js'
 import { SIDEBAR_CSS } from '../../../ds-bot/src/client/sidebar.js'
 import { CONVERSATION_CSS, SHELL_CSS, installStyles } from '../../../ds-bot/src/client/styles.js'
 import { USAGE_CSS } from '../../../ds-bot/src/client/usage-page.js'
-import { createLocale } from './locale.js'
 import { App } from './app.js'
 import './app.css'
 
-installLocale(createLocale(navigator.language))
-document.documentElement.lang = navigator.language
+document.documentElement.lang = 'en'
 // macOS puts the window buttons at the band's left end, over the sidebar (app.css).
 if (/mac/iu.test(navigator.userAgentData?.platform ?? navigator.platform)) document.documentElement.dataset.mac = ''
 

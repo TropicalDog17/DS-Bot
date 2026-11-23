@@ -90,7 +90,7 @@ test('the main process takes only its own acts, each in its own views', () => {
     for (const view of ['boot', 'failed', 'watchdog', 'handoff', 'moving']) assert.equal(acceptsAct(name, view), false, `${name} in ${view}`)
   }
   assert.equal(acceptsAct('handoffShow', 'handoff'), true)
-  // 「换个位置…」 while the start boots and 〔重新选〕 on its cards; a card's answer only on a card.
+  // "Change the location…" while the start boots and [Choose again] on its cards; a card's answer only on a card.
   assert.equal(acceptsAct('pick', 'boot'), true)
   assert.equal(acceptsAct('pick', 'card'), true)
   assert.equal(acceptsAct('pick', 'watchdog'), true)
@@ -141,7 +141,7 @@ test('acts come only from the start page that was loaded', () => {
 })
 
 const state = (change = {}) => ({
-  lang: 'zh', start: 'first', motion: 'normal', effects: 'full', frame: 'band', view: 'boot', done: [], celebrate: true,
+  start: 'first', motion: 'normal', effects: 'full', frame: 'band', view: 'boot', done: [], celebrate: true,
   explain: explainOf(), clock: { base: 0, from: 1000, running: true }, hint: undefined, failure: undefined, ...change,
 })
 
@@ -149,7 +149,7 @@ test('the snapshot carries the phase, the stages done and the clock', () => {
   const now = 1_700_000_000_000
   const booting = startSnapshot(state({ clock: { base: 0, from: now - 6400, running: true } }), now)
   assert.deepEqual(booting, {
-    v: 1, lang: 'zh', start: 'first', motion: 'normal', effects: 'full', frame: 'band', view: 'boot', phases: ['data', 'engine', 'team'], phase: 'data', done: [],
+    v: 1, start: 'first', motion: 'normal', effects: 'full', frame: 'band', view: 'boot', phases: ['data', 'engine', 'team'], phase: 'data', done: [],
     clock: { ms: 6400, at: now, running: true, rate: 1 },
     explain: { mode: 'new', nextStep: true, previewNotice: true }, celebrate: true, shown: false,
   })
@@ -304,7 +304,7 @@ function startWindow(t, { effects = 'full' } = {}) {
   const calls = { retry: 0, reload: 0, close: 0, pick: [], answer: [], update: [], saveAs: [], saveTo: undefined }
   const start = new StartWindow({
     electron: fake.electron, page: join(tmpdir(), 'start', 'start.html'), preload: 'preload.cjs', icon: 'icon.ico', devTools: false,
-    lang: () => 'en', motion: 'normal', effects, version: '0.0.0', program: [], log: { dir: 'logs', tail: () => ['a log line'] },
+    motion: 'normal', effects, version: '0.0.0', program: [], log: { dir: 'logs', tail: () => ['a log line'] },
     mainWindow: () => main,
     onRetry: () => { calls.retry += 1 }, onReload: () => { calls.reload += 1 }, onClose: () => { calls.close += 1 },
     onPick: (value) => { calls.pick.push(value) }, onAnswer: (value) => { calls.answer.push(value) }, onUpdate: (name) => { calls.update.push(name) },
@@ -381,8 +381,8 @@ test('a dialog of the start window shows it at once: it never opens over nothing
   assert.equal(s.state().shown, true)
 })
 
-// 〔保存日志…〕 asks the app's own picker (main.mjs saveAs) where, never a system box.
-test('〔保存日志…〕 writes the log where the app\'s picker says, and nothing when it is cancelled', async (t) => {
+// [Save log…] asks the app's own picker (main.mjs saveAs) where, never a system box.
+test('[Save log…] writes the log where the app\'s picker says, and nothing when it is cancelled', async (t) => {
   const s = startWindow(t)
   s.start.open('first')
   s.start.fail(new Error('The DSH Host stopped (exit 1)'))
@@ -424,7 +424,7 @@ test('the 180 s question comes on the start\'s clock while the engine is not up'
   s.tick(1)
   assert.equal(s.state().view, 'watchdog')
   assert.equal(s.state().clock.running, false)
-  // 〔继续等待〕: another 180 s on the clock.
+  // [Keep waiting]: another 180 s on the clock.
   assert.equal(s.act('wait'), true)
   assert.equal(s.state().view, 'boot')
   s.tick(WATCHDOG_MS - 1)
@@ -476,7 +476,7 @@ test("the copy is a stage of its own, and the engine's stage waits for the copie
 
 // start-window §7: the stage that failed is the one the snapshot is at, and the page turns its arc
 // red: the data folder when it cannot be made or written, the engine when it or the Host stops.
-// §6: a failed copy keeps the copy's arc (the page turns it red); 〔先不带团队开始〕 takes the card
+// §6: a failed copy keeps the copy's arc (the page turns it red); [Start without the team] takes the card
 // away and the ring goes back to three.
 test('a failed copy keeps its arc on the ring until the start goes on without the team', (t) => {
   const s = startWindow(t)
@@ -550,7 +550,7 @@ test('the team view has 20 s to call ready(); a late ready() hands over without 
   s.tick(1)
   assert.equal(s.state().view, 'viewFailed')
   assert.deepEqual(s.state().failure, { reason: 'other', log: ['a log line'] })
-  // 〔重新载入〕: the hidden team view loads again and has another 20 s.
+  // [Reload]: the hidden team view loads again and has another 20 s.
   assert.equal(s.act('reloadView'), true)
   assert.equal(s.calls.reload, 1)
   assert.equal(s.state().view, 'boot')
@@ -809,11 +809,11 @@ test('the place line, its picker and its cards, and a start over in another fold
   assert.equal('place' in s.state(), false)
   s.start.place({ drive: 'C', free: '412 GB' })
   assert.deepEqual(s.state().place, { drive: 'C', free: '412 GB' })
-  // 「换个位置…」 from the line, with its detail; the picker's own wait is the main process's.
+  // "Change the location…" from the line, with its detail; the picker's own wait is the main process's.
   assert.equal(s.act('pick', { value: 'changePlace' }), true)
   assert.deepEqual(s.calls.pick, ['changePlace'])
   assert.equal(s.act('answer', { value: 'use' }), false)
-  // A layer the app added: the 「会放在…」 card waits for the answer, and the clock with it.
+  // A layer the app added: the "It will go in…" card waits for the answer, and the clock with it.
   s.start.card({ kind: 'picked', path: 'D:\\DS Bot' })
   assert.equal(s.state().view, 'card')
   assert.deepEqual(s.state().card, { kind: 'picked', path: 'D:\\DS Bot' })

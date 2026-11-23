@@ -39,9 +39,8 @@ const voiceEl = $('.voice'), voiceText = $('.voice>span')
 const captionText = $('.caption-text')
 const placeEl = $('.place'), placeText = $('.place-text')
 const CODE = new Set(['path', 'dataDir', 'workspace'])
-let lang = 'zh'
 let s = null
-const say = (key, vars) => t(lang, key, vars)
+const say = t
 
 // ---- text ----
 const sigs = new WeakMap()
@@ -64,13 +63,13 @@ function render(el, vars = {}) {
   }))
 }
 function renderStatic() {
-  root.lang = lang === 'zh' ? 'zh-CN' : 'en'
+  root.lang = 'en'
   for (const el of document.querySelectorAll('.track [data-t], .footrow [data-t], .caption [data-t]')) render(el)
   $('.track').setAttribute('aria-label', say('status.track'))
   for (const st of document.querySelectorAll('.station')) st.querySelector('.sr').textContent = say(`status.state.${st.dataset.state}`)
   if (s) { fillBlock(shown); placeUI(s.place); timeUI() }
 }
-// Where the data goes, centred in the footer with a grey 〔换个位置…〕: on a first start (the main
+// Where the data goes, centred in the footer with a grey [Change the location…]: on a first start (the main
 // process sends no place on a reinstall or once a copied team lives there), and on a later start
 // whose drive is down to a fifth of its room at the start. The drive and its free space on
 // Windows, the folder elsewhere.
@@ -279,7 +278,7 @@ async function showBlock(name, jump) {
   }
 }
 
-// 〔复制过来〕, 〔继续复制〕 or a retry: the card does not fold away. Its surface shrinks to a drop
+// [Copy them over], [Continue copying] or a retry: the card does not fold away. Its surface shrinks to a drop
 // that turns the whale's blue and jumps up into the import's arc, which lights up as it lands and
 // then fills with the copy; the pond comes back down after it (start-window §6). Reduced motion
 // folds the card as usual and turns the arc on at once.
@@ -378,10 +377,10 @@ function missing(el) {
     a.done.then(() => { line.hidden = true; a.cancel(); resize() })
   }, 4000)
 }
-// The recommended-drive card: the question and 〔放到 D 盘〕 only with a drive to recommend,
-// 〔仍然放在 C 盘〕 only when the default place works but its drive is short on space. A
+// The recommended-drive card: the question and [Put it on drive D] only with a drive to recommend,
+// [Keep it on drive C] only when the default place works but its drive is short on space. A
 // rejected pick keeps the buttons of the card it came from (card.keep says whether it had
-// 〔仍然放在 C 盘〕).
+// [Keep it on drive C]).
 function recommend(el) {
   const card = s.card
   const rec = Boolean(card.rec)
@@ -429,7 +428,7 @@ function bar(el, fraction, keep) {
   el.style.scale = `${f} 1`
   if (!reduced()) play(el, [{ scale: from }, { scale: `${f} 1` }], { ...spring('list'), fill: 'none' })
 }
-// The recovery card. 〔换个位置…〕 and 〔用新的空白团队开始…〕 show only when the main process can
+// The recovery card. [Change the location…] and [Start with a new blank team…] show only when the main process can
 // carry them out (failure.places).
 function failed(el) {
   for (const node of el.querySelectorAll('[data-places]')) node.hidden = !s.failure?.places
@@ -491,7 +490,6 @@ let applied = false
 function apply(next) {
   const jump = !applied && resume
   s = next
-  if ((next.lang ?? 'zh') !== lang || !applied) { lang = next.lang ?? 'zh'; renderStatic() }
   const motion = next.motion ?? 'normal'
   if (root.dataset.motion !== motion) root.dataset.motion = motion
   const effects = next.effects ?? 'full'

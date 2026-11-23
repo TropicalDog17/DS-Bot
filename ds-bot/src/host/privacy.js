@@ -150,15 +150,14 @@ export function install(rt) {
   const closed = (bot, what) => new Error(`${bot.name} is a private Bot, and other Bots cannot reach its ${what}. Ask the user if ${bot.name} should share something.`)
 
   // What a private Bot sends out is shown to the user first, as the user sees it.
-  async function approve(exec, { en, zh }) {
+  async function approve(exec, reason) {
     const approval = ctx.get?.('approval')
     if (approval === undefined || exec.agent?.session === undefined) throw new Error('A private Bot needs the user\'s approval for this, and there is no way to ask for it here, so it was not done.')
     const outcome = await approval.request({
       agent: exec.agent,
       toolName: exec.name,
       ...(exec.callId !== undefined ? { callId: exec.callId } : {}),
-      reason: en,
-      displayReason: { en, zh },
+      reason,
       ...(exec.signal ? { signal: exec.signal } : {}),
     })
     if (outcome === 'allowed-once') return
@@ -184,14 +183,14 @@ export function install(rt) {
         const bot = target(args.to)
         if (bot) throw new Error(`Not sent: ${bot.name} is a private Bot, and other Bots cannot message it. Ask the user to pass it on.`)
         const to = botNamed(args.to)
-        if (isPrivate(self) && to !== undefined) await approve(exec, { en: `Let ${rt.botOf(self).name} send this to ${to.name}?\n\n${String(args.message ?? '')}`, zh: `允许 ${rt.botOf(self).name} 把下面的内容发给 ${to.name} 吗？\n\n${String(args.message ?? '')}` })
+        if (isPrivate(self) && to !== undefined) await approve(exec, `Let ${rt.botOf(self).name} send this to ${to.name}?\n\n${String(args.message ?? '')}`)
         return
       }
       // Every Bot reads the shared capabilities, so saving one shares what is in it.
       case 'save_capability': {
         if (!isPrivate(self)) return
         const shown = JSON.stringify(args, null, 2)
-        await approve(exec, { en: `Let ${rt.botOf(self).name} share this with the team?\n\n${shown}`, zh: `允许 ${rt.botOf(self).name} 把下面的内容共享给团队吗？\n\n${shown}` })
+        await approve(exec, `Let ${rt.botOf(self).name} share this with the team?\n\n${shown}`)
         return
       }
       case 'stop_bot': {
@@ -258,7 +257,7 @@ export function install(rt) {
         const own = await spellings(rt.botOf(self).workDir)
         const base = folder()
         const target = await spellings(base === undefined ? path : resolve(base, path))
-        if (!target.every(key => own.some(root => within(key, root)))) await approve(exec, { en: `Let ${rt.botOf(self).name} change ${path}? It is outside its own folder.`, zh: `允许 ${rt.botOf(self).name} 修改 ${path} 吗？它在自己的文件夹之外。` })
+        if (!target.every(key => own.some(root => within(key, root)))) await approve(exec, `Let ${rt.botOf(self).name} change ${path}? It is outside its own folder.`)
       }
       return
     }

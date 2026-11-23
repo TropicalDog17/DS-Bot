@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { capabilityStatusFor, capabilityStatusText, unapprovedCapabilitiesFor } from './capabilities.ts'
-import { setLang } from '../ui/i18n.ts'
 
 test('capabilityStatusFor resolves nested per-bot capabilityStatuses with severity order', () => {
   const statuses = {
@@ -46,27 +45,15 @@ test('unapprovedCapabilitiesFor resolves stdio MCP targets for direct items and 
 })
 
 // A status the phone cannot resolve must read as unknown, not erase the status from
-// the row (#1523): the Issue asks for 「空值或缺失时显示未知」.
-test('a missing or empty status reads as unknown in both languages', (t) => {
-  t.after(() => setLang('system'))
-  setLang('zh')
-  assert.equal(capabilityStatusText(undefined), '未知')
-  assert.equal(capabilityStatusText({}), '未知')
-  setLang('en')
+// the row (#1523): an empty or missing status shows as unknown.
+test('a missing or empty status reads as unknown', () => {
   assert.equal(capabilityStatusText(undefined), 'Unknown')
   assert.equal(capabilityStatusText({}), 'Unknown')
 })
 
 // The statuses the host does send keep their copy; a state this build does not know
 // keeps the old "connecting" text, not unknown.
-test('known statuses keep their text and an unknown state stays connecting', (t) => {
-  t.after(() => setLang('system'))
-  setLang('zh')
-  assert.equal(capabilityStatusText({ state: 'ready' }), '就绪')
-  assert.equal(capabilityStatusText({ state: 'needs-approval' }), '需要批准')
-  assert.equal(capabilityStatusText({ state: 'error', error: 'ECONNREFUSED' }), '连接失败：ECONNREFUSED')
-  assert.equal(capabilityStatusText({ state: 'something-new' }), '正在连接…')
-  setLang('en')
+test('known statuses keep their text and an unknown state stays connecting', () => {
   assert.equal(capabilityStatusText({ state: 'ready' }), 'Ready')
   assert.equal(capabilityStatusText({ state: 'needs-approval' }), 'Needs approval')
   assert.equal(capabilityStatusText({ state: 'error', error: 'ECONNREFUSED' }), 'Could not connect: ECONNREFUSED')

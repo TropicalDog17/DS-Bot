@@ -119,7 +119,7 @@ function answerPicker(contents, request) {
       state.ipc.get('ds-bot:app-picker-cancel')(event, request.id)
       return
     }
-    // The user makes a folder that is not there yet with 〔新建文件夹〕, then chooses it.
+    // The user makes a folder that is not there yet with [New folder], then chooses it.
     if (request.mode === 'folder') {
       try { mkdirSync(answer.filePaths[0], { recursive: true }) } catch {}
     }

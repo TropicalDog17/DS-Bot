@@ -2,7 +2,7 @@ import { Children, Fragment, useCallback, useEffect, useState } from 'react'
 import { AppState, Linking, PermissionsAndroid, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native'
 import { useTeam } from '../team/context.tsx'
 import { androidNotificationStatus } from '../team/notifications.ts'
-import { t, getLang, setLang } from '../ui/i18n.ts'
+import { t } from '../ui/i18n.ts'
 import { ChevronRightIcon } from '../ui/icons.tsx'
 import { readPrefs, writePrefs } from '../store.ts'
 import { radius, shadow, type as typeScale, useTheme } from '../ui/tokens.ts'
@@ -63,7 +63,6 @@ export function Settings({ navigation }: { navigation?: any }) {
   const { p } = useTheme()
   const { team, computer } = useTeam()
   const [prefs, setPrefs] = useState<Record<string, string>>({})
-  const [, bump] = useState(0)
   const androidSdk = Platform.OS === 'android' ? Number(Platform.Version) : 0
   const [notifAllowed, setNotifAllowed] = useState(false)
   const refreshNotif = useCallback(() => {
@@ -87,7 +86,6 @@ export function Settings({ navigation }: { navigation?: any }) {
     }, () => void Linking.openSettings())
   }
   const theme = prefs.theme ?? 'system'
-  const lang = getLang()
   const notifStatus = androidNotificationStatus(androidSdk, notifAllowed)
   return (
     <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
@@ -95,8 +93,6 @@ export function Settings({ navigation }: { navigation?: any }) {
         <Row label={t('Computers')} value={computer?.name ?? ''} onPress={() => navigation?.navigate('Computers')} />
         <Choice label={t('Appearance')} value={theme as 'system' | 'light' | 'dark'} onPick={next => set('theme', next)}
           options={[{ id: 'system', label: t('System') }, { id: 'light', label: t('Light') }, { id: 'dark', label: t('Dark') }]} />
-        <Choice label={t('Language')} value={lang as 'system' | 'zh' | 'en'} onPick={next => { set('lang', next); setLang(next); bump(v => v + 1) }}
-          options={[{ id: 'system', label: t('Follow system') }, { id: 'zh', label: '简体中文' }, { id: 'en', label: 'English' }]} />
         <Row label={t('In-app banners')} end={<Switch value={prefs.banners !== 'off'} onValueChange={on => set('banners', on ? 'on' : 'off')} trackColor={{ false: p.line2, true: p.accent }} thumbColor={p.knob} />} />
         {Platform.OS === 'android' ? <Row label={t('Notifications')} value={notifStatus !== undefined ? t(notifStatus) : undefined} onPress={openNotifications} /> : null}
       </Section>

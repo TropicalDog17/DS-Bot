@@ -9,7 +9,7 @@ Version: draft 0.2 (2026-10-15, checked against `dev` `2f9300d`; 0.1 was 2026-10
 - **Reference interfaces**: the top pill and the usage page in settings. The motion of a new interface follows these two.
 - **Direction**: fix the current state in place. Values follow the existing code; the work only removes inconsistencies and does not set a new visual design. Over time this grows into DS Bot's own design language.
 - **When there is a trade-off**: do not decide on your own. Build a side-by-side preview of the two options and let the maintainer choose; once chosen, record it in section 14, "Decision record", and follow the record from then on.
-- **Hard rules** (from `AGENTS.md`): only original material, no code, icons or graphics copied from other products; the source language of interface text is English, and the Chinese is in `i18n.js`; do not change DSH itself.
+- **Hard rules** (from `AGENTS.md`): only original material, no code, icons or graphics copied from other products; interface text is English only, and goes through `t()` in `i18n.js`; do not change DSH itself.
 
 ## 1. Design principles
 
@@ -499,7 +499,7 @@ Choose by where the problem is:
 
 - Must: write only what the user needs. Do not put the discussion, plans or process from a session into the interface (for example "right away", "later", "next version"), except for wording the user gave verbatim.
 - Must: settings have no description text by default. When one is really needed, write one neutral sentence about what the setting does; do not repeat the wording from a session, and do not compare options. If in doubt, leave it out.
-- Must: write the source text in English and the Chinese in `ZH` in `i18n.js`; look it up with `t()` at render time and do not cache the translated result.
+- Must: write interface text in English only, and pass it through `t()` from `i18n.js` so that `{name}` slots are filled in one place.
 - Should: English uses sentence case; labels and buttons have no period; buttons start with a verb (Create, Save, Delete).
 - Should: error text says clearly what happened and what the user can do, placed next to where the error happened.
 - Terms:

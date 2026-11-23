@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { START_ACTS } from '../src/start-window.mjs'
-import { langOf, TEXT, t } from '../src/start/text.mjs'
+import { TEXT, t } from '../src/start/text.mjs'
 
 const dir = new URL('../src/start/', import.meta.url)
 const read = name => readFileSync(new URL(name, dir), 'utf8')
@@ -193,20 +193,20 @@ test('the whale\'s entrance waits until the window is on screen', () => {
 
 test('the footer is the place line alone, centred with a grey button, on first and later starts', () => {
   assert.match(html, /<footer class="footrow"><p class="place" hidden><span class="place-text"><\/span><button class="btn" data-look="small" data-act="pick" data-detail="changePlace" data-t="btn.changePlace"><\/button><\/p><\/footer>/u)
-  assert.ok(!('foot.community' in TEXT.zh), 'the community note is back')
+  assert.ok(!('foot.community' in TEXT), 'the community note is back')
   const css = read('start.css')
   assert.match(css, /\.footrow\{[^}]*justify-content:center/u)
   assert.match(css, /html\[data-start=moving\] \.footrow\{display:none\}/u)
   assert.doesNotMatch(css, /data-start=later[^{]*\.footrow/u)
   assert.doesNotMatch(css, /\.note\b/u)
   assert.match(code['start.js'], /const on = START !== 'moving' && place !== null/u)
-  // A later start's move asks on a card: 〔移动并重启〕, 〔重新选…〕 and 〔取消〕.
+  // A later start's move asks on a card: [Move and restart], [Choose again…] and [Cancel].
   assert.match(html, /<section class="card" data-kind="move" hidden>.*?data-t="say\.move".*?data-t="card\.move\.lead".*?data-detail="move" data-t="btn\.move".*?data-act="pick" data-t="btn\.repick".*?data-detail="cancel" data-t="btn\.cancel".*?<\/section>/u)
 })
 
 // A move that does not go through says why on the moving page (start-window §5): a place that
 // cannot be used after all, another DSH on the data, a copy that failed. Each variant shows its own
-// parts only; 〔用原来的位置启动〕 is on all three, 〔重试〕 and the details only after a failed copy.
+// parts only; [Start in the old folder] is on all three, [Try again] and the details only after a failed copy.
 // start-window §7: a recovery card says what happened and what to do, and folds out the log.
 const cardOf = kind => html.match(new RegExp(`<section class="card" data-kind="${kind}" hidden>.*?</section>`, 'u'))?.[0] ?? ''
 const recovers = (card, kind) => {
@@ -217,7 +217,7 @@ const recovers = (card, kind) => {
 test('the failure page says what happened, what to do for each reason, and folds out the log', () => {
   const card = cardOf('failed')
   assert.match(card, /<p class="lead" data-t="reason\.start\.\{reason\}"><\/p><p class="small do" data-t="card\.failed\.do\.\{reason\}"><\/p>/u)
-  for (const reason of ['permission', 'space', 'files', 'engine', 'missing', 'other']) assert.ok(`card.failed.do.${reason}` in TEXT.zh, reason)
+  for (const reason of ['permission', 'space', 'files', 'engine', 'missing', 'other']) assert.ok(`card.failed.do.${reason}` in TEXT, reason)
   assert.match(card, /data-act="retry" data-main/u)
   recovers(card, 'failed')
 })
@@ -252,29 +252,17 @@ const layerOf = key => key.split('.')[0]
 // {name} and {name|one|many} (an English count) both name one placeholder.
 const PLACEHOLDER = /\{(\w+)(?:\|[^}]*)?\}/gu
 
-test('all locales carry the same keys and the same placeholders', () => {
-  const placeholders = text => [...text.matchAll(PLACEHOLDER)].map(match => match[1]).sort().join()
-  const zhKeys = Object.keys(TEXT.zh).sort()
-  for (const [lang, table] of Object.entries(TEXT)) {
-    if (lang === 'zh') continue
-    assert.deepEqual(Object.keys(table).sort(), zhKeys, `${lang}: keys differ`)
-    for (const [key, zh] of Object.entries(TEXT.zh)) {
-      assert.equal(placeholders(table[key]), placeholders(zh), `${lang}.${key}: placeholders differ`)
-    }
-  }
-})
-
 test('every text key starts with one of the eleven layers', () => {
-  for (const key of Object.keys(TEXT.zh)) assert.ok(LAYERS.includes(layerOf(key)), `${key}: unknown layer`)
+  for (const key of Object.keys(TEXT)) assert.ok(LAYERS.includes(layerOf(key)), `${key}: unknown layer`)
 })
 
 // The whale speaks only when something went wrong (the 180 s question, a failure), and the hint
 // row only for a short drive: no greeting, stage lines, slow-start lines or clock.
 test('the whale and the hint row have only the lines for when the user is needed', () => {
-  const layer = name => Object.keys(TEXT.zh).filter(key => layerOf(key) === name).sort()
+  const layer = name => Object.keys(TEXT).filter(key => layerOf(key) === name).sort()
   assert.deepEqual(layer('voice'), ['voice.failed', 'voice.viewFailed', 'voice.watchdog'])
   assert.deepEqual(layer('hint'), ['hint.space'])
-  assert.ok(!('status.elapsed' in TEXT.zh), 'the elapsed clock is back')
+  assert.ok(!('status.elapsed' in TEXT), 'the elapsed clock is back')
 })
 
 // §2 and §4: a line that stands alone takes no full stop; card, reason, note and dialog text is
@@ -286,37 +274,20 @@ test('each layer ends its lines as its rule says', () => {
     'card.update.slow', 'card.update.downloading', 'dialog.pickRoot', 'dialog.pickMove', 'dialog.pickCookies', 'dialog.saveAs', 'dialog.saveLog',
     'card.import.line', 'card.import.model', 'card.import.optRegen', 'card.import.optSkipWork',
   ])
-  for (const key of Object.keys(TEXT.zh)) {
-    const zh = TEXT.zh[key]
-    const en = TEXT.en[key]
+  for (const [key, text] of Object.entries(TEXT)) {
     if (BARE.has(layerOf(key))) {
-      assert.doesNotMatch(zh, /。$/u, `${key}: zh ends with a full stop`)
-      assert.doesNotMatch(en, /\.$/u, `${key}: en ends with a full stop`)
+      assert.doesNotMatch(text, /\.$/u, `${key}: ends with a full stop`)
     } else if (key.startsWith('reason.copy.')) {
       // A fragment set into a sentence.
-      assert.doesNotMatch(zh, /[。？！，]$/u, `${key}: a fragment ends with punctuation`)
-      assert.doesNotMatch(en, /[.?!,]$/u, `${key}: a fragment ends with punctuation`)
+      assert.doesNotMatch(text, /[.?!,]$/u, `${key}: a fragment ends with punctuation`)
     } else if (!NOT_SENTENCES.has(key)) {
       // A reason or a footnote states; only a card or a dialog may ask.
-      const ends = layerOf(key) === 'reason' || layerOf(key) === 'note' ? [/。$/u, /\.$/u] : [/[。？]$/u, /[.?]$/u]
-      assert.match(zh, ends[0], `${key}: zh is not a whole sentence`)
-      assert.match(en, ends[1], `${key}: en is not a whole sentence`)
+      const end = layerOf(key) === 'reason' || layerOf(key) === 'note' ? /\.$/u : /[.?]$/u
+      assert.match(text, end, `${key}: not a whole sentence`)
     }
     if (['dialog.pickRoot', 'dialog.pickMove', 'dialog.pickCookies', 'dialog.saveAs', 'dialog.saveLog'].includes(key)) {
-      assert.doesNotMatch(zh, /。$/u, `${key}: a picker title ends with a full stop`)
-      assert.doesNotMatch(en, /\.$/u, `${key}: a picker title ends with a full stop`)
+      assert.doesNotMatch(text, /\.$/u, `${key}: a picker title ends with a full stop`)
     }
-  }
-})
-
-// Counted after the placeholders are removed, a run of Latin letters or digits (a name such as
-// DeepSeek, a unit) as one character.
-test('the zh lines stay within their layer’s length', () => {
-  const LIMITS = { voice: 16, say: 12, hint: 22, btn: 10 }
-  const length = text => [...text.replace(PLACEHOLDER, '').replace(/\s+/gu, '').replace(/[A-Za-z0-9]+/gu, 'A')].length
-  for (const [key, zh] of Object.entries(TEXT.zh)) {
-    const limit = LIMITS[layerOf(key)]
-    if (limit !== undefined) assert.ok(length(zh) <= limit, `${key}: ${String(length(zh))} characters, over ${String(limit)}`)
   }
 })
 
@@ -326,28 +297,12 @@ test('a button that opens the system picker ends with …', () => {
   for (const tag of picks) {
     const key = tag.match(/data-t="([^"]+)"/u)?.[1]
     assert.ok(key !== undefined, `a pick button without text: ${tag}`)
-    assert.match(TEXT.zh[key], /…$/u, `${key}: a pick button`)
-    assert.match(TEXT.en[key], /…$/u, `${key}: a pick button`)
+    assert.match(TEXT[key], /…$/u, `${key}: a pick button`)
   }
-})
-
-// docs/plans/2026-10-26-windows-onboarding.md, 用词: proper names and units only.
-test('the zh copy shows no English but the allowed names and units', () => {
-  const NAMES = ['DS Bot', 'DSH Desktop', 'DSH Web']
-  const WORDS = new Set(['DeepSeek', 'Bot', 'API', 'Key', 'Harness', 'DSH', 'Agent', 'MCP', 'Windows', 'PowerShell', 'GitHub', 'SmartScreen', 'OneDrive', 'cookie', 'HTTP', 'SOCKS', 'KB', 'MB', 'GB'])
-  const english = []
-  for (const [key, value] of Object.entries(TEXT.zh)) {
-    let rest = value.replace(PLACEHOLDER, ' ')
-    for (const name of NAMES) rest = rest.replaceAll(name, ' ')
-    for (const word of rest.match(/[A-Za-z][A-Za-z0-9.-]*/gu) ?? []) if (!WORDS.has(word)) english.push(`${key}: ${word}`)
-    // A promise the engine cannot keep.
-    assert.doesNotMatch(value, /马上|稍后|下个版本/u, key)
-  }
-  assert.deepEqual(english, [])
 })
 
 test('every text key that the page uses exists', () => {
-  const keys = Object.keys(TEXT.zh)
+  const keys = Object.keys(TEXT)
   const matching = pattern => keys.filter(key => new RegExp(`^${pattern.replaceAll('.', '\\.').replace(/\{\w+\}/gu, '\\w+')}$`, 'u').test(key))
   for (const [, key] of html.matchAll(/data-t(?:-label)?="([^"]+)"/gu)) assert.ok(matching(key).length > 0, `start.html: unknown text key ${key}`)
   const literal = new RegExp(`^(?:${LAYERS.join('|')})\\.[\\w.]+$`, 'u')
@@ -357,11 +312,11 @@ test('every text key that the page uses exists', () => {
       ...[...text.matchAll(/'([\w.]+)'/gu)].map(match => match[1]).filter(key => literal.test(key)),
       ...[...text.matchAll(/\b(?:say|label)\('([\w.]+)'/gu)].map(match => match[1]),
     ]
-    for (const key of used) assert.ok(key in TEXT.zh, `${name}: unknown text key ${key}`)
+    for (const key of used) assert.ok(key in TEXT, `${name}: unknown text key ${key}`)
     for (const [, prefix] of text.matchAll(/`([\w.]+\.)\$\{/gu)) assert.ok(keys.some(key => key.startsWith(prefix)), `${name}: no text key starts with ${prefix}`)
   }
   // Keys the page builds from the snapshot's views, the stages and the failure reasons.
-  for (const key of ['voice.failed', 'voice.viewFailed', 'voice.watchdog', 'status.phase.data', 'status.phase.import', 'status.phase.engine', 'status.phase.team', 'status.state.pending', 'status.state.active', 'status.state.done', 'status.state.failed']) assert.ok(key in TEXT.zh, key)
+  for (const key of ['voice.failed', 'voice.viewFailed', 'voice.watchdog', 'status.phase.data', 'status.phase.import', 'status.phase.engine', 'status.phase.team', 'status.state.pending', 'status.state.active', 'status.state.done', 'status.state.failed']) assert.ok(key in TEXT, key)
   assert.deepEqual(matching('reason.start.{reason}').sort(), ['reason.start.engine', 'reason.start.files', 'reason.start.missing', 'reason.start.other', 'reason.start.permission', 'reason.start.space'])
   assert.deepEqual(matching('reason.place.{reason}').sort(), ['reason.place.drive', 'reason.place.dsh', 'reason.place.foreign', 'reason.place.nested', 'reason.place.onedrive', 'reason.place.permission', 'reason.place.program', 'reason.place.space', 'reason.place.workspace'])
   assert.deepEqual(matching('reason.copy.{reason}').sort(), ['reason.copy.full', 'reason.copy.inUse', 'reason.copy.other', 'reason.copy.permission'])
@@ -376,7 +331,7 @@ test('the main process uses only keys of the table and keeps no table of its own
       ...[...text.matchAll(/\btx\(\s*'([^']+)'/gu)].map(match => match[1]),
       ...[...text.matchAll(/'((?:dialog|btn)\.[\w.]+)'/gu)].map(match => match[1]),
     ]
-    for (const key of used) assert.ok(key in TEXT.zh, `${name}: unknown text key ${key}`)
+    for (const key of used) assert.ok(key in TEXT, `${name}: unknown text key ${key}`)
   }
   assert.match(files['main.mjs'], /\btx\('dialog\./u)
   assert.match(files['first-run.mjs'], /\btx\('dialog\./u)
@@ -386,42 +341,18 @@ test('the main process uses only keys of the table and keeps no table of its own
   }
 })
 
-test('t fills placeholders and falls back to zh, then to the key', () => {
-  assert.equal(t('zh', 'hint.space', { drive: 'C', free: '1.2 GB' }), 'C 盘只剩 1.2 GB')
-  assert.equal(t('zh-TW', 'hint.space', { drive: 'C', free: '1.2 GB' }), 'C 槽只剩 1.2 GB')
-  assert.equal(t('en', 'hint.space', { drive: 'C', free: '1.2 GB' }), 'Only 1.2 GB left on drive C')
-  assert.equal(t('ja', 'btn.retry'), '再試行')
-  assert.equal(t('ko', 'btn.retry'), '다시 시도')
-  assert.equal(t('es', 'btn.retry'), 'Reintentar')
-  assert.equal(t('fr', 'btn.retry'), 'Réessayer')
-  assert.equal(t('de', 'btn.retry'), 'Erneut versuchen')
-  assert.equal(t('en', 'btn.useRec', { rec: 'D' }), 'Put it on drive D')
-  assert.equal(t('nl', 'btn.retry'), '重试')
-  assert.equal(t('en', 'hint.space', { drive: 'C' }), 'Only {free} left on drive C')
-  assert.equal(t('zh', 'no.such.key'), 'no.such.key')
+test('t fills placeholders and falls back to the key', () => {
+  assert.equal(t('hint.space', { drive: 'C', free: '1.2 GB' }), 'Only 1.2 GB left on drive C')
+  assert.equal(t('btn.useRec', { rec: 'D' }), 'Put it on drive D')
+  assert.equal(t('btn.retry'), 'Try again')
+  assert.equal(t('hint.space', { drive: 'C' }), 'Only {free} left on drive C')
+  assert.equal(t('no.such.key'), 'no.such.key')
 })
 
 test('t picks the English singular or plural by the value', () => {
-  assert.equal(t('en', 'card.import.line', { bots: 1, groups: 6 }), 'Found your old team: 1 Bot, 6 group chats')
-  assert.equal(t('en', 'card.import.line', { bots: 6, groups: 1 }), 'Found your old team: 6 Bots, 1 group chat')
-  assert.equal(t('zh', 'card.import.line', { bots: 4, groups: 0 }), '找到你以前的团队了：4 个 Bot、0 个群聊')
-  assert.equal(t('en', 'card.import.line', { bots: 1 }), 'Found your old team: 1 Bot, {groups|group chat|group chats}')
-})
-
-test('langOf resolves supported locales and falls back to en', () => {
-  assert.equal(langOf('zh-CN'), 'zh')
-  assert.equal(langOf('zh-SG'), 'zh')
-  assert.equal(langOf('ZH-tw'), 'zh-TW')
-  assert.equal(langOf('zh-HK'), 'zh-TW')
-  assert.equal(langOf('zh-Hant-TW'), 'zh-TW')
-  assert.equal(langOf('en-US'), 'en')
-  assert.equal(langOf('ja-JP'), 'ja')
-  assert.equal(langOf('ko-KR'), 'ko')
-  assert.equal(langOf('es-MX'), 'es')
-  assert.equal(langOf('fr-FR'), 'fr')
-  assert.equal(langOf('de-DE'), 'de')
-  assert.equal(langOf('nl'), 'en')
-  assert.equal(langOf(''), 'en')
+  assert.equal(t('card.import.line', { bots: 1, groups: 6 }), 'Found your old team: 1 Bot, 6 group chats')
+  assert.equal(t('card.import.line', { bots: 6, groups: 1 }), 'Found your old team: 6 Bots, 1 group chat')
+  assert.equal(t('card.import.line', { bots: 1 }), 'Found your old team: 1 Bot, {groups|group chat|group chats}')
 })
 
 test('the generated blocks of the start page are current', () => {

@@ -288,7 +288,7 @@ test('a folder outside the team workspace needs the user\'s approval', async (t)
   mkdirSync(join(first.team, 'site'))
   assert.equal(await first.tool('update_bot', { work_dir: join(first.team, 'site') }, 'b'), `Updated Writer. From your next step on, you work in ${join(first.team, 'site')}.`)
   assert.equal(rejected.requests.length, 2)
-  assert.deepEqual(rejected.requests[1].displayReason, { en: `Let the new Bot Builder work in ${first.project}? Files there can then be changed.`, zh: `允许新 Bot Builder 在 ${first.project} 中工作吗？之后可以修改这个文件夹里的文件。` })
+  assert.equal(rejected.requests[1].reason, `Let the new Bot Builder work in ${first.project}? Files there can then be changed.`)
   await first.workingIn('b', join(first.team, 'site'))
 
   const never = await start(approvalServices('allowed-once', { policy: 'never' }))
@@ -331,7 +331,7 @@ test('a group\'s folder holds for every member there; only the user or a Main Bo
   assert.equal(state().rooms.r1.workDir, undefined)
   assert.equal(requests.length, 0)
   assert.match(await tool('update_group', { group: 'Ops', work_dir: project }, 'a'), /^Updated "Ops": every member now works in .* here\.$/)
-  assert.equal(requests[0].displayReason.zh, `允许群聊「Ops」的成员在 ${project} 中工作吗？之后可以修改这个文件夹里的文件。`)
+  assert.equal(requests[0].reason, `Let every member of "Ops" work in ${project}? Files there can then be changed.`)
 })
 
 test('a group\'s permissions hold for every member there in place of its own, until the user clears them', async (t) => {

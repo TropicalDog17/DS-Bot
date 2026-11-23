@@ -87,17 +87,12 @@ async function authorizeBrowserAction(rt, exec, botId, action) {
     throw new Error(`This action needs the user's approval, and there is no way to ask here, so nothing was done.`)
   }
   const verbs = {
-    post: { en: 'post', zh: '发布内容' },
-    upload: { en: 'upload files', zh: '上传文件' },
-    download: { en: 'download a file', zh: '下载文件' },
-    delete: { en: 'delete something', zh: '删除内容' },
+    post: 'post',
+    upload: 'upload files',
+    download: 'download a file',
+    delete: 'delete something',
   }
-  const verb = verbs[action.kind]
-  const reason = `Let ${bot.name} ${verb.en} on ${action.host}: "${action.label}"?`
-  const displayReason = {
-    en: reason,
-    zh: `允许${bot.name}在 ${action.host} 上${verb.zh}“${action.label}”吗？`,
-  }
+  const reason = `Let ${bot.name} ${verbs[action.kind]} on ${action.host}: "${action.label}"?`
   let outcome
   try {
     outcome = await approval.request({
@@ -105,7 +100,6 @@ async function authorizeBrowserAction(rt, exec, botId, action) {
       toolName: exec.name,
       ...(exec.callId !== undefined ? { callId: exec.callId } : {}),
       reason,
-      displayReason,
       ...(exec.signal ? { signal: exec.signal } : {}),
     })
   } catch {

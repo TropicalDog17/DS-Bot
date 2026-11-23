@@ -173,8 +173,7 @@ export function install(rt) {
       agent,
       toolName: exec.name,
       ...(exec.callId !== undefined ? { callId: exec.callId } : {}),
-      reason: `Let ${who.en} work in ${path}? Files there can then be changed.`,
-      displayReason: { en: `Let ${who.en} work in ${path}? Files there can then be changed.`, zh: `允许${who.zh}在 ${path} 中工作吗？之后可以修改这个文件夹里的文件。` },
+      reason: `Let ${who} work in ${path}? Files there can then be changed.`,
       ...(exec.signal ? { signal: exec.signal } : {}),
     })
     if (outcome === 'allowed-once') return

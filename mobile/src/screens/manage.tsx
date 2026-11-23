@@ -816,11 +816,8 @@ const whenText = (task: { kind: string; time?: string; everySeconds?: number; mi
       if (d === '1,2,3,4,5') return t('Every weekday at {time}', { time: task.time ?? '' })
       if (d === '6,7') return t('Every weekend at {time}', { time: task.time ?? '' })
       if (d === '1,2,3,4,5,6,7') return t('Every day at {time}', { time: task.time ?? '' })
-      const labels = (task.weekdays ?? []).map(day => {
-        const short = weekdayShort(day)
-        return /^[\u4e00-\u9fff]$/.test(short) ? `周${short}` : short
-      })
-      return t('Every {days} at {time}', { days: labels.join(labels[0]?.startsWith('周') ? '、' : ', '), time: task.time ?? '' })
+      const labels = (task.weekdays ?? []).map(weekdayShort)
+      return t('Every {days} at {time}', { days: labels.join(', '), time: task.time ?? '' })
     }
     case 'cron': return t('On the schedule {expression}', { expression: task.expression ?? '' })
     default: return ''

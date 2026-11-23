@@ -13,7 +13,7 @@ const host = argument('ds-bot-origin')
 if (startPage !== undefined) {
   if (location.href.split(/[?#]/u)[0] === startPage) {
     contextBridge.exposeInMainWorld('dsBotStart', startBridge())
-    // The start page's folder pickers (换个位置…, a data move) are the app's own too.
+    // The start page's folder pickers (Change the location…, a data move) are the app's own too.
     ipcRenderer.on('ds-bot:app-picker', (_event, request) => { showPicker(request) })
   }
 } else if (host !== undefined && location.origin === host) {

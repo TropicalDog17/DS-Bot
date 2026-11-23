@@ -107,8 +107,8 @@ export const answerCard = (index, win = window()) => {
 export const messageBoxes = () => state.dialogs.filter(options => 'message' in options)
 
 /**
- * A later start whose drive runs low, and its place line's 〔换个位置…〕 to `to`, answered with
- * 〔移动并重启〕: the start window becomes the move's. `picked` runs once the move card is up.
+ * A later start whose drive runs low, and its place line's [Change the location…] to `to`, answered with
+ * [Move and restart]: the start window becomes the move's. `picked` runs once the move card is up.
  * @returns {Promise<{ home: string, workspace: string }>}
  */
 export const moveFromStart = async (to, { before = () => {}, picked = () => {} } = {}) => {
