@@ -681,8 +681,7 @@ test('approval is one-shot and each write requests it again', async (t) => {
   assert.match(approval.requests[0].reason, /Publish update/)
   assert.equal(approval.requests[0].toolName, 'browser_write')
   assert.equal(approval.requests[0].callId, 'call-1')
-  assert.match(approval.requests[0].displayReason.en, /^Let Writer post/)
-  assert.match(approval.requests[0].displayReason.zh, /Writer/)
+  assert.match(approval.requests[0].reason, /^Let Writer post/)
 })
 
 test('a rejected approval prevents the write', async (t) => {

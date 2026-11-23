@@ -365,7 +365,7 @@ test('what a private Bot sends to the others waits for the user', async (t) => {
   assert.equal(approval.requests.length, 1)
   assert.equal(approval.requests[0].toolName, 'message_bot')
   assert.match(approval.requests[0].reason, /Diary[\s\S]*Writer[\s\S]*My secret plan/)
-  assert.match(approval.requests[0].displayReason.zh, /My secret plan/)
+  assert.equal(approval.requests[0].displayReason, undefined)
   // The Bots that are not private send as before.
   await run('message_bot', { to: 'Chief', message: 'hi' }, 'b')
   assert.equal(approval.requests.length, 1)

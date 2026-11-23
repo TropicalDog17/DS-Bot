@@ -441,7 +441,7 @@ export function install(rt) {
         const avatar = args.avatar ? await readAvatar(String(args.avatar), { baseDir: rt.sessionFolder?.(exec.agent?.session ?? exec.agent), isData: rt.inData }) : undefined
         const workDir = args.work_dir ? await rt.cleanWorkDir(args.work_dir) : undefined
         const name = String(args.name ?? '').trim()
-        await rt.approveFolder(exec, { path: workDir, who: { en: `the new Bot ${name}`, zh: `新 Bot ${name} ` } })
+        await rt.approveFolder(exec, { path: workDir, who: `the new Bot ${name}` })
         // Without a named model the team's default applies; without one the new Bot
         // takes its creator's: the DSH default may be a provider that has no key, and
         // then the new Bot fails on its first reply.
@@ -490,7 +490,7 @@ export function install(rt) {
         }
         const moving = typeof args.work_dir === 'string'
         const workDir = moving ? await rt.cleanWorkDir(args.work_dir) : undefined
-        if (moving && workDir !== bot.workDir) await rt.approveFolder(exec, { path: workDir, sessions: rt.sessionsOfBot(bot.id), who: { en: bot.name, zh: ` ${bot.name} ` } })
+        if (moving && workDir !== bot.workDir) await rt.approveFolder(exec, { path: workDir, sessions: rt.sessionsOfBot(bot.id), who: bot.name })
         // The photo rides on the Bot's other avatar fields, as the settings page's upload
         // does: setting one keeps a custom character, and clearing removes only the image.
         // They are read here, after the waits above, so a change made meanwhile stays.
@@ -533,7 +533,7 @@ export function install(rt) {
       // The folder holds only for this group conversation, so only this Session's
       // writes widen; the private-Bot check is the one updateBot would run.
       await rt.checkPrivacyChange(bot, { moving: true, workDir })
-      await rt.approveFolder(exec, { path: workDir, sessions: [exec.agent.id], who: { en: bot.name, zh: ` ${bot.name} ` } })
+      await rt.approveFolder(exec, { path: workDir, sessions: [exec.agent.id], who: bot.name })
       const result = await next()
       if (result?.isError !== true) {
         ;(room.memberDirs ??= {})[bot.id] = workDir ?? null
@@ -541,7 +541,7 @@ export function install(rt) {
       }
       return result
     }
-    await rt.approveFolder(exec, { path: workDir, sessions: rt.sessionsOfBot(bot.id), who: { en: bot.name, zh: ` ${bot.name} ` } })
+    await rt.approveFolder(exec, { path: workDir, sessions: rt.sessionsOfBot(bot.id), who: bot.name })
     const result = await next()
     if (result?.isError !== true) await rt.updateBot(bot.id, { workDir: workDir ?? '' }, rt.selfOf(exec.agent?.id))
     return result
@@ -654,10 +654,10 @@ export function install(rt) {
         const joining = add.bots.filter(bot => !room.members.includes(bot.id))
         if (moving && workDir !== room.workDir) {
           const members = [...room.members, ...joining.map(bot => bot.id)]
-          await rt.approveFolder(exec, { path: workDir, sessions: members.map(id => room.sessions?.[id]).filter(Boolean), who: { en: `every member of "${room.name}"`, zh: `群聊「${room.name}」的成员` } })
+          await rt.approveFolder(exec, { path: workDir, sessions: members.map(id => room.sessions?.[id]).filter(Boolean), who: `every member of "${room.name}"` })
         } else if (joining.length > 0) {
           const names = joining.map(bot => bot.name)
-          await rt.approveFolder(exec, { path: room.workDir, sessions: joining.map(bot => room.sessions?.[bot.id]).filter(Boolean), who: { en: names.join(', '), zh: ` ${names.join('、')} ` } })
+          await rt.approveFolder(exec, { path: room.workDir, sessions: joining.map(bot => room.sessions?.[bot.id]).filter(Boolean), who: names.join(', ') })
         }
         const { room: next, changes } = await rt.updateRoom(room.id, {
           name: args.name,
