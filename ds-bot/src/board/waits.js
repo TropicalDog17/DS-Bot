@@ -64,7 +64,7 @@ export function wakeText(wait, outcome, shown) {
     ...(wait.cardId === undefined ? [] : [`It is the work of card ${wait.cardId}.`]),
     ...(wait.note === undefined ? [] : [`Your note when you started waiting: ${wait.note}`]),
     ...(lines === '' ? [] : ['What it shows last:', '```', lines.replaceAll('```', '`​``'), '```']),
-    'Check the result in the pane, then go on with the work.',
+    wait.cardId === undefined ? 'Check the result in the pane, then go on with the work.' : 'Check the result in the pane, board update the card\'s progress in one line, then go on with the work.',
   ].join('\n')
 }
 

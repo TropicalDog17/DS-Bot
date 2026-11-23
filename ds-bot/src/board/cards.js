@@ -52,6 +52,12 @@ export function ticketKey(text) {
   return key.length <= KEY_MAX && /^[A-Z][A-Z0-9_]*-\d+$/.test(key) ? key : undefined
 }
 
+// The ticket key a title starts with ("LIFE-782: merge #1209"), or undefined.
+export function titleKey(title) {
+  const match = /^([A-Za-z][A-Za-z0-9_]*-\d+)\s*[:·–—-]\s/.exec(String(title ?? '').trim())
+  return match === null ? undefined : ticketKey(match[1])
+}
+
 // An http(s) address, or undefined.
 export function webUrl(text) {
   const raw = String(text ?? '').trim()
@@ -130,7 +136,11 @@ export function createBoard({ roster, now = Date.now }) {
         const key = ticketKey(args.key)
         if (key === undefined) return { error: 'key is a ticket key like LIFE-782.' }
         const other = openWithKey(cards, key)
-        if (other !== undefined && other !== card) return { error: `${key} is already on the board as ${other.id}; update that card.` }
+        if (other !== undefined && other !== card) {
+          return { error: card === undefined
+            ? `${key} already has an open card, ${other.id} (${nameOf(other.assignee)}): put this work on it with board note ${other.id} instead of opening another card.`
+            : `${key} is already on the board as ${other.id}; update that card.` }
+        }
         fields.key = key
       }
     }
@@ -259,7 +269,9 @@ export function createBoard({ roster, now = Date.now }) {
       const handed = forBot && assignee !== self
       if (handed && brief === '') return { error: `A card for ${nameOf(assignee)} needs a brief: everything it needs to do the work, since it cannot see this conversation.` }
       if (forBot && brief === '') return { error: 'A card needs a brief: the goal, the context, the limits and what done looks like. Its work runs in a conversation of its own that cannot see this one.' }
-      const ticket = ticketFields(cards, args)
+      // A title that starts with a ticket key is that ticket's card, so a follow-up on the
+      // ticket goes to its open card rather than a new card beside it.
+      const ticket = ticketFields(cards, { ...args, key: args.key ?? titleKey(title) })
       if (ticket.error !== undefined) return ticket
       const at = now()
       const card = {
@@ -319,7 +331,7 @@ export function createBoard({ roster, now = Date.now }) {
       if (card.status !== before || card.progress !== progressBefore) logStep(card, self)
       touch(card)
       const ask = WAITING_STATUSES.includes(card.status) && !card.need ? ' Say with need what the user must do, with the link to it.' : ''
-      return { card, before, said: `Updated ${label(card)} (${COLUMN[card.status]}).${ask}` }
+      return { card, before, progressBefore, said: `Updated ${label(card)} (${COLUMN[card.status]}).${ask}` }
     },
     // A question for the user with the choices to pick from. It joins the card's
     // conversation, the card moves to Review, and the user's pick comes back as a note.

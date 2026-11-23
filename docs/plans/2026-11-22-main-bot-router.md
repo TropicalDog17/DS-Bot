@@ -101,8 +101,8 @@ source.
 
 - The Telegram bot is bound to the Main Bot. It is the one voice on the user's phone.
 - The Main Bot may push to its own bound Telegram chat without a Telegram message having
-  started the turn, but only for: a card question (`ask`), a card moved to Review, a card done
-  or failed, and a watchdog alert. Each push is short (about 100 words) and names the card
+  started the turn, but only for: a card question (`ask`), a card moved to Review or Blocked,
+  a card done or failed, progress on a long card, and a watchdog alert. Each push is short (about 100 words) and names the card
   (ticket key or id); the detail stays on the card. This changes the IM rule "a reply goes only to the
   source" for the Main Bot alone.
 - Replying in Telegram to a message tagged with a card goes straight to that card thread,
@@ -162,6 +162,22 @@ source.
   A status question is answered from the card's status and progress first; only when that
   is not enough does a note go to the card, and the Main Bot does not wait for the answer.
   A Main Bot's note shows in the card conversation under its name.
+- Follow-through, after three days of live use where the user asked "how is it going" about
+  twelve times and a member Bot ran most of its commands in the group conversation:
+  - A card that moves to Blocked pushes, with what it needs. A card older than 10 minutes
+    pushes a new progress line, at most once per 30 minutes per card (the time of the last
+    push is kept in memory, so a restart may push one line early). Every Bot's rules say to
+    `board update` progress in one line at each step of a long card, and a wake from
+    `wait_pane` on a card asks for it.
+  - One open card per ticket. A title that starts with a ticket key (`LIFE-782: …`) sets the
+    card's key, so a second card for the ticket is refused with the open card's id and a
+    pointer to `board note`. A next step on a finished card's ticket is a new card whose
+    brief names the finished one.
+  - In a group, a member Bot (not the Main Bot) answers in a few lines; work that takes more
+    than a quick look goes to a card it opens, and the group gets the card id.
+  - Every Bot gets the bundled `herdr-panes` skill (`src/board/skill.js`): pick or start a
+    pane, prompt it without `--wait`, `wait_pane` and end the turn, read the pane when woken.
+    herdr's own skill stops outside a herdr pane, where a Bot always runs.
 
 ### Evaluation
 
