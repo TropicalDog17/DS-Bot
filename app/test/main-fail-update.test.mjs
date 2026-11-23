@@ -1,6 +1,6 @@
 // A start that fails while a new version downloads offers it on the failure page's update banner
-// instead of a message box (start-window §7): the download's progress, 〔重试〕 after a failed
-// download, 「手动下载」, then the install. The Electron parts are test doubles: no display, no
+// instead of a message box (start-window §7): the download's progress, [Try again] after a failed
+// download, "Download manually", then the install. The Electron parts are test doubles: no display, no
 // DSH, no data of the user.
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
@@ -38,7 +38,7 @@ test('a failed start offers the downloading update on its banner and installs it
   await waitFor(() => startState().update !== undefined, 'offer the update')
   assert.deepEqual(startState().update, { state: 'downloading', version: '9.9.9', percent: 37, received: 78, total: 212 })
 
-  // The download fails: 〔重试〕 checks again, and the new download shows its progress.
+  // The download fails: [Try again] checks again, and the new download shows its progress.
   downloads[0].reject(new Error('download failed'))
   updater.emit('error', new Error('download failed'))
   await waitFor(() => startState().update?.state === 'failed', 'say that the download failed')
@@ -49,7 +49,7 @@ test('a failed start offers the downloading update on its banner and installs it
   await waitFor(() => startState().update?.percent === 64, 'show the new download')
   assert.equal(startState().update.state, 'downloading')
 
-  // 「手动下载」 opens the release page.
+  // "Download manually" opens the release page.
   assert.equal(await startAct('manualDownload'), true)
   await waitFor(() => (state.opened ?? []).length === 1, 'open the release page')
   assert.deepEqual(state.opened, ['https://github.com/Fei2411/DS-Bot/releases/latest'])

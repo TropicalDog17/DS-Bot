@@ -8,9 +8,6 @@
 ; hook; a LangString for a language the build does not load would create a
 ; phantom language table (makensis warning 6040, treated as error).
 !macro customHeader
-  !ifdef LANG_SIMPCHINESE
-    LangString dsbInstDirNotWritable ${LANG_SIMPCHINESE} "无法写入「$dsbCheckTarget」。请换一个位置。"
-  !endif
   !ifdef LANG_ENGLISH
     LangString dsbInstDirNotWritable ${LANG_ENGLISH} "Cannot write to $dsbCheckTarget. Choose another location."
   !endif

@@ -56,7 +56,7 @@ export const defaultOptions = sizes => ({ regen: (sizes.regen ?? 0) >= REGENERAB
 
 /**
  * The time left, in whole minutes: it changes only once it is a full minute away from the one on
- * the card, and under a minute it is 0 (「不到 1 分钟」), never counted down to nothing.
+ * the card, and under a minute it is 0 ("under a minute"), never counted down to nothing.
  * @param {number | null} shown the minutes on the card, null before there was a rate
  */
 export function etaMinutes(shown, { done, total, elapsedMs }) {
@@ -85,7 +85,6 @@ export function etaMinutes(shown, { done, total, elapsedMs }) {
  *   reasonOf: (error: unknown) => string,
  *   progress?: (fraction: number) => void,
  *   now?: () => number,
- *   lang?: string,
  *   signal: AbortSignal,
  * }} ImportIo
  */
@@ -127,9 +126,9 @@ export class ImportFlow {
     const model = this.#models.find(entry => entry.id === this.#profile)
     return {
       kind: 'import', bots: offer.bots, groups: offer.rooms, sessions: offer.sessions, path: offer.from,
-      names: offer.names.slice(0, 3).join(this.#io.lang === 'en' ? ', ' : '、'),
+      names: offer.names.slice(0, 3).join(', '),
       bare: size === undefined ? 'Bare' : '',
-      ...(size === undefined ? {} : { chats: formatBytes(size.chats, this.#io.lang), work: formatBytes(size.work, this.#io.lang), total: formatBytes(size.total, this.#io.lang) }),
+      ...(size === undefined ? {} : { chats: formatBytes(size.chats), work: formatBytes(size.work), total: formatBytes(size.total) }),
       model: model?.label ?? '', models: this.#models.length > 1 ? this.#models : [],
       options: { ...this.#options },
     }
@@ -180,7 +179,7 @@ export class ImportFlow {
     if (size === undefined || free === undefined) return undefined
     const need = size.total + SPARE_BYTES
     if (free >= need) return undefined
-    const text = bytes => formatBytes(bytes, this.#io.lang)
+    const text = bytes => formatBytes(bytes)
     return { need: text(need), free: text(free), short: text(need - free), drive: drive ?? '' }
   }
 
@@ -208,7 +207,7 @@ export class ImportFlow {
     })
   }
 
-  // 「DeepSeek Harness 还在用这个团队」: looks again every 2 s and goes on by itself once DSH lets go.
+  // "DeepSeek Harness is still using this team": looks again every 2 s and goes on by itself once DSH lets go.
   async #waitFree() {
     const io = this.#io
     const free = new AbortController()
@@ -230,10 +229,10 @@ export class ImportFlow {
         }
         const size = copySize(this.#sizes, this.#options)
         const total = size?.total ?? 0
-        const of = size === undefined ? '…' : formatBytes(total, io.lang)
+        const of = size === undefined ? '…' : formatBytes(total)
         const checkedStep = this.#copyCard?.steps?.[0] ?? {}
         let eta = null
-        this.#setCopy({ step: 2, steps: [checkedStep, { a: formatBytes(0, io.lang), b: of }, {}], fraction: 0, eta: null })
+        this.#setCopy({ step: 2, steps: [checkedStep, { a: formatBytes(0), b: of }, {}], fraction: 0, eta: null })
         await io.warmed()
         signal.throwIfAborted()
         const started = this.#now()
@@ -242,7 +241,7 @@ export class ImportFlow {
           onProgress: (bytes) => {
             const done = total > 0 ? Math.min(bytes, total) : bytes
             eta = etaMinutes(eta, { done, total, elapsedMs: this.#now() - started })
-            this.#setCopy({ step: 2, steps: [checkedStep, { a: formatBytes(done, io.lang), b: of }, {}], fraction: total > 0 ? done / total : 0, eta })
+            this.#setCopy({ step: 2, steps: [checkedStep, { a: formatBytes(done), b: of }, {}], fraction: total > 0 ? done / total : 0, eta })
           },
         })
         this.#setCopy({ step: 3, steps: [checkedStep, { ...this.#copyCard.steps[1], a: of === '…' ? this.#copyCard.steps[1].a : of }, {}], fraction: 0, eta: null }, true)

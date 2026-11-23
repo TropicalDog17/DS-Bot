@@ -33,7 +33,7 @@ test('the update waits for the window and is installed when the window comes bac
   trayMenu()[0].click()
   await waitFor(() => windowCards(win).length === 1, 'ask on a card in the team window')
   assert.match(windowCards(win)[0].message, /9\.9\.9/u)
-  assert.equal(windowCards(win)[0].cancel, 1, 'Escape is 「以后再说」')
+  assert.equal(windowCards(win)[0].cancel, 1, 'Escape is "Not now"')
   answerCard(0, win)
   await waitFor(() => updaterState.quitAndInstall.length === 1, 'install the update')
   assert.equal(hostState.stops, 1, 'the Host stops for the installer')

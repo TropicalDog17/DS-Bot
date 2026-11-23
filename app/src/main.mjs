@@ -25,7 +25,6 @@ import { currentRootOf, driveOf, formatBytes, freeSpace, isEmptyTree, pickFrom, 
 import { createShell, SHELL_TEXT } from './shell.mjs'
 import { readStartFrame, writeStartFrame } from './start-frame.mjs'
 import { explainOf, StartWindow } from './start-window.mjs'
-import { langOf } from './start/text.mjs'
 import { createDeferredPrompt } from './update-prompt.mjs'
 import { CAPTION_HEIGHT, cssColor, frameOptions, framelessOn, keepVibrancy, materialOf, nativeThemeSource } from './window-frame.mjs'
 
@@ -54,7 +53,7 @@ const IPC = {
 // A cookie export larger than this is not a cookie export.
 const IMPORT_FILE_MAX = 32 * 1024 * 1024
 const MOVE_PROBLEMS = { drive: 'dialog.move.drive', nested: 'dialog.move.nested', workspace: 'dialog.move.workspace', program: 'dialog.move.inProgram', notEmpty: 'dialog.move.notEmpty' }
-// The same problems as the start page's 「这里放不了」 reasons (reason.place.*).
+// The same problems as the start page's "That place won’t work" reasons (reason.place.*).
 const MOVE_REASONS = { drive: 'drive', nested: 'nested', workspace: 'workspace', dsh: 'dsh', program: 'program', notEmpty: 'foreign' }
 // A team window that does not say within this time that it shows a card cannot show one.
 const CARD_SHOWN_MS = 2000
@@ -79,7 +78,7 @@ const frameFile = join(app.getPath('userData'), 'start-frame.json')
 
 // Loaded once the start window is up (loadModules).
 let BotBrowserGuests, partitionOf, BotViews, isBotId, importFromBrowser, listSources, applyCookies, CookieImports, parseCookieFile
-let downloadSaver, chooseLocations, defaultPlaces, lang, pickerLabels, pickRoot, programFolder, saveLocations, teamIn, teamsAt, tx, HostProcess
+let downloadSaver, chooseLocations, defaultPlaces, pickerLabels, pickRoot, programFolder, saveLocations, teamIn, teamsAt, tx, HostProcess
 let copySessions, findTeam, importTeam, restoreSessions, teamInUse, teamSizes, userDshHome, copyData, copyReason, moveProblem, BUNDLES, CHECK_PROFILE, PROFILE, ImportFlow
 let watchReleases, watchUpdates, RELEASE_PAGE, getDshRuntimeVersion, electronUpdater
 
@@ -101,12 +100,12 @@ let stopping = false
 let stopped = false
 let failed = false
 let places
-// Which of the places this start made, so that 「换个位置…」 can take them away again.
+// Which of the places this start made, so that "Change the location…" can take them away again.
 let made = { dataDir: false, workspace: false, root: false }
 // A bundle of the app installed into the profile's own dependencies shadows the bundled copy
 // for good (#1305). The card about it is asked once per run, however the start retries.
 let shadowedAsked = false
-// The folder picker of 「换个位置…」 is open, and the root it proposed on the 「会放在…」 card.
+// The folder picker of "Change the location…" is open, and the root it proposed on the "It will go in…" card.
 let picking = false
 let proposed
 // The folder a later start's move card asks about.
@@ -198,19 +197,18 @@ if (canonical !== undefined) {
   console.log(`DS Bot ${app.getVersion()} (${process.platform} ${process.arch}), Electron ${process.versions.electron}`)
   startWindow = new StartWindow({
     electron: { BrowserWindow, ipcMain, screen, shell: electronShell, clipboard, nativeTheme, systemPreferences },
-    // 〔保存日志…〕 on the start window's failure cards.
+    // [Save log…] on the start window's failure cards.
     saveAs: (win, name) => askPicker(win, { mode: 'save', title: tx('dialog.saveLog'), start: knownFolder('desktop'), name }),
     page: join(here, 'start', 'start.html'), preload: join(here, 'preload.cjs'), icon: iconFile, material, devTools: !app.isPackaged,
     css: readFileSync(join(here, 'page-card.css'), 'utf8'),
-    // On Windows the locale is known only once the app is ready.
-    lang: () => langOf(app.getLocale()), motion: readStartFrame(frameFile).motion, effects: readStartFrame(frameFile).effects,
+    motion: readStartFrame(frameFile).motion, effects: readStartFrame(frameFile).effects,
     version: app.getVersion(), program: [dirname(process.execPath), process.resourcesPath, app.getAppPath()], log: logs, mainWindow: () => mainWindow,
     onRetry: () => { retry().catch(fail) },
     onReload: () => { mainWindow?.webContents.reload() },
     // Closing the start window before the hand-off quits: there is no team window yet to stay in
     // the tray with.
     onClose: () => { app.quit() },
-    // 「换个位置…」: a first start picks the place again; a later start moves the data there.
+    // "Change the location…": a first start picks the place again; a later start moves the data there.
     onPick: () => {
       // The question about a shadowing plugin copy has to be answered first.
       if (asked === 'shadowed') return
@@ -305,7 +303,7 @@ async function loadModules() {
   ;({ applyCookies, CookieImports } = cookies)
   ;({ parseCookieFile } = cookieFiles)
   ;({ downloadSaver } = downloads)
-  ;({ chooseLocations, defaultPlaces, lang, pickerLabels, pickRoot, programFolder, saveLocations, teamIn, teamsAt, tx } = firstRun)
+  ;({ chooseLocations, defaultPlaces, pickerLabels, pickRoot, programFolder, saveLocations, teamIn, teamsAt, tx } = firstRun)
   ;({ HostProcess } = hostProcess)
   ;({ copySessions, findTeam, importTeam, restoreSessions, teamInUse, teamSizes, userDshHome } = imports)
   ;({ ImportFlow } = flows)
@@ -452,8 +450,8 @@ function tellPlace(dataDir) {
   const drive = driveOf(dataDir)
   const short = drive !== undefined && free !== undefined && free < SHORT_DRIVE_BYTES
   // The page has no words while the start goes well: the line shows only when room runs short.
-  startWindow.place(short ? placeOf(dataDir, { free, lang: lang() }) : undefined)
-  startWindow.hint(short ? { drive, free: formatBytes(free, lang()) } : undefined)
+  startWindow.place(short ? placeOf(dataDir, { free }) : undefined)
+  startWindow.hint(short ? { drive, free: formatBytes(free) } : undefined)
 }
 
 // A later start shows the line again once the drive is down to a fifth of the free space it had
@@ -470,12 +468,12 @@ function tellLowSpace(freeAtStart) {
     return
   }
   const free = freeSpace(places.dataDir)
-  if (runningLow(free, freeAtStart)) startWindow.place(placeOf(places.dataDir, { free, lang: lang() }))
+  if (runningLow(free, freeAtStart)) startWindow.place(placeOf(places.dataDir, { free }))
 }
 
-// 「换个位置…」 on the start page and 〔重新选〕 on its cards: the system picker, then the root rule
-// (windows-onboarding §3, 一个位置). The root is used at once when it is the folder picked; a
-// layer the app added is confirmed on the 「会放在…」 card; a place that cannot be used says why.
+// "Change the location…" on the start page and [Choose again] on its cards: the system picker, then the root rule
+// (windows-onboarding §3, one location). The root is used at once when it is the folder picked; a
+// layer the app added is confirmed on the "It will go in…" card; a place that cannot be used says why.
 // A cancelled picker leaves things as they were: the line, or the card it came from. Not during
 // the first run's copy, whose team would be left behind.
 async function changePlace() {
@@ -647,7 +645,7 @@ async function startEngine(mine) {
     }).catch(() => host?.send({ type: 'ds-bot:browser-endpoint-response', id: message.id, error: 'Could not create the browser endpoint.' }))
   })
   const engine = await (warm?.up ?? host.start())
-  // The copying card stays on 「启动团队」 until the engine of the copied team is up.
+  // The copying card stays on "Open the team" until the engine of the copied team is up.
   if (mine === attempt) startWindow.card(undefined)
   return engine
 }
@@ -655,7 +653,7 @@ async function startEngine(mine) {
 // The import card while the engine warms up on the new data location (windows-onboarding §4,
 // start-window §6). The places are saved once the card has its answer. Undefined when this start
 // gives way (a quit, another place, the failure page); else the engine that warmed up, when the
-// start goes on with it: 〔先不复制〕 takes it as it is, without a restart.
+// start goes on with it: [Don’t copy yet] takes it as it is, without a restart.
 async function importStep(mine) {
   const offer = importOffer
   const where = { ...places }
@@ -690,7 +688,6 @@ async function importStep(mine) {
       copy: options => importTeam({ from: offer.from, to: where.dataDir, workspace: where.workspace, dsh: getDshRuntimeVersion(), ...options }),
       reasonOf: copyReason,
       progress: setProgress,
-      lang: lang(),
       signal,
     })
     importFlow = flow
@@ -723,8 +720,8 @@ async function importStep(mine) {
 
 const botNames = team => Object.values(team.bots ?? {}).map(bot => bot?.name).filter(name => typeof name === 'string' && name !== '')
 
-// 〔选择其他位置…〕 on the import's space card, or 「换个位置…」 while the import card is up: the
-// picker and the root rule as for 「换个位置…」 (changePlace), asked on cards that this import
+// [Choose another location…] on the import's space card, or "Change the location…" while the import card is up: the
+// picker and the root rule as for "Change the location…" (changePlace), asked on cards that this import
 // waits for. True once the start begins again in the new root; false to go back to the import
 // card.
 async function importElsewhere(signal) {
@@ -977,7 +974,7 @@ async function moveData(workspace) {
   return true
 }
 
-// 〔换个位置…〕 on a later start's place line (start-window §5): the same move, asked on the start
+// [Change the location…] on a later start's place line (start-window §5): the same move, asked on the start
 // page's cards instead of message boxes. Only the folder picker is a system window; while it or
 // a card is open, the clock stands still and the hand-off waits.
 async function moveFromStart() {
@@ -990,7 +987,7 @@ async function moveFromStart() {
   }
 }
 
-// 「这里放不了」 with the reason, or 「搬到这个文件夹？」. A cancelled picker is no change: the card
+// "That place won’t work" with the reason, or "Move the data here?". A cancelled picker is no change: the card
 // that led here goes, and the start goes on.
 async function pickMove() {
   const picked = await askPicker(owner(), { mode: 'folder', title: tx('dialog.pickMove'), start: dirname(places.dataDir) })
@@ -1025,9 +1022,9 @@ function moveReason(to, workspace = places.workspace) {
   }
 }
 
-// 〔移动并重启〕 checks the folder again (the team workspace can move while the card is open);
+// [Move and restart] checks the folder again (the team workspace can move while the card is open);
 // then the start window becomes the move's before a hand-off that waited can go, and the boot it
-// showed gives way. 〔取消〕 goes back to the start.
+// showed gives way. [Cancel] goes back to the start.
 async function moveAnswer(value) {
   if (startWindow.kind !== 'later' || moveTo === undefined || picking || copying !== undefined || stopping || failed) return
   const to = moveTo
@@ -1076,9 +1073,9 @@ async function moveRefused(to, workspace) {
 }
 
 // The move itself, on the start window's moving page. What keeps it from going through is said on
-// a card there, 「没有搬成」, and the app starts again on the old folder: a folder that cannot be
+// a card there, "The data didn’t move", and the app starts again on the old folder: a folder that cannot be
 // used after all, another DSH on the data (the move goes on by itself once it is closed), a copy
-// that failed (〔重试〕 copies again). Quitting meanwhile stops it without a new start.
+// that failed ([Try again] copies again). Quitting meanwhile stops it without a new start.
 async function runMove(to, workspace) {
   const signal = copyAbort.signal
   copying = (async () => {
@@ -1182,7 +1179,7 @@ function windowShown() {
 // question on it would go with it. After a failed start, fail() takes the update over.
 const afterHandoff = async () => { await startWindow.teamShown; return !failed }
 
-// An update question that the page cannot show counts as 「以后再说」: the update installs at the
+// An update question that the page cannot show counts as "Not now": the update installs at the
 // next quit, and the About row still offers it.
 async function askRestartNow(version) {
   if (failed || !await afterHandoff()) return false
@@ -1482,10 +1479,9 @@ function setMenu() {
   ]))
 }
 
-// The tray's and the menu's copy, in the app's language. On Windows the locale is known only once
-// the app is ready.
+// The tray's and the menu's copy.
 function shellText() {
-  return SHELL_TEXT[langOf(app.getLocale())]
+  return SHELL_TEXT
 }
 
 function assertWindow(event) {
@@ -1515,7 +1511,7 @@ async function fail(error) {
   await offerUpdate(mine).catch((failure) => { console.error(failure) })
 }
 
-// The update banner of the failure page (start-window §7): 〔下载〕 opens the release page of a
+// The update banner of the failure page (start-window §7): [Download] opens the release page of a
 // version that cannot install itself (macOS, a Linux deb); one that can is downloading already,
 // and installs once it is downloaded, unless the user has tried again meanwhile.
 async function offerUpdate(mine) {
@@ -1537,7 +1533,7 @@ async function offerUpdate(mine) {
   await updates.install()
 }
 
-// The banner's buttons: 〔下载〕 and 「手动下载」 open the release page; 〔重试〕 after a failed
+// The banner's buttons: [Download] and "Download manually" open the release page; [Try again] after a failed
 // download checks again.
 function updateAct(name) {
   if (!failed) return

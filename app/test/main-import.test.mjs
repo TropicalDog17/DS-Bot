@@ -50,7 +50,7 @@ test('the first start offers the DSH team on the import card, copies it on cards
   await waitFor(() => startState().done.includes('engine'), 'warm the engine up')
   assert.equal(startState().view, 'card', 'the card stays up')
 
-  // 「不复制可以重新生成的文件夹」, ticked on the card.
+  // "Skip folders that can be regenerated", ticked on the card.
   const start = startWindows()[0]
   start.webContents.mainFrame.url = start.url
   state.ipc.get('ds-bot:start-act')({ sender: start.webContents, senderFrame: start.webContents.mainFrame }, 'importOption', { option: 'regen', value: true })

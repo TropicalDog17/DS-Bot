@@ -35,7 +35,6 @@ function harness({ inUse = () => false, free = 100 * GB, check = async () => 0, 
     warmed: async () => {},
     copy: copy ?? (async ({ onProgress }) => { onProgress(2.6 * GB); return { bots: 6, sessions: 3, from: '/home/user/.dsh' } }),
     reasonOf: () => 'other',
-    lang: 'zh',
     signal: new AbortController().signal,
   }
   return { io, cards, shown, answer: (value) => { if (respond) { const r = respond; respond = undefined; r(value) } else answers.push(value) } }
@@ -68,7 +67,7 @@ test('the time left is in whole minutes, moves a full minute at a time and never
   assert.equal(etaMinutes(null, { done: 1, total: 10, elapsedMs: 60_000 }), 9)
   assert.equal(etaMinutes(9, { done: 1.05, total: 10, elapsedMs: 60_000 }), 9, 'under a minute of change keeps the number')
   assert.equal(etaMinutes(9, { done: 2, total: 10, elapsedMs: 60_000 }), 4)
-  assert.equal(etaMinutes(4, { done: 99, total: 100, elapsedMs: 600_000 }), 0, 'under a minute is 「不到 1 分钟」')
+  assert.equal(etaMinutes(4, { done: 99, total: 100, elapsedMs: 600_000 }), 0, 'under a minute is "under a minute"')
 })
 
 test('the import card says what it found, what the copy takes and which model settings go along', async () => {
@@ -79,7 +78,7 @@ test('the import card says what it found, what the copy takes and which model se
   const card = cards[0]
   assert.equal(card.kind, 'import')
   assert.deepEqual([card.bots, card.groups, card.sessions, card.path], [6, 2, 3, '/home/user/.dsh'])
-  assert.equal(card.names, 'Chief、Writer、Coder')
+  assert.equal(card.names, 'Chief, Writer, Coder')
   assert.deepEqual([card.chats, card.work, card.total, card.bare], ['1.2 GB', '3.0 GB', '4.2 GB', ''])
   assert.equal(card.model, 'DSH Desktop · deepseek/v4')
   assert.deepEqual(card.models.map(model => model.id), ['desktop', 'web'])
@@ -131,7 +130,7 @@ test('a drive without room for the copy and 500 MB says how much is missing', as
   assert.deepEqual(await run, { outcome: 'pick' })
 })
 
-test('「换个位置…」 on the import card picks another place for the import', async () => {
+test('"Change the location…" on the import card picks another place for the import', async () => {
   const { io, answer } = harness()
   const run = new ImportFlow(io).run()
   await tick()

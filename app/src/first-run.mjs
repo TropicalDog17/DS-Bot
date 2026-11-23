@@ -8,12 +8,10 @@ import { dirname, join, resolve } from 'node:path'
 import { findTeam, userDshHome } from './import.mjs'
 import { installFolder } from './move-data.mjs'
 import { freeSpace } from './place.mjs'
-import { langOf, t } from './start/text.mjs'
+import { t } from './start/text.mjs'
 
-// The app's picker and the cards in the team window speak the language of the start page
-// (main.mjs gives it the same locale).
-export const lang = () => langOf(app.getLocale())
-export const tx = (key, vars) => t(lang(), key, vars)
+// The app's picker and the cards in the team window take their copy from the start page's table.
+export const tx = (key, vars) => t(key, vars)
 
 const locationsFile = () => join(app.getPath('userData'), 'locations.json')
 
@@ -43,7 +41,7 @@ async function pick(title, from, signal, ui) {
 export const programFolder = () => installFolder(app.getPath('exe'))
 
 /**
- * The picker of 「换个位置…」 on the start page: one folder, from which the root rule
+ * The picker of "Change the location…" on the start page: one folder, from which the root rule
  * (place.mjs) makes the places. Undefined when the picker was cancelled or the app is quitting.
  * @param {string} from the folder the picker opens in
  */
@@ -121,7 +119,7 @@ function readSaved(file) {
 /**
  * Where the app keeps its data and the Bots' files: the saved places, or at the first start the
  * default ones without a question (the start page says where the data goes and offers
- * 「换个位置…」; windows-onboarding §3). A team in the user's own DSH comes back as `offer`: the
+ * "Change the location…"; windows-onboarding §3). A team in the user's own DSH comes back as `offer`: the
  * places are saved once the import card has its answer, so that quitting before that asks again.
  * A run on throwaway folders (DS_BOT_HOME, for development and tests) asks nothing and copies
  * nothing. `freeAtStart` is the free space of the data's drive that saveLocations() kept, none

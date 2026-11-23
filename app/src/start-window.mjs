@@ -37,7 +37,7 @@ export const HOLD_MS = CROSSFADE.duration + 40
 export const TEAM_WAIT_MS = 150
 export const TEAM_HANDOFF = 'ds-bot:handoff'
 export const FAILURE_LINES = 200
-// 〔保存日志…〕 saves this many of the latest log lines, after the same header as the copied details.
+// [Save log…] saves this many of the latest log lines, after the same header as the copied details.
 export const SAVED_LINES = 5000
 // The DeepSeek theme's --bt-main and --bt-ink (ui-standard 2.1), as in start.css: the window's
 // own background and caption symbols, which show before the page paints and where no material is.
@@ -57,14 +57,14 @@ const ACT_VIEWS = {
   retry: ['failed', 'watchdog'],
   wait: ['watchdog'],
   reloadView: ['viewFailed'],
-  // 「换个位置…」 on the page (also under the 180 s question), and the cards it leads to
-  // (「会放在…」, a place that cannot be used).
+  // "Change the location…" on the page (also under the 180 s question), and the cards it leads to
+  // ("It will go in…", a place that cannot be used).
   pick: ['boot', 'card', 'watchdog'],
   answer: ['card'],
   // The import card's model and options, and the copying card's stop (windows-onboarding §4).
   importModel: ['card'],
   importOption: ['card'],
-  // The failure page's update banner: 〔下载〕 or 〔重试〕 on it, and 「手动下载」.
+  // The failure page's update banner: [Download] or [Try again] on it, and "Download manually".
   installUpdate: ['failed'],
   manualDownload: ['failed'],
   copyDetails: null,
@@ -248,7 +248,6 @@ export const clockMs = (clock, now) => clock.base + (clock.running ? Math.max(0,
 export function startSnapshot(state, now) {
   const snapshot = {
     v: 1,
-    lang: state.lang,
     start: state.start,
     motion: state.motion,
     effects: state.effects ?? 'full',
@@ -314,7 +313,7 @@ export class StartWindow {
    * @param {{
    *   electron: { BrowserWindow: any, ipcMain: any, screen: any, shell: any, clipboard: any, nativeTheme: any, systemPreferences: any },
    *   page: string, preload: string, icon: string, material?: 'mica' | 'vibrancy', devTools: boolean, css?: string,
-   *   lang: () => 'zh' | 'en', motion: string, version: string, program: string[],
+   *   motion: string, version: string, program: string[],
    *   log: { dir: string, tail: (count: number) => string[] },
    *   mainWindow: () => any,
    *   onRetry: () => void, onReload: () => void, onClose: () => void,
@@ -322,11 +321,11 @@ export class StartWindow {
    *   saveAs?: (win: any, name: string) => Promise<string | undefined>,
    *   onUpdate?: (name: 'installUpdate' | 'manualDownload') => void,
    *   onImport?: (name: 'importModel' | 'importOption', value: unknown) => void,
-   * }} options `lang` is asked at each open; `program` names the folders of the app's own files;
+   * }} options `program` names the folders of the app's own files;
    *   `onClose` runs when the user closes the start window before the hand-off; `onPick` when
    *   the page asks for the folder picker ('changePlace' from its place line, nothing from a
-   *   card's 〔重新选〕; on a later start the line's button moves the data), `onAnswer` with a
-   *   card's answer ('use' for 〔继续〕 on 「会放在…」), `onUpdate` with a button of the failure
+   *   card's [Choose again]; on a later start the line's button moves the data), `onAnswer` with a
+   *   card's answer ('use' for [Continue] on "It will go in…"), `onUpdate` with a button of the failure
    *   page's update banner, `onImport` with the import card's model and options and the copying
    *   card's stop.
    */
@@ -467,7 +466,7 @@ export class StartWindow {
   }
 
   /**
-   * The line that says where the data goes, with 「换个位置…」 (start-window §2; a first start, or a
+   * The line that says where the data goes, with "Change the location…" (start-window §2; a first start, or a
    * later one whose drive runs low, §5): the drive and its free space, or the folder. Undefined
    * takes the line away.
    * @param {{ drive?: string, path?: string, free?: string } | undefined} place
@@ -483,8 +482,8 @@ export class StartWindow {
 
   /**
    * A card on the sheet while the start boots or the data moves (the clock stands still), or
-   * none: back to the boot or the move. The cards of a place (「会放在…」, a place that cannot be
-   * used, a later start's 「搬到这个文件夹？」), of the first run's import and of a move that did
+   * none: back to the boot or the move. The cards of a place ("It will go in…", a place that cannot be
+   * used, a later start's "Move the data here?"), of the first run's import and of a move that did
    * not go through.
    * @param {{ kind: string, [field: string]: unknown } | undefined} card
    * @returns {boolean} whether the window shows it: not on the failure page or at the hand-off
@@ -516,7 +515,7 @@ export class StartWindow {
   }
 
   /**
-   * The data moves in the middle of a later start (「换个位置…」 on its place line, §5): the page
+   * The data moves in the middle of a later start ("Change the location…" on its place line, §5): the page
    * loads again as the move's start, and a hand-off that waited goes with the start it was for.
    */
   moving() {
@@ -601,7 +600,7 @@ export class StartWindow {
 
   /**
    * dsBotApp.ready() from the team view: the hand-off starts. While a dialog of the window or
-   * a card is up (the folder picker, 「会放在…」), it waits: the hand-off would take the window,
+   * a card is up (the folder picker, "It will go in…"), it waits: the hand-off would take the window,
    * and with it the dialog's owner, away while the user is still choosing where the data goes.
    */
   ready(report) {
@@ -724,7 +723,7 @@ export class StartWindow {
     const now = Date.now()
     this.#phaseAt = now
     this.#state = {
-      lang: this.#o.lang(), start, motion: this.#o.motion, effects: this.#o.effects ?? 'full', frame: framelessOn(process.platform) ? 'band' : 'system',
+      start, motion: this.#o.motion, effects: this.#o.effects ?? 'full', frame: framelessOn(process.platform) ? 'band' : 'system',
       view: start === 'moving' ? 'moving' : 'boot',
       done: [], explain: this.#explain, celebrate: start === 'first', shown: false,
       clock: { base: 0, from: now, running: true },
@@ -800,7 +799,7 @@ export class StartWindow {
     this.#o.onRetry()
   }
 
-  // 〔继续等待〕: the question comes back after another 180 s on the clock.
+  // [Keep waiting]: the question comes back after another 180 s on the clock.
   #wait() {
     this.#watchAt = clockMs(this.#state.clock, Date.now()) + WATCHDOG_MS
     this.#update({ view: 'boot' })
