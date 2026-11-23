@@ -229,6 +229,66 @@ test('a restart picks a background part up in that part, not in the foreground c
   assert.deepEqual([request.source.role, request.source.exchangeId, request.source.senderPart, request.source.resumed], ['request', 'x1', 'a', true])
 })
 
+// A background job dies with DSH and DSH forgets it, so its Bot would wait for good.
+test('a background job a restart stopped is named to its Bot once; a finished or still running one is not', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const home = freshHome(t)
+  const logs = new Map()
+  const first = await start(home, logs)
+  const job = (jobId, label) => ({ jobId, owner: 'b', kind: 'bash', label, startedAt: Date.UTC(2026, 10, 23, 3, 49) })
+  first.emit('b', 'job/registered', job('j-wait', 'herdr agent wait w1:p1T --until done'))
+  first.emit('b', 'job/registered', job('j-done', 'npm test'))
+  first.emit('b', 'job/registered', job('j-live', 'sleep 600'))
+  first.emit('a', 'job/registered', { ...job('j-chief', 'make build'), owner: 'a' })
+  first.emit('b', 'job/settled', { ...job('j-done', 'npm test'), status: 'completed', cause: 'producer' })
+  // The shutdown stops the rest; Chief's job had settled, the live one goes on in DSH.
+  first.emit('b', 'job/settled', { ...job('j-wait', 'herdr agent wait w1:p1T --until done'), status: 'killed', cause: 'teardown' })
+  await settle(() => Object.keys(notes(home).jobs ?? {}).sort().join() === 'j-chief,j-live,j-wait')
+  await first.stop()
+  logs.set('b', [{ type: 'job/settled', data: { jobId: 'j-wait', cause: 'teardown' } }])
+  logs.set('a', [{ type: 'job/settled', data: { jobId: 'j-chief', cause: 'producer' } }])
+
+  const second = await start(home, logs)
+  t.mock.timers.tick(3000)
+  await settle(() => second.agentOf('b').calls.length === 1)
+  const told = second.agentOf('b').calls[0]
+  assert.deepEqual([told.source.role, told.source.resumed], ['resume', true])
+  assert.match(text(told), /^\[DeepSeek Harness restarted while you were working\]\nDeepSeek Harness restarted and stopped your background job/)
+  assert.match(text(told), /- bash started 2026-11-23T03:49:00\.000Z: herdr agent wait w1:p1T --until done/)
+  assert.doesNotMatch(text(told), /npm test|sleep 600/)
+  assert.deepEqual(second.agentOf('a').calls.map(text), [])
+  // The job still running stays noted; the stopped one is told once, when its turn ends.
+  await settle(() => Object.keys(notes(home).jobs ?? {}).join() === 'j-live')
+  run(second, 'b', 2, told)
+  second.emit('b', 'turn/end', { turn: 2, reason: { kind: 'completed' } })
+  await settle(() => Object.keys(notes(home).queued).length === 0 && Object.keys(notes(home).turns).length === 0)
+  await second.stop()
+  const third = await start(home, logs)
+  t.mock.timers.tick(3000)
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(third.agentOf('b').calls.length, 0)
+})
+
+// A turn a restart cut off says, in the one message that picks it up, which jobs stopped.
+test('a cut-off turn names the background jobs the restart stopped in its Session', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const home = freshHome(t)
+  const logs = new Map()
+  const first = await start(home, logs)
+  run(first, 'a', 1, { content: [{ type: 'text', text: 'hello' }], source: { kind: 'user' } })
+  first.emit('a', 'job/registered', { jobId: 'j1', owner: 'a', kind: 'bash', label: 'go test ./...', startedAt: 1 })
+  await settle(() => inflight(home).a !== undefined && notes(home).jobs?.j1 !== undefined)
+  await first.stop()
+  logs.set('a', [{ type: 'job/settled', data: { jobId: 'j1', cause: 'teardown' } }])
+
+  const second = await start(home, logs)
+  t.mock.timers.tick(3000)
+  await settle(() => second.agentOf('a').calls.length === 1)
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(second.agentOf('a').calls.length, 1)
+  assert.match(text(second.agentOf('a').calls[0]), /your last turn stopped before it finished[\s\S]*stopped your background job[\s\S]*go test \.\/\.\.\./)
+})
+
 test('when only DS Bot restarts, a turn still running or finished meanwhile is not picked up', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] })
   const home = freshHome(t)
