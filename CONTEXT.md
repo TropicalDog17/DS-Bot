@@ -43,8 +43,8 @@ The one Bot that does a Card's Task.
 _Avoid_: owner, worker
 
 **Note**:
-What the user writes on a Card for its Assignee.
-_Avoid_: comment, message
+What the user writes on a Card for its Assignee, or what the Main Bot passes on there from the user; it reaches the Card thread.
+_Avoid_: comment, message, @mention (for work on a Card)
 
 **Card conversation**:
 The Notes, questions and replies shown on a Card; what the user reads, not the Assignee's working context.
@@ -61,7 +61,7 @@ A chain of Parts that make up one conversation of a Bot. A Bot has one main Thre
 _Avoid_: session, chat (for the chain)
 
 **Card thread**:
-The Thread an Assignee keeps for one Card's work only.
+The Thread an Assignee keeps for one Card's work only. Every Card a Bot holds has one, also a Card it opened for itself.
 _Avoid_: card part, worker session, task session
 
 **Push**:

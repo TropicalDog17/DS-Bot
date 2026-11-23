@@ -10,10 +10,11 @@
 //                as the user's `@Bot` message, else into the Bot's own chat. onReply
 //                hears each answer a Bot then writes where the user reads it.
 //                startCard opens a card thread (a conversation of the Bot's own for one
-//                card) with the card's brief; deliver with a cardId reaches that thread;
-//                closeCard closes it once the card is finished. push sends a short line to
-//                the user's phone through the Main Bot's IM chat; onCardNote hears a reply
-//                there to a push about a card.
+//                card) with the card's brief and cardThread finds it (busy: is the Bot
+//                in a turn anywhere); deliver with a
+//                cardId reaches that thread; closeCard closes it once the card is
+//                finished. push sends a short line to the user's phone through the Main
+//                Bot's IM chat; onCardNote hears a reply there to a push about a card.
 //   dsBotBridge  the tools a Bot on a local agent CLI (Claude Code, Codex, ACP) may call
 //                through DS Bot's MCP bridge. Only the team tools cross by default; a
 //                companion names the tools it registers so those Bots get them too.
@@ -122,6 +123,20 @@ export function notesService(rt) {
       const requestId = randomUUID()
       await rt.sendUser({ sessionId, content: [{ type: 'text', text: brief }], requestId })
       return { sessionId, requestId }
+    },
+    // { botId, cardId } -> the Session of the card's open thread, or undefined.
+    async cardThread({ botId, cardId } = {}) {
+      await rt.load()
+      const bot = typeof botId === 'string' ? rt.botOf(botId) : undefined
+      return bot === undefined || typeof cardId !== 'string' ? undefined : cardThreadSession(bot, cardId)
+    },
+    // { botId } -> true while any conversation of the Bot is in a turn.
+    async busy({ botId } = {}) {
+      await rt.load()
+      const bot = typeof botId === 'string' ? rt.botOf(botId) : undefined
+      if (bot === undefined) return false
+      const sessions = [rt.chatOf?.(bot.id), ...(bot.openParts ?? []).map(part => part.sessionId), ...(rt.groupSessionsOf?.(bot.id) ?? [])]
+      return sessions.some(sessionId => sessionId !== undefined && rt.live?.get(sessionId)?.turn !== undefined)
     },
     // { botId, cardId } -> { closed: true | 'later' | false }. 'later': the thread's turn
     // still runs and it closes when that turn ends.

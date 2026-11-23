@@ -22,17 +22,21 @@ export const ROUTE = '/api/ds-bot-board'
 // After DS Bot's own identity section (640), so the board rules read as part of it.
 const RULES_ORDER = 650
 const DIGEST_CARDS = 15
+// How often a card still without a card thread is tried again; the first try is this
+// long after start, when DS Bot has resumed the turns a restart cut off.
+const ADOPT_MS = 60_000
 const COLUMN_NAME = { todo: 'Todo', active: 'In progress', review: 'Review', blocked: 'Blocked' }
 const MAIN_BOARD_RULES = [
   '## The board',
   '- A task becomes a card: board open with a one-line title, the assignee (exact Bot name) and a brief with everything that Bot needs: the goal, the context, the limits and what done looks like. It cannot see this conversation.',
   '- The card reaches that Bot by itself, in a conversation of its own for the card: do not also message_bot it. Tell the user in one line who has it and the card id.',
-  '- Something the user says about work already on a card goes to that card: board note with the card id and the text.',
+  '- Something the user says about work already on a card goes to that card: board note with the card id and the text. It reaches the card\'s own conversation; never pass card work on with @name in a group or message_bot, even for a card that came from a group.',
+  '- When the user asks how a card is going, answer from its status and progress (team snapshot, board show) first. Only when that does not answer it, board note the question to the card and tell the user the answer will come there; do not wait for it.',
   '- A question is never a card. The open cards are in the team snapshot; board show lists the rest.',
 ]
 const BOARD_RULES = [
   '## The board',
-  '- Every task you take is a card. When the user asks you for one directly, open the card yourself (board open) and keep it moving.',
+  '- Every task you take is a card. When the user asks you for one directly, open the card yourself (board open) with a brief: its work runs in a conversation of its own for the card, so tell the user in one line that you took it and stop there. Do not open a card for a step of the card you are working on.',
   '- A card handed to you arrives in a conversation of its own that starts with "[Card …]". Do that card\'s work there: board update as it moves, board ask when the user must decide, then board complete with a one-line result or board cancel with the reason. Notes on the card arrive in the same conversation.',
   '- A question the Main Bot passes on is not a card: just answer it.',
 ]
@@ -95,8 +99,11 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
   async function follow(result) {
     if (result.start !== undefined) {
       const started = await Promise.resolve(notes.startCard?.(result.start)).catch(error => ({ error: error?.message ?? String(error) }))
-      if (started === undefined || started.error !== undefined) {
-        // No card thread: the brief still reaches the Bot, in its own chat.
+      const failed = started === undefined || started.error !== undefined
+      // No card thread for a card the Bot keeps: it does the work where it is.
+      if (failed && result.card.openedBy === result.start.botId) return 'The card could not get a conversation of its own, so do its work here after all.'
+      // No card thread: the brief still reaches the Bot, in its own chat.
+      if (failed) {
         const sent = await notes.deliver({ botId: result.start.botId, cardId: result.start.cardId, text: result.start.text }).catch(error => ({ error: error?.message ?? String(error) }))
         if (sent?.error !== undefined) return `The card is open, but ${nameOf(result.start.botId)} did not get it: ${sent.error}`
       }
@@ -197,6 +204,7 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
     roster.addRoutingPart?.(() => openCardsDigest()),
     systemPrompt?.section?.({ name: 'ds-bot-board-rules', order: RULES_ORDER, interpolate: false, text: context => rulesFor(context?.agent?.id) }),
     watchdog(),
+    adoptLater(),
     tools.register(tool),
     bridge.share(tool.name),
     connection.fetch.register({
@@ -236,6 +244,35 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
     timer.unref?.()
     return () => clearInterval(timer)
   }
+  // A while after start, and then every ADOPT_MS until none is left: an open card a Bot
+  // holds without a card thread (opened before cards had their own, or its thread failed
+  // to start) moves into one. A Bot in a turn may be working on that card where it is,
+  // so its cards wait until it is idle.
+  function adoptLater() {
+    const every = config.adoptMs ?? ADOPT_MS
+    if (!(every >= 0)) return undefined
+    const timer = setInterval(() => {
+      void adoptOnce().then(({ waiting }) => { if (waiting === 0) clearInterval(timer) })
+        .catch(error => warn('ds-bot-board: moving cards to their threads failed: %s', error))
+    }, every)
+    timer.unref?.()
+    return () => clearInterval(timer)
+  }
+  async function adoptOnce() {
+    const moved = []
+    let waiting = 0
+    if (store.readOnly() || typeof notes.cardThread !== 'function') return { moved, waiting }
+    await roster.ready()
+    for (const card of Object.values(store.read().cards)) {
+      if (!isOpen(card) || roster.bot(card.assignee) === undefined) continue
+      if (await notes.cardThread({ botId: card.assignee, cardId: card.id }) !== undefined) continue
+      if (await notes.busy?.({ botId: card.assignee })) { waiting += 1; continue }
+      const started = await Promise.resolve(notes.startCard?.(board.adoptOf(card))).catch(error => ({ error: error?.message ?? String(error) }))
+      if (started === undefined || started.error !== undefined) warn('ds-bot-board: %s stays without a thread: %s', card.id, started?.error ?? 'no card threads')
+      else moved.push(card.id)
+    }
+    return { moved, waiting }
+  }
   async function watchOnce() {
     if (store.readOnly()) return []
     await roster.ready()
@@ -253,6 +290,7 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
 
   return {
     watchOnce,
+    adoptOnce,
     rulesFor,
     openCardsDigest,
     handle: async (endpoint, payload) => respond(await handle(endpoint, payload)),
