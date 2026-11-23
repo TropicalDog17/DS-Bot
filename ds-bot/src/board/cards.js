@@ -28,6 +28,12 @@ export const QUESTION_MAX = 1000
 export const OPTION_MAX = 80
 export const OPTIONS_MIN = 2
 export const OPTIONS_MAX = 6
+// What the user must do for a card that waits on them (Review or Blocked).
+export const NEED_MAX = 500
+export const WAITING_STATUSES = ['review', 'blocked']
+// The steps a card keeps: each column and progress it moved to, so it shows how the
+// work went and not only where it is.
+export const LOG_MAX = 40
 // A card moved to its own conversation brings this much of its latest conversation along.
 const ADOPT_NOTES = 3
 const ADOPT_NOTE_MAX = 300
@@ -89,6 +95,7 @@ export function createBoard({ roster, now = Date.now }) {
     const mine = card.assignee === self ? ' (yours)' : ''
     const rows = [`- ${label(card)} · ${nameOf(card.assignee)} · ${card.title}${mine}`]
     if (card.progress) rows.push(`  progress: ${card.progress}`)
+    if (card.need) rows.push(`  the user must: ${oneLine(card.need, NEED_MAX)}`)
     const note = (card.notes ?? []).at(-1)
     if (note !== undefined) rows.push(`  latest note from ${note.by === USER ? 'the user' : nameOf(note.by)}: ${note.text}${note.options ? ` (options: ${note.options.join(' / ')})` : ''}`)
     return rows.join('\n')
@@ -143,6 +150,12 @@ export function createBoard({ roster, now = Date.now }) {
     if (thread.length > THREAD_MAX) thread.splice(0, thread.length - THREAD_MAX)
     touch(card)
   }
+  const logStep = (card, by) => {
+    const log = (card.log ??= [])
+    log.push({ at: now(), by, status: card.status, ...(card.progress ? { progress: card.progress } : {}) })
+    if (log.length > LOG_MAX) log.splice(0, log.length - LOG_MAX)
+  }
+  const dropNeed = (card) => { if (!WAITING_STATUSES.includes(card.status)) delete card.need }
   const addLink = (card, link) => {
     if (!(card.links ??= []).some(entry => entry.url === link)) card.links.push({ url: link, at: now() })
   }
@@ -227,6 +240,7 @@ export function createBoard({ roster, now = Date.now }) {
         ...(brief === '' ? {} : { brief }),
       }
       apply(card, ticket.fields)
+      logStep(card, self)
       cards[card.id] = card
       return {
         card,
@@ -256,12 +270,21 @@ export function createBoard({ roster, now = Date.now }) {
         card.title = title
       }
       const before = card.status
+      const progressBefore = card.progress
       if (args.status !== undefined) card.status = args.status
       if (args.progress !== undefined) card.progress = oneLine(args.progress, PROGRESS_MAX)
+      if (args.need !== undefined) {
+        const need = replyText(args.need, NEED_MAX)
+        if (need === '') delete card.need
+        else card.need = need
+      }
+      dropNeed(card)
       if (link !== undefined) addLink(card, link)
       apply(card, ticket.fields)
+      if (card.status !== before || card.progress !== progressBefore) logStep(card, self)
       touch(card)
-      return { card, before, said: `Updated ${label(card)} (${COLUMN[card.status]}).` }
+      const ask = WAITING_STATUSES.includes(card.status) && !card.need ? ' Say with need what the user must do, with the link to it.' : ''
+      return { card, before, said: `Updated ${label(card)} (${COLUMN[card.status]}).${ask}` }
     },
     // A question for the user with the choices to pick from. It joins the card's
     // conversation, the card moves to Review, and the user's pick comes back as a note.
@@ -275,7 +298,10 @@ export function createBoard({ roster, now = Date.now }) {
       if (question === '') return { error: 'ask needs a question.' }
       const options = [...new Set((Array.isArray(args.options) ? args.options : []).map(option => oneLine(option, OPTION_MAX)).filter(option => option !== ''))]
       if (options.length < OPTIONS_MIN || options.length > OPTIONS_MAX) return { error: `ask needs ${OPTIONS_MIN} to ${OPTIONS_MAX} different options.` }
-      card.status = 'review'
+      if (card.status !== 'review') {
+        card.status = 'review'
+        logStep(card, self)
+      }
       say(card, self, question, { options })
       card.unread = true
       return { card, said: `Asked on ${label(card)}: ${options.join(' / ')}. The user's pick reaches you as a note on the card.` }
@@ -314,6 +340,7 @@ export function createBoard({ roster, now = Date.now }) {
       card.status = 'done'
       card.result = result
       card.doneAt = now()
+      dropNeed(card)
       touch(card)
       return { card, said: `Finished ${label(card)}: "${result}"`, ...closeOf(card) }
     },
@@ -325,6 +352,7 @@ export function createBoard({ roster, now = Date.now }) {
       card.status = 'cancelled'
       const why = oneLine(args.reason, REASON_MAX)
       if (why !== '') card.reason = why
+      dropNeed(card)
       touch(card)
       return { card, said: `Cancelled ${label(card)}.`, ...closeOf(card) }
     },
@@ -356,6 +384,7 @@ export function createBoard({ roster, now = Date.now }) {
       const brief = replyText(input.brief, BRIEF_MAX)
       const card = { id: newCardId(), title, assignee, openedBy: USER, status, progress: '', links: [], notes: [], createdAt: at, updatedAt: at, ...(brief === '' ? {} : { brief }) }
       apply(card, ticket.fields)
+      logStep(card, USER)
       cards[card.id] = card
       return { card, ...(assignee === USER ? {} : { start: startOf(card, USER) }) }
     },
@@ -368,6 +397,8 @@ export function createBoard({ roster, now = Date.now }) {
       card.status = status
       if (status === 'done') card.doneAt = now()
       else delete card.doneAt
+      dropNeed(card)
+      logStep(card, USER)
       touch(card)
       return { card, ...(status === 'done' ? closeOf(card) : {}) }
     },
@@ -415,6 +446,7 @@ export function createBoard({ roster, now = Date.now }) {
       card.status = 'cancelled'
       const why = oneLine(reason, REASON_MAX)
       if (why !== '') card.reason = why
+      dropNeed(card)
       touch(card)
       return { card, ...closeOf(card) }
     },

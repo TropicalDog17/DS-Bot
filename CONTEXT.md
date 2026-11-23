@@ -42,6 +42,9 @@ _Avoid_: ticket, thread, task (for the record itself)
 The one Bot that does a Card's Task.
 _Avoid_: owner, worker
 
+**Need**:
+What the user must do for a Card that waits on them (in Review or Blocked), with where to do it. It goes when the Card moves on.
+
 **Note**:
 What the user writes on a Card for its Assignee, or what the Main Bot passes on there from the user; it reaches the Card thread.
 _Avoid_: comment, message, @mention (for work on a Card)

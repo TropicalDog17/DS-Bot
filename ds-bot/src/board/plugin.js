@@ -37,7 +37,7 @@ const MAIN_BOARD_RULES = [
 const BOARD_RULES = [
   '## The board',
   '- Every task you take is a card. When the user asks you for one directly, open the card yourself (board open) with a brief: its work runs in a conversation of its own for the card, so tell the user in one line that you took it and stop there. Do not open a card for a step of the card you are working on.',
-  '- A card handed to you arrives in a conversation of its own that starts with "[Card …]". Do that card\'s work there: board update as it moves, board ask when the user must decide, then board complete with a one-line result or board cancel with the reason. Notes on the card arrive in the same conversation.',
+  '- A card handed to you arrives in a conversation of its own that starts with "[Card …]". Do that card\'s work there: board update as it moves (when it waits on the user, review or blocked with need: what the user must do and the link to it), board ask when the user must choose, then board complete with a one-line result or board cancel with the reason. Notes on the card arrive in the same conversation.',
   '- A question the Main Bot passes on is not a card: just answer it.',
 ]
 const output = { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: String(value) }] }
@@ -63,6 +63,7 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
       text: { type: 'string', description: 'note: what to pass on to the card\'s assignee' },
       status: { type: 'string', enum: BOT_STATUSES, description: 'todo, active (in progress), review (waits for the user), blocked' },
       progress: { type: 'string', description: 'Latest progress, one line' },
+      need: { type: 'string', description: 'update to review or blocked: what the user must do (approve, merge, answer) with the link to it; Markdown' },
       link: { type: 'string', description: 'A URL to attach, e.g. the PR' },
       result: { type: 'string', description: 'complete: the result, one line' },
       reason: { type: 'string', description: 'cancel: why it stops' },

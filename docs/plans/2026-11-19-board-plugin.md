@@ -57,6 +57,15 @@ Cards are kept in `<DSH_HOME>/bot-board/board.json`. To keep them elsewhere:
   card's links go through the same Markdown, so a link shows the site's mark (GitHub's
   for github.com) and a short name: `owner/repo#12` for a pull request or issue,
   `owner/repo@abc1234` for a commit. The card on the board shows one plain line.
+- A card that waits on the user (Review or Blocked) leads its sheet with what the user
+  must do: the `need` a Bot gives with `board update` (Markdown, so the PR to merge is a
+  link), or its progress line on a card from before `need`. Moving the card on or
+  finishing it drops the need, and a Bot that moves a card into Review or Blocked
+  without one is told to say it.
+- A card keeps its steps (`log`): every column and progress it moved to, with the time
+  and who moved it, the last 40. The sheet shows the progress line and folds the earlier
+  steps under History, so progress no longer overwrites how the work went.
+- The sheet shows the card's brief under its links, folded to a few lines when long.
 - Storage is one JSON file, written whole (temp file, fsync, rename) through one queue.
   A second dsh on the same home reads it and refuses changes, using DS Bot's home lock
   on `board.lock`. A file that does not parse is kept beside it as `.broken-<time>`.
