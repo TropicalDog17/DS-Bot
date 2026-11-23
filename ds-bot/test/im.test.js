@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -10,14 +10,16 @@ import { adapters } from '../src/host/im/platforms/index.js'
 
 // A platform adapter that records sends/edits and lets the test feed inbound
 // messages, actions and statuses. `fail` makes send throw once per call queued.
-const fakeAdapter = ({ buttons = true } = {}) => {
+const fakeAdapter = ({ buttons = true, fileLimit } = {}) => {
   const sent = []
+  const files = []
   const edited = []
   const typed = []
   const fails = []
   const adapter = {
     id: 'fake',
     sent,
+    files,
     edited,
     typed,
     handlers: null,
@@ -37,6 +39,15 @@ const fakeAdapter = ({ buttons = true } = {}) => {
           if (next !== undefined) throw next
           return { messageId: sent.length }
         },
+        // A file goes into `sent` too, so tests see it in order with the text around it.
+        ...(fileLimit === undefined ? {} : {
+          fileLimit,
+          sendFile: async (chat, file) => {
+            files.push({ chat, ...file })
+            sent.push({ chat, file: file.name })
+            return { messageId: sent.length }
+          },
+        }),
         edit: async (chat, messageId, body) => { edited.push({ chat, messageId, ...body }) },
         typing: async (chat) => { typed.push(chat) },
         stop: () => { adapter.stopped = (adapter.stopped ?? 0) + 1 },
@@ -716,6 +727,79 @@ test('reply origin: a peer Bot message and a scheduled task do not reach IM', as
     s.emitEvent('a', 'assistant/message', { message: { content: [{ type: 'text', text: 'internal reply' }] } })
     await s.flush()
   }
+  assert.equal(s.fake.sent.length, 0)
+})
+
+const presentedDir = (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'dsb-present-'))
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  return dir
+}
+
+test('a file presented in an IM turn goes to that chat as a document, after the text before it', async (t) => {
+  const s = await start({ adapter: fakeAdapter({ fileLimit: 1024 }) })
+  t.after(s.stop)
+  await pairedConn(s)
+  const dir = presentedDir(t)
+  const path = join(dir, 'APP-INTEGRATION-782.md')
+  writeFileSync(path, '# Plan\n')
+  await dm(s, 'u1', 'write me the doc')
+  s.imTurn('a')
+  s.fake.sent.length = 0
+  s.emitEvent('a', 'assistant/message', { message: { content: [{ type: 'text', text: 'Here it is.' }] } })
+  s.emitEvent('a', 'deliverables/presented', { turn: 1, callId: 'c1', files: [{ path }] })
+  s.emitEvent('a', 'assistant/message', { message: { content: [{ type: 'text', text: 'Done.' }] } })
+  await s.flush()
+  assert.deepEqual(s.fake.sent.map(entry => entry.text ?? entry.file), ['Here it is.', 'APP-INTEGRATION-782.md', 'Done.'])
+  assert.equal(s.fake.files[0].chat.key, 'dm-u1')
+  assert.equal(Buffer.from(s.fake.files[0].data).toString(), '# Plan\n')
+})
+
+test('a presented file that cannot go out sends a line naming it instead', async (t) => {
+  const dir = presentedDir(t)
+  const big = join(dir, 'big.bin')
+  writeFileSync(big, Buffer.alloc(2048))
+  const small = join(dir, 'notes.md')
+  writeFileSync(small, 'hi')
+  const link = join(dir, 'link.md')
+  symlinkSync(small, link)
+  const turn = async (adapter, files) => {
+    const s = await start({ adapter })
+    t.after(s.stop)
+    await pairedConn(s)
+    await dm(s, 'u1', 'send it')
+    s.imTurn('a')
+    s.fake.sent.length = 0
+    s.emitEvent('a', 'deliverables/presented', { turn: 1, callId: 'c1', files })
+    await s.flush()
+    return s
+  }
+  // Over the platform's limit, a symlink, a relative path, a file in DS Bot's own data.
+  const limited = await turn(fakeAdapter({ fileLimit: 1024 }), [{ path: big }, { path: link }, { path: 'notes.md' }])
+  writeFileSync(join(limited.home, 'state-copy.json'), '{}')
+  limited.emitEvent('a', 'deliverables/presented', { turn: 1, callId: 'c2', files: [{ path: join(limited.home, 'state-copy.json') }] })
+  await limited.flush()
+  assert.deepEqual(limited.fake.files, [])
+  assert.deepEqual(limited.fake.sent.map(entry => entry.text), [
+    'big.bin could not be sent here; open it on the computer.',
+    'link.md could not be sent here; open it on the computer.',
+    'notes.md could not be sent here; open it on the computer.',
+    'state-copy.json could not be sent here; open it on the computer.',
+  ])
+  // A platform without file sending.
+  const plain = await turn(fakeAdapter(), [{ path: small }])
+  assert.deepEqual(plain.fake.sent.map(entry => entry.text), ['notes.md could not be sent here; open it on the computer.'])
+})
+
+test('a file presented in a Web turn is not sent to IM', async (t) => {
+  const s = await start({ adapter: fakeAdapter({ fileLimit: 1024 }) })
+  t.after(s.stop)
+  await pairedConn(s)
+  const path = join(presentedDir(t), 'report.md')
+  writeFileSync(path, 'x')
+  s.emitEvent('a', 'user/message', { source: { kind: 'web' }, content: [{ type: 'text', text: 'typed in the browser' }] })
+  s.emitEvent('a', 'deliverables/presented', { turn: 1, callId: 'c1', files: [{ path }] })
+  await s.flush()
   assert.equal(s.fake.sent.length, 0)
 })
 

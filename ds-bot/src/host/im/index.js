@@ -3,8 +3,9 @@
 // The platform adapters (im/platforms/) own the wire; this module owns pairing,
 // routing, cards and the send queues. Only the dsh holding the team lock connects.
 import { randomBytes, randomUUID } from 'node:crypto'
-import { chmod, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { constants } from 'node:fs'
+import { chmod, mkdir, open, readFile, rm, writeFile } from 'node:fs/promises'
+import { basename, isAbsolute, join } from 'node:path'
 import { replaceFile } from '../files.js'
 import { viewCardText } from '../parts.js'
 import { questionTitle, questionsOf } from '../question-card.js'
@@ -54,6 +55,7 @@ export function install(rt) {
         idle: 'Nothing is running.',
         stale: 'This card was already answered.',
         noFile: 'This file cannot be sent here; send it on the computer.',
+        noFileOut: `${values.name} could not be sent here; open it on the computer.`,
         greeting: `Hello, I am ${values.name}.`,
         question: `${values.bot} asks: `,
         approval: `${values.bot} asks for approval: `,
@@ -74,6 +76,7 @@ export function install(rt) {
         idle: '现在没有在做的活。',
         stale: '这张卡已经答过了。',
         noFile: '这个文件发不过去，请在电脑上发。',
+        noFileOut: `${values.name} 发不过来，请在电脑上打开。`,
         greeting: `你好，我是 ${values.name}。`,
         question: `${values.bot} 问你：`,
         approval: `${values.bot} 请你审批：`,
@@ -94,6 +97,7 @@ export function install(rt) {
         idle: '現在沒有在做的活。',
         stale: '這張卡已經答過了。',
         noFile: '這個檔案傳不過去，請在電腦上傳。',
+        noFileOut: `${values.name} 傳不過來，請在電腦上開啟。`,
         greeting: `你好，我是 ${values.name}。`,
         question: `${values.bot} 問你：`,
         approval: `${values.bot} 請你審批：`,
@@ -114,6 +118,7 @@ export function install(rt) {
         idle: '実行中のタスクはありません。',
         stale: 'このカードは回答済みです。',
         noFile: 'このファイルはここでは送信できません。PC から送信してください。',
+        noFileOut: `${values.name} はここに送信できません。PC で開いてください。`,
         greeting: `こんにちは、${values.name} です。`,
         question: `${values.bot} からの質問：`,
         approval: `${values.bot} からの承認リクエスト：`,
@@ -134,6 +139,7 @@ export function install(rt) {
         idle: '진행 중인 작업이 없습니다.',
         stale: '이미 응답한 카드입니다.',
         noFile: '이 파일은 여기서 보낼 수 없습니다. 컴퓨터에서 보내 주세요.',
+        noFileOut: `${values.name} 파일은 여기로 보낼 수 없습니다. 컴퓨터에서 열어 주세요.`,
         greeting: `안녕하세요, ${values.name}입니다.`,
         question: `${values.bot}의 질문: `,
         approval: `${values.bot}의 승인 요청: `,
@@ -154,6 +160,7 @@ export function install(rt) {
         idle: 'No hay nada en curso.',
         stale: 'Esta tarjeta ya fue respondida.',
         noFile: 'Este archivo no se puede enviar por aquí; envíalo desde el ordenador.',
+        noFileOut: `${values.name} no se puede enviar por aquí; ábrelo en el ordenador.`,
         greeting: `Hola, soy ${values.name}.`,
         question: `${values.bot} pregunta: `,
         approval: `${values.bot} pide aprobación: `,
@@ -174,6 +181,7 @@ export function install(rt) {
         idle: 'Rien n’est en cours.',
         stale: 'Cette carte a déjà reçu une réponse.',
         noFile: 'Ce fichier ne peut pas être envoyé ici ; envoyez-le depuis l’ordinateur.',
+        noFileOut: `${values.name} ne peut pas être envoyé ici ; ouvrez-le sur l’ordinateur.`,
         greeting: `Bonjour, je suis ${values.name}.`,
         question: `${values.bot} demande : `,
         approval: `${values.bot} demande une approbation : `,
@@ -194,6 +202,7 @@ export function install(rt) {
         idle: 'Aktuell läuft nichts.',
         stale: 'Diese Karte wurde bereits beantwortet.',
         noFile: 'Diese Datei kann hier nicht gesendet werden; sende sie am Computer.',
+        noFileOut: `${values.name} kann hier nicht gesendet werden; öffne die Datei am Computer.`,
         greeting: `Hallo, ich bin ${values.name}.`,
         question: `${values.bot} fragt: `,
         approval: `${values.bot} bittet um Freigabe: `,
@@ -592,7 +601,7 @@ export function install(rt) {
         queue.sending = true
         let sent
         try {
-          sent = await runner.handle.send(job.chat, job)
+          sent = job.file === undefined ? await runner.handle.send(job.chat, job) : await sendFile(runner.handle, job)
         } catch (error) {
           queue.sending = false
           const settled = queue.stoppedSend
@@ -706,6 +715,31 @@ export function install(rt) {
     }
     requests.delete(requestId)
     return pushed
+  }
+
+  // A presented file is read when its turn in the queue comes. It leaves the computer, so
+  // it must be a plain file outside DSH's and the team's data, where keys and tokens live.
+  const readPresented = async (path, limit) => {
+    if (!isAbsolute(path) || await rt.inData?.(await rt.real(path))) return undefined
+    let handle
+    try {
+      // O_NONBLOCK keeps a FIFO from stalling the chat's queue on open.
+      handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0))
+      const info = await handle.stat()
+      if (!info.isFile() || info.size > limit) return undefined
+      const data = await handle.readFile()
+      return data.length > limit ? undefined : data
+    } catch {
+      return undefined
+    } finally {
+      await handle?.close().catch(() => {})
+    }
+  }
+  const sendFile = async (handle, job) => {
+    const name = basename(job.file.path)
+    const data = typeof handle.sendFile === 'function' ? await readPresented(job.file.path, handle.fileLimit ?? 0) : undefined
+    if (data === undefined) return handle.send(job.chat, { text: job.file.label + text('noFileOut', { name }) })
+    return handle.sendFile(job.chat, { name, data, caption: job.file.caption })
   }
 
   const sendText = (conn, chat, body, buttons, after) => enqueue(conn, chat.key, { chat, text: body, buttons, after })
@@ -1560,11 +1594,21 @@ export function install(rt) {
     if (origin === undefined) return
     // A card thread answers on the Main Bot's chat, so its lines say whose and which card.
     const cardId = rt.cardOfSession?.(session.id)
-    const label = cardId === undefined ? '' : `**${rt.botOf(botId)?.name ?? '?'} · ${cardId}**: `
+    const card = cardId === undefined ? '' : `${rt.botOf(botId)?.name ?? '?'} · ${cardId}`
+    const label = card === '' ? '' : `**${card}**: `
+    const chat = { key: origin.chatKey, kind: origin.chat.kind, title: origin.chat.title }
     for (const item of rt.displayItems(session.id, [event])) {
       if (item.kind !== 'bot' && item.kind !== 'view') continue
       const body = label + (item.kind === 'bot' ? item.text : viewCardText({ title: item.title, view: item.view }) || (item.title ?? ''))
-      sendTo(origin.conn, origin.chatKey, { key: origin.chatKey, kind: origin.chat.kind, title: origin.chat.title }, body)
+      sendTo(origin.conn, origin.chatKey, chat, body)
+    }
+    // displayItems only folds presented files into the closing Bot row, so they are
+    // taken from the event itself.
+    if (event.type === 'deliverables/presented') {
+      for (const file of Array.isArray(event.data?.files) ? event.data.files : []) {
+        if (typeof file?.path !== 'string') continue
+        enqueue(origin.conn, origin.chatKey, { chat, file: { path: file.path, label, ...(card === '' ? {} : { caption: card }) } })
+      }
     }
   })
 

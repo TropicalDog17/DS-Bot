@@ -8,6 +8,10 @@ const TEXT_LIMIT = 4096
 const POLL_TIMEOUT = 50
 // Cloud Bot API `getFile` rejects files larger than 20 MiB.
 const TELEGRAM_MAX_FILE_BYTES = 20 * 1024 * 1024
+// Upload limits: the cloud Bot API takes 50 MB, a local Bot API server 2000 MB.
+const CLOUD_UPLOAD_BYTES = 50 * 1024 * 1024
+const LOCAL_UPLOAD_BYTES = 2000 * 1024 * 1024
+const UPLOAD_TIMEOUT = 120_000
 const UPDATES = ['message', 'callback_query']
 
 const reason = (error) => {
@@ -50,10 +54,11 @@ export default {
       if (stopped) abort.abort(stoppedError())
       const timer = setTimeout(() => abort.abort(new Error('timeout')), timeout)
       try {
+        // fetch sets the multipart boundary itself for a FormData body.
+        const payload = params instanceof FormData ? { body: params } : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(params) }
         const response = await env.fetch(download ? `${fileBase}/${method}` : `${base}/${method}`, download ? { signal: abort.signal } : {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(params),
+          ...payload,
           signal: abort.signal,
         })
         if (download) {
@@ -258,8 +263,19 @@ export default {
       return { messageId }
     }
 
+    const sendFile = async (chat, { name, data, caption }) => {
+      const form = new FormData()
+      form.append('chat_id', chat.key)
+      form.append('document', new Blob([data]), name)
+      if (caption) form.append('caption', caption)
+      const sent = await call('sendDocument', form, { timeout: UPLOAD_TIMEOUT })
+      return { messageId: sent?.message_id }
+    }
+
     return {
       send,
+      sendFile,
+      fileLimit: isCloudApi ? CLOUD_UPLOAD_BYTES : LOCAL_UPLOAD_BYTES,
       edit: async (chat, messageId, { text, buttons }) => {
         const markup = { reply_markup: { inline_keyboard: (buttons ?? []).map(button => [{ text: button.label, callback_data: button.data }]) } }
         try {
