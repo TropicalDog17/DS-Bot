@@ -70,5 +70,19 @@ export function createHerdr({ binary = 'herdr', exec = run } = {}) {
       const title = typeof info?.terminal_title_stripped === 'string' ? info.terminal_title_stripped.trim() : undefined
       return { text: tail(read.stdout.replace(/\s+$/, ''), PANE_TEXT_MAX), ...(status ? { status } : {}), ...(title ? { title } : {}) }
     },
+    // { target } -> { status? } | { error, gone? }: the agent's state only, for a wait.
+    async status(target) {
+      const pane = paneTarget(target)
+      if (pane === undefined) return { error: 'Not a pane.' }
+      const got = await exec(binary, ['pane', 'get', pane])
+      if (got.missing) return { error: 'herdr is not installed here.' }
+      if (!got.ok) {
+        const error = parsed(got.stdout)?.error ?? parsed(got.stderr)?.error
+        const gone = typeof error?.code === 'string' && error.code.endsWith('not_found')
+        return { error: error?.message ?? (got.stderr.trim() || 'herdr could not get the pane.'), ...(gone ? { gone: true } : {}) }
+      }
+      const status = parsed(got.stdout)?.result?.pane?.agent_status
+      return typeof status === 'string' ? { status } : {}
+    },
   }
 }

@@ -17,6 +17,7 @@
 //                opened it, how the card ended. push sends a short line to the user's
 //                phone through the Main Bot's IM chat; onCardNote hears a reply there
 //                to a push about a card.
+//                wake tells a Bot that its wait on a herdr pane is over, where it asked.
 //   dsBotBridge  the tools a Bot on a local agent CLI (Claude Code, Codex, ACP) may call
 //                through DS Bot's MCP bridge. Only the team tools cross by default; a
 //                companion names the tools it registers so those Bots get them too.
@@ -163,6 +164,30 @@ export function notesService(rt) {
     async closeCard({ botId, cardId } = {}) {
       if (typeof botId !== 'string' || typeof cardId !== 'string' || typeof rt.closeCardThread !== 'function') return { closed: false }
       return { closed: await rt.closeCardThread(botId, cardId) }
+    },
+    // { botId, cardId?, roomId?, pane, text } -> { where } | { error }. Wakes a Bot whose
+    // wait on a herdr pane is over, where it asked: the card's thread while it is open,
+    // else the group when it is still a member there, else its own chat (the part open
+    // now, not the one it asked from). It reads as DS Bot's note, not the user's.
+    async wake({ botId, cardId, roomId, pane, text } = {}) {
+      await rt.load()
+      const bot = typeof botId === 'string' ? rt.botOf(botId) : undefined
+      if (bot === undefined) return { error: 'No such Bot.' }
+      const body = keepLines(text, BRIEF_MAX)
+      if (body === '') return { error: 'Write a note first.' }
+      const note = `herdr pane ${oneLine(pane, 40) || '?'} · the wait you started is over`
+      const thread = typeof cardId === 'string' ? cardThreadSession(bot, cardId) : undefined
+      if (thread !== undefined) {
+        await rt.deliver({ toId: bot.id, sessionId: thread, role: 'wake', note, text: body })
+        return { where: 'card' }
+      }
+      const room = typeof roomId === 'string' ? rt.roomOf(roomId) : undefined
+      if (room !== undefined && (room.members ?? []).includes(bot.id) && room.sessions?.[bot.id] !== undefined) {
+        await rt.deliver({ toId: bot.id, sessionId: room.sessions[bot.id], role: 'room', roomId: room.id, note, text: body })
+        return { where: 'group' }
+      }
+      await rt.deliver({ toId: bot.id, role: 'wake', note, text: body })
+      return { where: 'chat' }
     },
     // { cardId?, botId?, text } -> { sent: number }. A short line to the user's phone: the
     // Main Bot's own IM chats get it with no message of theirs having asked (im/index.js

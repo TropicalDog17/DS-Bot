@@ -21,6 +21,13 @@ const clean = (parsed) => {
   }
   const settings = parsed?.settings
   if (settings !== null && typeof settings === 'object' && !Array.isArray(settings)) data.settings = settings
+  // The Bots' waits on herdr panes (waits.js), by id.
+  const waits = parsed?.waits
+  if (waits !== null && typeof waits === 'object' && !Array.isArray(waits)) {
+    for (const [id, wait] of Object.entries(waits)) {
+      if (wait !== null && typeof wait === 'object' && wait.id === id && typeof wait.pane === 'string' && typeof wait.botId === 'string' && Array.isArray(wait.until)) (data.waits ??= {})[id] = wait
+    }
+  }
   return data
 }
 

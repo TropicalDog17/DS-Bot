@@ -10,9 +10,10 @@ import { ACTIONS, ticketKey } from '../src/board/cards.js'
 import { KEPT_THINK_MAX, callAbout, keep, visibleThought } from '../src/board/live.js'
 import { createHerdr, herdrBinary, panesIn } from '../src/board/herdr.js'
 import { commandOf } from '../src/board/plugin.js'
+import { ARM_MS, WAITS_PER_BOT, WAIT_MAX_MS, addWait, check, wakeText } from '../src/board/waits.js'
 import { bridgeService, notesService, rosterService } from '../src/host/companions.js'
 import { homeLock } from '../src/host/home-lock.js'
-import { addCardThread, cardThreadSession, closeCardThread } from '../src/host/threads.js'
+import { addCardThread, addCardThread as addCardThreadFor, cardThreadSession, closeCardThread } from '../src/host/threads.js'
 
 // The board plugin knows the team only through DS Bot's public services, so the tests
 // build those services over a small fake team, exactly as the host provides them.
@@ -81,7 +82,7 @@ function host(t, { file, notes, now = Date.now, config = {}, threads = true, her
   const emit = (name, ...args) => listeners[name]?.(...args)
   const sections = new Map()
   const systemPrompt = { section: (section) => { sections.set(section.name, section); return () => { sections.delete(section.name) } } }
-  const handle = install(ctx, { file: boardFile, adoptMs: -1, ...config }, { ...team, ...(notes ? { notes } : {}), ...(herdr ? { herdr } : {}), tools, connection, systemPrompt, store: openBoardStore(boardFile), now })
+  const handle = install(ctx, { file: boardFile, adoptMs: -1, waitPollMs: -1, ...config }, { ...team, ...(notes ? { notes } : {}), ...(herdr ? { herdr } : {}), tools, connection, systemPrompt, store: openBoardStore(boardFile), now })
   t.after(() => handle.dispose())
   const tool = (args, sessionId = 'b') => registered.tools.find(entry => entry.name === 'board').execute(args, { agent: { id: sessionId } })
   const cards = () => Object.values(JSON.parse(readFileSync(boardFile, 'utf8')).cards)
@@ -553,8 +554,8 @@ test('a note whose delivery fails is kept on the card and says it was not sent',
 
 test('disposing the plugin takes back its tool, its share on the CLI bridge and its route', async (t) => {
   const h = host(t)
-  assert.equal(h.registered.tools.length, 1)
-  assert.deepEqual(h.team.bridged(), ['board'])
+  assert.deepEqual(h.registered.tools.map(tool => tool.name), ['board', 'wait_pane'])
+  assert.deepEqual(h.team.bridged(), ['board', 'wait_pane'])
   assert.equal(h.registered.routes.length, 1)
   h.handle.dispose()
   assert.equal(h.registered.tools.length, 0)
@@ -822,6 +823,14 @@ test('the herdr panes a shell command drives, and a pane read through the herdr 
   assert.deepEqual(await herdr.read('w1:p1T'), { error: 'pane w1:p1T not found', gone: true })
   const missing = createHerdr({ exec: async () => ({ ok: false, stdout: '', stderr: '', missing: true }) })
   assert.deepEqual(await missing.read('w1:p1T'), { error: 'herdr is not installed here.' })
+  assert.deepEqual(await missing.status('w1:p1T'), { error: 'herdr is not installed here.' })
+  // A wait reads only the agent's state.
+  calls.length = 0
+  assert.deepEqual(await herdr.status('w1:p1T'), { status: 'working' })
+  assert.deepEqual(calls, [['hd', 'pane', 'get', 'w1:p1T']])
+  assert.deepEqual(await herdr.status('--help'), { error: 'Not a pane.' })
+  answers.get = answers.read
+  assert.deepEqual(await herdr.status('w1:p1T'), { error: 'pane w1:p1T not found', gone: true })
 })
 
 // The user asked where the card was opened; its work ran in the card's own thread.
@@ -893,4 +902,100 @@ test('a card keeps the herdr panes its Bot drives from the card thread, and the 
   assert.match(await h.tool({ action: 'update', id: card.id, pane: '-rf' }, 'b'), /^pane is a herdr pane id/)
   for (const pane of ['w1:p2', 'w1:p3', 'w1:p4', 'w1:p1T']) await h.tool({ action: 'update', id: card.id, pane }, 'b')
   assert.deepEqual(h.cards()[0].panes.map(entry => entry.id), ['w1:p2', 'w1:p3', 'w1:p4', 'w1:p1T'])
+})
+
+test('a wait on a herdr pane counts once the pane was seen working, or after a while', () => {
+  const waits = {}
+  assert.deepEqual(addWait(waits, { pane: 'w1:p1', until: ['soon'], botId: 'b', id: 'w0', at: 0 }), { error: 'until is one or more of idle, done, blocked.' })
+  const { wait } = addWait(waits, { pane: 'w1:p1', botId: 'b', id: 'w1', at: 0, note: '  then  open a PR ' })
+  assert.deepEqual(wait, { id: 'w1', pane: 'w1:p1', until: ['idle', 'done', 'blocked'], botId: 'b', since: 0, note: 'then open a PR' })
+  // Idle right after the prompt: the agent has not started yet.
+  assert.equal(check(wait, { status: 'idle' }, 1000), undefined)
+  assert.deepEqual(check(wait, { status: 'working' }, 2000), { armed: true })
+  assert.deepEqual(check({ ...wait, armed: true }, { status: 'done' }, 3000), { kind: 'match', status: 'done' })
+  assert.deepEqual(check(wait, { status: 'idle' }, ARM_MS), { kind: 'match', status: 'idle' })
+  assert.deepEqual(check(wait, { error: 'gone', gone: true }, 10), { kind: 'gone' })
+  assert.equal(check({ ...wait, armed: true }, { error: 'herdr is not installed here.' }, 10), undefined)
+  assert.deepEqual(check(wait, { status: 'working' }, WAIT_MAX_MS), { kind: 'expired', status: 'working' })
+  // One wait per pane and Bot; a new one takes its place.
+  assert.equal(addWait(waits, { pane: 'w1:p1', until: ['done'], botId: 'b', id: 'w2', at: 5 }).replaced, true)
+  assert.deepEqual(Object.keys(waits), ['w2'])
+  for (let i = 1; i < WAITS_PER_BOT; i++) addWait(waits, { pane: `w1:p${i + 1}`, botId: 'b', id: `x${i}`, at: 5 })
+  assert.match(addWait(waits, { pane: 'w9:p9', botId: 'b', id: 'y', at: 5 }).error, /already wait on 10 panes/)
+  assert.equal(addWait(waits, { pane: 'w9:p9', botId: 'c', id: 'y', at: 5 }).error, undefined)
+
+  const text = wakeText({ ...wait, cardId: 'c_1' }, { kind: 'match', status: 'done' }, 'a\nb\n```\nlast\n')
+  assert.equal(text, 'herdr pane w1:p1 is done.\nIt is the work of card c_1.\nYour note when you started waiting: then open a PR\nWhat it shows last:\n```\na\nb\n`\u200b``\nlast\n```\nCheck the result in the pane, then go on with the work.')
+  assert.match(wakeText({ ...wait, until: ['done'] }, { kind: 'expired', status: 'working' }), /^herdr pane w1:p1 did not get to done within 24 hours; it is working\. The wait ended\./)
+})
+
+// The wait outlives a restart and a new part of the chat: it is in board.json, not a job.
+test('wait_pane keeps the wait on the board and wakes the Bot where it asked, also after a restart', async (t) => {
+  let clock = 1000
+  const statuses = { 'w1:p1T': 'idle', 'w1:p2': 'working' }
+  const herdr = {
+    status: async pane => (pane in statuses ? { status: statuses[pane] } : { error: 'pane not found', gone: true }),
+    read: async pane => ({ text: `tests passed in ${pane}`, status: statuses[pane] }),
+  }
+  const dir = mkdtempSync(join(tmpdir(), 'ds-bot-board-wait-'))
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  const file = join(dir, 'board.json')
+  const h = host(t, { file, herdr, now: () => clock })
+  const wait = (args, sessionId) => h.registered.tools.find(entry => entry.name === 'wait_pane').execute(args, { agent: { id: sessionId } })
+
+  await h.tool({ action: 'open', title: 'Speed up tests', assignee: 'Writer', brief: 'Under 3 minutes.' }, 'a')
+  const [card] = h.cards()
+  const thread = `ct-${card.id}`
+  h.team.owners[thread] = { botId: 'b' }
+  assert.equal(await wait({ pane: 'w1:p1T', until: ['done', 'idle'], note: 'open the PR' }, thread),
+    'Waiting for herdr pane w1:p1T to be done or idle. When it gets there you are woken here with what it shows, also after a restart. End your turn now; do not wait for it with herdr agent wait, --wait or a background job. It is idle now.')
+  assert.equal(await wait({ pane: 'w1:p2' }, 'b'), 'Waiting for herdr pane w1:p2 to be idle, done or blocked. When it gets there you are woken here with what it shows, also after a restart. End your turn now; do not wait for it with herdr agent wait, --wait or a background job. It is working now.')
+  assert.equal(await wait({ pane: 'w1:p404' }, 'b'), 'herdr has no pane w1:p404.')
+  assert.equal(await wait({ pane: 'w1:p1T' }, 'nobody'), 'Only Bots on the team can use wait_pane.')
+  const saved = JSON.parse(readFileSync(file, 'utf8'))
+  const waits = Object.values(saved.waits)
+  assert.deepEqual(waits.map(entry => [entry.pane, entry.botId, entry.cardId]), [['w1:p1T', 'b', card.id], ['w1:p2', 'b', undefined]])
+  assert.deepEqual(saved.cards[card.id].panes.map(entry => entry.id), ['w1:p1T'])
+
+  // Still idle right after the prompt, and still working: nobody is woken.
+  assert.deepEqual(await h.handle.pollWaits(), [])
+  statuses['w1:p1T'] = 'working'
+  assert.deepEqual(await h.handle.pollWaits(), [])
+  assert.equal(h.team.delivered.length, 0)
+
+  // A restart: a new host on the same board keeps both waits.
+  h.handle.dispose()
+  const again = host(t, { file, herdr, now: () => clock })
+  again.team.state.bots.b.openParts = []
+  addCardThreadFor(again.team.state.bots.b, thread, card.id)
+  statuses['w1:p1T'] = 'done'
+  statuses['w1:p2'] = 'blocked'
+  clock += 5000
+  assert.equal((await again.handle.pollWaits()).length, 2)
+  assert.deepEqual(again.team.delivered.map(entry => [entry.toId, entry.sessionId, entry.role, entry.note]), [
+    ['b', thread, 'wake', 'herdr pane w1:p1T · the wait you started is over'],
+    ['b', undefined, 'wake', 'herdr pane w1:p2 · the wait you started is over'],
+  ])
+  assert.match(again.team.delivered[0].text, new RegExp(`^herdr pane w1:p1T is done\\.\\nIt is the work of card ${card.id}\\.\\nYour note when you started waiting: open the PR\\nWhat it shows last:\\n\`\`\`\\ntests passed in w1:p1T\\n`))
+  assert.match(again.team.delivered[1].text, /^herdr pane w1:p2 is blocked\./)
+  assert.equal(JSON.parse(readFileSync(file, 'utf8')).waits, undefined)
+  assert.deepEqual(await again.handle.pollWaits(), [])
+})
+
+test('wait_pane stop ends a wait, and a pane that is gone wakes its Bot once', async (t) => {
+  const statuses = { 'w1:p1': 'working' }
+  const herdr = { status: async pane => (pane in statuses ? { status: statuses[pane] } : { error: 'pane not found', gone: true }), read: async () => ({ text: '' }) }
+  const h = host(t, { herdr })
+  const wait = (args, sessionId = 'b') => h.registered.tools.find(entry => entry.name === 'wait_pane').execute(args, { agent: { id: sessionId } })
+  await wait({ pane: 'w1:p1' })
+  assert.equal(await wait({ pane: 'w1:p1', stop: true }), 'Stopped waiting on w1:p1.')
+  assert.equal(await wait({ pane: 'w1:p1', stop: true }), 'You do not wait on w1:p1.')
+  await wait({ pane: 'w1:p1' }, 'gb')
+  delete statuses['w1:p1']
+  h.team.state.rooms.r1.sessions = { a: 'ga', b: 'gb' }
+  await h.handle.pollWaits()
+  assert.deepEqual(h.team.delivered.map(entry => [entry.sessionId, entry.role, entry.roomId]), [['gb', 'room', 'r1']])
+  assert.match(h.team.delivered[0].text, /^herdr pane w1:p1 is gone \(closed, or its agent left\)\.\nCheck the result/)
+  await h.handle.pollWaits()
+  assert.equal(h.team.delivered.length, 1)
 })
