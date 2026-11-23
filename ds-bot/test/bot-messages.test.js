@@ -155,6 +155,25 @@ test('message_bot when "queue" waits for the current work, and reply_to "user" a
   assert.equal(agents.get('b').calls[1][1].source.audience, 'user')
 })
 
+// The user on their phone does not read the other Bot's web chat: its reply comes back.
+test('reply_to "user" from a turn the user started over IM comes back to the sender', async (t) => {
+  const { agents, emit, tool, stop } = await start(team())
+  t.after(stop)
+
+  emit('a', 'turn/start', { turn: 1 })
+  emit('a', 'user/message', { content: [{ type: 'text', text: 'docs?' }], source: { kind: 'user', rpcId: 'im:telegram:1' } })
+  const out = await tool('message_bot', { to: 'Writer', message: 'write the docs', reply_to: 'user' }, 'a')
+  assert.match(out, /^Delivered to Writer\. Its reply will arrive later as a new message; do not wait for it\. The user wrote to you from their phone and does not read Writer's chat, so its reply comes back to you: pass it on to the user in full\./)
+  assert.equal(agents.get('b').calls[0][1].source.audience, undefined)
+
+  // A turn the user started in the web chat keeps reply_to "user".
+  emit('a', 'turn/end', { turn: 1, reason: { kind: 'completed' } })
+  emit('a', 'turn/start', { turn: 2 })
+  emit('a', 'user/message', { content: [{ type: 'text', text: 'hi' }], source: { kind: 'user', rpcId: 'web-1' } })
+  await tool('message_bot', { to: 'Writer', message: 'say hi', reply_to: 'user' }, 'a')
+  assert.equal(agents.get('b').calls.at(-1)[1].source.audience, 'user')
+})
+
 test('a Bot busy in a group gets the message in its own chat, and the sender is told', async (t) => {
   const seed = team({ group: true })
   seed.rooms.r1.sessions.a = 'ga'

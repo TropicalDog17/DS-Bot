@@ -281,6 +281,10 @@ export function install(rt) {
       await rt.load()
       const sender = callerBot(exec)
       if (sender === undefined) return 'Only Bots on the team can use message_bot.'
+      // A user who wrote from IM does not read the other Bot's web chat: its answer comes
+      // back here, to be passed on where the user is.
+      const fromIm = args.reply_to === 'user' && rt.live.get(exec.agent?.id)?.im === true
+      if (fromIm) args = { ...args, reply_to: 'me' }
       const target = rt.findBot(args.to)
       if (target === undefined) return `No Bot named ${args.to}. Team: ${Object.values(state.bots).map(bot => bot.name).join(', ')}`
       if (target.id === sender.id) return 'You cannot message yourself.'
@@ -379,7 +383,7 @@ export function install(rt) {
           status === 'idle' ? '' : `${target.name} now: ${status}.`,
           asker ? `When you have handed on everything, end your turn: each reply brings you back to this work, and your answer goes to ${asker} once all of it is back.` : '',
         ].filter(Boolean)
-        const out = [sent, ...notes].join(' ')
+        const out = [sent, ...(fromIm ? [`The user wrote to you from their phone and does not read ${target.name}'s chat, so its reply comes back to you: pass it on to the user in full.`] : []), ...notes].join(' ')
         // A message reaches the part of the Bot's own chat it is delivered to only; work
         // going on elsewhere (a group, or another live part of its own chat) goes on
         // without it.
