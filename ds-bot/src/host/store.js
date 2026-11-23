@@ -175,6 +175,12 @@ export function install(rt) {
       migrated = true
     }
     state.mainBotIds = state.mainBotIds.filter(id => state.bots[id])
+    // A team from before the Main Bot routed every Request could have several; the
+    // first, the sidebar tile, keeps the role.
+    if (state.mainBotIds.length > 1) {
+      state.mainBotIds = state.mainBotIds.slice(0, 1)
+      migrated = true
+    }
     if (!Array.isArray(state.privateArchives)) state.privateArchives = []
     if (!Array.isArray(state.sections)) state.sections = []
     else {
@@ -565,6 +571,10 @@ export function install(rt) {
         const partSid = sessionIdOf(part?.sessionId)
         if (partSid !== undefined) chatOwners.set(partSid, botId)
         indexPast(part?.segments, { botId })
+      }
+      // A closed card thread stays readable as the Bot's own history.
+      for (const closed of Array.isArray(bot.closedCards) ? bot.closedCards : []) {
+        indexPast([{ sessionId: closed?.sessionId }, ...(Array.isArray(closed?.segments) ? closed.segments : [])], { botId })
       }
     }
     for (const [id, room] of Object.entries(state.rooms)) {

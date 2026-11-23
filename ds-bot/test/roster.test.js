@@ -208,7 +208,7 @@ test('a first message from the user is helped with, not replaced by an opening q
   assert.doesNotMatch(text, /\b(?:ask_user(?:_question)?|allowCustom)\b/)
 })
 
-test('a group the user makes without a first message opens with its admin asking what it is for', async (t) => {
+test('a group the user makes without a first message opens with the Main Bot asking what it is for, as it takes plain messages', async (t) => {
   const { call, stop, sent, ctx, home } = start(undefined, { models: ['deepseek-v4-flash'] })
   t.after(stop)
   const chief = (await call('state', {})).value.mainBotId
@@ -220,7 +220,7 @@ test('a group the user makes without a first message opens with its admin asking
   const room = (await call('create-room', { members: [chief, writer.id], admin: writer.id, greet: true })).value
   assert.deepEqual(sent.map(entry => [entry.sessionId, entry.message.source.role]), [[room.id, 'kickoff']])
 
-  // The relay gives the admin alone a turn, and the cue adds no line to the group.
+  // The relay gives the Main Bot alone a turn, though Writer is the admin, and the cue adds no line to the group.
   for (const listener of ctx.listeners.get('session/event')) listener({ id: room.id }, { type: 'user/message', data: sent[0].message })
   const relay = rt.teamTools.find(d => d.name === 'group_relay').execute({}, { agent: { id: room.id }, callId: 'relay', signal: new AbortController().signal })
     .then(value => afterRound(rt, room.id, value))
@@ -233,9 +233,10 @@ test('a group the user makes without a first message opens with its admin asking
   assert.match(text, /^\[Group chat "[^"]+" · the group was just created\]\n/)
   assert.match(text, /The user just created this group/)
   assert.doesNotMatch(text, /This round so far|Nothing new in this round/)
-  assert.deepEqual(result.passed, ['Writer'])
+  assert.match(text, /You are the Main Bot: the user's plain messages in this group come to you first/)
+  assert.deepEqual(result.passed, ['Chief'])
   const saved = JSON.parse(readFileSync(join(home, 'state.json'), 'utf8')).rooms[room.id]
-  assert.equal(saved.sessions[writer.id], turns[0].sessionId)
+  assert.equal(saved.sessions[chief], turns[0].sessionId)
   assert.deepEqual(saved.log, [])
 })
 
@@ -412,8 +413,10 @@ test('a team from before the whale was stored gets it once, on its first Main Bo
   assert.equal(team.w2.avatar, undefined)
   assert.equal(JSON.parse(readFileSync(join(home, 'state.json'), 'utf8')).whaleStored, true)
 
+  // The team keeps one Main Bot: the first, the sidebar tile.
+  assert.deepEqual((await call('state', {})).value.mainBotIds, ['m1'])
   // The whale is now an ordinary look: it does not pass on when its Bot is deleted.
-  assert.equal((await call('set-main', { id: 'm1', main: false })).ok, true)
+  assert.equal((await call('set-main', { id: 'w2', main: true })).ok, true)
   assert.equal((await call('delete-bot', { id: 'm1' })).ok, true)
   team = await bots()
   assert.equal(team.w2.avatar, undefined)
@@ -437,18 +440,16 @@ test('another Bot takes the Main Bot place in one step', async (t) => {
   assert.deepEqual(after.bots.map(bot => bot.id), [writer.id])
 })
 
-test('a Main Bot moves to the front and the others keep their order', async (t) => {
+test('making a Bot the Main Bot hands the role over, so there is always exactly one', async (t) => {
   const { call, stop } = start()
   t.after(stop)
   const chief = (await call('state', {})).value.mainBotId
   const writer = (await call('create-bot', { name: 'Writer' })).value
   const reader = (await call('create-bot', { name: 'Reader' })).value
-  assert.deepEqual((await call('set-main', { id: writer.id, main: true })).value.mainBotIds, [chief, writer.id])
-  assert.deepEqual((await call('set-main', { id: writer.id, main: true, primary: true })).value.mainBotIds, [writer.id, chief])
-  assert.deepEqual((await call('set-main', { id: reader.id, main: true })).value.mainBotIds, [writer.id, chief, reader.id])
-  // Replacing a Main Bot that is not first keeps its place; one already a Main Bot moves into it.
-  assert.deepEqual((await call('set-main', { id: reader.id, main: true, replace: chief })).value.mainBotIds, [writer.id, reader.id])
-  assert.deepEqual((await call('set-main', { id: writer.id, main: false })).value.mainBotIds, [reader.id])
+  assert.deepEqual((await call('set-main', { id: writer.id, main: true })).value.mainBotIds, [writer.id])
+  // Older clients still send `primary` or `replace`; the result is the same hand-over.
+  assert.deepEqual((await call('set-main', { id: reader.id, main: true, primary: true })).value.mainBotIds, [reader.id])
+  assert.deepEqual((await call('set-main', { id: chief, main: true, replace: reader.id })).value.mainBotIds, [chief])
 })
 
 test('set-main keeps one Main Bot and replaces only a Main Bot', async (t) => {
@@ -458,8 +459,8 @@ test('set-main keeps one Main Bot and replaces only a Main Bot', async (t) => {
   const writer = (await call('create-bot', { name: 'Writer' })).value
   const reader = (await call('create-bot', { name: 'Reader' })).value
   assert.equal((await call('set-main', { id: chief, main: false })).ok, false)
-  assert.equal((await call('set-main', { id: writer.id, main: true, replace: reader.id })).ok, false)
   assert.equal((await call('set-main', { id: 'nope', main: true })).ok, false)
+  assert.ok(writer.id)
   assert.equal((await call('set-main', { id: reader.id, main: false })).ok, true)
   assert.deepEqual((await call('state', {})).value.mainBotIds, [chief])
 })

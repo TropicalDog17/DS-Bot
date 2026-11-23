@@ -62,9 +62,7 @@ import { RIGHTBAR_ATTRIBUTES, columnOpened, createSwitchWindow, drawerOpened, ri
 import { ErrorToast, FEEDBACK_CSS } from './feedback.js'
 import { ABOUT_CSS } from './about.js'
 import { MEMBER_CSS, MemberDock } from './member-status.js'
-import { TASK_CSS } from './task-board.js'
 import { IM_CSS } from './im-page.js'
-import { GOAL_CSS } from './goal.js'
 import { BotMention, USER_MESSAGE_CSS, UserMessageCell, canDrawUserMessages, installUserBubble } from './user-message.js'
 import { BOT_MENTION_ID, installBotMentionRule } from './user-text-rule.js'
 import { QueueDock, QUEUE_CSS } from './queue-dock.js'
@@ -95,7 +93,7 @@ export function apply(ctx) {
   let seenAt = seenStore.read()
   // `details` is the panel's subject (a Session id); `view` picks details or the
   // subject Bot's browser inside it.
-  const ui = createSource({ details: null, view: 'details', readOnlyPart: null, renaming: false, tab: null, side: null, newChat: null, exchange: null, menu: null, voice: null, palette: null, quote: null, paste: {}, pendingOpen: null, settings: null, memory: null, toast: null, signIn: null, renameAgent: null, unread: unreadStore.read(), reactions: reactionStore.read(), visits: {}, panelYield: false, leftDrawer: false, bootFailed: false, goalCompose: null, goalOpen: null, page: null })
+  const ui = createSource({ details: null, view: 'details', readOnlyPart: null, renaming: false, tab: null, side: null, newChat: null, exchange: null, menu: null, voice: null, palette: null, quote: null, paste: {}, pendingOpen: null, settings: null, memory: null, toast: null, signIn: null, renameAgent: null, unread: unreadStore.read(), reactions: reactionStore.read(), visits: {}, panelYield: false, leftDrawer: false, bootFailed: false, page: null })
   // The seat companion plugins take: a sidebar icon and a full page (pages.js).
   const pages = createPages({
     // A companion's notice is a toast whose Open leads to its page.
@@ -1202,13 +1200,11 @@ export function apply(ctx) {
     [FEEDBACK_CSS, 'feedback'],
     [ABOUT_CSS, 'about'],
     [MEMBER_CSS, 'members'],
-    [TASK_CSS, 'tasks'],
     [BOARD_CSS, 'board'],
     [CARD_TAG_CSS, 'board-card-tag'],
     [PASTE_CSS, 'paste'],
     [OPENING_CSS, 'opening'],
     [IM_CSS, 'im'],
-    [GOAL_CSS, 'goal'],
     [USER_MESSAGE_CSS, 'user-messages'],
     [WIDGET_CSS, 'widgets'],
     [CHANGES_CSS, 'changes'],

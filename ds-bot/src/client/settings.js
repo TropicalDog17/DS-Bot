@@ -209,29 +209,18 @@ function LocationsSection({ actions, run }) {
       data.fixed ? null : h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: moving, onClick: () => { if (!busy.current) void run(app.moveData(team ?? undefined)) } }, t('Change…'))))
 }
 
-// The first Main Bot is the sidebar tile. Picking another Bot there hands it the role
-// in one step; more Main Bots can sit beside it.
+// A team has exactly one Main Bot. Picking another Bot hands it the role in one step.
 function MainBotsSection({ roster, actions, run }) {
-  const mains = (roster.mainBotIds ?? []).map(id => roster.byId[id]).filter(Boolean)
-  const [first, ...others] = mains
-  const candidates = roster.bots.filter(bot => !isMainOf(roster, bot.id))
+  const main = roster.byId[(roster.mainBotIds ?? [])[0]]
   return h(SetSection, { title: t('Main Bot') },
     h(SetRow, {
       label: t('Main Bot'),
-      hint: first ? t('First in the sidebar. Pick another Bot to hand it the role; {name} then stops being a Main Bot.', { name: first.name }) : undefined,
+      hint: main ? t('Takes every request and hands it to the right Bot. Pick another Bot to hand it the role; {name} then stops being the Main Bot.', { name: main.name }) : undefined,
     },
     h('select', {
-      className: 'bt-select', 'aria-label': t('Main Bot'), value: first?.id ?? '',
-      onChange: event => run(actions.setMain(event.target.value, true, first ? { replace: first.id } : {})),
-    }, first ? null : h('option', { value: '' }, t('Choose a Bot…')), roster.bots.map(bot => h('option', { key: bot.id, value: bot.id }, bot.name)))),
-    others.map(bot => h(SetRow, { key: bot.id, label: bot.name, hint: t('Also a Main Bot.') },
-      h('button', { type: 'button', className: 'bt-soft bt-soft-sm', onClick: () => run(actions.setMain(bot.id, true, { primary: true })) }, t('Move to first')),
-      h('button', { type: 'button', className: 'bt-soft bt-soft-sm', onClick: () => run(actions.setMain(bot.id, false)) }, t('Remove Main Bot role')))),
-    candidates.length > 0 ? h(SetRow, { label: t('Add a Main Bot'), hint: t('Main Bots can create and change Bots, and run every group chat.') },
-      h('select', {
-        className: 'bt-select', 'aria-label': t('Add a Main Bot'), value: '',
-        onChange: (event) => { if (event.target.value) void run(actions.setMain(event.target.value, true)) },
-      }, h('option', { value: '' }, t('Choose a Bot…')), candidates.map(bot => h('option', { key: bot.id, value: bot.id }, bot.name)))) : null)
+      className: 'bt-select', 'aria-label': t('Main Bot'), value: main?.id ?? '',
+      onChange: event => run(actions.setMain(event.target.value, true)),
+    }, main ? null : h('option', { value: '' }, t('Choose a Bot…')), roster.bots.filter(bot => bot.private !== true).map(bot => h('option', { key: bot.id, value: bot.id }, bot.name)))))
 }
 
 const MOTIONS = [['quiet', 'Quiet'], ['normal', 'Normal'], ['lively', 'Lively']]

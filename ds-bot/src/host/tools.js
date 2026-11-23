@@ -17,7 +17,7 @@ import { checkShownView, showViewDescription, showViewParameters } from 'deep-vi
 export const output = { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: String(value) }] }
 export const GROUP_REF = { type: 'string', required: true, description: 'Exact group chat name from list_bots' }
 const BLOCKING_QUESTION_TOOL = 'ask_user_question'
-// DS Bot has its own group goals; DSH's session goal still does not survive conversation parts.
+// DSH's session goal does not survive conversation parts; Bots track work as board cards.
 const GOAL_TOOLS = ['create_goal', 'update_goal', 'get_goal']
 // DSH's delegation tools start child agents the user cannot watch or stop, and they
 // end with the conversation part that started them; Bots hand work to other Bots.
@@ -31,12 +31,19 @@ const HIDDEN_TOOLS = HIDDEN_TOOL_GROUPS.flat()
 // every root Session a Team Lead and tells it to spawn teammates in `team:policy`;
 // its `team:identity` context is required, so DSH puts it back after any filter.
 const HIDDEN_SECTIONS = new Set([...HIDDEN_TOOLS.map(name => `tool:${name}`), 'tool:goal', 'team:policy'])
-const GOAL_REFUSAL = 'Bot chats do not run /goal. To give a group a goal, use Set a goal in its + menu.'
+const GOAL_REFUSAL = 'Bot chats do not run /goal. Track the work as a card on the board.'
 // DSH 0.2.2's schedule tools can deliver to a new Session, which is outside the team and
 // has no Bot; a Bot's tasks deliver to its own chat, which DS Bot moves on with each part.
 const SCHEDULE_TARGET_TOOLS = ['schedule_create', 'schedule_edit']
 const SCHEDULE_TARGET_REFUSAL = 'A Bot’s scheduled tasks run in its own chat. Use target "this_session".'
 const DELEGATION_REFUSAL = 'Bots do not start subagents, teammates or workflows. Do the work yourself, or hand it to another Bot with message_bot.'
+// The Main Bot takes every Request and hands it on; it does no work itself. The limit is
+// structural rather than a prompt rule, because a Session allowed to do work often does
+// it itself. Reading (files, the web, chats, memory) stays: a Question it can answer from
+// what it reads is answered there.
+const MAIN_DENIED_TOOLS = ['bash', 'pwsh', 'write', 'edit', 'apply_patch', 'str_replace_editor', 'terminal_open', 'terminal_send', 'terminal_signal', 'terminal_close', 'job_kill', 'load_workspace_dependencies', 'create_worktree']
+export const mainDenied = name => MAIN_DENIED_TOOLS.includes(name) || name.startsWith('browser_')
+const MAIN_REFUSAL = 'The Main Bot does not do the work itself. Open a card on the board for the Bot whose role fits and hand it on, or ask that Bot with message_bot.'
 const MODE_PARAM = {
   type: 'string',
   enum: ROOM_MODES,
@@ -78,7 +85,7 @@ export function install(rt) {
       room.notice ? `notice: ${room.notice.split('\n')[0].slice(0, 100)}` : '',
       room.workDir ? `members work in ${room.workDir} here` : '',
       room.permission ? `members work with the ${room.permission} permissions here` : '',
-      room.goal !== undefined ? `goal: "${room.goal.title}" (${room.goal.status}${room.goal.status === 'active' || room.goal.status === 'paused' ? `, stage ${Math.min(room.goal.current + 1, room.goal.stages.length)}/${room.goal.stages.length}` : ''})` : '',
+
     ].filter(Boolean)
     return `- "${room.name}" — ${parts.join('; ')}`
   }
@@ -669,92 +676,6 @@ export function install(rt) {
     },
   }))
 
-  // The shared to-do list of a group: open items first, then done ones, each with the
-  // short id the check and remove actions take. Ids are UUIDs, and the first eight
-  // characters are what the list shows; a prefix is accepted when it names exactly one item.
-  const todoCount = (room) => {
-    const todos = room.todos ?? []
-    const open = todos.filter(item => item.done !== true).length
-    return { todos, open, done: todos.length - open }
-  }
-  const todoLines = (room) => {
-    const { todos, open, done } = todoCount(room)
-    if (todos.length === 0) return `The shared to-do list of "${room.name}" is empty. Add one with action "add".`
-    const order = [...todos].sort((a, b) => Number(a.done === true) - Number(b.done === true) || (a.createdAt ?? 0) - (b.createdAt ?? 0))
-    return [
-      `Shared to-do list of "${room.name}" (${open} open, ${done} done):`,
-      ...order.map(item => `- [${item.done === true ? 'x' : ' '}] ${item.text} (todo ${item.id.slice(0, 8)})`),
-    ].join('\n')
-  }
-  const findTodo = (room, ref) => {
-    const wanted = String(ref ?? '').trim()
-    if (wanted === '') return { error: 'Which to-do? Pass the id from the list.' }
-    const exact = (room.todos ?? []).find(item => item.id === wanted)
-    if (exact !== undefined) return { todo: exact }
-    const matches = (room.todos ?? []).filter(item => item.id.startsWith(wanted))
-    if (matches.length === 1) return { todo: matches[0] }
-    if (matches.length > 1) return { error: `Several to-dos start with "${wanted}". Use a longer id.` }
-    return { error: `No to-do with id "${wanted}" on the list.` }
-  }
-
-  rt.teamTools.push(defineTool({
-    name: 'group_todo',
-    description: 'The shared to-do list of a group chat. Every member reads and changes the same list, and the user sees it in the group\'s details. List it, add one item, tick an item done or not done, remove one item, or clear the completed items. The list holds at most 100 items; when it is full, remove an item or clear completed ones before adding. Nothing is dropped on its own. Add, remove, or clear only what the user asked for.',
-    parameters: {
-      group: GROUP_REF,
-      action: {
-        type: 'string',
-        enum: ['list', 'add', 'check', 'remove', 'clear'],
-        required: true,
-        description: '"list" reads the list; "add" adds one item with text; "check" ticks one item by id, or unticks it with done: false; "remove" deletes one item by id; "clear" deletes every completed item',
-      },
-      text: { type: 'string', description: 'The to-do item, one line, at most 200 characters (action "add")' },
-      id: { type: 'string', description: 'The to-do id from the list, or its first characters (action "check" or "remove")' },
-      done: { type: 'boolean', description: 'true ticks the item, false unticks it; defaults to true (action "check")' },
-    },
-    output,
-    async execute(args, exec) {
-      await rt.load()
-      const self = rt.selfOf(exec.agent?.id)
-      if (rt.botOf(self) === undefined) return 'Only Bots on the team can use a group to-do list.'
-      const { room, error } = pickRoom(args.group, self)
-      if (error) return error
-      const action = String(args.action ?? '').trim()
-      if (action === 'list') return todoLines(room)
-      try {
-        if (action === 'add') {
-          const item = await rt.addRoomTodo(room.id, args.text, self)
-          const { open } = todoCount(room)
-          return `Added "${item.text}" to the shared to-do list of "${room.name}" (${open} open, todo ${item.id.slice(0, 8)}).`
-        }
-        if (action === 'check') {
-          const found = findTodo(room, args.id)
-          if (found.error) return found.error
-          const item = await rt.setRoomTodoDone(room.id, found.todo.id, args.done === undefined ? true : args.done === true, self)
-          const { open } = todoCount(room)
-          return `${item.done === true ? 'Ticked' : 'Unticked'} "${item.text}" (${open} open).`
-        }
-        if (action === 'remove') {
-          const found = findTodo(room, args.id)
-          if (found.error) return found.error
-          const item = await rt.removeRoomTodo(room.id, found.todo.id)
-          const { open } = todoCount(room)
-          return `Removed "${item.text}" from the shared to-do list of "${room.name}" (${open} open).`
-        }
-        if (action === 'clear') {
-          const removed = await rt.clearDoneRoomTodos(room.id)
-          const { open } = todoCount(room)
-          if (removed.length === 0) return `No completed to-dos to clear on "${room.name}" (${open} open).`
-          const noun = removed.length === 1 ? 'to-do' : 'to-dos'
-          return `Cleared ${removed.length} completed ${noun} from "${room.name}" (${open} open).`
-        }
-        return 'Use action "list", "add", "check", "remove" or "clear".'
-      } catch (failure) {
-        return `Could not change the to-do list of "${room.name}": ${failure.message}`
-      }
-    },
-  }))
-
   rt.teamTools.push(defineTool({
     name: 'delete_group',
     description: 'Main Bot only. Delete a group chat; its history is archived. Only when the user asks.',
@@ -946,7 +867,7 @@ export function install(rt) {
     const held = scoped.get(id)
     if (held === undefined) return
     scoped.delete(id)
-    for (const dispose of held.disposers) {
+    for (const dispose of [...held.disposers, ...(held.mainLifts ?? [])]) {
       try {
         dispose()
       } catch (error) {
@@ -964,6 +885,11 @@ export function install(rt) {
     // owns before its next request. hideBotUnusedTools does nothing for a
     // Session that stays unowned, and nothing twice for one already scoped.
     for (const agent of ctx.get?.('agents')?.list?.() ?? []) hideBotUnusedTools(agent)
+    // The Main Bot role can move on any save: the Agents already scoped follow it.
+    for (const [id, held] of [...scoped]) {
+      const main = rt.isBotSession(id) && rt.isMain(rt.selfOf(id))
+      if (held.agent !== undefined && ((held.routing ?? false) !== main || (held.mainRouting ?? false) !== main)) hideBotUnusedTools(held.agent)
+    }
   }
   ctx.effect(() => () => { for (const id of scoped.keys()) unscope(id) }, 'ds-bot: scoped team tools')
 
@@ -982,10 +908,13 @@ export function install(rt) {
     // can move onto or off a local route after its Agent exists.
     const self = owns ? rt.botOf(rt.selfOf(id)) : undefined
     const localBot = rt.isLocalAgentRef?.(self?.model ?? self?.appliedModel) === true
+    // The Main Bot's Sessions leave out the tools that do work; the role can move to
+    // another Bot while its Agents live, which scopes them again.
+    const routing = owns && !localBot && rt.isMain(self?.id)
     // A Session that left the team, a scope of the wrong kind, a fresh Agent
     // for one Session, or a Bot that changed between a local route and a model
     // all start over; a wanted scope is registered again below.
-    if (held !== undefined && (!wanted || held.agent !== agent || held.relay !== relayOnly || (held.tools === true && held.local !== localBot))) {
+    if (held !== undefined && (!wanted || held.agent !== agent || held.relay !== relayOnly || (held.tools === true && (held.local !== localBot || held.routing !== routing)))) {
       unscope(id)
       held = undefined
     }
@@ -997,6 +926,7 @@ export function install(rt) {
     if (held?.tools === true) {
       for (const def of [...rt.teamTools, ...(localBot ? (rt.localAgentTools ?? []) : [])]) {
         if (relayOnly && def.name !== 'group_relay') continue
+        if (routing && mainDenied(def.name)) continue
         if (held.added?.has(def.name) === true) continue
         try {
           const dispose = agent.ctx.tools.register(def)
@@ -1032,6 +962,7 @@ export function install(rt) {
     const registered = []
     for (const def of [...rt.teamTools, ...(localBot ? (rt.localAgentTools ?? []) : [])]) {
       if (relayOnly && def.name !== 'group_relay') continue
+      if (routing && mainDenied(def.name)) continue
       try {
         const dispose = agent.ctx.tools.register(def)
         if (typeof dispose === 'function') {
@@ -1051,6 +982,7 @@ export function install(rt) {
     held.relay = relayOnly
     held.tools = true
     held.local = localBot
+    held.routing = routing
     held.disposers.push(...disposers)
     held.added = new Set(registered)
     scoped.set(id, held)
@@ -1090,6 +1022,7 @@ export function install(rt) {
     rt.teamTools.push(def)
     for (const held of scoped.values()) {
       if (held.relay || typeof held.agent?.ctx?.tools?.register !== 'function') continue
+      if (held.routing === true && mainDenied(def.name)) continue
       try {
         const dispose = held.agent.ctx.tools.register(def)
         if (typeof dispose === 'function') held.disposers.push(dispose)
@@ -1153,10 +1086,46 @@ export function install(rt) {
       }
     }
   }
+  let servedVersion = 0
+  // The work tools DSH serves to every Session are masked on the Main Bot's ones, and
+  // lifted when the role moves on. Re-applied on tools/change and on every save.
+  const maskMainTools = (agent, held) => {
+    if (typeof agent.ctx?.tools?.restrict !== 'function' || typeof ctx.tools?.schemas !== 'function') return
+    const id = agent.session?.id
+    const self = rt.botOf(rt.selfOf(id))
+    const routing = rt.isBotSession(id) && self !== undefined && rt.isMain(self.id) && rt.isLocalAgentRef?.(self.model ?? self.appliedModel) !== true
+    if (!routing && (held.mainDenied?.size ?? 0) === 0) return
+    // Reading the served schemas walks every schema: only when the role or the served
+    // tools changed since this Session was last masked.
+    if (held.mainRouting === routing && held.mainServed === servedVersion) return
+    held.mainRouting = routing
+    held.mainServed = servedVersion
+    const served = new Set([...ctx.tools.schemas(agent).map(schema => schema.name), ...(held.mainDenied ?? [])])
+    const deny = routing ? [...served].filter(name => mainDenied(name) && held.added?.has(name) !== true) : []
+    const before = held.mainDenied ?? new Set()
+    if (deny.length === before.size && deny.every(name => before.has(name))) return
+    for (const lift of held.mainLifts ?? []) { try { lift() } catch { /* already lifted */ } }
+    held.mainLifts = []
+    held.mainDenied = new Set(deny)
+    if (deny.length === 0) return
+    try {
+      const lift = agent.ctx.tools.restrict({ deny })
+      if (typeof lift === 'function') held.mainLifts.push(lift)
+    } catch {
+      // A name in the Agent's own scope fails the whole list; the guard refuses what stays.
+      for (const name of deny) {
+        try {
+          const lift = agent.ctx.tools.restrict({ deny: [name] })
+          if (typeof lift === 'function') held.mainLifts.push(lift)
+        } catch { /* scoped: refused by the guard */ }
+      }
+    }
+  }
   const reapplyToolMasks = () => {
     for (const held of scoped.values()) {
       if (held.agent === undefined) continue
       try { maskConnectorTools(held.agent, held) } catch (error) { rt.warn('ds-bot: connector mask failed: %s', error) }
+      try { maskMainTools(held.agent, held) } catch (error) { rt.warn('ds-bot: Main Bot mask failed: %s', error) }
     }
   }
 
@@ -1213,8 +1182,12 @@ export function install(rt) {
       maskHiddenTools(agent, held, new Set(ctx.tools.schemas(agent).map(schema => schema.name)))
     }
     maskConnectorTools(agent, held)
+    maskMainTools(agent, held)
   }
-  ctx.on('tools/change', () => reapplyToolMasks())
+  ctx.on('tools/change', () => {
+    servedVersion += 1
+    reapplyToolMasks()
+  })
   // A new Bot, part, or group Session gets its Agent before ds-bot records it, so the
   // recording path resolves it again once the session is known as a Bot's; meanwhile
   // the guard refuses the question and delegation tools in any Bot Session, and a
@@ -1224,6 +1197,10 @@ export function install(rt) {
     if (exec.name === BLOCKING_QUESTION_TOOL) return `Bots cannot use ${BLOCKING_QUESTION_TOOL}. Ask with ask_user in your own chat, or ask in your reply.`
     const target = exec.arguments?.target
     if (SCHEDULE_TARGET_TOOLS.includes(exec.name) && target !== undefined && target !== 'this_session') return SCHEDULE_TARGET_REFUSAL
+    if (mainDenied(exec.name)) {
+      const self = rt.botOf(rt.selfOf(exec.agent?.id))
+      if (self !== undefined && rt.isMain(self.id) && rt.isLocalAgentRef?.(self.model ?? self.appliedModel) !== true) return MAIN_REFUSAL
+    }
     return DELEGATION_TOOLS.includes(exec.name) ? DELEGATION_REFUSAL : undefined
   })
   // Creation waits for this listener, so the Agent's first step already lacks the tool.

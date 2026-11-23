@@ -3,7 +3,7 @@
 import { openSessions } from './threads.js'
 import { randomUUID } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
-import { MAX_AVATAR_IMAGE, ROOM_MAX_MEMBERS, ROOM_MODES, ROOM_NAME_MAX, ROOM_NOTICE_MAX, ROOM_TODO_MAX, ROOM_TODO_TEXT_MAX, SECTION_COLORS, SECTION_NAME_MAX } from './constants.js'
+import { MAX_AVATAR_IMAGE, ROOM_MAX_MEMBERS, ROOM_MODES, ROOM_NAME_MAX, ROOM_NOTICE_MAX, SECTION_COLORS, SECTION_NAME_MAX } from './constants.js'
 import { currentColor, isColor, normalize, unquote } from './text.js'
 import { nameProblem } from '../shared/mentions.js'
 
@@ -224,7 +224,8 @@ export function install(rt) {
         createdBy: createdBy ?? null,
         capabilities: [],
       }
-      if (main) state.mainBotIds.push(id)
+      // Exactly one Main Bot: a new one takes the role over.
+      if (main) state.mainBotIds = [id]
       const creator = rt.botOf(createdBy)
       const original = rt.botOf(copyOf)
       const language = rt.uiLanguage?.()
@@ -833,93 +834,19 @@ export function install(rt) {
     if (failed !== undefined) throw failed
   }
 
-  // The shared to-do list of a group lives on the room, so every member reads the same
-  // list and deleting the group deletes it with the rest of the room.
-  async function addRoomTodo(id, text, by) {
-    const room = rt.roomOf(id)
-    if (room === undefined) throw new Error('Unknown group chat')
-    const clean = String(text ?? '').replace(/\s+/g, ' ').trim()
-    if (clean === '') throw new Error('Write the to-do first.')
-    if (clean.length > ROOM_TODO_TEXT_MAX) throw new Error(`Keep a to-do under ${ROOM_TODO_TEXT_MAX} characters.`)
-    const todos = room.todos ??= []
-    if (todos.length >= ROOM_TODO_MAX) throw new Error(`The shared to-do list is full (${ROOM_TODO_MAX}). Remove one or clear the completed items.`)
-    const item = { id: randomUUID(), text: clean, done: false, createdAt: Date.now(), ...(by ? { createdBy: by } : {}) }
-    todos.push(item)
-    await rt.save()
-    return item
-  }
-
-  // Without `done` the item flips; ticking twice is not an error, so two members can
-  // act on the same row without a race.
-  async function setRoomTodoDone(id, todoId, done, by) {
-    const room = rt.roomOf(id)
-    if (room === undefined) throw new Error('Unknown group chat')
-    const item = (room.todos ?? []).find(entry => entry.id === todoId)
-    if (item === undefined) throw new Error('That to-do is no longer on the list.')
-    const next = done === undefined ? item.done !== true : done === true
-    if (item.done !== next) {
-      item.done = next
-      if (next) {
-        item.doneAt = Date.now()
-        if (by) item.doneBy = by
-      } else {
-        delete item.doneAt
-        delete item.doneBy
-      }
-      await rt.save()
-    }
-    return item
-  }
-
-  async function removeRoomTodo(id, todoId) {
-    const room = rt.roomOf(id)
-    if (room === undefined) throw new Error('Unknown group chat')
-    const todos = room.todos ?? []
-    const index = todos.findIndex(entry => entry.id === todoId)
-    if (index === -1) throw new Error('That to-do is no longer on the list.')
-    const [item] = todos.splice(index, 1)
-    await rt.save()
-    return item
-  }
-
-  // Open rows stay. A full list is unblocked by dropping the completed ones, or by
-  // removing a single row, and nothing is discarded on its own.
-  async function clearDoneRoomTodos(id) {
-    const room = rt.roomOf(id)
-    if (room === undefined) throw new Error('Unknown group chat')
-    const todos = room.todos ?? []
-    const removed = []
-    let index = 0
-    while (index < todos.length) {
-      if (todos[index].done === true) removed.push(todos.splice(index, 1)[0])
-      else index += 1
-    }
-    if (removed.length > 0) await rt.save()
-    return removed
-  }
-
-  // The first Main Bot is the sidebar tile. `replace` gives a Main Bot's place to
-  // another Bot in one step, so the team never has none; `primary` moves a Bot to the
-  // front and keeps the others.
-  async function setMain(id, main, { primary = false, replace } = {}) {
+  // A team has exactly one Main Bot: it takes every Request and hands it on. Making
+  // another Bot the Main Bot hands the role over in one step, so the team never has none
+  // and never two. `primary` and `replace` are kept for older clients and mean the same.
+  async function setMain(id, main) {
     const bot = liveBot(id)
     if (bot === undefined) throw new Error('Unknown Bot')
     if (main && bot.private === true) throw new Error(`${bot.name} is private, so it cannot be a Main Bot`)
-    const others = state.mainBotIds.filter(other => other !== id)
-    let next
     if (!main) {
       if (!rt.isMain(id)) return
-      if (others.length === 0) throw new Error('The team needs at least one Main Bot')
-      next = others
-    } else if (replace !== undefined && replace !== id) {
-      const at = others.indexOf(replace)
-      if (at === -1) throw new Error('Only a Main Bot can be replaced')
-      next = others.with(at, id)
-    } else if (primary) {
-      next = [id, ...others]
-    } else {
-      next = rt.isMain(id) ? state.mainBotIds : [...others, id]
+      throw new Error('The team needs a Main Bot; make another Bot the Main Bot instead')
     }
+    if (state.mainBotIds.length === 1 && state.mainBotIds[0] === id) return
+    const next = [id]
     // The sidebar shows every Main Bot, so a hidden Bot would vanish again once demoted.
     if (main) delete bot.hidden
     // A held setup greeting says "you are the Main Bot"; it must not go out after demotion.
@@ -1023,7 +950,6 @@ export function install(rt) {
     ensureWorkspace, keepTeamFolder, createSession, createBot, duplicateBot, updateBot, setFlags,
     saveSection, reorderSections, deleteSection,
     roomBusy, autoRoomName, retitleRoom, createRoom, updateRoom, deleteRoom,
-    addRoomTodo, setRoomTodoDone, removeRoomTodo, clearDoneRoomTodos,
     setMain, deleteBot, bootstrap, releaseKickoff, greetingOut, holdKickoffAgain, userWrote, userAnswered,
   })
 }

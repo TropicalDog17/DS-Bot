@@ -69,7 +69,7 @@ export function install(rt) {
     // `sessionId` is the Bot's current own-chat part; `parts` its earlier ones.
     // `waiting`: the Bot holds its greeting until the user picks its model or fixes
     // what failed it. `blocked`: the facts of a failure only the user can fix (turns.js).
-    bots: Object.values(state.bots).map(({ segments, kickoff, openParts, ...bot }) => {
+    bots: Object.values(state.bots).map(({ segments, kickoff, openParts, closedCards, ...bot }) => {
       const tail = rt.chatTail(rt.chatOf(bot.id))
       // `openParts` are the parts opened while the Bot was busy: live, with their own
       // earlier parts, and each one's run state read from the live turns.
@@ -77,10 +77,20 @@ export function install(rt) {
         sessionId: part.sessionId,
         startedAt: part.startedAt ?? 0,
         parts: (part.segments ?? []).map(segment => segment.sessionId),
+        // A card thread: the board card it works on.
+        ...(typeof part.card === 'string' ? { card: part.card } : {}),
+      }))
+      // Closed card threads stay readable: the card, its current part and earlier ones.
+      const closed = (closedCards ?? []).map(part => ({
+        card: part.card,
+        sessionId: part.sessionId,
+        closedAt: part.closedAt ?? 0,
+        parts: (part.segments ?? []).map(segment => segment.sessionId),
       }))
       return {
         ...bot, sessionId: rt.chatOf(bot.id), parts: (segments ?? []).map(segment => segment.sessionId),
-        ...(open.length > 0 ? { openParts: open } : {}), ...(kickoff ? { waiting: true } : {}),
+        ...(open.length > 0 ? { openParts: open } : {}), ...(closed.length > 0 ? { closedCards: closed } : {}),
+        ...(kickoff ? { waiting: true } : {}),
         // `engine` is the Bot's local-agent route, present only on abots.
         ...(rt.localAgentBadge?.(bot.model ?? bot.appliedModel) !== undefined ? { engine: rt.localAgentBadge(bot.model ?? bot.appliedModel) } : {}),
         ...(tail ? { lastAt: tail.lastAt, preview: tail.preview } : {}),
@@ -457,23 +467,6 @@ export function install(rt) {
           })
           return ok({ room: view().rooms.find(entry => entry.id === room.id), changes })
         }
-        // The user ticks, removes, or clears completed shared to-dos in the group's
-        // details; members read and change the same list with the group_todo tool.
-        case 'room-todo': {
-          await rt.load()
-          const room = rt.roomOf(String(body.roomId ?? ''))
-          if (room === undefined) return fail('Unknown group chat', 'room/not-found')
-          if (body.action === 'clear') {
-            const removed = await rt.clearDoneRoomTodos(room.id)
-            return ok({ removed: removed.length, todos: room.todos ?? [] })
-          }
-          if (body.action === 'remove') {
-            const item = await rt.removeRoomTodo(room.id, String(body.id ?? ''))
-            return ok({ item, todos: room.todos ?? [] })
-          }
-          const item = await rt.setRoomTodoDone(room.id, String(body.id ?? ''), typeof body.done === 'boolean' ? body.done : undefined)
-          return ok({ item, todos: room.todos ?? [] })
-        }
         case 'folders':
         case 'folder-pick':
         case 'folder-list':
@@ -524,54 +517,11 @@ export function install(rt) {
         case 'approval-answer':
           rt.answerApproval(body.id, body.choice)
           return ok(true)
-        // A stop that fails partway still parks the goal, or it wakes the admin again.
         case 'stop-member-work':
-          try {
-            return ok(await rt.stopMemberWork(String(body.roomId ?? ''), String(body.botId ?? '')))
-          } finally {
-            rt.goalUserStopped?.(String(body.roomId ?? ''))
-          }
+          return ok(await rt.stopMemberWork(String(body.roomId ?? ''), String(body.botId ?? '')))
         case 'stop-room-work':
-          try {
-            return ok(await rt.stopRoomWork(String(body.roomId ?? '')))
-          } finally {
-            rt.goalUserStopped?.(String(body.roomId ?? ''))
-          }
-        case 'goal-draft': {
-          await rt.load()
-          const result = await rt.goalDraft(String(body.roomId ?? ''), body.text)
-          return result.error !== undefined ? fail(result.error, result.code ?? 'bot/refused') : ok(view())
-        }
-        case 'goal-control': {
-          await rt.load()
-          const result = await rt.goalControl(String(body.roomId ?? ''), body)
-          return result.error !== undefined ? fail(result.error, result.code ?? 'bot/refused') : ok(view())
-        }
-        // The task board's two panel actions. A note the user adds is kept on the task
-        // and posted into the group as the user's own message that calls its owner, so
-        // the Bot acts on it where the work runs, as if the user had typed it there.
-        case 'task-note': {
-          await rt.load()
-          const roomId = String(body.roomId ?? '')
-          const result = rt.taskNote(roomId, String(body.id ?? ''), body.text)
-          if (result.error !== undefined) return fail(result.error, 'bot/refused')
-          const bot = rt.botOf(result.task.botId)
-          await rt.save()
-          if (bot !== undefined) {
-            await rt.sendUser({
-              sessionId: roomId,
-              content: [{ type: 'text', text: `@${bot.name} ${result.task.notes.at(-1).text}` }],
-            })
-          }
-          return ok(view())
-        }
-        case 'task-cancel': {
-          await rt.load()
-          const result = rt.taskCancel(String(body.roomId ?? ''), String(body.id ?? ''))
-          if (result.error !== undefined) return fail(result.error, 'bot/refused')
-          await rt.save()
-          return ok(view())
-        }
+          return ok(await rt.stopRoomWork(String(body.roomId ?? '')))
+
         case 'stop-chat':
           return ok(await rt.stopChat(String(body.botId ?? '')))
         case 'dismiss-question':

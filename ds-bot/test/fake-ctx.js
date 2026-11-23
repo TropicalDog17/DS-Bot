@@ -53,12 +53,14 @@ export function fakeContext({ services = {} } = {}) {
   // Listeners by event name, in registration order.
   const listeners = new Map()
   const sections = new Map()
+  const contexts = new Map()
   const ctx = {
     calls,
     registeredTools,
     guards,
     listeners,
     sections,
+    contexts,
     logger: { warn() {}, info() {} },
     get: name => services[name],
     // As in real cordis: the plugin does not inject this service, so reading it throws.
@@ -123,6 +125,10 @@ export function fakeContext({ services = {} } = {}) {
         calls.push(`prompt ${section.name} ${section.order}`)
         sections.set(section.name, section)
         return () => {}
+      },
+      context(context) {
+        contexts.set(context.name, context)
+        return () => { contexts.delete(context.name) }
       },
     },
     connection: {

@@ -45,7 +45,7 @@ command**. It also adds DS Bot's own actions to the `/` menu.
   checks again once the state is saved (`onSaved`), so the new Bot's first command is not
   missed.
 - Typing `/name args` in these Sessions: the DSH handler does not run, and a clear result
-  is returned; in a group chat `/goal` points to Goal in the group details. Skills (a
+  is returned; `/goal` says to track the work as a card on the board. Skills (a
   separate `/` source) are not affected.
 - It listens to the global `commands/change`: it first lifts its own shadows, then takes
   the current set and registers again, so new commands are shadowed too. Shadows are
@@ -57,9 +57,6 @@ command**. It also adds DS Bot's own actions to the `/` menu.
 - The client `src/client/command-actions.js` adds DS Bot action rows through
   `ctx.commandUi`:
   - `/scheduled-task`: opens the scheduled tasks of this Session (Bot or group).
-  - In a group chat, bare `/goal` uses a decoration to open DS Bot's group Goal (DSH's
-    `/goal` row is still there, but the bare invocation is replaced with DS Bot's
-    behavior).
   - "Reference a chat" stays in the "+" menu: `ActionSpec.run(session)` receives only the
     Session, not the composer's caret or insertion, and the reference menu depends on the
     span from `captureInsertion`.
@@ -88,3 +85,7 @@ command**. It also adds DS Bot's own actions to the `/` menu.
   not clash with host commands work as usual.
 - Once DSH upstream enables per-Session source filtering (#133), this module should be
   removed and the menu should use native filtering.
+
+## Changes
+
+- 2026-11-23: the group Goal is retired ([Main Bot router](2026-11-22-main-bot-router.md)); the bare `/goal` row in group chats is gone and `/goal` is refused like other DSH commands.

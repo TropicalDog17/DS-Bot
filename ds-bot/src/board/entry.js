@@ -9,13 +9,13 @@
 import { install } from './plugin.js'
 
 export const name = 'ds-bot-board'
-export const inject = ['botSessionIdentity', 'dsBotRoster', 'dsBotNotes', 'dsBotBridge', 'tools', 'connection']
+export const inject = ['botSessionIdentity', 'dsBotRoster', 'dsBotNotes', 'dsBotBridge', 'tools', 'connection', 'systemPrompt']
 
 export function apply(ctx, config = {}) {
   ctx.effect(() => {
     const handle = install(ctx, config, {
       identity: ctx.botSessionIdentity, roster: ctx.dsBotRoster, notes: ctx.dsBotNotes, bridge: ctx.dsBotBridge,
-      tools: ctx.tools, connection: ctx.connection,
+      tools: ctx.tools, connection: ctx.connection, systemPrompt: ctx.systemPrompt,
     })
     return () => handle.dispose()
   }, 'ds-bot-board')

@@ -4,9 +4,8 @@ import { MarkdownText, writeClipboard } from './dsh-primitives.js'
 import { inkText } from './inks.js'
 import { linkTexts, linkTarget, textLinks } from './text-links.js'
 import { linkMentions, mentionTarget, dayLabel, contentText, stripHeader, stripToolCallTags, isHiddenTurn, isRelayContext, relaysBefore, relayPart, commRunOf, toolName, toolArgs, reminderPrompts, elapsedLabel, clockLabel, messageClock } from './text.js'
-import { SmileIcon, ReplyIcon, DotsIcon, CheckIcon, DownloadIcon, CopyIcon, GoalIcon, MemoryIcon } from './icons.js'
+import { SmileIcon, ReplyIcon, DotsIcon, CheckIcon, DownloadIcon, CopyIcon, MemoryIcon } from './icons.js'
 import { ChangesCard } from './changes-card.js'
-import { goalEventText } from './goal.js'
 import { colorOf, toolState, BotMark, RoomAvatar } from './mark.js'
 import { CellEmpty } from './cell-empty.js'
 import { AskUserCell, SettledQuestion } from './questions.js'
@@ -1112,10 +1111,7 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
       if (reply.kind !== undefined) {
         return h(RelayEvent, { key: `${reply.botId ?? reply.kind}-${index}`, reply, bot, sessionId, actions })
       }
-      if (reply.kind === 'goal') {
-        return h('div', { key: `goal-${index}`, className: 'bt-event', title: reply.text || undefined },
-          h('span', { className: 'bt-event-ico', 'aria-hidden': true }, h(GoalIcon)), goalEventText(reply))
-      }
+
       return h(GroupMessage, { key: `${reply.botId}-${index}`, bot, texts, room, sessionId, roster, actions, msgKey: callId ? `${sessionId}:${callId}:${index}` : undefined, useUi, time, duration, claims, changes })
     }),
     pending.map((id, at) => {

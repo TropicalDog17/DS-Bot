@@ -67,13 +67,15 @@ Each bot can have its own working folder and permission preset — just tell the
 
 The main bot is your chief. It has very high rights: it manages the other bots and the group chats. The first time you open DS Bot, there is already a main bot called Chief. Talk to it, and it walks you through the setup.
 
+The main bot routes: it answers a quick question itself and hands real work to the bot whose role fits, as a card on the board. It does not do the work itself.
+
 In short: have a question? Ask the main bot.
 
 ### Group chats
 
 DS Bot has group chats. A group chat is a great way to get several bots to work together, but it clearly costs more. So DS Bot does this: every group chat has an admin. The admin answers your messages by default and calls in the other bots for you. You can also @ a bot directly, and it answers you directly. To give the bots another chat as context, use + → Reference a chat in the message box.
 
-Any bot can hand work to other bots with @, and those bots do the work on their own and post the results back to the group. A group chat has its own memory and working folder, invisible to bots outside the group. For larger work, a group chat can run a Goal: the admin aligns with you on what "done" means, splits the work into stages across members, and checks each stage before moving on.
+Any bot can hand work to other bots with @, and those bots do the work on their own and post the results back to the group. A group chat has its own memory and working folder, invisible to bots outside the group. A plain message in a group goes to the main bot when it is a member; work becomes a card on the board, in the assignee's own card thread.
 
 ![Group chat: the admin, Chief, hands the work to Writer and Coder](docs/images/group.png)
 

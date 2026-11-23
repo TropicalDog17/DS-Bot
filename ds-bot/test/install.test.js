@@ -54,6 +54,7 @@ test('apply registers listeners and effects in a fixed order', (t) => {
     'on tools/execute',
     'effect ds-bot: identity section',
     'prompt bot-identity 640',
+    'effect ds-bot: routing digest',
     'on agent/pre-step (prepend)',
     'on tools/execute',
     'effect ds-bot: scoped team tools',

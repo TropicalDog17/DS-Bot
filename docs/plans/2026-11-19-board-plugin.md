@@ -95,4 +95,5 @@ Cards are kept in `<DSH_HOME>/bot-board/board.json`. To keep them elsewhere:
   the seams.
 - **No import of group tasks.** `room.tasks` (the `group_task` list) is reachable only
   by reading DS Bot's state file, which is not a seam. The board starts empty, and
-  `group_task` stays as it is.
+  `group_task` stays as it is. (Later: the Main Bot router retired `group_task`; the
+  board is now the only place work is tracked.)

@@ -4,7 +4,7 @@ This file says what DS Bot is meant to be and why. For how to use it, see the [R
 
 ## What DS Bot is
 
-DS Bot is a persistent team of Bots, built on [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH). It is open source under the Apache 2.0 license. The user can chat with one Bot, or work with a team with clear roles: one or more Main Bots organize the work, every Bot does its own part and talks to the others, and the user can see at any time who is doing what. Bots keep working over time and have a long-term memory.
+DS Bot is a persistent team of Bots, built on [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH). It is open source under the Apache 2.0 license. The user can chat with one Bot, or work with a team with clear roles: one Main Bot routes the work, every Bot does its own part and talks to the others, and the user can see at any time who is doing what. Bots keep working over time and have a long-term memory.
 
 ## Two forms
 
@@ -20,7 +20,7 @@ Both forms run the same `ds-bot` plugin. The point of the app is that DS Bot con
 1. **Built on DSH, independent of each other.** Every Bot is built on DSH, and the Bots are independent of each other.
 2. **Reliable.** Bots work reliably: they stay aligned with the goal, act on evidence, stay inside their task, and their results can be checked. Bots will also be able to improve themselves (planned).
 3. **Memory and persistence.** Bots keep working over time, that is, they have a long-term memory. A Bot can read the other Bots' memories but not change them (only a Main Bot can change another Bot's memory). A Bot manages its own memory, and the user can manage each Bot's memory too. A group chat shares one memory.
-4. **Levels of rights.** A Main Bot has the highest rights: it creates and changes other Bots. Other Bots do not have these rights, and only the user deletes a Bot. There can be more than one Main Bot. Every Bot can call on every other Bot.
+4. **Levels of rights.** A Main Bot has the highest rights: it creates and changes other Bots. Other Bots do not have these rights, and only the user deletes a Bot. There is exactly one Main Bot, and it routes the work instead of doing it. Every Bot can call on every other Bot.
 5. **Group chats.** Group chats are the core form of Bots working together in DS Bot. Bots in a group call on each other, and a group can have an admin Bot. The admin manages the group, adds and removes members, and by default answers the user's messages.
 6. **Working folders.** Each Bot can have its own working folder, and a group chat can set one folder for all its members. A Bot can set its own working folder, so one sentence from the user is enough.
 7. **Browser.** Each Bot has its own browser, and the browsers do not affect each other. Importing cookies is planned.

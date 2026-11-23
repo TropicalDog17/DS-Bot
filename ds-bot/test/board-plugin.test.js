@@ -10,6 +10,7 @@ import { ACTIONS, ticketKey } from '../src/board/cards.js'
 import { KEPT_THINK_MAX, callAbout, keep, visibleThought } from '../src/board/live.js'
 import { bridgeService, notesService, rosterService } from '../src/host/companions.js'
 import { homeLock } from '../src/host/home-lock.js'
+import { addCardThread, cardThreadSession, closeCardThread } from '../src/host/threads.js'
 
 // The board plugin knows the team only through DS Bot's public services, so the tests
 // build those services over a small fake team, exactly as the host provides them.
@@ -32,7 +33,20 @@ function fakeTeam() {
     findBot: ref => (hasOwn(state.bots, ref) ? state.bots[ref] : Object.values(state.bots).find(bot => bot.name.toLowerCase() === ref.toLowerCase())),
     onSaved: () => () => {},
     sendUser: async input => { sent.push([input.sessionId, input.content[0].text]); requests.push(input.requestId) },
+    // Card threads as parts.js keeps them, named ct-<card id>.
+    openCardThread: async (botId, cardId) => {
+      const bot = state.bots[botId]
+      const known = cardThreadSession(bot, cardId)
+      if (known !== undefined) return known
+      addCardThread(bot, `ct-${cardId}`, cardId)
+      return `ct-${cardId}`
+    },
+    closeCardThread: async (botId, cardId) => closeCardThread(state.bots[botId], cardId) !== undefined,
+    imPush: async (push) => { pushes.push(push); return 1 },
+    routingParts: (part) => { parts.add(part); return () => { parts.delete(part) } },
   }
+  const pushes = []
+  const parts = new Set()
   // Own chats a, b, c; group Sessions ga, gb; a talk between Writer and Coder, xb.
   const owners = { a: { botId: 'a' }, b: { botId: 'b' }, c: { botId: 'c' }, ga: { botId: 'a', roomId: 'r1' }, gb: { botId: 'b', roomId: 'r1' }, xb: { botId: 'b' } }
   const identity = { ownerOfSession: id => (hasOwn(owners, id) ? owners[id] : undefined), subscribe: () => () => {} }
@@ -40,10 +54,10 @@ function fakeTeam() {
   const bridge = bridgeService(rt)
   // What turns.js does when a Bot's turn ends with an answer the user reads.
   const reply = heard => rt.botReplied(heard)
-  return { state, sent, requests, identity, roster: rosterService(rt), notes, bridge, bridged: () => rt.bridgedTools(), reply }
+  return { state, sent, requests, pushes, parts, identity, roster: rosterService(rt), notes, bridge, bridged: () => rt.bridgedTools(), reply, cardNote: note => rt.cardNote(note) }
 }
 
-function host(t, { file, notes, now = Date.now } = {}) {
+function host(t, { file, notes, now = Date.now, config = {} } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'ds-bot-board-plugin-'))
   t.after(() => rmSync(dir, { recursive: true, force: true }))
   const team = fakeTeam()
@@ -55,7 +69,9 @@ function host(t, { file, notes, now = Date.now } = {}) {
   const listeners = {}
   const ctx = { on: (name, listener) => { listeners[name] = listener; return () => { delete listeners[name] } } }
   const emit = (name, ...args) => listeners[name]?.(...args)
-  const handle = install(ctx, { file: boardFile }, { ...team, ...(notes ? { notes } : {}), tools, connection, store: openBoardStore(boardFile), now })
+  const sections = new Map()
+  const systemPrompt = { section: (section) => { sections.set(section.name, section); return () => { sections.delete(section.name) } } }
+  const handle = install(ctx, { file: boardFile, ...config }, { ...team, ...(notes ? { notes } : {}), tools, connection, systemPrompt, store: openBoardStore(boardFile), now })
   t.after(() => handle.dispose())
   const tool = (args, sessionId = 'b') => registered.tools.find(entry => entry.name === 'board').execute(args, { agent: { id: sessionId } })
   const cards = () => Object.values(JSON.parse(readFileSync(boardFile, 'utf8')).cards)
@@ -66,12 +82,12 @@ function host(t, { file, notes, now = Date.now } = {}) {
   }
   // A copied answer is written after the event; the next change waits for it.
   const settle = () => handle.store.change(() => ({ error: 'settled' }))
-  return { dir, team, handle, registered, tool, cards, post, boardFile, settle, emit, listeners }
+  return { dir, team, handle, registered, tool, cards, post, boardFile, settle, emit, listeners, sections }
 }
 
 test('the entry is a separate plugin that needs only public services', () => {
   assert.equal(name, 'ds-bot-board')
-  assert.deepEqual(inject, ['botSessionIdentity', 'dsBotRoster', 'dsBotNotes', 'dsBotBridge', 'tools', 'connection'])
+  assert.deepEqual(inject, ['botSessionIdentity', 'dsBotRoster', 'dsBotNotes', 'dsBotBridge', 'tools', 'connection', 'systemPrompt'])
   let effects = 0
   apply({ effect: () => { effects += 1 } }, {})
   assert.equal(effects, 1)
@@ -112,7 +128,7 @@ test('a group card remembers its group; a talk between Bots does not', async (t)
 
 test('who may change and cancel a card: assignee, opener, a Main Bot, or the group admin for cancel', async (t) => {
   const h = host(t)
-  assert.match(await h.tool({ action: 'open', title: 'Write tests', assignee: 'Coder', status: 'todo' }, 'a'), /\(Todo, Coder\)/)
+  assert.match(await h.tool({ action: 'open', title: 'Write tests', assignee: 'Coder', status: 'todo', brief: 'Cover the parser.' }, 'a'), /\(Todo, Coder\)/)
   assert.match(await h.tool({ action: 'open', title: 'Approve the PR', assignee: 'user' }, 'a'), /the user\)/)
   const [forCoder] = h.cards()
   assert.match(await h.tool({ action: 'update', status: 'active' }, 'c'), /In progress/)
@@ -181,7 +197,9 @@ test('the Board page adds, moves, notes and cancels; notes reach the Bot through
   const mine = (await h.post('add', { title: 'Mine' })).value
   const mineId = Object.values(mine.cards).find(entry => entry.title === 'Mine').id
   await h.post('note', { id: mineId, text: 'remember' })
-  assert.deepEqual(h.team.sent, [
+  // The card started Writer's card thread; done closed it, so the later note goes to its chat.
+  assert.match(h.team.sent[0][1], /^\[Card c_\w+ · "Đặt lịch khám răng"\] from the user\./)
+  assert.deepEqual(h.team.sent.slice(1), [
     ['b', `Note on card ${card.id} "Đặt lịch khám răng": gọi trước 5h`],
     ['r1', `@Writer Note on card ${group.id} "Group work": add tests`],
   ])
@@ -197,8 +215,9 @@ test('the Board page adds, moves, notes and cancels; notes reach the Bot through
 test('chat is where the Bot answers: the answer that read the note is copied onto the card', async (t) => {
   let clock = 1000
   const h = host(t, { now: () => clock })
-  const added = await h.post('add', { title: 'Đặt lịch khám răng', assignee: 'b' })
-  const id = Object.keys(added.value.cards)[0]
+  // Writer took the card in its own chat: no card thread, so notes reach that chat.
+  await h.tool({ action: 'open', title: 'Đặt lịch khám răng' }, 'b')
+  const id = h.cards()[0].id
   await h.post('note', { id, text: 'gọi trước 5h nhé' })
   const [first] = h.team.requests
   assert.deepEqual(h.cards()[0].awaiting, { botId: 'b', since: 1000, requests: [first] })
@@ -235,7 +254,10 @@ test('chat is where the Bot answers: the answer that read the note is copied ont
 
 test('notes on three cards to one Bot: each answer lands on the cards whose notes it read, in any order', async (t) => {
   const h = host(t)
-  const open = async title => Object.values((await h.post('add', { title, assignee: 'b' })).value.cards).find(card => card.title === title).id
+  const open = async (title) => {
+    await h.tool({ action: 'open', title }, 'b')
+    return h.cards().find(card => card.title === title).id
+  }
   const honey = await open('honey: flaky test')
   const preset = await open('dual-investment-alpha: preset')
   const gateway = await open('gateway: images')
@@ -261,8 +283,8 @@ test('notes on three cards to one Bot: each answer lands on the cards whose note
 test('a Bot\'s answer copied onto a card is unread until the user opens the card', async (t) => {
   const clock = 1000
   const h = host(t, { now: () => clock })
-  const added = await h.post('add', { title: 'Fix login', key: 'LIFE-782', assignee: 'b' })
-  const id = Object.keys(added.value.cards)[0]
+  await h.tool({ action: 'open', title: 'Fix login', key: 'LIFE-782' }, 'b')
+  const id = h.cards()[0].id
   await h.post('note', { id, text: 'có cần log không?' })
   // The user's own note is not news to them.
   assert.equal(h.cards()[0].unread, undefined)
@@ -329,8 +351,8 @@ test('a chat card that waited before request ids still gets the next answer ther
 test('a waiting card shows what its Bot is doing: reasoning as it streams and each tool call', async (t) => {
   let clock = 1000
   const h = host(t, { now: () => clock })
-  const added = await h.post('add', { title: 'Sửa lỗi đăng nhập', assignee: 'b' })
-  const id = Object.keys(added.value.cards)[0]
+  await h.tool({ action: 'open', title: 'Sửa lỗi đăng nhập' }, 'b')
+  const id = h.cards()[0].id
   await h.post('note', { id, text: 'xem giúp log nhé' })
   const session = { id: 'b' }
   const event = (type, data, time = clock) => h.emit('session/event', session, { type, data, time })
@@ -402,7 +424,8 @@ test('a waiting card shows what its Bot is doing: reasoning as it streams and ea
 test('the board level sets how much of a Bot\'s work shows and stays: off, tool calls, thinking, all', async (t) => {
   let clock = 1000
   const h = host(t, { now: () => clock })
-  const id = Object.keys((await h.post('add', { title: 'Logs', assignee: 'b' })).value.cards)[0]
+  await h.tool({ action: 'open', title: 'Logs' }, 'b')
+  const id = h.cards()[0].id
   const session = { id: 'b' }
   const event = (type, data) => h.emit('session/event', session, { type, data, time: clock })
   const frame = (frame) => h.emit('agent/assistant-stream', { agent: session, frame })
@@ -523,4 +546,145 @@ test('storage: atomic whole-file writes, a broken file kept aside, one writer pe
   assert.deepEqual(store.read().cards, {})
   assert.equal(readdirSync(dir).some(entry => entry.startsWith('board.json.broken-')), true)
   assert.equal(existsSync(file), true)
+})
+
+test('a card handed to another Bot needs a brief, starts that Bot\'s card thread and closes it when done', async (t) => {
+  const h = host(t)
+  assert.match(await h.tool({ action: 'open', title: 'Draft the newsletter', assignee: 'Writer' }, 'a'), /^A card for Writer needs a brief/)
+  const said = await h.tool({ action: 'open', title: 'Draft the newsletter', assignee: 'Writer', brief: 'Topic: the November release.\nKeep it under 300 words.' }, 'a')
+  assert.match(said, /The card reaches Writer by itself; do not also message it\./)
+  const [card] = h.cards()
+  assert.equal(card.brief, 'Topic: the November release.\nKeep it under 300 words.')
+  const thread = `ct-${card.id}`
+  assert.deepEqual(h.team.state.bots.b.openParts.map(part => [part.sessionId, part.card]), [[thread, card.id]])
+  assert.equal(h.team.sent[0][0], thread)
+  assert.match(h.team.sent[0][1], /^\[Card c_\w+ · "Draft the newsletter"\] from Chief\.\n\nTopic: the November release\.\nKeep it under 300 words\.\n\nThis conversation is for this card only\./)
+
+  // Every answer in the card thread is the card's; a note on the card goes to the thread.
+  h.team.reply({ botId: 'b', cardId: card.id, text: 'On it.', since: Date.now() })
+  await h.settle()
+  await h.post('note', { id: card.id, text: 'mention the new board' })
+  assert.deepEqual(h.team.sent.at(-1), [thread, `Note on card ${card.id} "Draft the newsletter": mention the new board`])
+  assert.deepEqual(h.cards()[0].awaiting.cardId, card.id)
+  h.team.reply({ botId: 'b', cardId: card.id, text: 'Added it.', since: Date.now() })
+  // Another Bot cannot answer for the card.
+  h.team.reply({ botId: 'c', cardId: card.id, text: 'not mine', since: Date.now() })
+  await h.settle()
+  assert.deepEqual(h.cards()[0].notes.map(note => [note.by, note.text]), [['b', 'On it.'], ['user', 'mention the new board'], ['b', 'Added it.']])
+
+  assert.match(await h.tool({ action: 'complete', id: card.id, result: 'Draft in docs/news.md' }, 'b'), /^Finished/)
+  assert.deepEqual(h.team.state.bots.b.openParts, [])
+  assert.deepEqual(h.team.state.bots.b.closedCards.map(closed => [closed.card, closed.sessionId]), [[card.id, thread]])
+})
+
+test('a card the user adds for a Bot starts its thread; cancelling or moving it to Done closes it', async (t) => {
+  const h = host(t)
+  const one = Object.values((await h.post('add', { title: 'Book the dentist', assignee: 'c', brief: 'Before Friday.' })).value.cards)[0]
+  assert.match(h.team.sent[0][1], /from the user\.\n\nBefore Friday\./)
+  await h.post('cancel', { id: one.id, reason: 'done by phone' })
+  const two = Object.values((await h.post('add', { title: 'Renew the domain', assignee: 'c' })).value.cards).find(card => card.title === 'Renew the domain')
+  assert.match(h.team.sent[1][1], /\n\nRenew the domain\n\n/)
+  await h.post('move', { id: two.id, status: 'done' })
+  assert.deepEqual(h.team.state.bots.c.openParts, [])
+  assert.deepEqual(h.team.state.bots.c.closedCards.map(closed => closed.card), [one.id, two.id])
+})
+
+test('without card threads the brief still reaches the Bot, in its own chat', async (t) => {
+  const team = fakeTeam()
+  const notes = { ...team.notes, startCard: async () => ({ error: 'Card threads are not available.' }) }
+  const h = host(t, { notes })
+  await h.tool({ action: 'open', title: 'Fix CI', assignee: 'Coder', brief: 'The lint job fails.' }, 'a')
+  // The host's own team is the one that records sends.
+  assert.deepEqual(team.sent.map(([sessionId]) => sessionId), ['c'])
+  assert.match(team.sent[0][1], /The lint job fails\./)
+})
+
+test('the Main Bot passes on what the user said with board note; it reaches the card thread', async (t) => {
+  const h = host(t)
+  await h.tool({ action: 'open', title: 'Fix CI', assignee: 'Coder', brief: 'The lint job fails.' }, 'a')
+  const [card] = h.cards()
+  assert.equal(await h.tool({ action: 'note', id: card.id }, 'a'), 'note needs the text to pass on.')
+  assert.equal(await h.tool({ action: 'note', id: card.id, text: 'x' }, 'c'), `${card.id} is yours; just do it.`)
+  assert.equal(await h.tool({ action: 'note', id: card.id, text: 'x' }, 'b'), `${card.id} belongs to Coder.`)
+  assert.match(await h.tool({ action: 'note', id: card.id, text: 'the user says skip the e2e job' }, 'a'), /^Passed on to Coder on c_\w+\./)
+  assert.deepEqual(h.team.sent.at(-1), [`ct-${card.id}`, `Note on card ${card.id} "Fix CI" from Chief: the user says skip the e2e job`])
+  assert.deepEqual(h.cards()[0].notes.map(note => [note.by, note.text]), [['a', 'the user says skip the e2e job']])
+})
+
+test('a Bot\'s ask, Review, done and cancel push a short line naming the card; the user\'s own moves do not', async (t) => {
+  const h = host(t)
+  await h.tool({ action: 'open', title: 'Fix login', key: 'LIFE-782', assignee: 'Writer', brief: 'Redirect loop after login.' }, 'a')
+  const [card] = h.cards()
+  await h.tool({ action: 'update', id: card.id, progress: 'found it' }, 'b')
+  await h.tool({ action: 'ask', id: card.id, question: 'Ship today?', options: ['Yes', 'No'] }, 'b')
+  await h.tool({ action: 'update', id: card.id, status: 'active' }, 'b')
+  await h.tool({ action: 'update', id: card.id, status: 'review', progress: 'PR #12 is up' }, 'b')
+  await h.post('move', { id: card.id, status: 'active' })
+  await h.tool({ action: 'complete', id: card.id, result: 'Merged PR #12' }, 'b')
+  await h.tool({ action: 'open', title: 'Other' }, 'c')
+  await h.tool({ action: 'cancel', reason: 'not needed' }, 'c')
+  await h.settle()
+  assert.deepEqual(h.team.pushes.map(push => push.text), [
+    'Writer · LIFE-782: asks "Fix login": Ship today? (Yes / No)',
+    'Writer · LIFE-782: "Fix login" is ready for review: PR #12 is up',
+    'Writer · LIFE-782: done "Fix login": Merged PR #12',
+    `Coder · ${h.cards()[1].id}: stopped "Other": not needed`,
+  ])
+  assert.deepEqual(h.team.pushes[0].cardId, card.id)
+  assert.deepEqual(h.team.pushes[0].botId, 'b')
+})
+
+test('a reply to a push about a card becomes a note on it, with the reply\'s own request id', async (t) => {
+  const h = host(t)
+  await h.tool({ action: 'open', title: 'Fix CI', assignee: 'Coder', brief: 'The lint job fails.' }, 'a')
+  const [card] = h.cards()
+  assert.equal(await h.team.cardNote({ cardId: 'c_nope', text: 'x', requestId: 'im:telegram:1' }), false)
+  assert.equal(await h.team.cardNote({ cardId: card.id, text: 'use node 22', requestId: 'im:telegram:2' }), true)
+  assert.deepEqual(h.team.sent.at(-1), [`ct-${card.id}`, `Note on card ${card.id} "Fix CI": use node 22`])
+  assert.equal(h.team.requests.at(-1), 'im:telegram:2')
+  assert.deepEqual(h.cards()[0].notes.map(note => note.text), ['use node 22'])
+})
+
+test('the board adds its rules to every Bot\'s prompt and its open cards to the Main Bot\'s digest', async (t) => {
+  const h = host(t)
+  const rules = id => h.sections.get('ds-bot-board-rules').text({ agent: { id } })
+  assert.match(rules('a'), /^## The board\n- A task becomes a card: board open/)
+  assert.match(rules('ga'), /do not also message_bot it/)
+  assert.match(rules('b'), /arrives in a conversation of its own that starts with "\[Card …\]"/)
+  assert.equal(rules('nobody'), '')
+  const [part] = h.team.parts
+  assert.equal(part('a'), 'Open cards: none.')
+  await h.tool({ action: 'open', title: 'Fix CI', key: 'LIFE-9', assignee: 'Coder', brief: 'x' }, 'a')
+  await h.tool({ action: 'open', title: 'Mine', status: 'todo' }, 'b')
+  assert.match(part('a'), /^Open cards:\n- c_\w+ · LIFE-9 · Coder · In progress · Fix CI\n- c_\w+ · Writer · Todo · Mine$/)
+  h.handle.dispose()
+  assert.equal(h.team.parts.size, 0)
+  assert.equal(h.sections.size, 0)
+})
+
+test('the watchdog tells the user once about a stuck card, a card left in Review and a card whose Bot is gone', async (t) => {
+  let clock = 0
+  const h = host(t, { now: () => clock, config: { watchMs: 0 } })
+  const hour = 3_600_000
+  await h.tool({ action: 'open', title: 'Stuck work', assignee: 'Writer', brief: 'x' }, 'a')
+  await h.tool({ action: 'open', title: 'Needs a look', status: 'review' }, 'b')
+  await h.tool({ action: 'open', title: 'Orphan', assignee: 'Coder', brief: 'x', status: 'todo' }, 'a')
+  const [stuck, review, orphan] = h.cards()
+  clock = 2 * hour
+  assert.deepEqual(await h.handle.watchOnce(), [])
+  delete h.team.state.bots.c
+  clock = 4 * hour
+  assert.deepEqual((await h.handle.watchOnce()).map(alert => alert.text), [
+    `Writer · ${stuck.id}: "Stuck work" has not moved for 4h`,
+    `Board · ${orphan.id}: "Orphan" has no assignee: its Bot is gone`,
+  ])
+  assert.deepEqual(await h.handle.watchOnce(), [])
+  clock = 25 * hour
+  assert.deepEqual((await h.handle.watchOnce()).map(alert => alert.text), [`Writer · ${review.id}: "Needs a look" has waited for you in Review for 25h`])
+  // A card that moves and gets stuck again is told again.
+  await h.tool({ action: 'update', id: stuck.id, progress: 'half way' }, 'b')
+  clock = 29 * hour
+  assert.deepEqual((await h.handle.watchOnce()).map(alert => alert.text), [`Writer · ${stuck.id}: "Stuck work" has not moved for 4h`])
+  await h.settle()
+  assert.equal(h.team.pushes.length, 4)
 })

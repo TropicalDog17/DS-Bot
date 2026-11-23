@@ -2,6 +2,7 @@
 
 - Date: 2026-11-12
 - Related: Issue #1441
+- Status: retired on 2026-11-23 by [Main Bot as the team's Router](2026-11-22-main-bot-router.md): `group_task` is removed and group tasks become board cards
 
 ## Why
 
@@ -54,3 +55,7 @@ group details drawer.
   If the group is paused or stopped at that moment, the message stays in the group until it
   resumes.
 - History is kept with the group data and is deleted only when the group is deleted.
+
+## Changes
+
+- 2026-11-23: retired; `group_task` is removed and group tasks become board cards ([Main Bot as the team's Router](2026-11-22-main-bot-router.md)).

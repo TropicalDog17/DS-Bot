@@ -58,7 +58,6 @@ export function ContextMenu({ menu, roster, actions, useWork, leaving = false })
   if (entry === undefined) return null
   const isMainBot = isMainOf(roster, menu.id)
   const isTile = roster.mainBotId === menu.id
-  const mainCount = (roster.mainBotIds ?? []).length
   const groups = [
     [
       isTile ? null : [entry.pinned ? t('Unpin') : t('Pin'), PinIcon, () => actions.setFlags(menu.id, { pinned: !entry.pinned })],
@@ -73,7 +72,6 @@ export function ContextMenu({ menu, roster, actions, useWork, leaving = false })
       room ? [t('Rename group'), PencilIcon, () => actions.renameBot(room.id)] : null,
       bot ? [t('Duplicate'), DuplicateIcon, async () => { const copy = await actions.duplicateBot(bot.id); actions.openSession(copy.id) }] : null,
       bot && !isMainBot ? [t('Make Main Bot'), StarLineIcon, () => actions.setMain(bot.id, true)] : null,
-      bot && isMainBot && mainCount > 1 ? [t('Remove Main Bot role'), StarLineIcon, () => actions.setMain(bot.id, false)] : null,
     ],
     [[t('Copy conversation ID'), CopyIcon, () => navigator.clipboard?.writeText(bot ? currentPart(bot) : menu.id)]],
     bot ? (waits?.waits ?? []).map(item => [t('Give up waiting for {name}', { name: item.name ?? t('a Bot') }), SignOutIcon, () => actions.abandonWork(item.id)]) : [],

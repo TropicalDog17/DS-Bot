@@ -1961,3 +1961,54 @@ test('a card with several questions shows them in IM without buttons, and a numb
   await s.fake.handlers.onAction({ chat: { key: 'dm-u1', kind: 'direct', title: 'U1' }, sender: { id: 'u1', name: 'U1' }, data: 'q:q1:0', messageId: card.messageId ?? 1 })
   assert.ok(s.rt.state.questions.a !== undefined, 'a press on one option does not settle the card')
 })
+
+test('a board push reaches the Main Bot\'s direct chats only, and a reply to it goes to the card', async (t) => {
+  const s = await start()
+  t.after(s.stop)
+  const conn = await add(s)
+  const one = s.rt.state.im.connections[conn.id]
+  one.paired.push({ id: 'u1', name: 'U1', at: 1 })
+  await s.rt.save()
+  await dm(s, 'u1', 'hi')
+  await gm(s, 'u1', 'hi group')
+  const before = s.fake.sent.length
+  assert.equal(await s.rt.imPush({ text: 'Writer · LIFE-7: asks "Fix CI": ship?', cardId: 'c_1', botId: 'b' }), 1)
+  await s.flush()
+  const pushed = s.fake.sent.slice(before)
+  assert.deepEqual(pushed.map(sent => [sent.chat.key, sent.text]), [['dm-u1', 'Writer · LIFE-7: asks "Fix CI": ship?']])
+  const messageId = before + 1
+
+  // The board takes a reply to the push as a note on the card, with the reply's request id.
+  const notes = []
+  s.rt.cardNote = async (note) => { notes.push(note); return true }
+  const prompts = s.prompts.length
+  await dm(s, 'u1', 'yes, ship it', { replyTo: messageId })
+  assert.deepEqual(notes.map(note => [note.cardId, note.text]), [['c_1', 'yes, ship it']])
+  assert.match(notes[0].requestId, /^im:telegram:/)
+  assert.equal(s.prompts.length, prompts)
+
+  // Without the board, the reply goes straight into the card's thread.
+  s.rt.cardNote = async () => false
+  s.rt.cardSession = (botId, cardId) => (botId === 'b' && cardId === 'c_1' ? 'ct-1' : undefined)
+  await dm(s, 'u1', 'and tag it', { replyTo: messageId })
+  assert.deepEqual([s.prompts.at(-1).sessionId, s.prompts.at(-1).content[0].text], ['ct-1', 'and tag it'])
+
+  // The card is gone: the Main Bot gets the reply, told which card it was about.
+  s.rt.cardSession = () => undefined
+  await dm(s, 'u1', 'never mind', { replyTo: messageId })
+  assert.equal(s.prompts.at(-1).sessionId, 'a')
+  assert.equal(s.prompts.at(-1).content[0].text, '[A reply to your message about card c_1] never mind')
+
+  // A reply to any other message is an ordinary message.
+  await dm(s, 'u1', 'plain', { replyTo: 999 })
+  assert.deepEqual([s.prompts.at(-1).sessionId, s.prompts.at(-1).content[0].text], ['a', 'plain'])
+})
+
+test('no Main Bot, no push', async (t) => {
+  const seed = TEAM()
+  seed.mainBotIds = []
+  const s = await start({ seed })
+  t.after(s.stop)
+  await add(s)
+  assert.equal(await s.rt.imPush({ text: 'x' }), 0)
+})

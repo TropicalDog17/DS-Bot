@@ -1007,7 +1007,8 @@ test('a change of role freezes the section again, so its team rule matches the t
   assert.match(promoted, /- Lives in Hangzhou \[/)
   assert.equal(section('b2'), promoted)
 
-  assert.equal((await call('set-main', { id: 'b2', main: false })).ok, true)
+  // Handing the role back to m1 takes it from b2: a team has one Main Bot.
+  assert.equal((await call('set-main', { id: 'm1', main: true })).ok, true)
   assert.match(section('b2'), /tell a Main Bot with message_bot/)
   // Coder loses the admin seat of Launch, and with it the team rule in its group Session.
   assert.match(section('g3'), /As a group admin you write it/)
