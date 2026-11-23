@@ -104,7 +104,11 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
         return changed
       })
       if (result.error !== undefined) return result.error
-      const after = await follow(result)
+      // A Bot that finishes its own card where it opened it (no card thread) already
+      // tells the user there; only work done elsewhere is reported back.
+      const thread = result.report === undefined ? undefined : await Promise.resolve(notes.cardThread?.({ botId: owner.botId, cardId: result.card.id })).catch(() => undefined)
+      const report = result.report !== undefined && (owner.botId !== result.report.botId || (thread !== undefined && thread === exec?.agent?.id))
+      const after = await follow(result, { report })
       const push = pushFor(args.action, before, result.card, nameOf)
       if (push !== undefined) void sendPush(result.card, push)
       return [result.said, after, board.line(result.card, owner.botId)].filter(Boolean).join('\n')
@@ -116,7 +120,7 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
     .catch(error => warn('ds-bot-board: push for %s failed: %s', card.id, error))
   // What a change sets off outside the board: a card thread to start or close, a note to
   // deliver. Returns a line for the Bot when something did not reach its Bot.
-  async function follow(result) {
+  async function follow(result, { report = false } = {}) {
     if (result.start !== undefined) {
       const started = await Promise.resolve(notes.startCard?.(result.start)).catch(error => ({ error: error?.message ?? String(error) }))
       const failed = started === undefined || started.error !== undefined
@@ -130,6 +134,9 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
     }
     if (result.close !== undefined) {
       await Promise.resolve(notes.closeCard?.(result.close)).catch(error => warn('ds-bot-board: closing the thread of %s failed: %s', result.close.cardId, error))
+    }
+    if (report && result.report !== undefined) {
+      await Promise.resolve(notes.cardEnded?.(result.report)).catch(error => warn('ds-bot-board: reporting %s back failed: %s', result.report.cardId, error))
     }
     if (result.deliver !== undefined) {
       const sent = await deliverNote(result.card.id, result.deliver)

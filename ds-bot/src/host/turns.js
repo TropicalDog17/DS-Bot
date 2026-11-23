@@ -907,6 +907,7 @@ export function install(rt) {
         entry.opened = false
         entry.joined = []
         entry.later = []
+        entry.im = false
         entry.steeredAt = undefined
         entry.carried = false
         let claimedPending
@@ -943,6 +944,8 @@ export function install(rt) {
       case 'user/message': {
         const source = event.data?.source
         if (source?.kind === 'user' && typeof source.rpcId === 'string') noteHeard(id, source.rpcId)
+        // The user wrote from a phone (an IM chat): it reads this Bot there, not in the web chat.
+        if (source?.kind === 'user' && typeof source.rpcId === 'string' && source.rpcId.startsWith('im:')) entry.im = true
         // A group round shows the member the user's lines; the turn that reads them heard them.
         if (source?.kind === SOURCE_KIND && source.role === 'room' && Array.isArray(source.requests)) {
           for (const requestId of source.requests) noteHeard(id, requestId)

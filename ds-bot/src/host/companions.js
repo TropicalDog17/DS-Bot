@@ -13,8 +13,10 @@
 //                card) with the card's brief and cardThread finds it (busy: is the Bot
 //                in a turn anywhere); deliver with a
 //                cardId reaches that thread; closeCard closes it once the card is
-//                finished. push sends a short line to the user's phone through the Main
-//                Bot's IM chat; onCardNote hears a reply there to a push about a card.
+//                finished; cardEnded tells the Bot that opened a card, where it
+//                opened it, how the card ended. push sends a short line to the user's
+//                phone through the Main Bot's IM chat; onCardNote hears a reply there
+//                to a push about a card.
 //                wake tells a Bot that its wait on a herdr pane is over, where it asked.
 //   dsBotBridge  the tools a Bot on a local agent CLI (Claude Code, Codex, ACP) may call
 //                through DS Bot's MCP bridge. Only the team tools cross by default; a
@@ -138,6 +140,24 @@ export function notesService(rt) {
       if (bot === undefined) return false
       const sessions = [rt.chatOf?.(bot.id), ...(bot.openParts ?? []).map(part => part.sessionId), ...(rt.groupSessionsOf?.(bot.id) ?? [])]
       return sessions.some(sessionId => sessionId !== undefined && rt.live?.get(sessionId)?.turn !== undefined)
+    },
+    // { botId, cardId, roomId?, text } -> { where } | { error }. How a card the Bot opened
+    // ended, to the Bot where it opened it: the group when it is still a member there,
+    // else its own chat. It reads as DS Bot's note, not as the user's message.
+    async cardEnded({ botId, cardId, roomId, text } = {}) {
+      await rt.load()
+      const bot = typeof botId === 'string' ? rt.botOf(botId) : undefined
+      if (bot === undefined) return { error: 'No such Bot.' }
+      const body = keepLines(text, NOTE_MAX)
+      if (body === '') return { error: 'Write a note first.' }
+      const card = typeof cardId === 'string' ? cardId : 'a card'
+      const room = typeof roomId === 'string' ? rt.roomOf(roomId) : undefined
+      if (room !== undefined && (room.members ?? []).includes(bot.id) && room.sessions?.[bot.id] !== undefined) {
+        await rt.deliver({ toId: bot.id, sessionId: room.sessions[bot.id], role: 'room', roomId: room.id, note: `card ${card} ended`, text: body })
+        return { where: 'group' }
+      }
+      await rt.deliver({ toId: bot.id, role: 'card', note: `Card ${card} ended in its own conversation`, text: body })
+      return { where: 'chat' }
     },
     // { botId, cardId } -> { closed: true | 'later' | false }. 'later': the thread's turn
     // still runs and it closes when that turn ends.

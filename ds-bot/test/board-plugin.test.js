@@ -833,6 +833,44 @@ test('the herdr panes a shell command drives, and a pane read through the herdr 
   assert.deepEqual(await herdr.status('w1:p1T'), { error: 'pane w1:p1T not found', gone: true })
 })
 
+// The user asked where the card was opened; its work ran in the card's own thread.
+test('a card a Bot opened reports how it ended back where it was opened', async (t) => {
+  const h = host(t, { now: () => 5000 })
+  const inThread = id => { h.team.owners[`ct-${id}`] = { botId: 'b' }; return `ct-${id}` }
+
+  await h.tool({ action: 'open', title: 'Research desk', brief: 'Find out what it is.' }, 'b')
+  const [own] = h.cards()
+  await h.tool({ action: 'complete', id: own.id, result: 'A funding-arb tool', link: 'https://docs.example.com/desk' }, inThread(own.id))
+  assert.deepEqual(h.team.delivered, [{
+    toId: 'b', role: 'card', note: `Card ${own.id} ended in its own conversation`,
+    text: `Card ${own.id} "Research desk" is done (Writer): A funding-arb tool (https://docs.example.com/desk)\nTell the user here in a line or two how it ended, with the card id; the whole work stays on the card.`,
+  }])
+  assert.deepEqual(h.cards()[0].log.at(-1), { at: 5000, by: 'b', status: 'done' })
+
+  // Finished where it was opened, the Bot tells the user itself.
+  h.team.delivered.length = 0
+  await h.tool({ action: 'open', title: 'Quick one', brief: 'Small.' }, 'b')
+  const quick = h.cards().find(card => card.title === 'Quick one')
+  await h.tool({ action: 'complete', id: quick.id, result: 'Done' }, 'b')
+  assert.deepEqual(h.team.delivered, [])
+
+  // A card Chief opened in a group for Writer goes back to Chief in that group.
+  h.team.state.rooms.r1.sessions = { a: 'ga', b: 'gb' }
+  await h.tool({ action: 'open', title: 'Write docs', assignee: 'Writer', brief: 'Docs for 782.' }, 'ga')
+  const docs = h.cards().find(card => card.title === 'Write docs')
+  await h.tool({ action: 'cancel', id: docs.id, reason: 'already written' }, inThread(docs.id))
+  assert.equal(h.team.delivered.length, 1)
+  assert.deepEqual({ ...h.team.delivered[0], text: undefined }, { toId: 'a', sessionId: 'ga', role: 'room', roomId: 'r1', note: `card ${docs.id} ended`, text: undefined })
+  assert.match(h.team.delivered[0].text, new RegExp(`^Card ${docs.id} "Write docs" was cancelled \\(Writer\\): already written\\n`))
+
+  // A card the user opened has no Bot to report to.
+  h.team.delivered.length = 0
+  await h.post('add', { title: 'Mine', assignee: 'b', brief: 'Do it.' })
+  const mine = h.cards().find(card => card.title === 'Mine')
+  await h.tool({ action: 'complete', id: mine.id, result: 'ok' }, inThread(mine.id))
+  assert.deepEqual(h.team.delivered, [])
+})
+
 test('a card keeps the herdr panes its Bot drives from the card thread, and the page reads only those', async (t) => {
   const reads = []
   const herdr = { read: async (pane) => { reads.push(pane); return { text: `tail of ${pane}`, status: 'working' } } }
