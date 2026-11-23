@@ -10,6 +10,10 @@ export const WATCH_MS = 15 * 60 * 1000
 export const STUCK_MS = 3 * 60 * 60 * 1000
 // In Review this long: the user has forgotten it.
 export const REVIEW_MS = 24 * 60 * 60 * 1000
+// A card's progress reaches the phone at most this often, and only once the card has
+// run this long: a card that is done in minutes says so with its done push.
+export const PROGRESS_PUSH_MS = 30 * 60 * 1000
+export const PROGRESS_AFTER_MS = 10 * 60 * 1000
 
 const tagOf = card => card.key ?? card.id
 const hours = ms => `${Math.max(1, Math.round(ms / 3_600_000))}h`
@@ -20,8 +24,10 @@ export function pushText(card, who, what) {
 }
 
 // The push a Bot's own board action makes, or undefined: a question, a card moved to
-// Review, a card finished or given up. The user's own changes on the page push nothing.
-export function pushFor(action, before, card, nameOf) {
+// Review or Blocked, a card finished or given up, and on a long card new progress
+// (`lastPush`: when this card last pushed, if it did). The user's own changes on the page
+// push nothing.
+export function pushFor(action, before, card, nameOf, { now = Date.now(), lastPush, progressBefore } = {}) {
   if (card === undefined) return undefined
   const who = nameOf(card.assignee)
   if (action === 'ask') {
@@ -30,6 +36,13 @@ export function pushFor(action, before, card, nameOf) {
   }
   if (action === 'update' && card.status === 'review' && before !== 'review') {
     return pushText(card, who, `"${card.title}" is ready for review${card.progress ? `: ${card.progress}` : ''}`)
+  }
+  if (action === 'update' && card.status === 'blocked' && before !== 'blocked') {
+    return pushText(card, who, `"${card.title}" is blocked${card.need ? `: ${card.need}` : card.progress ? `: ${card.progress}` : ''}`)
+  }
+  if (action === 'update' && card.progress && card.progress !== progressBefore
+    && now - (card.createdAt ?? now) >= PROGRESS_AFTER_MS && (lastPush === undefined || now - lastPush >= PROGRESS_PUSH_MS)) {
+    return pushText(card, who, `"${card.title}": ${card.progress}`)
   }
   if (action === 'complete') return pushText(card, who, `done "${card.title}": ${card.result ?? ''}`)
   if (action === 'cancel') return pushText(card, who, `stopped "${card.title}"${card.reason ? `: ${card.reason}` : ''}`)

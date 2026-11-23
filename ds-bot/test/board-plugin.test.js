@@ -6,7 +6,9 @@ import { test } from 'node:test'
 import { apply, inject, name } from '../src/board/entry.js'
 import { ROUTE, boardFileOf, install } from '../src/board/plugin.js'
 import { READ_ONLY, openBoardStore } from '../src/board/store.js'
-import { ACTIONS, ticketKey } from '../src/board/cards.js'
+import { ACTIONS, ticketKey, titleKey } from '../src/board/cards.js'
+import { PROGRESS_AFTER_MS, PROGRESS_PUSH_MS } from '../src/board/watch.js'
+import { herdrSkillProvider } from '../src/board/skill.js'
 import { KEPT_THINK_MAX, callAbout, keep, visibleThought } from '../src/board/live.js'
 import { createHerdr, herdrBinary, panesIn } from '../src/board/herdr.js'
 import { commandOf } from '../src/board/plugin.js'
@@ -102,6 +104,10 @@ test('the entry is a separate plugin that needs only public services', () => {
   let effects = 0
   apply({ effect: () => { effects += 1 } }, {})
   assert.equal(effects, 1)
+  // With a skills service, every Bot gets the herdr-panes skill.
+  const providers = []
+  apply({ effect: () => {}, inject: (deps, fn) => fn({ skills: { registerProvider: p => providers.push(p) } }) }, {})
+  assert.equal(providers[0]().name, 'ds-bot-board')
   assert.equal(boardFileOf({}, { DSH_HOME: '/tmp/x-home' }), '/tmp/x-home/bot-board/board.json')
   assert.equal(boardFileOf({ file: '/data/b.json' }, {}), '/data/b.json')
 })
@@ -192,7 +198,7 @@ test('board validates its input strictly and refuses Sessions that are not Bots'
   assert.equal(await h.tool({ action: 'open', brief: 'Do it.', title: 'x', url: 'javascript:alert(1)' }), 'url must be an http(s) address.')
   await h.tool({ action: 'open', brief: 'Do it.', title: 'First', key: 'LIFE-1' })
   const first = h.cards()[0]
-  assert.equal(await h.tool({ action: 'open', brief: 'Do it.', title: 'Again', key: 'LIFE-1' }), `LIFE-1 is already on the board as ${first.id}; update that card.`)
+  assert.equal(await h.tool({ action: 'open', brief: 'Do it.', title: 'Again', key: 'LIFE-1' }), `LIFE-1 already has an open card, ${first.id} (Writer): put this work on it with board note ${first.id} instead of opening another card.`)
   assert.equal(h.cards().length, 1)
   for (const terminal of ['complete', 'cancel']) {
     const id = (await h.tool({ action: 'open', brief: 'Do it.', title: `Deliver ${terminal}` })).match(/c_[0-9a-f]{8}/)[0]
@@ -740,6 +746,46 @@ test('a Bot\'s ask, Review, done and cancel push a short line naming the card; t
   assert.deepEqual(h.team.pushes[0].botId, 'b')
 })
 
+test('a long card pushes a blocked card, and its progress at most every half hour', async (t) => {
+  let clock = 0
+  const h = host(t, { now: () => clock })
+  await h.tool({ action: 'open', title: 'Load test', key: 'LIFE-5', assignee: 'Writer', brief: 'Measure p99.' }, 'a')
+  const [card] = h.cards()
+  // A card that is just starting does not push its progress.
+  await h.tool({ action: 'update', id: card.id, progress: 'pane w1:p2 runs the test' }, 'b')
+  clock = PROGRESS_AFTER_MS
+  await h.tool({ action: 'update', id: card.id, progress: 'half of the runs done' }, 'b')
+  clock += 60_000
+  await h.tool({ action: 'update', id: card.id, progress: 'three quarters done' }, 'b')
+  await h.tool({ action: 'update', id: card.id, status: 'blocked', need: 'the staging password' }, 'b')
+  await h.tool({ action: 'update', id: card.id, status: 'active' }, 'b')
+  clock += PROGRESS_PUSH_MS
+  await h.tool({ action: 'update', id: card.id, progress: 'three quarters done' }, 'b')
+  await h.tool({ action: 'update', id: card.id, progress: 'all runs done, writing it up' }, 'b')
+  await h.settle()
+  assert.deepEqual(h.team.pushes.map(push => push.text), [
+    'Writer · LIFE-5: "Load test": half of the runs done',
+    'Writer · LIFE-5: "Load test" is blocked: the staging password',
+    'Writer · LIFE-5: "Load test": all runs done, writing it up',
+  ])
+})
+
+test('a card for a ticket takes its key from the title, and a second open card for it is refused', async (t) => {
+  assert.equal(titleKey('LIFE-782: fix the redirect'), 'LIFE-782')
+  assert.equal(titleKey('life-782 · step 2'), 'LIFE-782')
+  assert.equal(titleKey('Fix LIFE-782 later'), undefined)
+  assert.equal(titleKey('COVID-19 notes'), undefined)
+  const h = host(t)
+  await h.tool({ action: 'open', title: 'LIFE-782: fix the redirect', assignee: 'Writer', brief: 'x' }, 'a')
+  const [card] = h.cards()
+  assert.equal(card.key, 'LIFE-782')
+  const refused = await h.tool({ action: 'open', title: 'LIFE-782: write the test', assignee: 'Coder', brief: 'y' }, 'a')
+  assert.match(JSON.stringify(refused), new RegExp(`LIFE-782 already has an open card, ${card.id} \\(Writer\\): put this work on it with board note ${card.id}`))
+  await h.tool({ action: 'complete', id: card.id, result: 'Merged' }, 'b')
+  await h.tool({ action: 'open', title: 'LIFE-782: write the test', assignee: 'Coder', brief: `After ${card.id} (merged): add the test.` }, 'a')
+  assert.equal(h.cards().length, 2)
+})
+
 test('a reply to a push about a card becomes a note on it, with the reply\'s own request id', async (t) => {
   const h = host(t)
   await h.tool({ action: 'open', title: 'Fix CI', assignee: 'Coder', brief: 'The lint job fails.' }, 'a')
@@ -760,6 +806,12 @@ test('the board adds its rules to every Bot\'s prompt and its open cards to the 
   assert.match(rules('a'), /answer from its status and progress \(team snapshot, board show\) first/)
   assert.match(rules('b'), /open the card yourself \(board open\) with a brief/)
   assert.match(rules('b'), /arrives in a conversation of its own that starts with "\[Card …\]"/)
+  assert.match(rules('a'), /One open card per ticket/)
+  assert.match(rules('b'), /board update progress in one line at each step/)
+  // Only a member Bot in a group gets the group rule.
+  assert.match(rules('gb'), /In this group, answer in a few lines/)
+  assert.doesNotMatch(rules('b'), /In this group/)
+  assert.doesNotMatch(rules('ga'), /In this group/)
   assert.equal(rules('nobody'), '')
   const [part] = h.team.parts
   assert.equal(part('a'), 'Open cards: none.')
@@ -795,7 +847,9 @@ test('the watchdog tells the user once about a stuck card, a card left in Review
   clock = 29 * hour
   assert.deepEqual((await h.handle.watchOnce()).map(alert => alert.text), [`Writer · ${stuck.id}: "Stuck work" has not moved for 4h`])
   await h.settle()
-  assert.equal(h.team.pushes.length, 4)
+  // The progress on the long card pushes too: the user hears it moved again.
+  assert.equal(h.team.pushes.map(push => push.text).at(-2), `Writer · ${stuck.id}: "Stuck work": half way`)
+  assert.equal(h.team.pushes.length, 5)
 })
 
 test('the herdr panes a shell command drives, and a pane read through the herdr CLI', async () => {
@@ -925,7 +979,8 @@ test('a wait on a herdr pane counts once the pane was seen working, or after a w
   assert.equal(addWait(waits, { pane: 'w9:p9', botId: 'c', id: 'y', at: 5 }).error, undefined)
 
   const text = wakeText({ ...wait, cardId: 'c_1' }, { kind: 'match', status: 'done' }, 'a\nb\n```\nlast\n')
-  assert.equal(text, 'herdr pane w1:p1 is done.\nIt is the work of card c_1.\nYour note when you started waiting: then open a PR\nWhat it shows last:\n```\na\nb\n`\u200b``\nlast\n```\nCheck the result in the pane, then go on with the work.')
+  assert.equal(text, 'herdr pane w1:p1 is done.\nIt is the work of card c_1.\nYour note when you started waiting: then open a PR\nWhat it shows last:\n```\na\nb\n`\u200b``\nlast\n```\nCheck the result in the pane, board update the card\'s progress in one line, then go on with the work.')
+  assert.match(wakeText(wait, { kind: 'match', status: 'done' }), /Check the result in the pane, then go on with the work\.$/)
   assert.match(wakeText({ ...wait, until: ['done'] }, { kind: 'expired', status: 'working' }), /^herdr pane w1:p1 did not get to done within 24 hours; it is working\. The wait ended\./)
 })
 
@@ -998,4 +1053,18 @@ test('wait_pane stop ends a wait, and a pane that is gone wakes its Bot once', a
   assert.match(h.team.delivered[0].text, /^herdr pane w1:p1 is gone \(closed, or its agent left\)\.\nCheck the result/)
   await h.handle.pollWaits()
   assert.equal(h.team.delivered.length, 1)
+})
+
+test('the herdr-panes skill tells a Bot how to hand work to a pane without holding its turn', async () => {
+  const provider = herdrSkillProvider()
+  const [candidate] = await provider.list()
+  assert.equal(candidate.name, 'herdr-panes')
+  assert.equal(candidate.source, 'bundled')
+  assert.deepEqual(candidate.invocation, { modelInvocable: true, userInvocable: true })
+  assert.ok(existsSync(candidate.locator))
+  const skill = await provider.get(candidate)
+  assert.doesNotMatch(skill.content, /^---/)
+  assert.match(skill.content, /herdr agent prompt <pane> "<task>"`, without `--wait`/)
+  assert.match(skill.content, /call `wait_pane` with the pane, and end your turn/)
+  assert.match(skill.content, /Never close a pane/)
 })

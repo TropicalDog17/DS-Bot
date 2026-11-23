@@ -39,6 +39,7 @@ const MAIN_BOARD_RULES = [
   '- Something the user says about work already on a card goes to that card: board note with the card id and the text. It reaches the card\'s own conversation; never pass card work on with @name in a group or message_bot, even for a card that came from a group.',
   '- When the user asks how a card is going, answer from its status and progress (team snapshot, board show) first. Only when that does not answer it, board note the question to the card and tell the user the answer will come there; do not wait for it.',
   '- A question is never a card. The open cards are in the team snapshot; board show lists the rest.',
+  '- One open card per ticket. A next step on a ticket that has an open card is a board note to that card, not a new card. A card for a ticket starts its title with the key (LIFE-782: …), and when it follows a finished card of the ticket, its brief names that card and its result.',
 ]
 const BOARD_RULES = [
   '## The board',
@@ -46,7 +47,13 @@ const BOARD_RULES = [
   '- A card handed to you arrives in a conversation of its own that starts with "[Card …]". Do that card\'s work there: board update as it moves (when it waits on the user, review or blocked with need: what the user must do and the link to it), board ask when the user must choose, then board complete with a one-line result or board cancel with the reason. Notes on the card arrive in the same conversation.',
   '- Work you run in a herdr pane shows on the card by itself when you drive the pane from the card\'s conversation. From anywhere else, board update with pane (its id, like w1:p1T) so the user can watch it.',
   '- To wait for work in a herdr pane, call wait_pane with the pane and end your turn: you are woken in this conversation when it gets there, also after a restart. Never wait with herdr agent wait, herdr agent prompt --wait or a background job: a restart or a new part of your chat stops those, and nothing wakes you.',
+  '- On a card that runs long, board update progress in one line at each step (when you hand work to a pane, when you are woken, when a test or deploy ends): the user reads it on the card and on the phone instead of asking how it is going.',
   '- A question the Main Bot passes on is not a card: just answer it.',
+]
+// Added for a Bot's conversation in a group: the group is for talk, and work done there
+// fills every member's context and never shows on a card.
+const GROUP_RULES = [
+  '- In this group, answer in a few lines. Work that takes more than a quick look (code, tests, deploys, measuring, long digging) is a task: board open a card for it and do it in the card\'s conversation, then tell the group the card id in one line. Its result comes back here when it ends.',
 ]
 const output = { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: String(value) }] }
 
@@ -98,9 +105,11 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
       // that is not text.
       if (args.action === 'show') return board.show(store.read().cards, owner.botId)
       let before
+      let progressBefore
       const result = await store.change((data) => {
         const changed = board.bot(data.cards, args.action, owner.botId, owner.roomId, args)
         before = changed.before
+        progressBefore = changed.progressBefore
         return changed
       })
       if (result.error !== undefined) return result.error
@@ -109,13 +118,19 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
       const thread = result.report === undefined ? undefined : await Promise.resolve(notes.cardThread?.({ botId: owner.botId, cardId: result.card.id })).catch(() => undefined)
       const report = result.report !== undefined && (owner.botId !== result.report.botId || (thread !== undefined && thread === exec?.agent?.id))
       const after = await follow(result, { report })
-      const push = pushFor(args.action, before, result.card, nameOf)
-      if (push !== undefined) void sendPush(result.card, push)
+      const push = pushFor(args.action, before, result.card, nameOf, { now: now(), lastPush: pushedAt.get(result.card.id), progressBefore })
+      if (push !== undefined) {
+        pushedAt.set(result.card.id, now())
+        void sendPush(result.card, push)
+      }
+      if (result.card !== undefined && !isOpen(result.card)) pushedAt.delete(result.card.id)
       return [result.said, after, board.line(result.card, owner.botId)].filter(Boolean).join('\n')
     },
   })
 
   const nameOf = id => (id === 'user' ? 'the user' : roster.bot(id)?.name ?? id)
+  // When each card last pushed. Kept in memory: after a restart a card may push once early.
+  const pushedAt = new Map()
   const sendPush = (card, text) => Promise.resolve(notes.push?.({ cardId: card.id, botId: card.assignee, text }))
     .catch(error => warn('ds-bot-board: push for %s failed: %s', card.id, error))
   // What a change sets off outside the board: a card thread to start or close, a note to
@@ -385,7 +400,8 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
     const owner = identity.ownerOfSession(sessionId)
     const bot = owner === undefined ? undefined : roster.bot(owner.botId)
     if (bot === undefined) return ''
-    return (bot.main ? MAIN_BOARD_RULES : BOARD_RULES).join('\n')
+    if (bot.main) return MAIN_BOARD_RULES.join('\n')
+    return (owner.roomId === undefined ? BOARD_RULES : [...BOARD_RULES, ...GROUP_RULES]).join('\n')
   }
   // On a schedule, what needs the user: a card stuck in progress, a card left in Review,
   // a card whose Bot is gone. Each is told once until the card changes.

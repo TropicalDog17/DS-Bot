@@ -7,11 +7,13 @@
 //
 // Config (all optional): { file: '/abs/board.json' }; default <DSH_HOME>/bot-board/board.json.
 import { install } from './plugin.js'
+import { herdrSkillProvider } from './skill.js'
 
 export const name = 'ds-bot-board'
 export const inject = ['botSessionIdentity', 'dsBotRoster', 'dsBotNotes', 'dsBotBridge', 'tools', 'connection', 'systemPrompt']
 
 export function apply(ctx, config = {}) {
+  ctx.inject?.({ skills: null }, sub => sub.skills.registerProvider(() => herdrSkillProvider()))
   ctx.effect(() => {
     const handle = install(ctx, config, {
       identity: ctx.botSessionIdentity, roster: ctx.dsBotRoster, notes: ctx.dsBotNotes, bridge: ctx.dsBotBridge,
