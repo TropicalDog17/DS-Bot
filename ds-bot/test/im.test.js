@@ -731,6 +731,26 @@ test('reply origin: another source in the same turn withdraws the IM origin', as
   assert.equal(s.fake.sent.length, 0, 'a mixed turn sends nothing')
 })
 
+test('reply origin: harness context added after the IM message keeps the chat', async (t) => {
+  const s = await start()
+  t.after(s.stop)
+  await pairedConn(s)
+  await dm(s, 'u1', 'hi')
+  s.imTurn('a')
+  // DSH re-sends a changed runtime context, the skill catalog and the clock right after
+  // the user's message; none of them is a second asker.
+  for (const source of [
+    { kind: 'runtime-context', form: 'snapshot', sections: [{ name: 'routing', text: 'team' }] },
+    { kind: 'skill-catalog', form: 'catalog', update: true, entries: [] },
+    { kind: 'time-context', form: 'snapshot', sections: [{ name: 'time-context', text: 'now' }] },
+    { kind: 'tool-jobs', form: 'notice', summary: 'job done' },
+  ]) s.emitEvent('a', 'user/message', { source, content: [{ type: 'text', text: 'context' }] })
+  s.fake.sent.length = 0
+  s.emitEvent('a', 'assistant/message', { message: { content: [{ type: 'text', text: 'reply' }] } })
+  await s.flush()
+  assert.deepEqual(s.fake.sent.map(entry => entry.chat.key), ['dm-u1'])
+})
+
 test('reply origin: the turn ending stops later output from going out', async (t) => {
   const s = await start()
   t.after(s.stop)

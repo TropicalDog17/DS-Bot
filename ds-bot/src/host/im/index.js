@@ -23,6 +23,8 @@ const TYPING_MS = 4_000
 const NUMBERS = /^\s*\d+(\s+\d+)*\s*$/
 // Pushed messages about cards a connection remembers, for replies to them.
 const PUSHED_MAX = 200
+// DSH context forms that inform a turn without asking anything (dsh-llm ContextForm).
+const CONTEXT_FORMS = new Set(['snapshot', 'catalog', 'instructions', 'notice'])
 
 const secretField = key => key.replace(/[A-Z]/g, char => `_${char}`).toUpperCase()
 
@@ -1501,6 +1503,10 @@ export function install(rt) {
         if (!working) pendingReset.add(session.id)
       }
     }
+    // Harness context (runtime context, skill catalog, clock, memory, job notices) is
+    // re-sent right after the user's message when it changed; it asks nothing, so it must
+    // neither claim nor withdraw the chat's origin. Relayed messages are real input.
+    if (event.type === 'user/message' && CONTEXT_FORMS.has(event.data?.source?.form)) return
     if (event.type === 'user/message') {
       const source = event.data?.source
       const imOrigin = source?.imOrigin
