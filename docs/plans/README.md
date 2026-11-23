@@ -79,3 +79,4 @@ Rules that can be checked. Write the current behavior, not the history.
 | [Mobile client API](2026-10-24-mobile-api.md) | The API for clients that draw their own interface (phones): handshake and versions, group chat items, notifications and resending, avatars fetched by reference, editing memory directly, usage of a single Bot |
 | [Office documents](2026-10-27-office-documents.md) | Bots handle .docx/.pptx/.xlsx offline: the payload bundled with the app, the `office.js` command line, the office route replaced by a version with `office-tools` |
 | [Connectors](2026-11-04-connectors.md) | The general connector engine, OAuth, gateways, email |
+| [Durable waits on herdr panes](2026-11-23-durable-pane-wait.md) | A Bot waits on a herdr pane with `wait_pane` and ends its turn; the wait is kept on the board, survives restarts and new chat parts, and wakes the Bot in the card thread, group or own chat |

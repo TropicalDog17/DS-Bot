@@ -750,6 +750,8 @@ export function TriggerCell({ node, sessionId, useRoster, useSessions, useTurnCl
       if (source.role === 'report') {
         return h(GroupEvent, { prefix: t('Replies from'), room: roster.roomsById[source.roomId], name: t('a group chat'), roster, actions })
       }
+      // A wait on a herdr pane is over; its first line is the host's own English text.
+      if (source.role === 'wake') return h('div', { className: 'bt-event' }, stripHeader(contentText(data.content)).split('\n')[0].slice(0, 120))
       // A request carried on keeps its role, but its message line was shown already.
       if (source.role === 'resume' || source.resumed === true) return h('div', { className: 'bt-event' }, t('Picked up its work after a restart'))
       if (source.role === 'retry' || source.retried === true) return h('div', { className: 'bt-event' }, t('Asked to make the tool call it wrote as text'))

@@ -11,15 +11,18 @@
 // (dsBotRoster addRoutingPart), the board's rules join every Bot's prompt, and what needs
 // the user goes to their phone (dsBotNotes push), with a watchdog for stuck cards.
 // Work a Bot hands to a herdr pane runs outside its turns; the card keeps the panes its
-// Bot drives and the page reads what they show (herdr.js).
+// Bot drives and the page reads what they show (herdr.js). A Bot waits on a pane with
+// wait_pane: the board keeps the wait, polls the pane and wakes the Bot (waits.js).
+import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { defineTool } from '../host/tool-schema.js'
 import { dshHomeOf } from '../host/folders.js'
-import { ACTIONS, BOT_STATUSES, createBoard, isOpen } from './cards.js'
+import { ACTIONS, BOT_STATUSES, createBoard, isOpen, paneTarget } from './cards.js'
 import { LEVELS, createLive, levelOf } from './live.js'
 import { openBoardStore } from './store.js'
 import { createHerdr, herdrBinary, panesIn } from './herdr.js'
 import { WATCH_MS, pushFor, sweep } from './watch.js'
+import { WAIT_POLL_MS, WAIT_STATES, addWait, check, waitingText, wakeText } from './waits.js'
 
 export const ROUTE = '/api/ds-bot-board'
 // After DS Bot's own identity section (640), so the board rules read as part of it.
@@ -42,6 +45,7 @@ const BOARD_RULES = [
   '- Every task you take is a card. When the user asks you for one directly, open the card yourself (board open) with a brief: its work runs in a conversation of its own for the card, so tell the user in one line that you took it and stop there. Do not open a card for a step of the card you are working on.',
   '- A card handed to you arrives in a conversation of its own that starts with "[Card …]". Do that card\'s work there: board update as it moves (when it waits on the user, review or blocked with need: what the user must do and the link to it), board ask when the user must choose, then board complete with a one-line result or board cancel with the reason. Notes on the card arrive in the same conversation.',
   '- Work you run in a herdr pane shows on the card by itself when you drive the pane from the card\'s conversation. From anywhere else, board update with pane (its id, like w1:p1T) so the user can watch it.',
+  '- To wait for work in a herdr pane, call wait_pane with the pane and end your turn: you are woken in this conversation when it gets there, also after a restart. Never wait with herdr agent wait, herdr agent prompt --wait or a background job: a restart or a new part of your chat stops those, and nothing wakes you.',
   '- A question the Main Bot passes on is not a card: just answer it.',
 ]
 const output = { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: String(value) }] }
@@ -185,6 +189,99 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
         return { error: 'Unknown board endpoint.', code: 'board/unknown' }
     }
   }
+  const waitTool = defineTool({
+    name: 'wait_pane',
+    description: 'Wait for the agent in a herdr pane to finish, stop or need input, without holding your turn. Call it once you handed the work to the pane, then end your turn: when the pane gets to one of the states you name, you are woken in this conversation with what it shows. The wait is kept by DS Bot, so a restart or a new part of your chat does not lose it. stop: true ends your wait on that pane.',
+    parameters: {
+      pane: { type: 'string', required: true, description: 'The herdr pane id, like w1:p1T' },
+      until: { type: 'array', items: { type: 'string', enum: WAIT_STATES }, description: `States to wake on; default ${WAIT_STATES.join(', ')}. done: it finished a task; idle: it waits for a prompt; blocked: it needs input or approval` },
+      note: { type: 'string', description: 'What to do once it is over, in one line; it comes back with the wake' },
+      stop: { type: 'boolean', description: 'true ends your wait on this pane' },
+    },
+    output,
+    async execute(args, exec) {
+      await roster.ready()
+      const sessionId = exec?.agent?.id
+      const owner = identity.ownerOfSession(sessionId)
+      if (owner === undefined || roster.bot(owner.botId) === undefined) return 'Only Bots on the team can use wait_pane.'
+      const pane = paneTarget(args.pane)
+      if (pane === undefined) return 'pane is a herdr pane id, like w1:p1T.'
+      if (store.readOnly()) return 'The board is read-only in this dsh, so a wait cannot be kept here.'
+      if (args.stop === true) {
+        const stopped = await store.change((data) => {
+          const wait = Object.values(data.waits ?? {}).find(entry => entry.botId === owner.botId && entry.pane === pane)
+          if (wait === undefined) return { error: `You do not wait on ${pane}.` }
+          dropWait(data, wait.id)
+          return {}
+        })
+        return stopped.error ?? `Stopped waiting on ${pane}.`
+      }
+      const seen = await herdr.status(pane)
+      if (seen.gone === true) return `herdr has no pane ${pane}.`
+      if (seen.error !== undefined && seen.status === undefined && /not installed/.test(seen.error)) return seen.error
+      const card = await cardOfThread(owner.botId, sessionId)
+      const result = await store.change((data) => {
+        const added = addWait(data.waits ??= {}, { pane, until: args.until, botId: owner.botId, roomId: owner.roomId, cardId: card?.id, note: args.note, id: `w_${randomUUID().slice(0, 8)}`, at: now() })
+        if (added.error === undefined && card !== undefined) board.panes(data.cards, card.id, [pane])
+        return added
+      })
+      if (result.error !== undefined) return result.error
+      return [waitingText(result.wait), result.replaced ? 'It takes the place of your earlier wait on this pane.' : '', seen.status ? `It is ${seen.status} now.` : ''].filter(Boolean).join(' ')
+    },
+  })
+  const dropWait = (data, id) => {
+    delete data.waits?.[id]
+    if (data.waits !== undefined && Object.keys(data.waits).length === 0) delete data.waits
+  }
+  // The open card whose thread a Session is, if any.
+  async function cardOfThread(botId, sessionId) {
+    if (typeof notes.cardThread !== 'function') return undefined
+    for (const card of Object.values(store.read().cards)) {
+      if (!isOpen(card) || card.assignee !== botId) continue
+      if (await notes.cardThread({ botId, cardId: card.id }) === sessionId) return card
+    }
+    return undefined
+  }
+  // Each wait's pane, once per poll: a wait that is over wakes its Bot, and is dropped
+  // only after the wake went out (a wake twice beats a wake lost to a crash).
+  let polling = false
+  async function pollWaits() {
+    if (polling || store.readOnly()) return []
+    polling = true
+    const woken = []
+    try {
+      await roster.ready()
+      for (const wait of Object.values(store.read().waits ?? {})) {
+        const outcome = roster.bot(wait.botId) === undefined ? { kind: 'gone-bot' } : check(wait, await herdr.status(wait.pane), now())
+        if (outcome === undefined) continue
+        if (outcome.armed === true) {
+          await store.change((data) => { if (data.waits?.[wait.id] !== undefined) data.waits[wait.id].armed = true; return {} })
+          continue
+        }
+        if (outcome.kind !== 'gone-bot') {
+          const shown = outcome.kind === 'gone' ? undefined : await herdr.read(wait.pane)
+          const sent = await Promise.resolve(notes.wake?.({ botId: wait.botId, pane: wait.pane, ...(wait.cardId ? { cardId: wait.cardId } : {}), ...(wait.roomId ? { roomId: wait.roomId } : {}), text: wakeText(wait, outcome, shown?.text) }))
+            .catch(error => ({ error: error?.message ?? String(error) }))
+          if (sent?.error !== undefined) {
+            warn('ds-bot-board: waking %s for %s failed: %s', wait.botId, wait.pane, sent.error)
+            if (outcome.kind !== 'expired') continue
+          } else woken.push(wait.id)
+        }
+        await store.change((data) => { dropWait(data, wait.id); return {} })
+      }
+    } finally {
+      polling = false
+    }
+    return woken
+  }
+  function waitPoller() {
+    const every = config.waitPollMs ?? WAIT_POLL_MS
+    if (!(every > 0)) return undefined
+    const timer = setInterval(() => { void pollWaits().catch(error => warn('ds-bot-board: polling herdr waits failed: %s', error)) }, every)
+    timer.unref?.()
+    return () => clearInterval(timer)
+  }
+
   // The user's change, then its card thread started or closed; the page shows the board.
   const followed = async (result) => {
     if (result?.error === undefined) await follow(result)
@@ -252,6 +349,9 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
     adoptLater(),
     tools.register(tool),
     bridge.share(tool.name),
+    tools.register(waitTool),
+    bridge.share(waitTool.name),
+    waitPoller(),
     connection.fetch.register({
       path: ROUTE,
       methods: ['POST'],
@@ -336,6 +436,8 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
   return {
     watchOnce,
     adoptOnce,
+    pollWaits,
+    waitTool,
     rulesFor,
     openCardsDigest,
     handle: async (endpoint, payload) => respond(await handle(endpoint, payload)),

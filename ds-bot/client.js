@@ -28256,6 +28256,7 @@ function TriggerCell({ node, sessionId, useRoster, useSessions, useTurnClock, us
       if (source.role === "report") {
         return (0, import_react34.createElement)(GroupEvent, { prefix: t("Replies from"), room: roster.roomsById[source.roomId], name: t("a group chat"), roster, actions });
       }
+      if (source.role === "wake") return (0, import_react34.createElement)("div", { className: "bt-event" }, stripHeader(contentText(data.content)).split("\n")[0].slice(0, 120));
       if (source.role === "resume" || source.resumed === true) return (0, import_react34.createElement)("div", { className: "bt-event" }, t("Picked up its work after a restart"));
       if (source.role === "retry" || source.retried === true) return (0, import_react34.createElement)("div", { className: "bt-event" }, t("Asked to make the tool call it wrote as text"));
       if (source.role === "continue") return (0, import_react34.createElement)("div", { className: "bt-event" }, t("Went on after the failed turn"));
