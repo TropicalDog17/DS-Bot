@@ -51,6 +51,8 @@ function BoardPage({ live, focus, call, close, paneLeft, leaving }) {
     boardCancel: (id, reason) => act('cancel', { id, reason }),
     boardSeen: id => act('seen', { id }),
     boardTrace: trace => act('trace', { trace }),
+    // A pane's tail is not the board's state: it goes to the sheet, not the view.
+    boardPane: (id, pane) => call('pane', { id, pane }),
     closeBoard: close,
     reportError: () => live.refresh(),
   }), [act, close, live])

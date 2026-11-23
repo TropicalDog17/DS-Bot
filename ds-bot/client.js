@@ -124,6 +124,8 @@ function convertHostErrors(pairs) {
 
 // src/client/locales/ja.js
 var JA = {
+  "Hide terminal": "ターミナルを閉じる",
+  "This pane is closed.": "このペインは閉じています。",
   "A new reply is waiting": "新しい返信があります",
   "Opening…": "開いています…",
   "Still opening…": "まだ開いています…",
@@ -2495,6 +2497,8 @@ var DSH_JA = {
 
 // src/client/locales/ko.js
 var KO = {
+  "Hide terminal": "터미널 숨기기",
+  "This pane is closed.": "이 창은 닫혔습니다.",
   "A new reply is waiting": "새 답변이 도착했습니다",
   "Opening…": "여는 중…",
   "Still opening…": "아직 여는 중…",
@@ -4910,6 +4914,8 @@ var DSH_KO = {
 
 // src/client/locales/es.js
 var ES = {
+  "Hide terminal": "Ocultar terminal",
+  "This pane is closed.": "Este panel está cerrado.",
   "A new reply is waiting": "Tienes una nueva respuesta",
   "Opening…": "Abriendo…",
   "Still opening…": "Sigue abriendo…",
@@ -7325,6 +7331,8 @@ var DSH_ES = {
 
 // src/client/locales/fr.js
 var FR = {
+  "Hide terminal": "Masquer le terminal",
+  "This pane is closed.": "Ce volet est fermé.",
   "A new reply is waiting": "Une nouvelle réponse vous attend",
   "Opening…": "Ouverture…",
   "Still opening…": "Toujours en cours d’ouverture…",
@@ -9696,6 +9704,8 @@ var DSH_FR = {
 
 // src/client/locales/de.js
 var DE = {
+  "Hide terminal": "Terminal ausblenden",
+  "This pane is closed.": "Dieser Bereich ist geschlossen.",
   "A new reply is waiting": "Eine neue Antwort wartet auf dich",
   "Opening…": "Wird geöffnet…",
   "Still opening…": "Wird noch geöffnet…",
@@ -12973,6 +12983,8 @@ var ZH = {
   "Message actions": "消息操作",
   Download: "下载",
   "Thought it through": "思考过程",
+  "Hide terminal": "收起终端",
+  "This pane is closed.": "这个窗格已关闭。",
   "Tool calls": "工具调用",
   "Earlier messages": "更早的消息",
   "Loading earlier messages…": "正在加载更早的消息…",
@@ -42850,6 +42862,59 @@ function Steps({ card, cards }) {
     ))) : null
   );
 }
+var PANE_MS = 2e3;
+function Panes({ card, actions }) {
+  const panes = card.panes ?? [];
+  const [open, setOpen] = (0, import_react73.useState)(false);
+  const [picked, setPicked] = (0, import_react73.useState)(null);
+  const [shown, setShown] = (0, import_react73.useState)(null);
+  const box = (0, import_react73.useRef)(null);
+  const pane = panes.some((entry) => entry.id === picked) ? picked : panes.at(-1)?.id;
+  (0, import_react73.useEffect)(() => {
+    if (!open || pane === void 0 || typeof actions.boardPane !== "function") return void 0;
+    let stopped = false;
+    let timer;
+    const tick = () => {
+      Promise.resolve(actions.boardPane(card.id, pane)).then((value) => value, (failure) => ({ pane, error: String(failure?.message ?? failure) })).then((value) => {
+        if (stopped) return;
+        setShown(value ?? null);
+        if (!value?.gone) timer = setTimeout(tick, PANE_MS);
+      });
+    };
+    tick();
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
+  }, [open, pane, card.id]);
+  const view = shown?.pane === pane ? shown : void 0;
+  const follow = (0, import_react73.useRef)(true);
+  (0, import_react73.useEffect)(() => {
+    follow.current = true;
+  }, [pane, open]);
+  (0, import_react73.useEffect)(() => {
+    const node = box.current;
+    if (node && follow.current) node.scrollTop = node.scrollHeight;
+  }, [view?.text]);
+  const scrolled = (event) => {
+    const node = event.currentTarget;
+    follow.current = node.scrollHeight - node.scrollTop - node.clientHeight < 40;
+  };
+  if (pane === void 0) return null;
+  return (0, import_react73.createElement)(
+    "div",
+    { className: "bt-board-panes" },
+    (0, import_react73.createElement)(
+      "button",
+      { type: "button", className: "bt-more bt-board-pane-toggle", "aria-expanded": open, "data-state": view?.status, onClick: () => setOpen((value) => !value) },
+      (0, import_react73.createElement)("span", { className: "bt-board-tool-dot", "aria-hidden": true }),
+      open ? t("Hide terminal") : t("Terminal"),
+      (0, import_react73.createElement)("span", { className: "bt-board-age" }, view?.status ? `${pane} · ${view.status}` : pane)
+    ),
+    open && panes.length > 1 ? (0, import_react73.createElement)("div", { className: "bt-board-pane-pick", role: "tablist" }, panes.map((entry) => (0, import_react73.createElement)("button", { key: entry.id, type: "button", role: "tab", className: "bt-board-pane-tab", "aria-selected": entry.id === pane, onClick: () => setPicked(entry.id) }, entry.id))) : null,
+    open ? view === void 0 ? (0, import_react73.createElement)("div", { className: "bt-board-msg-text bt-board-dots", "aria-hidden": true }, (0, import_react73.createElement)("i"), (0, import_react73.createElement)("i"), (0, import_react73.createElement)("i")) : view.error !== void 0 ? (0, import_react73.createElement)("div", { className: "bt-board-line bt-board-pane-gone" }, view.gone ? t("This pane is closed.") : view.error) : (0, import_react73.createElement)("pre", { className: "bt-board-term", ref: box, title: view.title, onScroll: scrolled }, view.text || " ") : null
+  );
+}
 var BRIEF_FOLD = 280;
 function Brief({ text, cards }) {
   const [open, setOpen] = (0, import_react73.useState)(false);
@@ -42956,6 +43021,7 @@ function CardDetail({ card, roster, actions, live, onOpenCard }) {
       ) : null,
       progress ? (0, import_react73.createElement)(BotText, { text: progress, cards: allCards, className: "bt-board-line" }) : null,
       (0, import_react73.createElement)(Steps, { card, cards: allCards }),
+      (0, import_react73.createElement)(Panes, { card, actions }),
       card.result ? (0, import_react73.createElement)(BotText, { text: card.result, cards: roster.board?.cards ?? {}, className: "bt-board-line bt-board-strong" }) : null,
       card.reason ? (0, import_react73.createElement)(BotText, { text: card.reason, cards: roster.board?.cards ?? {}, className: "bt-board-line" }) : null,
       links.length > 0 ? (0, import_react73.createElement)(
@@ -43214,6 +43280,17 @@ a.bt-board-key:hover{color:var(--bt-ink)}
 .bt-board-step .bt-board-dot{align-self:start;margin-top:5.5px}
 .bt-board-step .bt-board-age{white-space:nowrap}
 .bt-board-step-text{min-width:0;overflow-wrap:anywhere}
+.bt-board-panes{display:flex;flex-direction:column;align-items:flex-start;gap:8px;margin-top:-8px;align-self:stretch;min-width:0}
+.bt-board-pane-toggle{display:inline-flex;align-items:center;gap:6px}
+.bt-board-pane-toggle .bt-board-tool-dot{background:var(--bt-ink-3)}
+.bt-board-pane-toggle[data-state=working] .bt-board-tool-dot{background:var(--bt-accent);animation:bt-board-pulse 1.2s ease-in-out infinite}
+.bt-board-pane-toggle[data-state=done] .bt-board-tool-dot,.bt-board-pane-toggle[data-state=idle] .bt-board-tool-dot{background:var(--bt-green)}
+.bt-board-pane-toggle[data-state=blocked] .bt-board-tool-dot{background:var(--bt-danger)}
+.bt-board-pane-pick{display:flex;flex-wrap:wrap;gap:6px}
+.bt-board-pane-tab{height:26px;padding:0 10px;border:1px solid var(--bt-line);border-radius:13px;background:none;color:var(--bt-ink-2);font:12px/24px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;cursor:pointer}
+.bt-board-pane-tab[aria-selected=true]{border-color:var(--bt-ink-2);color:var(--bt-ink)}
+.bt-board-term{align-self:stretch;margin:0;padding:8px 10px;border-radius:8px;background:var(--bt-hover);font:12px/17px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--bt-ink);white-space:pre-wrap;overflow-wrap:anywhere;max-height:360px;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.bt-board-pane-gone{color:var(--bt-ink-3)}
 .bt-board-brief{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding-top:12px;border-top:1px solid var(--bt-line)}
 .bt-board-brief[data-folded] .bt-board-md{max-height:84px;overflow:hidden;mask-image:linear-gradient(to bottom,#000 60%,transparent)}
 .bt-board-links{display:flex;flex-direction:column;gap:4px}
@@ -43273,7 +43350,7 @@ a.bt-board-key:hover{color:var(--bt-ink)}
 .bt-board-level{display:inline-flex;align-items:center;gap:6px;color:var(--bt-ink-2)}
 .bt-board-level .bt-select{min-width:0;height:30px}
 @keyframes bt-board-pulse{50%{opacity:.35}}
-@media (prefers-reduced-motion:reduce){.bt-board-trace [data-state=running] .bt-board-tool-dot{animation:none}}
+@media (prefers-reduced-motion:reduce){.bt-board-trace [data-state=running] .bt-board-tool-dot,.bt-board-pane-toggle[data-state=working] .bt-board-tool-dot{animation:none}}
 .bt-board-fold{align-self:stretch;font-size:13px;line-height:18px;color:var(--bt-ink-2)}
 .bt-board-fold summary{cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:6px;padding:0 4px}
 .bt-board-fold summary::-webkit-details-marker{display:none}
@@ -43358,6 +43435,8 @@ function BoardPage({ live, focus, call: call2, close, paneLeft, leaving }) {
     boardCancel: (id, reason) => act("cancel", { id, reason }),
     boardSeen: (id) => act("seen", { id }),
     boardTrace: (trace) => act("trace", { trace }),
+    // A pane's tail is not the board's state: it goes to the sheet, not the view.
+    boardPane: (id, pane) => call2("pane", { id, pane }),
     closeBoard: close,
     reportError: () => live.refresh()
   }), [act, close, live]);

@@ -49,6 +49,10 @@ What the user must do for a Card that waits on them (in Review or Blocked), with
 What the user writes on a Card for its Assignee, or what the Main Bot passes on there from the user; it reaches the Card thread.
 _Avoid_: comment, message, @mention (for work on a Card)
 
+**Pane**:
+A herdr terminal where an agent does a Card's Task outside its Assignee's turns; the Card keeps it and shows what it shows.
+_Avoid_: tab, window, session (for the herdr terminal)
+
 **Card conversation**:
 The Notes, questions and replies shown on a Card; what the user reads, not the Assignee's working context.
 _Avoid_: card thread, card history

@@ -1,6 +1,8 @@
 // Japanese (ja) localization for DS Bot client and DSH settings namespaces.
 
 export const JA = {
+  'Hide terminal': 'ターミナルを閉じる',
+  'This pane is closed.': 'このペインは閉じています。',
   'A new reply is waiting': "新しい返信があります",
   "Opening…": "開いています…",
   "Still opening…": "まだ開いています…",

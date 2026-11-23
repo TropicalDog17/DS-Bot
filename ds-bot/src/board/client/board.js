@@ -260,6 +260,60 @@ function Steps({ card, cards }) {
         step.progress ? h(BotText, { text: step.progress, cards, className: 'bt-board-step-text' }) : null))) : null)
 }
 
+// The herdr panes the card's work runs in. Opened, the newest shows what it shows now,
+// read again every few seconds while open; it follows the newest line unless the
+// reader scrolled up. herdr's agent state (working, idle, done) marks its toggle.
+const PANE_MS = 2000
+export function Panes({ card, actions }) {
+  const panes = card.panes ?? []
+  const [open, setOpen] = useState(false)
+  const [picked, setPicked] = useState(null)
+  const [shown, setShown] = useState(null)
+  const box = useRef(null)
+  const pane = panes.some(entry => entry.id === picked) ? picked : panes.at(-1)?.id
+  useEffect(() => {
+    if (!open || pane === undefined || typeof actions.boardPane !== 'function') return undefined
+    let stopped = false
+    let timer
+    const tick = () => {
+      Promise.resolve(actions.boardPane(card.id, pane))
+        .then(value => value, failure => ({ pane, error: String(failure?.message ?? failure) }))
+        .then((value) => {
+          if (stopped) return
+          setShown(value ?? null)
+          if (!value?.gone) timer = setTimeout(tick, PANE_MS)
+        })
+    }
+    tick()
+    return () => { stopped = true; clearTimeout(timer) }
+  }, [open, pane, card.id])
+  const view = shown?.pane === pane ? shown : undefined
+  // A pane opens on its newest line and stays there until the reader scrolls up.
+  const follow = useRef(true)
+  useEffect(() => { follow.current = true }, [pane, open])
+  useEffect(() => {
+    const node = box.current
+    if (node && follow.current) node.scrollTop = node.scrollHeight
+  }, [view?.text])
+  const scrolled = (event) => {
+    const node = event.currentTarget
+    follow.current = node.scrollHeight - node.scrollTop - node.clientHeight < 40
+  }
+  if (pane === undefined) return null
+  return h('div', { className: 'bt-board-panes' },
+    h('button', { type: 'button', className: 'bt-more bt-board-pane-toggle', 'aria-expanded': open, 'data-state': view?.status, onClick: () => setOpen(value => !value) },
+      h('span', { className: 'bt-board-tool-dot', 'aria-hidden': true }),
+      open ? t('Hide terminal') : t('Terminal'),
+      h('span', { className: 'bt-board-age' }, view?.status ? `${pane} · ${view.status}` : pane)),
+    open && panes.length > 1 ? h('div', { className: 'bt-board-pane-pick', role: 'tablist' }, panes.map(entry =>
+      h('button', { key: entry.id, type: 'button', role: 'tab', className: 'bt-board-pane-tab', 'aria-selected': entry.id === pane, onClick: () => setPicked(entry.id) }, entry.id))) : null,
+    open ? (view === undefined
+      ? h('div', { className: 'bt-board-msg-text bt-board-dots', 'aria-hidden': true }, h('i'), h('i'), h('i'))
+      : view.error !== undefined
+        ? h('div', { className: 'bt-board-line bt-board-pane-gone' }, view.gone ? t('This pane is closed.') : view.error)
+        : h('pre', { className: 'bt-board-term', ref: box, title: view.title, onScroll: scrolled }, view.text || ' ')) : null)
+}
+
 // The brief the card started from: folded to a few lines until opened.
 const BRIEF_FOLD = 280
 function Brief({ text, cards }) {
@@ -344,6 +398,7 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
         h(BotText, { text: need, cards: allCards, className: 'bt-board-line bt-board-strong' })) : null,
       progress ? h(BotText, { text: progress, cards: allCards, className: 'bt-board-line' }) : null,
       h(Steps, { card, cards: allCards }),
+      h(Panes, { card, actions }),
       card.result ? h(BotText, { text: card.result, cards: roster.board?.cards ?? {}, className: 'bt-board-line bt-board-strong' }) : null,
       card.reason ? h(BotText, { text: card.reason, cards: roster.board?.cards ?? {}, className: 'bt-board-line' }) : null,
       links.length > 0 ? h('div', { className: 'bt-board-links' },
@@ -532,6 +587,17 @@ a.bt-board-key:hover{color:var(--bt-ink)}
 .bt-board-step .bt-board-dot{align-self:start;margin-top:5.5px}
 .bt-board-step .bt-board-age{white-space:nowrap}
 .bt-board-step-text{min-width:0;overflow-wrap:anywhere}
+.bt-board-panes{display:flex;flex-direction:column;align-items:flex-start;gap:8px;margin-top:-8px;align-self:stretch;min-width:0}
+.bt-board-pane-toggle{display:inline-flex;align-items:center;gap:6px}
+.bt-board-pane-toggle .bt-board-tool-dot{background:var(--bt-ink-3)}
+.bt-board-pane-toggle[data-state=working] .bt-board-tool-dot{background:var(--bt-accent);animation:bt-board-pulse 1.2s ease-in-out infinite}
+.bt-board-pane-toggle[data-state=done] .bt-board-tool-dot,.bt-board-pane-toggle[data-state=idle] .bt-board-tool-dot{background:var(--bt-green)}
+.bt-board-pane-toggle[data-state=blocked] .bt-board-tool-dot{background:var(--bt-danger)}
+.bt-board-pane-pick{display:flex;flex-wrap:wrap;gap:6px}
+.bt-board-pane-tab{height:26px;padding:0 10px;border:1px solid var(--bt-line);border-radius:13px;background:none;color:var(--bt-ink-2);font:12px/24px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;cursor:pointer}
+.bt-board-pane-tab[aria-selected=true]{border-color:var(--bt-ink-2);color:var(--bt-ink)}
+.bt-board-term{align-self:stretch;margin:0;padding:8px 10px;border-radius:8px;background:var(--bt-hover);font:12px/17px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--bt-ink);white-space:pre-wrap;overflow-wrap:anywhere;max-height:360px;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.bt-board-pane-gone{color:var(--bt-ink-3)}
 .bt-board-brief{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding-top:12px;border-top:1px solid var(--bt-line)}
 .bt-board-brief[data-folded] .bt-board-md{max-height:84px;overflow:hidden;mask-image:linear-gradient(to bottom,#000 60%,transparent)}
 .bt-board-links{display:flex;flex-direction:column;gap:4px}
@@ -591,7 +657,7 @@ a.bt-board-key:hover{color:var(--bt-ink)}
 .bt-board-level{display:inline-flex;align-items:center;gap:6px;color:var(--bt-ink-2)}
 .bt-board-level .bt-select{min-width:0;height:30px}
 @keyframes bt-board-pulse{50%{opacity:.35}}
-@media (prefers-reduced-motion:reduce){.bt-board-trace [data-state=running] .bt-board-tool-dot{animation:none}}
+@media (prefers-reduced-motion:reduce){.bt-board-trace [data-state=running] .bt-board-tool-dot,.bt-board-pane-toggle[data-state=working] .bt-board-tool-dot{animation:none}}
 .bt-board-fold{align-self:stretch;font-size:13px;line-height:18px;color:var(--bt-ink-2)}
 .bt-board-fold summary{cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:6px;padding:0 4px}
 .bt-board-fold summary::-webkit-details-marker{display:none}

@@ -1,6 +1,8 @@
 // Spanish (es) localization for DS Bot client and DSH settings namespaces.
 
 export const ES = {
+  'Hide terminal': 'Ocultar terminal',
+  'This pane is closed.': 'Este panel está cerrado.',
   'A new reply is waiting': "Tienes una nueva respuesta",
   'Opening…': 'Abriendo…',
   'Still opening…': 'Sigue abriendo…',

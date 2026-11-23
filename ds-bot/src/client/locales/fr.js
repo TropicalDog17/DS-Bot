@@ -1,6 +1,8 @@
 // French (fr) localization for DS Bot client and DSH settings namespaces.
 
 export const FR = {
+  'Hide terminal': 'Masquer le terminal',
+  'This pane is closed.': 'Ce volet est fermé.',
   'A new reply is waiting': "Une nouvelle réponse vous attend",
   "Opening…": "Ouverture…",
   "Still opening…": "Toujours en cours d’ouverture…",

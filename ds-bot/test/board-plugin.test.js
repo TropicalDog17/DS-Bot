@@ -8,6 +8,8 @@ import { ROUTE, boardFileOf, install } from '../src/board/plugin.js'
 import { READ_ONLY, openBoardStore } from '../src/board/store.js'
 import { ACTIONS, ticketKey } from '../src/board/cards.js'
 import { KEPT_THINK_MAX, callAbout, keep, visibleThought } from '../src/board/live.js'
+import { createHerdr, herdrBinary, panesIn } from '../src/board/herdr.js'
+import { commandOf } from '../src/board/plugin.js'
 import { bridgeService, notesService, rosterService } from '../src/host/companions.js'
 import { homeLock } from '../src/host/home-lock.js'
 import { addCardThread, cardThreadSession, closeCardThread } from '../src/host/threads.js'
@@ -57,12 +59,12 @@ function fakeTeam() {
   const bridge = bridgeService(rt)
   // What turns.js does when a Bot's turn ends with an answer the user reads.
   const reply = heard => rt.botReplied(heard)
-  return { state, sent, requests, pushes, parts, live: rt.live, identity, roster: rosterService(rt), notes, bridge, bridged: () => rt.bridgedTools(), reply, cardNote: note => rt.cardNote(note) }
+  return { state, owners, sent, requests, pushes, parts, live: rt.live, identity, roster: rosterService(rt), notes, bridge, bridged: () => rt.bridgedTools(), reply, cardNote: note => rt.cardNote(note) }
 }
 
 // threads: false is a host without card threads, where a card's notes reach the Bot in
 // its own chat or its group and the card waits for the answer there.
-function host(t, { file, notes, now = Date.now, config = {}, threads = true } = {}) {
+function host(t, { file, notes, now = Date.now, config = {}, threads = true, herdr } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'ds-bot-board-plugin-'))
   t.after(() => rmSync(dir, { recursive: true, force: true }))
   const team = fakeTeam()
@@ -77,7 +79,7 @@ function host(t, { file, notes, now = Date.now, config = {}, threads = true } = 
   const emit = (name, ...args) => listeners[name]?.(...args)
   const sections = new Map()
   const systemPrompt = { section: (section) => { sections.set(section.name, section); return () => { sections.delete(section.name) } } }
-  const handle = install(ctx, { file: boardFile, adoptMs: -1, ...config }, { ...team, ...(notes ? { notes } : {}), tools, connection, systemPrompt, store: openBoardStore(boardFile), now })
+  const handle = install(ctx, { file: boardFile, adoptMs: -1, ...config }, { ...team, ...(notes ? { notes } : {}), ...(herdr ? { herdr } : {}), tools, connection, systemPrompt, store: openBoardStore(boardFile), now })
   t.after(() => handle.dispose())
   const tool = (args, sessionId = 'b') => registered.tools.find(entry => entry.name === 'board').execute(args, { agent: { id: sessionId } })
   const cards = () => Object.values(JSON.parse(readFileSync(boardFile, 'utf8')).cards)
@@ -791,4 +793,64 @@ test('the watchdog tells the user once about a stuck card, a card left in Review
   assert.deepEqual((await h.handle.watchOnce()).map(alert => alert.text), [`Writer · ${stuck.id}: "Stuck work" has not moved for 4h`])
   await h.settle()
   assert.equal(h.team.pushes.length, 4)
+})
+
+test('the herdr panes a shell command drives, and a pane read through the herdr CLI', async () => {
+  assert.deepEqual(panesIn('H=~/.local/bin/herdr; $H agent prompt w1:p1J "go" --wait; $H pane read w1D:p7 | tail; $H agent get w1:p1J'), ['w1:p1J', 'w1D:p7'])
+  assert.deepEqual(panesIn('for p in w1:p1C w1:p1F; do herdr pane close $p; done'), [])
+  assert.deepEqual(panesIn('echo w1:p1J'), [])
+  assert.equal(commandOf(JSON.stringify({ description: 'Send it', command: 'herdr agent prompt w1:p1T "x"' })), 'herdr agent prompt w1:p1T "x"')
+  assert.equal(commandOf({ cmd: 'ls' }), 'ls')
+  assert.equal(commandOf({ path: 'a' }), '')
+  assert.equal(herdrBinary({ herdr: '/opt/herdr' }), '/opt/herdr')
+  assert.equal(herdrBinary({}, '/nowhere'), 'herdr')
+
+  const calls = []
+  const answers = {
+    read: { ok: true, stdout: '● Running tests\nok  pkg/a  3.1s\n\n', stderr: '' },
+    get: { ok: true, stdout: JSON.stringify({ result: { pane: { agent_status: 'working', terminal_title_stripped: ' Integration tests ' } } }), stderr: '' },
+  }
+  const herdr = createHerdr({ binary: 'hd', exec: async (file, args) => { calls.push([file, ...args]); return answers[args[1]] } })
+  assert.deepEqual(await herdr.read('w1:p1T'), { text: '● Running tests\nok  pkg/a  3.1s', status: 'working', title: 'Integration tests' })
+  assert.deepEqual(calls, [['hd', 'pane', 'read', 'w1:p1T', '--source', 'recent-unwrapped', '--lines', '200'], ['hd', 'pane', 'get', 'w1:p1T']])
+  // Never a flag, never a shell word.
+  assert.deepEqual(await herdr.read('--help'), { error: 'Not a pane.' })
+  assert.deepEqual(await herdr.read('w1:p1 ; rm'), { error: 'Not a pane.' })
+  answers.read = { ok: false, stdout: JSON.stringify({ error: { code: 'pane_not_found', message: 'pane w1:p1T not found' } }), stderr: '' }
+  assert.deepEqual(await herdr.read('w1:p1T'), { error: 'pane w1:p1T not found', gone: true })
+  const missing = createHerdr({ exec: async () => ({ ok: false, stdout: '', stderr: '', missing: true }) })
+  assert.deepEqual(await missing.read('w1:p1T'), { error: 'herdr is not installed here.' })
+})
+
+test('a card keeps the herdr panes its Bot drives from the card thread, and the page reads only those', async (t) => {
+  const reads = []
+  const herdr = { read: async (pane) => { reads.push(pane); return { text: `tail of ${pane}`, status: 'working' } } }
+  const h = host(t, { herdr, now: () => 5000 })
+  await h.tool({ action: 'open', title: 'Speed up tests', assignee: 'Writer', brief: 'Under 3 minutes.' }, 'a')
+  const [card] = h.cards()
+  const thread = `ct-${card.id}`
+  h.team.owners[thread] = { botId: 'b' }
+  // The card's thread is looked up before the pane is saved.
+  const flush = async () => { await new Promise(resolve => setTimeout(resolve, 0)); await h.settle() }
+  const call = (sessionId, command) => h.emit('session/event', { id: sessionId }, { type: 'tool/call', data: { callId: `k${reads.length}`, name: 'bash', arguments: JSON.stringify({ command }) } })
+
+  call(thread, 'H=~/.local/bin/herdr; $H agent prompt w1:p1T "Find the slow tests" --wait --timeout 1800000')
+  await flush()
+  assert.deepEqual(h.cards()[0].panes, [{ id: 'w1:p1T', at: 5000 }])
+  // The same pane again changes nothing; a command elsewhere is not the card's.
+  call(thread, 'herdr agent get w1:p1T')
+  call('b', 'herdr agent prompt w1:p9 "other work"')
+  await flush()
+  assert.deepEqual(h.cards()[0].panes.map(entry => entry.id), ['w1:p1T'])
+  assert.match(await h.tool({ action: 'show' }, 'a'), /herdr pane: w1:p1T/)
+
+  assert.deepEqual((await h.post('pane', { id: card.id, pane: 'w1:p1T' })).value, { pane: 'w1:p1T', at: 5000, text: 'tail of w1:p1T', status: 'working' })
+  assert.deepEqual(await h.post('pane', { id: card.id, pane: 'w1:p9' }), { ok: false, error: { code: 'board/refused', message: 'That pane is not on the card.' } })
+  assert.equal((await h.post('pane', { id: 'c_nope', pane: 'w1:p1T' })).ok, false)
+  assert.deepEqual(reads, ['w1:p1T'])
+
+  // From anywhere else, the Bot names the pane; the newest is last, four at most.
+  assert.match(await h.tool({ action: 'update', id: card.id, pane: '-rf' }, 'b'), /^pane is a herdr pane id/)
+  for (const pane of ['w1:p2', 'w1:p3', 'w1:p4', 'w1:p1T']) await h.tool({ action: 'update', id: card.id, pane }, 'b')
+  assert.deepEqual(h.cards()[0].panes.map(entry => entry.id), ['w1:p2', 'w1:p3', 'w1:p4', 'w1:p1T'])
 })
