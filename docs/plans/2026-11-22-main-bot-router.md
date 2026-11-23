@@ -146,6 +146,22 @@ source.
   every member answers. `@name` goes to that Bot. A group without the Main Bot keeps its
   admin first.
 - The group Goal, `group_task` and `group_todo` are removed.
+- Every card a Bot holds has a card thread, including one it opens for itself: `board open`
+  needs a brief for any Bot assignee, and the opening thread is told to stop and tell the
+  user in one line. Without card threads the Bot does the work where it is. A card for the
+  user has no thread.
+- A card that is open without a card thread (opened before card threads, or its thread
+  failed to start) moves into one a minute after start (`adoptOnce` in
+  `src/board/plugin.js`). Its brief is built by code, with no model call: the card's brief,
+  status, progress, links and latest three notes, and where its earlier work is (the group
+  or the Bot's own chat) to search with `read_group_chat` or `read_own_chat`. A waiting card
+  (Review, Blocked) only confirms its state. `dsBotNotes.cardThread` tells whether a card
+  has an open thread.
+- The Main Bot's board rules: a follow-up about a card goes through `board note` to the card
+  thread, never `@name` in a group or `message_bot`, also for a card that came from a group.
+  A status question is answered from the card's status and progress first; only when that
+  is not enough does a note go to the card, and the Main Bot does not wait for the answer.
+  A Main Bot's note shows in the card conversation under its name.
 
 ### Evaluation
 
@@ -198,7 +214,5 @@ This note changes earlier decisions; each needs its note updated in the same mer
 - Routing quality depends on the Bots' role descriptions; vague roles route badly.
 - One Main Bot is one queue: a burst of requests is batched into its next turn, not handled in
   parallel.
-- A card a Bot opens for itself stays in the thread where it was opened; only a card for
-  another Bot starts a card thread.
 - The live metrics count the Sessions of the Bot that is Main now; a team that moved the role
   sees the old Main Bot's history under the new one.

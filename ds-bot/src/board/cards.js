@@ -28,6 +28,9 @@ export const QUESTION_MAX = 1000
 export const OPTION_MAX = 80
 export const OPTIONS_MIN = 2
 export const OPTIONS_MAX = 6
+// A card moved to its own conversation brings this much of its latest conversation along.
+const ADOPT_NOTES = 3
+const ADOPT_NOTE_MAX = 300
 
 export const oneLine = (text, max) => String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, max)
 // A Bot's reply keeps its lines; runs of blank lines become one.
@@ -151,18 +154,44 @@ export function createBoard({ roster, now = Date.now }) {
 
   // A card handed to a Bot starts that Bot's card thread with this brief (dsBotNotes
   // startCard); a finished card closes it.
+  const cardRules = card => `This conversation is for this card only. Keep it moving with board update (id ${card.id}); when you need the user to decide, board ask; finish with board complete and a one-line result, or board cancel with the reason.`
   const startOf = (card, from) => ({
     botId: card.assignee,
     cardId: card.id,
     title: card.title,
     text: [
-      `[Card ${label(card)} · "${card.title}"] from ${from === USER ? 'the user' : nameOf(from)}.`,
+      `[Card ${label(card)} · "${card.title}"] ${from === card.assignee ? 'opened by you' : `from ${from === USER ? 'the user' : nameOf(from)}`}.`,
       '',
       card.brief ?? card.title,
       '',
-      `This conversation is for this card only. Keep it moving with board update (id ${card.id}); when you need the user to decide, board ask; finish with board complete and a one-line result, or board cancel with the reason.`,
+      cardRules(card),
     ].join('\n'),
   })
+  // A card that was open before it had a conversation of its own: its earlier work is
+  // where it was opened, so the brief says where to read it rather than retelling it.
+  const adoptOf = (card) => {
+    const group = card.roomId === undefined ? undefined : roster.group(card.roomId)
+    const where = group === undefined ? 'your own chat (read_own_chat)' : `the group "${group.name}" (read_group_chat)`
+    const latest = (card.notes ?? []).slice(-ADOPT_NOTES).map(note => `- ${nameOf(note.by)}: ${oneLine(note.text, ADOPT_NOTE_MAX)}`)
+    const links = (card.links ?? []).map(link => link.url)
+    return {
+      botId: card.assignee,
+      cardId: card.id,
+      title: card.title,
+      text: [
+        `[Card ${label(card)} · "${card.title}"] moved to a conversation of its own.`,
+        '',
+        card.brief ?? card.title,
+        '',
+        [`Status: ${COLUMN[card.status] ?? card.status}.`, card.progress ? `Progress: ${card.progress}.` : '', links.length > 0 ? `Links: ${links.join(' ')}` : ''].filter(Boolean).join(' '),
+        ...(latest.length > 0 ? ['', 'Latest on the card:', ...latest] : []),
+        '',
+        `Its earlier work is in ${where}: search it for ${card.key ?? card.id} and read what you need before you act, and do not redo what is done. If the card is waiting (Review or Blocked), say its state in one line and stop.`,
+        '',
+        cardRules(card),
+      ].join('\n'),
+    }
+  }
   const closeOf = card => (card.assignee !== USER && roster.bot(card.assignee) !== undefined ? { close: { botId: card.assignee, cardId: card.id } } : {})
 
   const botActions = {
@@ -182,8 +211,12 @@ export function createBoard({ roster, now = Date.now }) {
       const status = args.status ?? 'active'
       if (!BOT_STATUSES.includes(status)) return { error: `status is one of ${BOT_STATUSES.join(', ')}.` }
       const brief = replyText(args.brief, BRIEF_MAX)
-      const handed = assignee !== self && assignee !== USER
+      // Every card a Bot holds runs in a card thread of its own, which cannot see this
+      // conversation, so the brief carries everything, also for a card the Bot keeps.
+      const forBot = assignee !== USER
+      const handed = forBot && assignee !== self
       if (handed && brief === '') return { error: `A card for ${nameOf(assignee)} needs a brief: everything it needs to do the work, since it cannot see this conversation.` }
+      if (forBot && brief === '') return { error: 'A card needs a brief: the goal, the context, the limits and what done looks like. Its work runs in a conversation of its own that cannot see this one.' }
       const ticket = ticketFields(cards, args)
       if (ticket.error !== undefined) return ticket
       const at = now()
@@ -197,8 +230,8 @@ export function createBoard({ roster, now = Date.now }) {
       cards[card.id] = card
       return {
         card,
-        said: `Opened ${label(card)}: ${card.title} (${COLUMN[status]}, ${nameOf(assignee)}).${handed ? ` The card reaches ${nameOf(assignee)} by itself; do not also message it.` : ''}`,
-        ...(handed ? { start: startOf(card, self) } : {}),
+        said: `Opened ${label(card)}: ${card.title} (${COLUMN[status]}, ${nameOf(assignee)}).${handed ? ` The card reaches ${nameOf(assignee)} by itself; do not also message it.` : forBot ? ' Its work runs in a conversation of its own that starts now: do not do it here. Tell the user in one line that you took it, with the card id.' : ''}`,
+        ...(forBot ? { start: startOf(card, self) } : {}),
       }
     },
     update(cards, self, _roomId, args) {
@@ -424,5 +457,5 @@ export function createBoard({ roster, now = Date.now }) {
     return { card: answered[0] }
   }
 
-  return { show, line, label, bot: (cards, action, self, roomId, args) => botActions[action](cards, self, roomId, args), user, mirror }
+  return { show, line, label, adoptOf, bot: (cards, action, self, roomId, args) => botActions[action](cards, self, roomId, args), user, mirror }
 }
