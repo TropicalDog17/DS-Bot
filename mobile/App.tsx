@@ -1,10 +1,9 @@
 import 'react-native-gesture-handler'
 import { StatusBar } from 'expo-status-bar'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, Linking, Text, useColorScheme, View } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
-import { DefaultTheme, NavigationContainer, type NavigationState } from '@react-navigation/native'
-import { setLang } from './src/ui/i18n.ts'
+import { DefaultTheme, NavigationContainer } from '@react-navigation/native'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { loadComputer, loadIdentity, onPrefsChange, readPrefs, setActiveComputer, type PhoneIdentity, type SavedComputer } from './src/store.ts'
 import { ComputersCtx, type ComputerActions } from './src/nav/computers.ts'
@@ -28,21 +27,6 @@ function useDark(): boolean {
   return override === 'dark' || (override !== 'light' && system)
 }
 
-// The phone's language pref; undefined until read, so the first frame is not in the wrong language.
-function useLang(): string | undefined {
-  const [lang, setLangState] = useState<string | undefined>(undefined)
-  useEffect(() => {
-    const apply = (prefs: Record<string, string>) => {
-      const next = prefs.lang === 'zh' || prefs.lang === 'en' ? prefs.lang : 'system'
-      setLang(next)
-      setLangState(next)
-    }
-    void readPrefs().then(apply)
-    return onPrefsChange(() => void readPrefs().then(apply))
-  }, [])
-  return lang
-}
-
 function ThemeProvider({ children }: { children: React.ReactNode }) {
   const dark = useDark()
   const { team } = useTeam()
@@ -52,11 +36,8 @@ function ThemeProvider({ children }: { children: React.ReactNode }) {
 
 // The navigator lives inside the palette provider so its container theme can
 // follow the computer's theme instead of flashing the default white.
-function ThemedShell({ lang }: { lang?: string }) {
+function ThemedShell() {
   const dark = useDark()
-  // A language change re-mounts the navigator so every screen reads the new
-  // strings; the saved navigation state keeps the user where they were.
-  const navState = useRef<NavigationState | undefined>(undefined)
   const { team } = useTeam()
   const value = useMemo(() => ({ dark, p: palette(dark, team?.prefs?.theme, team?.prefs?.accent) }), [dark, team?.prefs?.theme, team?.prefs?.accent])
   const navTheme = useMemo(() => ({
@@ -73,7 +54,7 @@ function ThemedShell({ lang }: { lang?: string }) {
   }), [dark, value])
   return (
     <ThemeContext.Provider value={value}>
-      <NavigationContainer key={lang} theme={navTheme} initialState={navState.current} onStateChange={state => { navState.current = state }}>
+      <NavigationContainer theme={navTheme}>
         <ErrorBoundary>
           <ShellB />
         </ErrorBoundary>
@@ -82,10 +63,10 @@ function ThemedShell({ lang }: { lang?: string }) {
   )
 }
 
-function Linked({ computer, identity, lang }: { computer: SavedComputer; identity: PhoneIdentity; lang?: string }) {
+function Linked({ computer, identity }: { computer: SavedComputer; identity: PhoneIdentity }) {
   return (
     <TeamProvider computer={computer} identity={identity}>
-      <ThemedShell lang={lang} />
+      <ThemedShell />
     </TeamProvider>
   )
 }
@@ -98,7 +79,6 @@ function Boot() {
   const [adding, setAdding] = useState(false)
   const [offer, setOffer] = useState<string | null>(null)
   const [seenReady, setSeenReady] = useState(false)
-  const lang = useLang()
 
   useEffect(() => {
     void loadSeen().finally(() => setSeenReady(true))
@@ -123,13 +103,13 @@ function Boot() {
   }), [])
   const paired = useCallback((next: SavedComputer) => { setAdding(false); setOffer(null); setComputer(next) }, [])
 
-  if (DEMO && lang !== undefined && seenReady) {
-    return <ComputersCtx.Provider value={actions}><DemoProvider><ThemedShell lang={lang} /></DemoProvider></ComputersCtx.Provider>
+  if (DEMO && seenReady) {
+    return <ComputersCtx.Provider value={actions}><DemoProvider><ThemedShell /></DemoProvider></ComputersCtx.Provider>
   }
   if (bootError !== null) return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: p.main }}><Text style={{ color: p.danger }}>{bootError}</Text></View>
-  if (identity === null || computer === undefined || lang === undefined || !seenReady) return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: p.main }}><ActivityIndicator color={p.accent} /></View>
+  if (identity === null || computer === undefined || !seenReady) return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: p.main }}><ActivityIndicator color={p.accent} /></View>
   if (computer === null || adding) return <ThemeProvider><Pair identity={identity} offer={offer} onPaired={paired} onCancel={computer !== null ? () => { setAdding(false); setOffer(null) } : undefined} /></ThemeProvider>
-  return <ComputersCtx.Provider value={actions}><Linked computer={computer} identity={identity} lang={lang} /></ComputersCtx.Provider>
+  return <ComputersCtx.Provider value={actions}><Linked computer={computer} identity={identity} /></ComputersCtx.Provider>
 }
 
 export default function App() {
