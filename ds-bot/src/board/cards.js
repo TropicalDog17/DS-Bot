@@ -221,6 +221,20 @@ export function createBoard({ roster, now = Date.now }) {
     }
   }
   const closeOf = card => (card.assignee !== USER && roster.bot(card.assignee) !== undefined ? { close: { botId: card.assignee, cardId: card.id } } : {})
+  // The Bot that opened a card hears how it ended where it opened it (its own chat or the
+  // group), since the user asked there and the work ran in the card's own thread.
+  const reportOf = (card, what) => {
+    if (card.openedBy === USER || roster.bot(card.openedBy) === undefined) return {}
+    const link = card.links?.at(-1)?.url
+    return {
+      report: {
+        botId: card.openedBy,
+        cardId: card.id,
+        ...(card.roomId === undefined ? {} : { roomId: card.roomId }),
+        text: [`Card ${label(card)} "${card.title}" ${what}${link === undefined ? '' : ` (${link})`}`, `Tell the user here in a line or two how it ended, with the card id; the whole work stays on the card.`].join('\n'),
+      },
+    }
+  }
 
   const botActions = {
     open(cards, self, roomId, args) {
@@ -362,8 +376,9 @@ export function createBoard({ roster, now = Date.now }) {
       card.result = result
       card.doneAt = now()
       dropNeed(card)
+      logStep(card, self)
       touch(card)
-      return { card, said: `Finished ${label(card)}: "${result}"`, ...closeOf(card) }
+      return { card, said: `Finished ${label(card)}: "${result}"`, ...closeOf(card), ...reportOf(card, `is done (${nameOf(self)}): ${result}`) }
     },
     cancel(cards, self, _roomId, args) {
       const card = pick(cards, args.id, self)
@@ -374,8 +389,9 @@ export function createBoard({ roster, now = Date.now }) {
       const why = oneLine(args.reason, REASON_MAX)
       if (why !== '') card.reason = why
       dropNeed(card)
+      logStep(card, self)
       touch(card)
-      return { card, said: `Cancelled ${label(card)}.`, ...closeOf(card) }
+      return { card, said: `Cancelled ${label(card)}.`, ...closeOf(card), ...reportOf(card, `was cancelled (${nameOf(self)})${why === '' ? '' : `: ${why}`}`) }
     },
   }
 

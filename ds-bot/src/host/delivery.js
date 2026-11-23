@@ -37,6 +37,7 @@ export function install(rt) {
     // the header stays neutral about who changed the profile.
     if (role === 'update') return '[Your profile was updated — follow the latest version]'
     if (role === 'secret') return '[Secret card]'
+    if (role === 'card') return `[${note} · tell the user here]`
     if (role === 'approval') return `[${fromName} waits for the user's approval · tell the user here]`
     if (audience === 'user') return `[Message from ${fromName} · the user sees your reply here]`
     return `[Message from ${fromName}]`
