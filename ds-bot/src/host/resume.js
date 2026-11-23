@@ -5,6 +5,11 @@
 // running Bot turn and each message it delivers until a turn takes it up, in
 // inflight.json; what is still noted at the next start is picked up once.
 //
+// A Bot's background job (a command it started with run_in_background) dies with DSH,
+// and DSH forgets it: the Bot is never woken for it and would wait for good. Each one
+// is noted until it settles; one a shutdown stopped is named to its Bot at the next
+// start, so it can check the work and wait again.
+//
 // A turn that ends while DS Bot is not watching it (the plugin reloaded, DSH went on)
 // is settled from the Session's durable log: an answer that was produced goes to the Bot
 // that waits for it, and an outcome that cannot be read is said to be unknown. The
@@ -26,6 +31,25 @@ export const resumeText = record => [
   record.approval ? `You were waiting for the user's approval to run ${record.approval.tool || 'a tool'}${record.approval.reason ? ` (${record.approval.reason})` : ''}; that request is gone, so ask again if you still need it.` : '',
   'Check what is already done (files, commands, messages) before you repeat anything, then finish the task and give your reply.',
 ].filter(Boolean).join(' ')
+
+// What a Bot is told about the background jobs a restart stopped in one of its Sessions.
+export const LABEL_MAX = 300
+export const jobsText = jobs => [
+  jobs.length === 1
+    ? 'DeepSeek Harness restarted and stopped your background job, so it will not finish or wake you:'
+    : `DeepSeek Harness restarted and stopped ${jobs.length} of your background jobs, so they will not finish or wake you:`,
+  ...jobs.map(job => `- ${job.kind ?? 'job'} started ${new Date(job.since).toISOString()}: ${clip(job.label)}`),
+  'What it ran or waited for (a herdr pane, a test run) may still be going or already done. Check that first, then start the wait again if you still need it, or go on with the work.',
+].join('\n')
+const clip = label => (String(label ?? '').length > LABEL_MAX ? `${String(label).slice(0, LABEL_MAX - 1)}…` : String(label ?? ''))
+
+// A job's fate in a Session's durable log: 'stopped' by a shutdown, 'settled' any
+// other way (its completion reached the Bot), or undefined while it still runs.
+export function jobFate(events, jobId) {
+  const settled = events.findLast(event => event?.type === 'job/settled' && event.data?.jobId === jobId)
+  if (settled === undefined) return undefined
+  return settled.data.cause === 'teardown' ? 'stopped' : 'settled'
+}
 
 // The turns of a Session's durable log, each with the exchanges it took up, what it
 // said and how it ended.
@@ -107,9 +131,9 @@ const readNotes = (file) => {
   try {
     const parsed = JSON.parse(readFileSync(file, 'utf8'))
     const object = value => (value !== null && typeof value === 'object' && !Array.isArray(value) ? value : {})
-    return { turns: object(parsed?.turns), queued: object(parsed?.queued) }
+    return { turns: object(parsed?.turns), queued: object(parsed?.queued), jobs: object(parsed?.jobs) }
   } catch {
-    return { turns: {}, queued: {} }
+    return { turns: {}, queued: {}, jobs: {} }
   }
 }
 
@@ -125,6 +149,8 @@ export function install(rt) {
   // A new delivery can persist before recovery runs; it must keep the old queue.
   /** @type {Record<string, {at:number, args:any}[]>} deliveries no turn has taken up, by Session */
   let queued = interrupted.queued
+  /** @type {Record<string, {sessionId:string, botId:string, kind?:string, label?:string, since:number}>} background jobs still running, by job id */
+  let jobs = interrupted.jobs
   let writing = Promise.resolve()
   let stopped = false
   let latest
@@ -132,7 +158,7 @@ export function install(rt) {
   const persist = () => {
     // Only the host that saves the team runs its work again.
     if (stopped || rt.readOnly() !== undefined) return
-    latest = JSON.stringify({ turns, queued })
+    latest = JSON.stringify({ turns, queued, jobs })
     // One write waits at a time and takes the latest notes, so a busy round does not
     // write the file once per change.
     if (due) return
@@ -213,6 +239,22 @@ export function install(rt) {
     }
     if (!rt.isBotSession(id)) return
     switch (event.type) {
+      case 'job/registered': {
+        const data = event.data ?? {}
+        if (typeof data.jobId !== 'string') break
+        jobs = { ...jobs, [data.jobId]: { sessionId: id, botId: rt.selfOf(id), kind: data.kind, label: clip(data.label), since: data.startedAt ?? event.time ?? Date.now() } }
+        persist()
+        break
+      }
+      case 'job/settled': {
+        // A job a shutdown stopped stays noted: the next start names it to its Bot.
+        const jobId = event.data?.jobId
+        if (event.data?.cause === 'teardown' || jobs[jobId] === undefined) break
+        jobs = { ...jobs }
+        delete jobs[jobId]
+        persist()
+        break
+      }
       case 'turn/start': {
         const owner = rt.groupOwners.get(id)
         const botId = owner?.botId ?? rt.chatOwners.get(id)
@@ -243,10 +285,10 @@ export function install(rt) {
   rt.noteApproval = (sessionId, approval) => update(sessionId, record => (record === undefined ? record
     : approval === undefined ? (({ approval: _, ...rest }) => rest)(record) : { ...record, approval }))
 
-  async function resumeTurn(sessionId, record) {
+  async function resumeTurn(sessionId, record, stopped = []) {
     const bot = rt.botOf(record.botId)
     if (bot === undefined) return
-    const text = resumeText(record)
+    const text = stopped.length === 0 ? resumeText(record) : `${resumeText(record)}\n\n${jobsText(stopped)}`
     if (record.roomId !== undefined) {
       const room = rt.roomOf(record.roomId)
       if (room === undefined || !room.members.includes(bot.id)) return
@@ -417,11 +459,40 @@ export function install(rt) {
     answerSender(rt, sessionId, asker, text, long)
   }
 
+  // The background jobs the last run noted, by Session, split by what became of them:
+  // one still running (only DS Bot restarted) stays noted, one that settled is
+  // forgotten, and one a shutdown stopped, or whose log cannot be read, is returned.
+  async function stoppedJobs(noted) {
+    const bySession = new Map()
+    const forget = (jobId) => {
+      jobs = { ...jobs }
+      delete jobs[jobId]
+    }
+    for (const [jobId, job] of Object.entries(noted)) {
+      if (rt.botOf(job?.botId) === undefined || typeof job.sessionId !== 'string') forget(jobId)
+      else bySession.set(job.sessionId, [...(bySession.get(job.sessionId) ?? []), { jobId, ...job }])
+    }
+    const stopped = new Map()
+    for (const [sessionId, list] of bySession) {
+      const events = await logOf(sessionId)
+      const lost = []
+      for (const job of list) {
+        const fate = events === undefined ? 'stopped' : jobFate(events, job.jobId)
+        if (fate === undefined) continue
+        forget(job.jobId)
+        if (fate === 'stopped') lost.push(job)
+      }
+      if (lost.length > 0) stopped.set(sessionId, lost)
+    }
+    persist()
+    return stopped
+  }
+
   async function resumeAll() {
     await rt.load()
     if (rt.readOnly() !== undefined) return
-    const { turns: noted, queued: dropped } = interrupted
-    interrupted = { turns: {}, queued: {} }
+    const { turns: noted, queued: dropped, jobs: noteJobs } = interrupted
+    interrupted = { turns: {}, queued: {}, jobs: {} }
     // What the last run still had on the way is noted again first, under the
     // Session it would go to now: nothing is cleared before it is handed over.
     // A Bot that is gone takes its notes with it; what a turn already read here
@@ -457,15 +528,31 @@ export function install(rt) {
       await resendQueued(sessionId, list).catch(error => rt.warn('ds-bot: sending again what %s was sent failed: %s', sessionId, error))
     }
     taken = undefined
+    const stopped = await stoppedJobs(noteJobs).catch((error) => {
+      rt.warn('ds-bot: reading the background jobs a restart stopped failed: %s', error)
+      return new Map()
+    })
     for (const [sessionId, record] of cut) {
-      await resumeTurn(sessionId, record).catch(error => rt.warn('ds-bot: picking up the turn of %s failed: %s', sessionId, error))
+      await resumeTurn(sessionId, record, stopped.get(sessionId)).catch(error => rt.warn('ds-bot: picking up the turn of %s failed: %s', sessionId, error))
+      stopped.delete(sessionId)
+    }
+    // A Session whose turn had ended is told on its own; the job's Bot goes on there.
+    for (const [sessionId, list] of stopped) {
+      const botId = list[0].botId
+      const room = rt.roomOf(rt.groupOwners.get(sessionId)?.roomId)
+      const where = room !== undefined
+        ? (room.members.includes(botId) ? { sessionId: room.sessions?.[botId] ?? sessionId, role: 'room', roomId: room.id, note: 'picking up after a restart' } : undefined)
+        : { ...(rt.selfOf(sessionId) === botId && rt.isBotSession(sessionId) ? { sessionId } : {}), role: 'resume' }
+      if (where === undefined) continue
+      await rt.deliver({ toId: botId, ...where, resumed: true, text: jobsText(list) })
+        .catch(error => rt.warn('ds-bot: telling %s about its stopped jobs failed: %s', sessionId, error))
     }
     // What a group's members were asked for and will not pick up is settled now.
     await rt.settleRoomBatches?.()
   }
 
   ctx.effect(() => {
-    const pending = Object.keys(interrupted.turns).length > 0 || Object.keys(interrupted.queued).length > 0
+    const pending = Object.keys(interrupted.turns).length > 0 || Object.keys(interrupted.queued).length > 0 || Object.keys(interrupted.jobs).length > 0
     // With nothing to pick up, the group batches a restart left are settled at once.
     const timer = pending
       ? setTimeout(() => void resumeAll().catch(error => rt.warn('ds-bot: picking up interrupted work failed: %s', error)), RESUME_DELAY_MS)
