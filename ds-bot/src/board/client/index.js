@@ -79,7 +79,7 @@ export function boardWatch(pages, { first, call, openMs = POLL_MS, liveMs = LIVE
   const source = createSource(first)
   let open = 0
   let focus = null
-  const waits = view => Object.values(view?.cards ?? {}).some(card => card?.awaiting !== undefined)
+  const waits = view => Object.values(view?.cards ?? {}).some(card => card?.awaiting !== undefined) || Object.keys(view?.live ?? {}).length > 0
   let waiting = waits(first)
   const told = new Set(unreadOf(first).map(entry => entry.key))
   const take = (view) => {

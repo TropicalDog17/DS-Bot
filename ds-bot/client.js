@@ -28797,12 +28797,12 @@ function TraceFold({ trace, open }) {
     (0, import_react73.createElement)(Trace, { steps, open })
   );
 }
-function Thread({ notes, roster, awaiting, live, pick: pick2, busy }) {
+function Thread({ notes, roster, awaiting, worker, live, pick: pick2, busy }) {
   const cards = roster.board?.cards ?? {};
   const asked = notes.findLastIndex((note) => Array.isArray(note.options) && note.options.length > 0);
   const answer = asked < 0 ? void 0 : notes.slice(asked + 1).find((note) => note.by === void 0 || note.by === USER);
-  const waiter = awaiting?.botId === void 0 ? void 0 : roster.byId?.[awaiting.botId];
   const working = Array.isArray(live?.steps) && live.steps.length > 0 ? live.steps : void 0;
+  const waiter = roster.byId?.[awaiting?.botId ?? (working ? worker : void 0)];
   const open = roster.board?.trace === "all";
   return (0, import_react73.createElement)(
     "ol",
@@ -28933,8 +28933,8 @@ function CardDetail({ card, roster, actions, live, onOpenCard }) {
   const [error, setError] = (0, import_react73.useState)("");
   const scroller = (0, import_react73.useRef)(null);
   const said = (card.notes ?? []).length;
-  const waiting = card.awaiting !== void 0;
-  const steps = waiting ? live?.steps?.length ?? 0 : 0;
+  const steps = live?.steps?.length ?? 0;
+  const waiting = card.awaiting !== void 0 || steps > 0;
   (0, import_react73.useEffect)(() => {
     const node = scroller.current;
     if (node && typeof node.scrollTo === "function") node.scrollTo({ top: node.scrollHeight });
@@ -29042,6 +29042,7 @@ function CardDetail({ card, roster, actions, live, onOpenCard }) {
         notes,
         roster,
         awaiting: open ? card.awaiting : void 0,
+        worker: card.assignee,
         live: open ? live : void 0,
         busy,
         pick: open ? (option) => run2(actions.boardNote(card.id, option)) : void 0
@@ -29448,7 +29449,7 @@ function boardWatch(pages, { first, call: call2, openMs = POLL_MS3, liveMs = LIV
   const source = createSource(first);
   let open = 0;
   let focus = null;
-  const waits = (view) => Object.values(view?.cards ?? {}).some((card) => card?.awaiting !== void 0);
+  const waits = (view) => Object.values(view?.cards ?? {}).some((card) => card?.awaiting !== void 0) || Object.keys(view?.live ?? {}).length > 0;
   let waiting = waits(first);
   const told = new Set(unreadOf(first).map((entry) => entry.key));
   const take = (view) => {
