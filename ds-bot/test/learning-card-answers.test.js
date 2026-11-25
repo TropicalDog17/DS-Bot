@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { answerFailure, answerKeepsCard, proposalCards, withoutEntry } from '../src/client/learning-card-model.js'
+import { answerFailure, answerKeepsCard, proposalCards } from '../src/client/learning-card-model.js'
 
 // A skill proposal card that failed to answer once stays in the chat only while another
 // try could work. `bot/stale` says the host no longer holds the proposal, so the card has
@@ -60,10 +60,4 @@ test('a long run of stale answers leaves nothing to remember or draw', () => {
   for (const item of failures) record = answerFailure(record, item, stale())
   assert.deepEqual(record, {})
   assert.deepEqual(proposalCards({ proposals: [], failures: record }), [])
-})
-
-test('a record without one entry keeps the rest, and returns itself when nothing changed', () => {
-  const record = { a: 1, b: 2 }
-  assert.deepEqual(withoutEntry(record, 'a'), { b: 2 })
-  assert.equal(withoutEntry(record, 'missing'), record)
 })

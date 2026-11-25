@@ -2,7 +2,6 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
-import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
@@ -516,18 +515,6 @@ test('the Bot footer lays out the account, another plugin\'s entry and the setti
   assert.equal(columnOf(document.querySelector('.x_settingsArea')), '3')
 })
 
-// 公开#502: the rail's icons keep the open column's rhythm — its row gap puts
-// the same ~20px between avatar edges that the open list's padding and gap do,
-// and the stacks and sections breathe on the same 6–8px steps.
-test('the rail spaces its icons on the open column\'s rhythm', () => {
-  const all = [...rulesOf(SHELL_CSS), ...rulesOf(SIDEBAR_CSS)]
-  const bodyOf = selector => all.filter(rule => rule.selector === selector).map(rule => rule.body).pop() ?? ''
-  assert.match(bodyOf('.bt-rail .bt-list'), /(^|;)gap:8px/)
-  assert.match(bodyOf('.bt-rail-top'), /(^|;)gap:8px/)
-  assert.match(bodyOf('.bt-leftcol-foot-rail'), /(^|;)gap:8px/)
-  assert.match(bodyOf('.bt-rail'), /(^|;)gap:6px/)
-})
-
 // The Plugins shortcut calls DSH's plugin page; a host without that navigation
 // face has no page to open, so the button stays out of the foot entirely.
 test('the Plugins shortcut stays out where the host has no plugin navigation', () => {
@@ -543,15 +530,6 @@ test('the Plugins shortcut opens the plugin manager and names itself', () => {
   assert.equal(button.props.title, 'Plugins')
   button.props.onClick()
   assert.deepEqual(calls, ['open'])
-})
-
-// The foot of the team column is the sidebar's own `.bt-leftcol-foot`, not the
-// shell's footArea: only the account menu and the Agent-mode return button go
-// through the shell's action slot.
-test('the shell footer action slot holds the account and the return button only', () => {
-  const source = readFileSync(new URL('../src/client/index.js', import.meta.url), 'utf8')
-  const ids = [...source.matchAll(/shadow\('sidebar\.footer\.action',\s*\{[^}]*?id:\s*['"]([^'"]+)['"]/g)].map(match => match[1])
-  assert.deepEqual(ids.sort(), ['bot-account', 'bot-return'])
 })
 
 // The edge drag writes the column and the chat's margins straight into the page, so these

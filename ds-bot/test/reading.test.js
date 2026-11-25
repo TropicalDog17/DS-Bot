@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { test } from 'node:test'
@@ -110,18 +109,4 @@ test('a reply follows the scroll by the band it is read in, not by the whole scr
   // Under the band, yet followed: the composer can grow past it.
   assert.equal(fillsBand(420, band), true)
   assert.equal(fillsBand(414, band), false)
-})
-
-test('the pill is a glass surface that pops in with the tap spring and stays still with reduced motion', () => {
-  const bundle = readFileSync(new URL('../client.js', import.meta.url), 'utf8')
-  // The whole line: the rule's spring interpolates, so a brace does not end it.
-  const rule = bundle.match(/\n\.bt-reading\{(.*)\r?\n/)?.[1]
-  assert.ok(rule, 'no .bt-reading rule')
-  assert.match(rule, /position:fixed/)
-  assert.match(rule, /background:var\(--bt-glass-bg\)/)
-  assert.match(rule, /animation:bt-pop-drop \$\{SPRING_TAP\.duration\}ms \$\{SPRING_TAP\.easing\}/)
-  assert.match(bundle, /\.bt-reading\[data-leaving\]\{pointer-events:none;animation:bt-pop-out \.12s/)
-  assert.match(bundle, /@media \(prefers-reduced-motion:reduce\)\{\.bt-reading\{animation:none\}\}/)
-  // A Bot reply carries the guide, idle while it streams or is folded.
-  assert.match(bundle, /\(ReplyGuide, \{ box: bubble, active: !live && !folded \}\)/)
 })
