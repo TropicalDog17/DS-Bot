@@ -74,6 +74,8 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
   const board = createBoard({ roster, now })
   const live = createLive({ identity, now })
   let disposed = false
+  const cardOfSession = sessionId => identity.ownerOfSession(sessionId)?.cardId
+  const delivering = new Map()
 
   const tool = defineTool({
     name: 'board',
@@ -117,8 +119,7 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
   // A close can remove the thread a report is restricted to, so resolve it first.
   async function run(card, effects, { requestId, waitForPush = false } = {}) {
     const onlyFrom = effects.find(effect => effect.kind === 'report')?.onlyFrom
-    const thread = onlyFrom === undefined ? undefined : await Promise.resolve()
-      .then(() => notes.cardThread?.({ botId: onlyFrom.botId, cardId: card.id })).catch(() => undefined)
+    const fromCard = onlyFrom !== undefined && cardOfSession(onlyFrom.sessionId) === card.id
     for (const effect of effects) {
       const { payload } = effect
       switch (effect.kind) {
@@ -127,8 +128,8 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
           if (started !== undefined && started.error === undefined) break
           if (effect.adopt) return { error: started?.error ?? 'no card threads' }
           if (!effect.fallback) return { said: 'The card could not get a conversation of its own, so do its work here after all.' }
-          const { botId, cardId, text } = payload
-          const sent = await Promise.resolve().then(() => notes.deliver({ botId, cardId, text })).catch(failure)
+          const { botId, text } = payload
+          const sent = await Promise.resolve().then(() => notes.deliver({ botId, text })).catch(failure)
           if (sent?.error !== undefined) return { said: `The card is open, but ${nameOf(botId)} did not get it: ${sent.error}` }
           break
         }
@@ -136,21 +137,22 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
           await Promise.resolve().then(() => notes.closeCard?.(payload)).catch(error => warn('ds-bot-board: closing the thread of %s failed: %s', card.id, error))
           break
         case 'report':
-          if (onlyFrom === undefined || (thread !== undefined && thread === onlyFrom.sessionId)) {
+          if (onlyFrom === undefined || fromCard) {
             await Promise.resolve().then(() => notes.cardEnded?.(payload)).catch(error => warn('ds-bot-board: reporting %s back failed: %s', card.id, error))
           }
           break
         case 'deliver': {
-          const since = now()
-          const sent = await Promise.resolve().then(() => notes.deliver({ ...payload, ...(requestId === undefined ? {} : { requestId }) })).catch(failure)
-          if (sent?.error !== undefined) {
-            const message = `Saved on the card, but not sent: ${sent.error}`
-            return { error: message, said: message }
+          const pending = delivering.get(payload.botId) ?? new Set()
+          delivering.set(payload.botId, pending)
+          const delivery = deliverNote(card, payload, requestId)
+          pending.add(delivery)
+          try {
+            const result = await delivery
+            if (result?.error !== undefined) return result
+          } finally {
+            pending.delete(delivery)
+            if (pending.size === 0) delivering.delete(payload.botId)
           }
-          const roomId = sent?.where === 'group' ? payload.roomId : undefined
-          const cardId = sent?.where === 'card' ? payload.cardId : undefined
-          const saved = await store.change(data => board.user.sent(data.cards, card.id, { botId: payload.botId, roomId, cardId, since, requestId: sent?.requestId }))
-          if (saved.error !== undefined) return { ...saved, said: `Saved on the card, but not sent: ${saved.error}` }
           break
         }
         case 'push': {
@@ -160,6 +162,23 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
           break
         }
       }
+    }
+  }
+
+  async function deliverNote(card, payload, requestId) {
+    const since = now()
+    const sent = await Promise.resolve().then(() => notes.deliver({
+      ...payload, title: card.title, brief: board.briefOf(card),
+      ...(requestId === undefined ? {} : { requestId }),
+    })).catch(failure)
+    const roomId = sent?.where === 'group' ? payload.roomId : undefined
+    const cardId = sent?.where === 'card' ? payload.cardId : undefined
+    const saved = sent?.error === undefined
+      ? await store.change(data => board.user.sent(data.cards, card.id, { botId: payload.botId, roomId, cardId, since, requestId: sent?.requestId }))
+      : sent
+    if (saved.error !== undefined) {
+      const message = `Saved on the card, but not sent: ${saved.error}`
+      return { ...saved, error: message, said: message }
     }
   }
 
@@ -205,15 +224,6 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
         return { error: 'Unknown board endpoint.', code: 'board/unknown' }
     }
   }
-  // The open card whose thread a Session is, if any.
-  async function cardOfThread(botId, sessionId) {
-    if (typeof notes.cardThread !== 'function') return undefined
-    for (const card of Object.values(store.read().cards)) {
-      if (!isOpen(card) || card.assignee !== botId) continue
-      if (await notes.cardThread({ botId, cardId: card.id }) === sessionId) return card
-    }
-    return undefined
-  }
   const runUser = async (result, { requestId, showError = false } = {}) => {
     if (result.error !== undefined) return result
     const after = await run(result.card, result.effects, { requestId })
@@ -239,10 +249,8 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
     if (event?.type !== 'tool/call') return
     const ids = panesIn(commandOf(event.data?.arguments))
     if (ids.length === 0) return
-    const owner = identity.ownerOfSession(sessionId)
-    if (owner === undefined) return
-    const card = await cardOfThread(owner.botId, sessionId)
-    if (card !== undefined) await store.change(data => board.panes(data.cards, card.id, ids))
+    const cardId = cardOfSession(sessionId)
+    if (cardId !== undefined) await store.change(data => board.panes(data.cards, cardId, ids))
   }
 
   const respond = (result) => {
@@ -251,7 +259,7 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
   }
 
   const waits = createPaneWaits({
-    store, herdr, notes, now, identity, roster, cardOfSession: cardOfThread, warn,
+    store, herdr, notes, now, identity, roster, warn,
     every: (ms, job, options) => {
       const interval = config.waitPollMs ?? ms
       return interval > 0 ? every(interval, job, options) : () => {}
@@ -260,8 +268,17 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
   const disposers = [
     // The Bot answers a note in its chat, where the user reads it; the card gets a copy.
     notes.onReply?.(reply => {
-      const trace = live.kept(reply, level())
-      void store.change(data => board.mirror(data.cards, { ...reply, ...(trace === undefined ? {} : { trace }) }))
+      const cardId = cardOfSession(reply.sessionId)
+      if (reply.cardId !== undefined && cardId !== reply.cardId) return
+      const trace = live.kept({ ...reply, cardId }, level())
+      const copy = () => store.change(data => board.mirror(data.cards, {
+        ...reply, cardId,
+        hasThread: id => notes.hasCardThread?.({ botId: reply.botId, cardId: id }),
+        ...(trace === undefined ? {} : { trace }),
+      }))
+      // A turn can finish before deliver returns its request id.
+      const pending = delivering.get(reply.botId)
+      void (pending === undefined ? copy() : Promise.allSettled(pending).then(copy))
         .catch(error => ctx.logger?.warn?.('ds-bot-board: copying an answer failed: %s', error))
     }),
     ctx.on?.('session/event', (session, event) => {
@@ -310,7 +327,7 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
     const bot = owner === undefined ? undefined : roster.bot(owner.botId)
     if (bot === undefined) return ''
     if (bot.main) return MAIN_BOARD_RULES.join('\n')
-    return (owner.roomId === undefined ? BOARD_RULES : [...BOARD_RULES, ...GROUP_RULES]).join('\n')
+    return (owner.roomId === undefined || owner.cardId !== undefined ? BOARD_RULES : [...BOARD_RULES, ...GROUP_RULES]).join('\n')
   }
   // On a schedule, what needs the user: a card stuck in progress, a card left in Review,
   // a card whose Bot is gone. Each is told once until the card changes.

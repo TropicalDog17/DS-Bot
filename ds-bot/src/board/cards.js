@@ -196,6 +196,7 @@ export function createBoard({ roster, now = Date.now }) {
     botId: card.assignee,
     cardId: card.id,
     title: card.title,
+    ...(card.roomId === undefined ? {} : { roomId: card.roomId }),
     text: [
       `[Card ${label(card)} · "${card.title}"] ${from === card.assignee ? 'opened by you' : `from ${from === USER ? 'the user' : nameOf(from)}`}.`,
       '',
@@ -215,6 +216,7 @@ export function createBoard({ roster, now = Date.now }) {
       botId: card.assignee,
       cardId: card.id,
       title: card.title,
+      ...(card.roomId === undefined ? {} : { roomId: card.roomId }),
       text: [
         `[Card ${label(card)} · "${card.title}"] moved to a conversation of its own.`,
         '',
@@ -479,11 +481,8 @@ export function createBoard({ roster, now = Date.now }) {
       return outcome(card, undefined, effects)
     },
     // The note reached the Bot (`where` from dsBotNotes): the card waits for its answer
-    // there. A wait already running keeps its start, so the first answer still lands.
-    // A note to the Bot's own chat also keeps its request id: the answer that read it
-    // names it, so it lands here even when the Bot answers other cards in between.
-    // A note that reached the card's own thread (cardId) waits there: every answer in
-    // that thread is the card's.
+    // there. The answer that read the note names its request id. A wait already
+    // running in the same conversation keeps its start.
     sent(cards, id, { botId, roomId, cardId, since, requestId }) {
       const { card, error } = found(cards, id)
       if (error !== undefined) return { error }
@@ -518,24 +517,29 @@ export function createBoard({ roster, now = Date.now }) {
   // from a turn that began after the note. A card waiting on request ids is never matched by order: an answer
   // to another card would land on it. `trace` is how the Bot got there (live.js keep):
   // its reasoning and tool calls.
-  const mirror = (cards, { botId, roomId, cardId, text, since, heard, trace } = {}) => {
+  const mirror = (cards, { botId, roomId, cardId, text, since, heard, trace, hasThread = () => false } = {}) => {
     const said = replyText(text, REPLY_MAX)
     if (said === '') return { error: 'Nothing to copy.' }
-    // An answer in a card thread is that card's, whether or not a note waits for it.
+    const read = new Set(Array.isArray(heard) ? heard : [])
+    const heardNote = card => card.awaiting?.requests?.some(requestId => read.has(requestId))
+    // The Session identifies the card. A pending note also needs its own request id.
     if (typeof cardId === 'string') {
       const card = own(cards, cardId)
       if (card === undefined || card.assignee !== botId) return { error: 'No card waits for this answer.' }
-      delete card.awaiting
+      if (card.awaiting?.cardId === cardId) {
+        if (!heardNote(card)) return { error: 'No card waits for this answer.' }
+        delete card.awaiting
+      }
       say(card, botId, said, trace === undefined ? {} : { trace })
       card.unread = true
       return outcome(card)
     }
     const there = list(cards).filter(card => card.awaiting?.botId === botId && card.awaiting.roomId === roomId && card.awaiting.cardId === undefined)
-    const read = new Set(Array.isArray(heard) ? heard : [])
-    let answered = there.filter(card => (card.awaiting.requests ?? []).some(requestId => read.has(requestId)))
+    let answered = there.filter(heardNote)
     if (answered.length === 0) {
       answered = there.filter(card => card.awaiting.requests === undefined
-        && card.awaiting.since <= since && since - card.awaiting.since <= AWAIT_MAX_MS)
+        && card.awaiting.since <= since && since - card.awaiting.since <= AWAIT_MAX_MS
+        && !hasThread(card.id))
         .sort((a, b) => a.awaiting.since - b.awaiting.since)
         .slice(0, 1)
     }
@@ -561,5 +565,6 @@ export function createBoard({ roster, now = Date.now }) {
     return outcome(card)
   }
 
-  return { show, line, label, adoptOf, panes, bot: (cards, action, self, roomId, args, sessionId) => botActions[action](cards, self, roomId, args, sessionId), user, mirror }
+  const briefOf = card => startOf(card, card.openedBy).text
+  return { show, line, label, adoptOf, briefOf, panes, bot: (cards, action, self, roomId, args, sessionId) => botActions[action](cards, self, roomId, args, sessionId), user, mirror }
 }

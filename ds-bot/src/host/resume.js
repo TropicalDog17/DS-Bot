@@ -21,7 +21,7 @@ import { join } from 'node:path'
 import { HISTORY_TIMEOUT_MS, MESSAGE_INLINE_MAX, SOURCE_KIND, STEER_CUT } from './constants.js'
 import { answerSender, cutOffText, failureLine, turnFailure } from './turns.js'
 import { textOf } from './text.js'
-import { threadCurrentOfPart } from './threads.js'
+import { reach, threadCurrentOfPart } from './threads.js'
 
 // Long enough for DSH to finish opening its workspaces after a start.
 export const RESUME_DELAY_MS = 3000
@@ -196,7 +196,7 @@ export function install(rt) {
   const deliver = rt.deliver
   rt.deliver = async (args) => {
     const noted = { ...args, exchangeId: args.exchangeId ?? randomUUID() }
-    const sessionId = noted.sessionId ?? rt.chatOf(noted.toId)
+    const sessionId = noted.sessionId ?? reach(rt.botOf(noted.toId)).sessionId
     // Noted before it is sent: a turn may take it up before the send returns. Notes
     // are kept whole; nothing waits out a delivery silently.
     queued = { ...queued, [sessionId]: [...(queued[sessionId] ?? []), { at: Date.now(), args: noted }] }
@@ -296,7 +296,8 @@ export function install(rt) {
       // A turn already picked up once and cut off again stays stopped: a restart loop
       // must not run it forever.
       if (record.resumed) return
-      await rt.deliver({ toId: bot.id, sessionId: room.sessions?.[bot.id] ?? sessionId, role: 'room', roomId: room.id, note: 'picking up after a restart', resumed: true, text, ...(record.trigger?.askedBy ? { askedBy: record.trigger.askedBy } : {}) })
+      const target = reach(bot, { roomId: room.id, room })
+      await rt.deliver({ toId: bot.id, sessionId: target.where === 'group' ? target.sessionId : sessionId, role: 'room', roomId: room.id, note: 'picking up after a restart', resumed: true, text, ...(record.trigger?.askedBy ? { askedBy: record.trigger.askedBy } : {}) })
       return
     }
     if (record.resumed) return
@@ -316,8 +317,13 @@ export function install(rt) {
 
   // Where a queued note goes now: its Session if it still is one, else the
   // current Session of its Bot, or of its group when the message went to one.
-  const sessionFor = (sessionId, args) => (rt.isBotSession(sessionId) ? sessionId
-    : args?.roomId === undefined ? rt.chatOf(args?.toId) : rt.roomOf(args.roomId)?.sessions?.[args.toId])
+  const sessionFor = (sessionId, args) => {
+    if (rt.isBotSession(sessionId)) return sessionId
+    const roomId = args?.roomId
+    const target = reach(rt.botOf(args?.toId), { roomId, room: roomId === undefined ? undefined : rt.roomOf(roomId) })
+    // A private group message must stay in that group.
+    return roomId === undefined || target.where === 'group' ? target.sessionId : undefined
+  }
 
   // A hard stop keeps the inbox, which the Session runs once it wakes; only what DSH
   // cancelled is sent again. The notes stay queued until a turn takes the messages
@@ -396,10 +402,11 @@ export function install(rt) {
     const said = turn.texts.join('\n\n')
     // The answer went up in another run: the work closes with what it said, and
     // nothing is sent twice.
-    const back = rt.roomOf(asker.senderRoomId)?.sessions?.[sender]
+    const bot = rt.botOf(sender)
+    const target = reach(bot, { roomId: asker.senderRoomId, room: rt.roomOf(asker.senderRoomId) })
     // The answer would have gone to the part of the asking Bot's chat the request came
     // from, which is not its foreground chat when that part is a background one.
-    const where = back ?? (asker.senderPart === undefined ? undefined : threadCurrentOfPart(rt.botOf(sender), asker.senderPart)) ?? rt.chatOf(sender)
+    const where = target.where === 'group' ? target.sessionId : threadCurrentOfPart(bot, asker.senderPart) ?? target.sessionId
     const sent = await logOf(where)
     if (sent !== undefined && answeredIn(sent, workId)) {
       rt.closeWork?.(workId, name, rt.answerText(workId, said, name))
@@ -540,8 +547,9 @@ export function install(rt) {
     for (const [sessionId, list] of stopped) {
       const botId = list[0].botId
       const room = rt.roomOf(rt.groupOwners.get(sessionId)?.roomId)
+      const target = reach(rt.botOf(botId), { roomId: room?.id, room })
       const where = room !== undefined
-        ? (room.members.includes(botId) ? { sessionId: room.sessions?.[botId] ?? sessionId, role: 'room', roomId: room.id, note: 'picking up after a restart' } : undefined)
+        ? (room.members.includes(botId) ? { sessionId: target.where === 'group' ? target.sessionId : sessionId, role: 'room', roomId: room.id, note: 'picking up after a restart' } : undefined)
         : { ...(rt.selfOf(sessionId) === botId && rt.isBotSession(sessionId) ? { sessionId } : {}), role: 'resume' }
       if (where === undefined) continue
       await rt.deliver({ toId: botId, ...where, resumed: true, text: jobsText(list) })

@@ -22,7 +22,7 @@
 //                through DS Bot's MCP bridge. Only the team tools cross by default; a
 //                companion names the tools it registers so those Bots get them too.
 import { randomUUID } from 'node:crypto'
-import { cardThreadSession } from './threads.js'
+import { ownChatSessions, reach } from './threads.js'
 
 export const NOTE_MAX = 2000
 // A card's brief keeps its lines: it is everything the assignee needs.
@@ -66,6 +66,12 @@ export function rosterService(rt) {
 export function notesService(rt) {
   const listeners = new Set()
   const cardNotes = new Set()
+  const roomOf = roomId => typeof roomId === 'string' ? rt.roomOf(roomId) : undefined
+  const open = (botId, cardId, title, roomId) => rt.openCardThread?.(botId, cardId, oneLine(title, 80), roomId)
+  const threadOf = (botId, cardId) => {
+    const target = reach(typeof botId === 'string' ? rt.botOf(botId) : undefined, { cardId })
+    return target.where === 'card' ? target.sessionId : undefined
+  }
   // im/index.js calls this with a reply to a push about a card; false when no companion took it.
   rt.cardNote = async (note) => {
     for (const listener of cardNotes) {
@@ -88,41 +94,43 @@ export function notesService(rt) {
     // A roomId the Bot is not (or no longer) a member of falls back to its own chat.
     // requestId is the note's id as a user message: an answer in the Bot's own chat or
     // in the group lists it in `heard` once a turn read the note.
-    // With a cardId whose card thread is open, the note goes there instead (where: 'card').
+    // A note with a cardId opens the thread if needed and goes there (where: 'card').
     // A requestId of the caller's (an IM message's) takes the place of a new one, so the
     // Bot's answer also goes back where that message came from.
-    async deliver({ botId, roomId, cardId, text, requestId: given } = {}) {
+    async deliver({ botId, roomId, cardId, title, brief, text, requestId: given } = {}) {
       await rt.load()
       const bot = typeof botId === 'string' ? rt.botOf(botId) : undefined
       if (bot === undefined) return { error: 'No such Bot.' }
       const line = oneLine(text, NOTE_MAX)
       if (line === '') return { error: 'Write a note first.' }
-      const thread = typeof cardId === 'string' ? cardThreadSession(bot, cardId) : undefined
-      const newId = () => (typeof given === 'string' && given !== '' ? given : randomUUID())
-      if (thread !== undefined) {
-        const requestId = newId()
-        await rt.sendUser({ sessionId: thread, content: [{ type: 'text', text: line }], requestId })
-        return { sessionId: thread, where: 'card', requestId }
+      let opened = false
+      if (typeof cardId === 'string' && cardId !== '' && reach(bot, { cardId }).where !== 'card') {
+        try {
+          opened = typeof await open(botId, cardId, title, roomId) === 'string'
+        } catch (error) {
+          rt.warn?.('ds-bot: could not open a card thread for %s: %s', botId, error)
+        }
       }
-      const room = typeof roomId === 'string' ? rt.roomOf(roomId) : undefined
-      const inGroup = room !== undefined && (room.members ?? []).includes(bot.id)
-      const target = inGroup ? { sessionId: room.id, text: `@${bot.name} ${line}`, where: 'group' } : { sessionId: bot.id, text: line, where: 'chat' }
-      const requestId = newId()
-      await rt.sendUser({ sessionId: target.sessionId, content: [{ type: 'text', text: target.text }], requestId })
-      return { sessionId: target.sessionId, where: target.where, requestId }
+      if (rt.botOf(botId) === undefined) return { error: 'No such Bot.' }
+      const { sessionId, where } = reach(rt.botOf(botId), { cardId, roomId, room: roomOf(roomId), user: true })
+      const seed = opened && where === 'card' ? keepLines(brief, BRIEF_MAX) : ''
+      const message = where === 'group' ? `@${bot.name} ${line}` : [seed, line].filter(Boolean).join('\n\n')
+      const requestId = typeof given === 'string' && given !== '' ? given : randomUUID()
+      await rt.sendUser({ sessionId, content: [{ type: 'text', text: message }], requestId })
+      return { sessionId, where: where === 'own' ? 'chat' : where, requestId }
     },
     // { botId, cardId, title?, text } -> { sessionId, requestId } | { error }. Opens the
     // card's thread (or finds the open one) and sends the brief there as the user's
     // message, so the Bot works on the card apart from its chat.
-    async startCard({ botId, cardId, title, text } = {}) {
+    async startCard({ botId, cardId, title, roomId, text } = {}) {
       await rt.load()
       const bot = typeof botId === 'string' ? rt.botOf(botId) : undefined
       if (bot === undefined) return { error: 'No such Bot.' }
       if (typeof cardId !== 'string' || cardId === '') return { error: 'A card thread needs a card id.' }
       const brief = keepLines(text, BRIEF_MAX)
       if (brief === '') return { error: 'A card needs a brief.' }
-      if (typeof rt.openCardThread !== 'function') return { error: 'Card threads are not available.' }
-      const sessionId = await rt.openCardThread(bot.id, cardId, oneLine(title, 80))
+      const sessionId = await open(botId, cardId, title, roomId)
+      if (sessionId === undefined) return { error: 'Card threads are not available.' }
       const requestId = randomUUID()
       await rt.sendUser({ sessionId, content: [{ type: 'text', text: brief }], requestId })
       return { sessionId, requestId }
@@ -130,15 +138,16 @@ export function notesService(rt) {
     // { botId, cardId } -> the Session of the card's open thread, or undefined.
     async cardThread({ botId, cardId } = {}) {
       await rt.load()
-      const bot = typeof botId === 'string' ? rt.botOf(botId) : undefined
-      return bot === undefined || typeof cardId !== 'string' ? undefined : cardThreadSession(bot, cardId)
+      return threadOf(botId, cardId)
     },
+    // A synchronous read for callers that already awaited roster.ready().
+    hasCardThread: ({ botId, cardId }) => threadOf(botId, cardId) !== undefined,
     // { botId } -> true while any conversation of the Bot is in a turn.
     async busy({ botId } = {}) {
       await rt.load()
       const bot = typeof botId === 'string' ? rt.botOf(botId) : undefined
       if (bot === undefined) return false
-      const sessions = [rt.chatOf?.(bot.id), ...(bot.openParts ?? []).map(part => part.sessionId), ...(rt.groupSessionsOf?.(bot.id) ?? [])]
+      const sessions = [...ownChatSessions(bot), ...(rt.groupSessionsOf?.(bot.id) ?? [])]
       return sessions.some(sessionId => sessionId !== undefined && rt.live?.get(sessionId)?.turn !== undefined)
     },
     // { botId, cardId, roomId?, text } -> { where } | { error }. How a card the Bot opened
@@ -151,9 +160,9 @@ export function notesService(rt) {
       const body = keepLines(text, NOTE_MAX)
       if (body === '') return { error: 'Write a note first.' }
       const card = typeof cardId === 'string' ? cardId : 'a card'
-      const room = typeof roomId === 'string' ? rt.roomOf(roomId) : undefined
-      if (room !== undefined && (room.members ?? []).includes(bot.id) && room.sessions?.[bot.id] !== undefined) {
-        await rt.deliver({ toId: bot.id, sessionId: room.sessions[bot.id], role: 'room', roomId: room.id, note: `card ${card} ended`, text: body })
+      const target = reach(bot, { roomId, room: roomOf(roomId) })
+      if (target.where === 'group') {
+        await rt.deliver({ toId: bot.id, sessionId: target.sessionId, role: 'room', roomId, note: `card ${card} ended`, text: body })
         return { where: 'group' }
       }
       await rt.deliver({ toId: bot.id, role: 'card', note: `Card ${card} ended in its own conversation`, text: body })
@@ -176,18 +185,13 @@ export function notesService(rt) {
       const body = keepLines(text, BRIEF_MAX)
       if (body === '') return { error: 'Write a note first.' }
       const note = `herdr pane ${oneLine(pane, 40) || '?'} · the wait you started is over`
-      const thread = typeof cardId === 'string' ? cardThreadSession(bot, cardId) : undefined
-      if (thread !== undefined) {
-        await rt.deliver({ toId: bot.id, sessionId: thread, role: 'wake', note, text: body })
-        return { where: 'card' }
-      }
-      const room = typeof roomId === 'string' ? rt.roomOf(roomId) : undefined
-      if (room !== undefined && (room.members ?? []).includes(bot.id) && room.sessions?.[bot.id] !== undefined) {
-        await rt.deliver({ toId: bot.id, sessionId: room.sessions[bot.id], role: 'room', roomId: room.id, note, text: body })
-        return { where: 'group' }
-      }
-      await rt.deliver({ toId: bot.id, role: 'wake', note, text: body })
-      return { where: 'chat' }
+      const { sessionId, where } = reach(bot, { cardId, roomId, room: roomOf(roomId) })
+      await rt.deliver({
+        toId: bot.id, note, text: body,
+        ...(where === 'group' ? { sessionId, role: 'room', roomId }
+          : { role: 'wake', ...(where === 'card' ? { sessionId } : {}) }),
+      })
+      return { where: where === 'own' ? 'chat' : where }
     },
     // { cardId?, botId?, text } -> { sent: number }. A short line to the user's phone: the
     // Main Bot's own IM chats get it with no message of theirs having asked (im/index.js
@@ -203,7 +207,7 @@ export function notesService(rt) {
       cardNotes.add(listener)
       return () => { cardNotes.delete(listener) }
     },
-    // listener({ botId, roomId?, cardId?, text, since, heard? }) once per finished answer; since is
+    // listener({ botId, sessionId?, roomId?, cardId?, text, since, heard? }) once per finished answer; since is
     // when its turn started, heard the request ids of the user's messages it answers.
     // Returns the unsubscribe.
     onReply(listener) {

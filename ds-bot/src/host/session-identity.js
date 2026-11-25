@@ -13,7 +13,10 @@ export function ownerOfSession(rt, sessionId) {
   const first = candidates[0]
   if (!first || !rt.botOf(first.botId)) return undefined
   if (candidates.some(owner => owner.botId !== first.botId || owner.roomId !== first.roomId)) return undefined
-  return Object.freeze({ botId: first.botId, ...(first.roomId === undefined ? {} : { roomId: first.roomId }) })
+  const card = rt.cardThreads?.ofSession(sessionId)
+  const cardId = card?.botId === first.botId ? card.cardId : undefined
+  const roomId = first.roomId ?? (cardId === undefined ? undefined : rt.cardThreads.roomOfSession(sessionId))
+  return Object.freeze({ botId: first.botId, ...(roomId === undefined ? {} : { roomId }), ...(cardId === undefined ? {} : { cardId }) })
 }
 
 export function install(rt) {

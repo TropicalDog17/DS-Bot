@@ -75,7 +75,7 @@ export function wakeText(wait, outcome, shown) {
 
 export const waitingText = wait => `Waiting for herdr pane ${wait.pane} to be ${states(wait.until)}. When it gets there you are woken here with what it shows, also after a restart. End your turn now; do not wait for it with herdr agent wait, --wait or a background job.`
 
-export function createPaneWaits({ store, herdr, notes, now = Date.now, identity, roster, every = schedule, cardOfSession, warn = console.warn }) {
+export function createPaneWaits({ store, herdr, notes, now = Date.now, identity, roster, every = schedule, warn = console.warn }) {
   const board = createBoard({ roster, now })
   const tool = defineTool({
     name: 'wait_pane',
@@ -107,10 +107,10 @@ export function createPaneWaits({ store, herdr, notes, now = Date.now, identity,
       const seen = await herdr.status(pane)
       if (seen.gone === true) return `herdr has no pane ${pane}.`
       if (seen.error !== undefined && seen.status === undefined && /not installed/.test(seen.error)) return seen.error
-      const card = await cardOfSession(owner.botId, sessionId)
+      const { cardId } = owner
       const result = await store.change((data) => {
-        const added = addWait(data.waits ??= {}, { pane, until: args.until, botId: owner.botId, roomId: owner.roomId, cardId: card?.id, note: args.note, id: `w_${randomUUID().slice(0, 8)}`, at: now() })
-        if (added.error === undefined && card !== undefined) board.panes(data.cards, card.id, [pane])
+        const added = addWait(data.waits ??= {}, { pane, until: args.until, botId: owner.botId, roomId: owner.roomId, cardId, note: args.note, id: `w_${randomUUID().slice(0, 8)}`, at: now() })
+        if (added.error === undefined && cardId !== undefined) board.panes(data.cards, cardId, [pane])
         return added
       })
       if (result.error !== undefined) return result.error

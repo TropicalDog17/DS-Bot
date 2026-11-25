@@ -25,7 +25,8 @@ import { RESUME_DELAY_MS } from './resume.js'
 import { clip, createClock, escapeRegExp, estimateTokens, reminderPrompts, splitRef, textOf } from './text.js'
 import { pageThinkingMs } from './thinking.js'
 import { viaOf } from '../shared/im-platforms.js'
-import { addCardThread, cardOfThread, cardThreadSession, closeCardThread, focusOpenPart, isOpenPart, ownChatSessions, pushThreadPart, startOpenPart, successorOfMovedPart, threadCurrent, threadCurrentOfPart, threadOf, threadOfPart } from './threads.js'
+import { createCardThreads } from './card-threads.js'
+import { focusOpenPart, isOpenPart, ownChatSessions, pushThreadPart, startOpenPart, successorOfMovedPart, threadCurrent, threadCurrentOfPart, threadOf, threadOfPart } from './threads.js'
 import { checkShownView, normalizeView, readViewReply, viewCardText, viewReply, viewReplyText } from 'deep-view/core'
 import { questionTitle, questionsOf } from './question-card.js'
 
@@ -2086,79 +2087,6 @@ export function install(rt) {
     if (now !== undefined && (now.ref !== picked?.ref || now.effort !== picked?.effort)) await selectRoute({ name: bot.name }, freshId, now)
   }
 
-  // A card thread: a conversation of the Bot's own for one card's work, beside its chat
-  // (threads.js). Opening one for a card that has it already returns that one.
-  async function openCardThread(botId, cardId, title = '') {
-    await rt.load()
-    const bot = rt.botOf(botId)
-    if (bot === undefined) throw Object.assign(new Error('Unknown Bot'), { code: 'bot/not-found' })
-    const known = cardThreadSession(bot, cardId)
-    if (known !== undefined) return known
-    const agent = await rt.resolveAgent(rt.chatOf(botId))
-    const freshId = await rt.createSession(title === '' ? bot.name : `${bot.name} · ${title}`.slice(0, 120), { dir: rt.workDirOf({ botId }) })
-    const picked = await freshRoute(bot, agent.session)
-    if (picked !== undefined) await selectRoute({ name: bot.name }, freshId, picked)
-    await rt.applyPermission(bot, freshId, undefined)
-      .catch(error => rt.warn('ds-bot: permission for a card thread of %s not applied: %s', bot.name, error))
-    // The Bot went away, or another call opened the card's thread meanwhile.
-    const raced = rt.botOf(botId) === bot ? cardThreadSession(bot, cardId) : undefined
-    if (rt.botOf(botId) !== bot || raced !== undefined) {
-      await ctx.workspaceRegistry.archiveSession(freshId, { stopActivity: true })
-        .catch(error => rt.warn('ds-bot: unused card thread of %s not archived: %s', bot.name, error))
-      if (raced !== undefined) return raced
-      throw Object.assign(new Error('Unknown Bot'), { code: 'bot/not-found' })
-    }
-    addCardThread(bot, freshId, cardId)
-    rt.chatOwners.set(freshId, bot.id)
-    await rt.save()
-    return freshId
-  }
-
-  // A finished card closes its thread. A thread whose turn still runs (the Bot finishing
-  // the card from inside it, most often) is marked and closes when that turn ends, so
-  // the turn is never cut off; the mark is saved, so a restart closes it too.
-  async function closeCardThreadOf(botId, cardId) {
-    await rt.load()
-    const bot = rt.botOf(botId)
-    const sessionId = cardThreadSession(bot, cardId)
-    if (sessionId === undefined) return false
-    if (rt.live.get(sessionId)?.turn !== undefined) {
-      const part = (bot.openParts ?? []).find(entry => entry.card === cardId)
-      if (part !== undefined && part.closing !== true) {
-        part.closing = true
-        await rt.save()
-      }
-      return 'later'
-    }
-    const closed = closeCardThread(bot, cardId)
-    if (closed !== undefined) {
-      rt.chatOwners.delete(closed.sessionId)
-      rt.pastOwners.set(closed.sessionId, { botId: bot.id })
-    }
-    await rt.save()
-    if (closed !== undefined) {
-      await ctx.workspaceRegistry.archiveSession(closed.sessionId, { stopActivity: false })
-        .catch(error => rt.warn('ds-bot: closed card thread of %s not archived: %s', bot.name, error))
-    }
-    return true
-  }
-
-  // turns.js calls this when a turn ends: a card thread marked to close closes now.
-  // Every marked one is tried, so one left from before a restart closes as well.
-  function cardTurnEnded() {
-    for (const bot of Object.values(state.bots)) {
-      for (const part of (bot.openParts ?? []).slice()) {
-        if (part.closing !== true || rt.live.get(part.sessionId)?.turn !== undefined) continue
-        void closeCardThreadOf(bot.id, part.card).catch(error => rt.warn('ds-bot: closing a card thread failed: %s', error))
-      }
-    }
-  }
-  const cardSession = (botId, cardId) => cardThreadSession(rt.botOf(botId), cardId)
-  const cardOfSession = (sessionId) => {
-    const bot = rt.botOf(rt.chatOwners.get(sessionId))
-    return bot === undefined ? undefined : cardOfThread(bot, sessionId)
-  }
-
   // Opening an earlier part again: it becomes the current one and the part that
   // was current joins the earlier ones where it sat.
   async function switchPart(botId, partId) {
@@ -2218,5 +2146,7 @@ export function install(rt) {
     return true
   }
 
-  Object.assign(rt, { clock, partsOf, partsOfThread, historyEntry, partLines, noteText, earlierPage, chatPage, displayItems, applySteps, followFolder, followEngine, heldBack, newPart, switchPart, openCardThread, closeCardThread: closeCardThreadOf, cardTurnEnded, cardOfSession, cardSession, sessionTokens: session => tokensOf(session), switchJobs: () => switches.values() })
+  const cardThreads = createCardThreads({ rt, freshRoute, selectRoute })
+  const cardOfSession = sessionId => cardThreads.ofSession(sessionId)?.cardId
+  Object.assign(rt, { cardThreads, clock, partsOf, partsOfThread, historyEntry, partLines, noteText, earlierPage, chatPage, displayItems, applySteps, followFolder, followEngine, heldBack, newPart, switchPart, openCardThread: cardThreads.open, closeCardThread: cardThreads.close, cardTurnEnded: cardThreads.turnEnded, cardOfSession, cardSession: cardThreads.sessionOf, sessionTokens: session => tokensOf(session), switchJobs: () => switches.values() })
 }
