@@ -2,6 +2,7 @@
 // board tool, the user's on the Board page. Pure functions over the cards object; the
 // caller loads and saves it (store.js). Who is who comes from DS Bot's dsBotRoster.
 import { randomBytes } from 'node:crypto'
+import { prName, prsOf } from './prs.js'
 
 // `active` is the In progress column; the name stays from the group task board.
 export const CARD_STATUSES = ['todo', 'active', 'review', 'blocked', 'done', 'cancelled']
@@ -175,6 +176,10 @@ export function createBoard({ roster, now = Date.now }) {
     if (log.length > LOG_MAX) log.splice(0, log.length - LOG_MAX)
   }
   const dropNeed = (card) => { if (!WAITING_STATUSES.includes(card.status)) delete card.need }
+  // A card in Review whose PRs are not all merged yet (`waitsMerge`) moves to Done by
+  // itself once they are (plugin.js asks gh). It stops waiting when it leaves Review.
+  const dropMerge = (card) => { if (card.status !== 'review') delete card.waitsMerge }
+  const mergeNeed = urls => `Merge ${urls.map(url => `[${prName(url)}](${url})`).join(', ')}.`
   const addLink = (card, link) => {
     if (!(card.links ??= []).some(entry => entry.url === link)) card.links.push({ url: link, at: now() })
   }
@@ -328,6 +333,9 @@ export function createBoard({ roster, now = Date.now }) {
       if (link !== undefined) addLink(card, link)
       if (pane !== undefined) addPane(card, pane)
       apply(card, ticket.fields)
+      // Moved to Review, or given a PR there: it waits for that PR to be merged.
+      if (card.status === 'review' && (args.status === 'review' || prsOf([link]).length > 0) && prsOf(card.links).length > 0) card.waitsMerge = true
+      dropMerge(card)
       if (card.status !== before || card.progress !== progressBefore) logStep(card, self)
       touch(card)
       const ask = WAITING_STATUSES.includes(card.status) && !card.need ? ' Say with need what the user must do, with the link to it.' : ''
@@ -372,7 +380,9 @@ export function createBoard({ roster, now = Date.now }) {
         ...(bot === undefined ? {} : { deliver: { botId: bot.id, cardId: card.id, ...(card.roomId === undefined ? {} : { roomId: card.roomId }), text: `Note on card ${label(card)} "${card.title}" from ${nameOf(self)}: ${said}` } }),
       }
     },
-    complete(cards, self, _roomId, args) {
+    // `unmerged`: the card's PRs that gh did not report merged (plugin.js asks before the
+    // change). With any, the work is done but the card waits in Review for the merge.
+    complete(cards, self, _roomId, args, { unmerged = [] } = {}) {
       const card = pick(cards, args.id, self)
       if (card === undefined) return { error: 'No open card of yours. Name one with its id or ticket key.' }
       if (!isOpen(card)) return { error: `${label(card)} is already finished.` }
@@ -384,8 +394,19 @@ export function createBoard({ roster, now = Date.now }) {
         if (link === undefined) return { error: 'link must be an http(s) address.' }
         addLink(card, link)
       }
+      if (unmerged.length > 0) {
+        const before = card.status
+        card.status = 'review'
+        card.result = result
+        card.waitsMerge = true
+        card.need = mergeNeed(unmerged)
+        logStep(card, self)
+        touch(card)
+        return { card, before, said: `${label(card)} waits in Review until ${unmerged.map(prName).join(', ')} ${unmerged.length === 1 ? 'is' : 'are'} merged, then moves to Done by itself. Your work on it is done: stop here.` }
+      }
       card.status = 'done'
       card.result = result
+      delete card.waitsMerge
       card.doneAt = now()
       dropNeed(card)
       logStep(card, self)
@@ -401,6 +422,7 @@ export function createBoard({ roster, now = Date.now }) {
       const why = oneLine(args.reason, REASON_MAX)
       if (why !== '') card.reason = why
       dropNeed(card)
+      dropMerge(card)
       logStep(card, self)
       touch(card)
       return { card, said: `Cancelled ${label(card)}.`, ...closeOf(card), ...reportOf(card, `was cancelled (${nameOf(self)})${why === '' ? '' : `: ${why}`}`) }
@@ -447,6 +469,7 @@ export function createBoard({ roster, now = Date.now }) {
       if (status === 'done') card.doneAt = now()
       else delete card.doneAt
       dropNeed(card)
+      dropMerge(card)
       logStep(card, USER)
       touch(card)
       return { card, ...(status === 'done' ? closeOf(card) : {}) }
@@ -496,6 +519,7 @@ export function createBoard({ roster, now = Date.now }) {
       const why = oneLine(reason, REASON_MAX)
       if (why !== '') card.reason = why
       dropNeed(card)
+      dropMerge(card)
       touch(card)
       return { card, ...closeOf(card) }
     },
@@ -550,5 +574,25 @@ export function createBoard({ roster, now = Date.now }) {
     return { card }
   }
 
-  return { show, line, label, adoptOf, panes, bot: (cards, action, self, roomId, args) => botActions[action](cards, self, roomId, args), user, mirror }
+  // The PRs a complete would wait on: the card's links and the link it brings.
+  const prsFor = (cards, args, self) => {
+    const card = pick(cards, args.id, self)
+    return card === undefined ? [] : prsOf([...(card.links ?? []), args.link])
+  }
+  // Every PR of a card that waits for the merge is merged (plugin.js asked gh): Done.
+  const merged = (cards, id) => {
+    const card = own(cards, id)
+    if (card === undefined || card.status !== 'review' || card.waitsMerge !== true) return { error: 'No card waits for a merge.' }
+    const urls = prsOf(card.links)
+    card.status = 'done'
+    card.result ??= `Merged ${urls.map(prName).join(', ')}`
+    card.doneAt = now()
+    delete card.waitsMerge
+    dropNeed(card)
+    logStep(card, card.assignee)
+    touch(card)
+    return { card, ...closeOf(card), ...reportOf(card, `is done: ${card.result} (merged)`) }
+  }
+
+  return { show, line, label, adoptOf, panes, prsFor, merged, bot: (cards, action, self, roomId, args, extra) => botActions[action](cards, self, roomId, args, extra), user, mirror }
 }
