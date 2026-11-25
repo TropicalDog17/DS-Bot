@@ -8,7 +8,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { characterMarkup, MASK_ID } from '../../ds-bot/src/client/characters.js'
+import { characterMarkup, MASK_ID } from '../../ds-bot/src/client/characters.ts'
 
 const here = fileURLToPath(import.meta.url)
 const assets = join(dirname(here), '..', 'assets')

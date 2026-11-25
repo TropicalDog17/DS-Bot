@@ -4,12 +4,12 @@
    colors and springs are the start window's, scoped to the card's layer so that the page's own
    stay as they are. */
 /* tokens */
-/* Generated from the DeepSeek theme in ds-bot/src/client/themes.js, inks.js and styles.js by scripts/start-assets.mjs; do not edit. */
+/* Generated from the DeepSeek theme in ds-bot/src/client/themes.ts, inks.ts and styles.ts by scripts/start-assets.mjs; do not edit. */
 .dsb-card-layer{color-scheme:light dark;--bt-main:#fcfcfc;--bt-card:#ffffff;--bt-ink:#141414;--bt-ink-2:rgba(20,20,20,0.6);--bt-line:rgba(20,20,20,0.08);--bt-line-2:rgba(20,20,20,0.15);--bt-hover:rgba(119,119,119,.09);--bt-accent:#4d6bfe;--bt-accent-ink:#ffffff;--bt-ink-deepseek:#4D6BFE;--bt-green:#00c972;--bt-danger:#e02135}
 @media (prefers-color-scheme:dark){.dsb-card-layer{--bt-main:#141414;--bt-card:#1f1f1f;--bt-ink:#f2f2f2;--bt-ink-2:rgba(242,242,242,0.6);--bt-line:rgba(242,242,242,0.08);--bt-line-2:rgba(242,242,242,0.15);--bt-hover:rgba(160,160,160,.12);--bt-accent:#5b7bff;--bt-accent-ink:#141414;--bt-ink-deepseek:#6A84FF}}
 /* /tokens */
 /* springs */
-/* Generated from ds-bot/src/client/motion.js by scripts/start-assets.mjs; do not edit. */
+/* Generated from ds-bot/src/client/motion.ts by scripts/start-assets.mjs; do not edit. */
 .dsb-card-layer {
   --spring-shape: linear(0.0000,0.0510,0.1692,0.3153,0.4639,0.6001,0.7163,0.8102,0.8823,0.9350,0.9717,0.9955,1.0098,1.0171,1.0198,1.0195,1.0175,1.0147,1.0117,1.0089,1.0064,1.0044,1.0028,1.0016,1.0000);
   --spring-shape-ms: 420ms;

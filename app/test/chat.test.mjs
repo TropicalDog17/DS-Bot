@@ -10,9 +10,9 @@ import { build } from 'esbuild'
 // Parts of the page outside the composer are stubbed: this checks the wiring
 // from the chat's hooks down to the textarea and the plugin's voice buttons.
 const stubs = {
-  'cells.js': 'export const Bubbles = ({ texts }) => texts.join(" ")\nexport const ChatRows = () => null\nexport const Shimmer = () => null\n',
-  'model-menu.js': 'export const ModelChoiceDock = () => null\n',
-  'api.js': "export const call = async () => ({ sessionId: 'b1', items: [], cursor: null })\n",
+  'cells.ts': 'export const Bubbles = ({ texts }) => texts.join(" ")\nexport const ChatRows = () => null\nexport const Shimmer = () => null\n',
+  'model-menu.ts': 'export const ModelChoiceDock = () => null\n',
+  'api.ts': "export const call = async () => ({ sessionId: 'b1', items: [], cursor: null })\n",
 }
 const { outputFiles } = await build({
   entryPoints: [fileURLToPath(new URL('../ui/src/chat.js', import.meta.url))],
@@ -21,7 +21,7 @@ const { outputFiles } = await build({
   plugins: [{
     name: 'app-chat-stubs',
     setup(bundler) {
-      bundler.onResolve({ filter: /src\/client\/(cells|model-menu|api)\.js$/ }, args => ({ path: args.path.split('/').pop(), namespace: 'app-chat-stub' }))
+      bundler.onResolve({ filter: /src\/client\/(cells|model-menu|api)\.ts$/ }, args => ({ path: args.path.split('/').pop(), namespace: 'app-chat-stub' }))
       bundler.onLoad({ filter: /.*/, namespace: 'app-chat-stub' }, args => ({ contents: stubs[args.path], loader: 'js' }))
     },
   }],
