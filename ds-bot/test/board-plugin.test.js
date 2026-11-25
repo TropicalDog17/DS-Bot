@@ -19,7 +19,7 @@ import { addCardThread, addCardThread as addCardThreadFor, cardThreadSession, cl
 
 // The board plugin knows the team only through DS Bot's public services, so the tests
 // build those services over a small fake team, exactly as the host provides them.
-function fakeTeam() {
+function fakeTeam({ load = async () => {} } = {}) {
   const state = {
     bots: { a: { id: 'a', name: 'Chief' }, b: { id: 'b', name: 'Writer' }, c: { id: 'c', name: 'Coder' } },
     rooms: { r1: { id: 'r1', name: 'Ops', members: ['a', 'b'], admin: 'a' } },
@@ -31,7 +31,7 @@ function fakeTeam() {
   const rt = {
     ctx: {},
     state,
-    load: async () => {},
+    load,
     botOf: id => (hasOwn(state.bots, id) ? state.bots[id] : undefined),
     roomOf: id => (hasOwn(state.rooms, id) ? state.rooms[id] : undefined),
     isMain: id => id === 'a',
@@ -69,10 +69,10 @@ function fakeTeam() {
 
 // threads: false is a host without card threads, where a card's notes reach the Bot in
 // its own chat or its group and the card waits for the answer there.
-function host(t, { file, notes, now = Date.now, config = {}, threads = true, herdr } = {}) {
+function host(t, { file, notes, now = Date.now, config = {}, threads = true, herdr, load } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'ds-bot-board-plugin-'))
   t.after(() => rmSync(dir, { recursive: true, force: true }))
-  const team = fakeTeam()
+  const team = fakeTeam({ load })
   if (!threads) notes = { ...team.notes, startCard: async () => ({ error: 'Card threads are not available.' }) }
   const registered = { tools: [], routes: [] }
   const tools = { register: (tool) => { registered.tools.push(tool); return () => { registered.tools.splice(registered.tools.indexOf(tool), 1) } } }
@@ -925,6 +925,39 @@ test('the watchdog tells the user once about a stuck card, a card left in Review
   // The progress on the long card pushes too: the user hears it moved again.
   assert.equal(h.team.pushes.map(push => push.text).at(-2), `Writer · ${stuck.id}: "Stuck work": half way`)
   assert.equal(h.team.pushes.length, 5)
+})
+
+test('disposing the board stops an in-flight watchdog before it saves or pushes', async (t) => {
+  let clock = 0
+  let pause = false
+  const started = Promise.withResolvers()
+  const resume = Promise.withResolvers()
+  const h = host(t, {
+    now: () => clock,
+    config: { watchMs: 0, stuckMs: 100 },
+    async load() {
+      if (!pause) return
+      started.resolve()
+      await resume.promise
+    },
+  })
+  await h.tool({ action: 'open', title: 'Stuck work', assignee: 'Writer', brief: 'Run the tests.' }, 'a')
+  assert.equal(h.cards()[0].status, 'active')
+  const before = readFileSync(h.boardFile, 'utf8')
+  const change = t.mock.method(h.handle.store, 'change')
+  clock = 100
+  pause = true
+  const pass = h.handle.watchOnce()
+  await started.promise
+  h.handle.dispose()
+  resume.resolve()
+  const alerts = await pass
+  assert.deepEqual({
+    board: readFileSync(h.boardFile, 'utf8'),
+    changes: change.mock.callCount(),
+    pushes: h.team.pushes,
+    alerts,
+  }, { board: before, changes: 0, pushes: [], alerts: [] })
 })
 
 test('the herdr panes a shell command drives, and a pane read through the herdr CLI', async () => {
