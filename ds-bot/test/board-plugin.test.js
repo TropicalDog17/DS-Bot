@@ -817,6 +817,34 @@ test('the progress push throttle survives a restart and is saved before sending'
   assert.deepEqual(pushes, [{ cardId: id, botId: 'b', text: 'Writer · c_load: "Load test": Tested all runs', savedAt: clock }])
 })
 
+test('two progress changes within one throttle window send one push', async (t) => {
+  let clock = 0
+  const h = host(t, { now: () => clock })
+  await h.tool({ action: 'open', title: 'Load test', brief: 'Measure p99.' })
+  const [{ id }] = h.cards()
+  clock = PROGRESS_AFTER_MS
+  await h.tool({ action: 'update', id, progress: 'Half done' })
+  clock += PROGRESS_PUSH_MS - 1
+  await h.tool({ action: 'update', id, progress: 'Writing results' })
+  assert.equal(h.cards()[0].progress, 'Writing results')
+  assert.deepEqual(h.team.pushes.map(push => push.text), [`Writer · ${id}: "Load test": Half done`])
+})
+
+test('updates and repeated completion on a closed card send no push', async (t) => {
+  let clock = 0
+  const h = host(t, { now: () => clock })
+  await h.tool({ action: 'open', title: 'Load test', brief: 'Measure p99.' })
+  const [{ id }] = h.cards()
+  clock = PROGRESS_AFTER_MS
+  await h.tool({ action: 'complete', id, result: 'Measured p99' })
+  assert.deepEqual(h.team.pushes.map(push => push.text), [`Writer · ${id}: done "Load test": Measured p99`])
+  clock += PROGRESS_PUSH_MS
+  assert.equal(await h.tool({ action: 'update', id, progress: 'More runs', status: 'review' }), `${id} is already finished.`)
+  assert.equal(await h.tool({ action: 'complete', id, result: 'Again' }), `${id} is already finished.`)
+  assert.equal(h.cards()[0].status, 'done')
+  assert.equal(h.team.pushes.length, 1)
+})
+
 test('a card for a ticket takes its key from the title, and a second open card for it is refused', async (t) => {
   assert.equal(titleKey('LIFE-782: fix the redirect'), 'LIFE-782')
   assert.equal(titleKey('life-782 · step 2'), 'LIFE-782')

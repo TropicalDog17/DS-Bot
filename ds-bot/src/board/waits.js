@@ -124,39 +124,59 @@ export function createPaneWaits({ store, herdr, notes, now = Date.now, identity,
   // Each wait's pane, once per poll: a wait that is over wakes its Bot, and is dropped
   // only after the wake went out (a wake twice beats a wake lost to a crash).
   let polling = false
+  let disposed = false
+  const changeWait = (id, change) => store.change(data => {
+    const wait = data.waits?.[id]
+    if (disposed || wait === undefined) return { error: 'The wait is no longer being polled.' }
+    change(wait, data)
+    return {}
+  })
+  const removeWait = id => changeWait(id, (_wait, data) => dropWait(data, id))
   async function poll() {
-    if (polling || store.readOnly()) return []
+    if (disposed || polling || store.readOnly()) return []
     polling = true
     const woken = []
     try {
       await roster.ready()
       for (const wait of Object.values(store.read().waits ?? {})) {
+        if (disposed) break
         const outcome = roster.bot(wait.botId) === undefined ? { kind: 'gone-bot' } : check(wait, await herdr.status(wait.pane), now())
+        if (disposed) break
         if (outcome === undefined) continue
         if (outcome.armed === true) {
-          await store.change((data) => { if (data.waits?.[wait.id] !== undefined) data.waits[wait.id].armed = true; return {} })
+          await changeWait(wait.id, entry => { entry.armed = true })
           continue
         }
         if (outcome.kind !== 'gone-bot') {
           const shown = outcome.kind === 'gone' ? undefined : await herdr.read(wait.pane)
+          if (disposed) break
           if (store.read().waits?.[wait.id] === undefined) continue
           const sent = await Promise.resolve().then(() => notes.wake({ botId: wait.botId, pane: wait.pane, ...(wait.cardId ? { cardId: wait.cardId } : {}), ...(wait.roomId ? { roomId: wait.roomId } : {}), text: wakeText(wait, outcome, shown?.text) }))
             .catch(error => ({ error: error?.message ?? String(error) }))
+          if (disposed) break
           if (sent?.error !== undefined) {
-            warn('ds-bot-board: waking %s for %s failed: %s', wait.botId, wait.pane, sent.error)
-            if (outcome.kind !== 'expired') continue
-          } else woken.push(wait.id)
+            const warned = wait.warned === true
+            const expired = outcome.kind === 'expired'
+            if (warned && !expired) continue
+            const saved = expired
+              ? await removeWait(wait.id)
+              : await changeWait(wait.id, entry => { entry.warned = true })
+            if (!warned && saved.error === undefined) warn('ds-bot-board: waking %s for %s failed: %s', wait.botId, wait.pane, sent.error)
+            continue
+          }
+          woken.push(wait.id)
         }
-        await store.change((data) => { dropWait(data, wait.id); return {} })
+        await removeWait(wait.id)
       }
     } finally {
       polling = false
     }
     return woken
   }
-  const dispose = every(WAIT_POLL_MS, poll, {
+  const stop = every(WAIT_POLL_MS, poll, {
     readOnly: () => store.readOnly(),
     onError: error => warn('ds-bot-board: polling herdr waits failed: %s', error),
   })
+  const dispose = () => { disposed = true; stop() }
   return Object.freeze({ tool, poll, dispose })
 }

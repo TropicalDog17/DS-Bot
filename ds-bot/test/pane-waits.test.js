@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { ARM_MS, WAITS_PER_BOT, WAIT_MAX_MS, createPaneWaits } from '../src/board/waits.js'
 
-function fixture({ wake, status, cardOfSession = () => undefined } = {}) {
+function fixture({ wake, wakeAvailable = true, status, cardOfSession = () => undefined } = {}) {
   let data = { cards: { c_1: { id: 'c_1', status: 'active' } } }
   let clock = 0
   let readOnly = false
@@ -12,17 +12,19 @@ function fixture({ wake, status, cardOfSession = () => undefined } = {}) {
   const reads = []
   const wakes = []
   const warnings = []
+  let writeCount = 0
   const store = {
     read: () => data,
     readOnly: () => readOnly,
     async change(change) {
+      writeCount++
       const draft = structuredClone(data)
       const result = change(draft)
       if (result.error === undefined) data = draft
       return result
     },
   }
-  const { tool, poll } = createPaneWaits({
+  const { tool, poll, dispose } = createPaneWaits({
     store,
     now: () => clock,
     identity: { ownerOfSession: session => ({ botId: session, roomId: 'ops' }) },
@@ -34,15 +36,18 @@ function fixture({ wake, status, cardOfSession = () => undefined } = {}) {
       },
       async read(pane) { reads.push(pane); return { text: 'Tests passed.' } },
     },
-    notes: { async wake(message) { wakes.push(message); await wake?.(message) } },
+    notes: wakeAvailable ? { async wake(message) { wakes.push(message); await wake?.(message) } } : {},
     cardOfSession,
     every: () => () => {},
     warn: (...warning) => warnings.push(warning),
   })
+  const storedWaits = () => Object.values(store.read().waits ?? {})
   return {
     tool: (args, bot = 'writer') => tool.execute(args, { agent: { id: bot } }),
-    poll, bots, statuses, statusCalls, reads, wakes, warnings,
-    waits: () => Object.values(store.read().waits ?? {}),
+    poll, dispose, bots, statuses, statusCalls, reads, wakes, warnings, storedWaits,
+    // Existing wait assertions compare the wait fields apart from warning bookkeeping.
+    waits: () => storedWaits().map(({ warned: _warned, ...wait }) => wait),
+    writes: () => writeCount,
     card: () => store.read().cards.c_1,
     setClock: value => { clock = value },
     setReadOnly: value => { readOnly = value },
@@ -64,6 +69,110 @@ test('wait_pane adds, replaces and stops a wait and adds its pane to the card', 
   assert.equal(await h.tool({ pane: 'w1:p1', stop: true }), 'You do not wait on w1:p1.')
   h.statuses.set('w1:p1', { gone: true })
   assert.equal(await h.tool({ pane: 'w1:p1' }), 'herdr has no pane w1:p1.')
+})
+
+test('two failed wakes warn once and the next poll still retries', async () => {
+  let attempts = 0
+  const h = fixture({ wake: () => {
+    attempts++
+    if (attempts <= 2) throw new Error('offline')
+  } })
+  await h.tool({ pane: 'w1:p1' })
+  const [wait] = h.storedWaits()
+  h.statuses.set(wait.pane, { status: 'done' })
+  h.setClock(ARM_MS)
+  assert.deepEqual(await h.poll(), [])
+  assert.deepEqual(h.storedWaits(), [{ ...wait, warned: true }])
+  const writes = h.writes()
+  assert.deepEqual(await h.poll(), [])
+  assert.deepEqual(h.storedWaits(), [{ ...wait, warned: true }])
+  assert.equal(h.writes(), writes)
+  assert.equal(attempts, 2)
+  assert.deepEqual(h.warnings.map(warning => warning.at(-1)), ['offline'])
+  assert.deepEqual(await h.poll(), [wait.id])
+  assert.equal(attempts, 3)
+  assert.deepEqual(h.storedWaits(), [])
+})
+
+test('an unavailable wake method warns once and leaves the wait pending', async () => {
+  const h = fixture({ wakeAvailable: false })
+  await h.tool({ pane: 'w1:p1' })
+  h.statuses.set('w1:p1', { status: 'done' })
+  h.setClock(ARM_MS)
+  assert.deepEqual(await h.poll(), [])
+  assert.deepEqual(await h.poll(), [])
+  assert.equal(h.warnings.length, 1)
+  assert.match(h.warnings[0].at(-1), /wake is not a function/)
+  assert.equal(h.storedWaits().length, 1)
+  assert.equal(h.storedWaits()[0].warned, true)
+})
+
+test('a previously warned wait still tries to wake on expiry and drops on failure', async () => {
+  const h = fixture({ wake: () => { throw new Error('offline') } })
+  await h.tool({ pane: 'w1:p1' })
+  h.statuses.set('w1:p1', { status: 'done' })
+  h.setClock(ARM_MS)
+  assert.deepEqual(await h.poll(), [])
+  assert.equal(h.storedWaits()[0].warned, true)
+  h.setClock(WAIT_MAX_MS)
+  assert.deepEqual(await h.poll(), [])
+  assert.equal(h.wakes.length, 2)
+  assert.match(h.wakes[1].text, /The wait ended\./)
+  assert.equal(h.warnings.length, 1)
+  assert.deepEqual(h.storedWaits(), [])
+})
+
+test('poll performs no wake, drop or write on a read-only store', async () => {
+  const h = fixture()
+  await h.tool({ pane: 'w1:p1' })
+  await h.tool({ pane: 'w1:p2' }, 'coder')
+  h.statuses.set('w1:p1', { status: 'done' })
+  h.bots.delete('coder')
+  h.setClock(ARM_MS)
+  h.setReadOnly(true)
+  const before = h.storedWaits()
+  const writes = h.writes()
+  assert.deepEqual(await h.poll(), [])
+  assert.deepEqual(h.wakes, [])
+  assert.deepEqual(h.storedWaits(), before)
+  assert.equal(h.writes(), writes)
+})
+
+test('replacing the same pane keeps only the new wait for that pane', async () => {
+  const h = fixture()
+  await h.tool({ pane: 'w1:p1', until: ['done'] })
+  await h.tool({ pane: 'w1:p2' })
+  const [first, other] = h.storedWaits()
+  await h.tool({ pane: first.pane, until: ['blocked'], note: 'Ask for approval' })
+  const [unchanged, replacement] = h.storedWaits()
+  assert.deepEqual(unchanged, other)
+  assert.notEqual(replacement.id, first.id)
+  assert.deepEqual(h.storedWaits().filter(wait => wait.pane === first.pane), [
+    { ...first, id: replacement.id, until: ['blocked'], note: 'Ask for approval' },
+  ])
+})
+
+test('a wake in flight can finish after dispose without writing the store', async () => {
+  const started = Promise.withResolvers()
+  const pending = Promise.withResolvers()
+  const h = fixture({ wake: async () => {
+    started.resolve()
+    await pending.promise
+  } })
+  await h.tool({ pane: 'w1:p1' })
+  h.statuses.set('w1:p1', { status: 'done' })
+  h.setClock(ARM_MS)
+  const before = h.storedWaits()
+  const writes = h.writes()
+  const pass = h.poll()
+  await started.promise
+  h.dispose()
+  pending.resolve()
+  await pass
+  assert.deepEqual(await h.poll(), [])
+  assert.equal(h.wakes.length, 1)
+  assert.equal(h.writes(), writes)
+  assert.deepEqual(h.storedWaits(), before)
 })
 
 test('the cap is per Bot and allows replacing a wait at the cap', async () => {

@@ -73,6 +73,7 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
   const warn = (...args) => ctx.logger?.warn?.(...args)
   const board = createBoard({ roster, now })
   const live = createLive({ identity, now })
+  let disposed = false
 
   const tool = defineTool({
     name: 'board',
@@ -344,16 +345,19 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
     return { moved, waiting }
   }
   async function watchOnce() {
-    if (store.readOnly()) return []
+    if (disposed || store.readOnly()) return []
     await roster.ready()
+    if (disposed) return []
     const alerts = sweep(store.read().cards, { now: now(), hasBot: id => roster.bot(id) !== undefined, nameOf, stuckMs: config.stuckMs, reviewMs: config.reviewMs })
     if (alerts.length === 0) return []
-    await store.change((data) => {
+    const saved = await store.change((data) => {
+      if (disposed) return { error: 'The board is disposed.' }
       for (const { card, kind } of alerts) {
         if (data.cards[card.id] !== undefined) data.cards[card.id].alerted = { kind, updatedAt: card.updatedAt }
       }
       return {}
     })
+    if (disposed || saved.error !== undefined) return []
     for (const { card, text } of alerts) await run(card, [{ kind: 'push', text }], { waitForPush: true })
     return alerts
   }
@@ -368,6 +372,7 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
     tool,
     store,
     dispose() {
+      disposed = true
       for (const dispose of disposers.reverse()) { try { dispose?.() } catch {} }
       store.dispose()
     },
