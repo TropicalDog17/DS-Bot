@@ -10,9 +10,10 @@
 // Usage: node scripts/start-assets.mjs [--check]   (--check exits 1 when a block is stale and
 // writes nothing)
 import { readFileSync, writeFileSync } from 'node:fs'
-import { CHARACTERS, characterMarkup, MASK_ID } from '../../ds-bot/src/client/characters.js'
-import { INKS } from '../../ds-bot/src/client/inks.js'
-import { allThemes, themeCss } from '../../ds-bot/src/client/themes.js'
+import { stripTypeScriptTypes } from 'node:module'
+import { CHARACTERS, characterMarkup, MASK_ID } from '../../ds-bot/src/client/characters.ts'
+import { INKS } from '../../ds-bot/src/client/inks.ts'
+import { allThemes, themeCss } from '../../ds-bot/src/client/themes.ts'
 
 const client = new URL('../../ds-bot/src/client/', import.meta.url)
 const page = new URL('../src/start/', import.meta.url)
@@ -95,12 +96,12 @@ function pick(vars, names, from) {
 
 function tokens(scope = ':root') {
   const [light, dark] = rules(themeCss(allThemes().deepseek))
-  const base = readFileSync(new URL('styles.js', client), 'utf8').match(/^body\{(--bt-[^}]*)\}$/mu)
-  if (!base) throw new Error('styles.js: the base body rule was not found')
+  const base = readFileSync(new URL('styles.ts', client), 'utf8').match(/^body\{(--bt-[^}]*)\}$/mu)
+  if (!base) throw new Error('styles.ts: the base body rule was not found')
   const [ink, inkDark] = INKS.deepseek
   return [
-    '/* Generated from the DeepSeek theme in ds-bot/src/client/themes.js, inks.js and styles.js by scripts/start-assets.mjs; do not edit. */',
-    `${scope}{color-scheme:light dark;${pick(light, THEME_TOKENS, 'themeCss')};--bt-ink-deepseek:${ink};${pick(rules(`{${base[1]}}`)[0], BASE_TOKENS, 'styles.js')}}`,
+    '/* Generated from the DeepSeek theme in ds-bot/src/client/themes.ts, inks.ts and styles.ts by scripts/start-assets.mjs; do not edit. */',
+    `${scope}{color-scheme:light dark;${pick(light, THEME_TOKENS, 'themeCss')};--bt-ink-deepseek:${ink};${pick(rules(`{${base[1]}}`)[0], BASE_TOKENS, 'styles.ts')}}`,
     `@media (prefers-color-scheme:dark){${scope}{${pick(dark, THEME_TOKENS, 'themeCss')};--bt-ink-deepseek:${inkDark}}}`,
   ]
 }
@@ -108,22 +109,22 @@ function tokens(scope = ':root') {
 // motion.js imports React for its hooks; its springs are plain arithmetic, so the module runs
 // here with the React names stubbed out.
 async function motion() {
-  const source = readFileSync(new URL('motion.js', client), 'utf8')
+  const source = readFileSync(new URL('motion.ts', client), 'utf8')
   const imports = source.match(/^import .*$/gmu) ?? []
   const react = imports.length === 1 ? imports[0].match(/^import \{([^}]*)\} from 'react'\r?$/u) : null
-  if (!react) throw new Error('motion.js: expected its only import to be from react')
+  if (!react) throw new Error('motion.ts: expected its only import to be from react')
   const stub = `const {${react[1].replaceAll(' as ', ': ')}} = {}`
-  return import(`data:text/javascript,${encodeURIComponent(source.replace(imports[0], stub))}`)
+  return import(`data:text/javascript,${encodeURIComponent(stripTypeScriptTypes(source.replace(imports[0], stub)))}`)
 }
 
 async function springs(scope = ':root') {
   const curves = await motion()
   return [
-    '/* Generated from ds-bot/src/client/motion.js by scripts/start-assets.mjs; do not edit. */',
+    '/* Generated from ds-bot/src/client/motion.ts by scripts/start-assets.mjs; do not edit. */',
     `${scope} {`,
     ...SPRINGS.flatMap((name) => {
       const curve = curves[`SPRING_${name.toUpperCase()}`]
-      if (!curve) throw new Error(`motion.js no longer exports SPRING_${name.toUpperCase()}`)
+      if (!curve) throw new Error(`motion.ts no longer exports SPRING_${name.toUpperCase()}`)
       return [`  --spring-${name}: ${curve.easing};`, `  --spring-${name}-ms: ${curve.duration}ms;`]
     }),
     '}',
