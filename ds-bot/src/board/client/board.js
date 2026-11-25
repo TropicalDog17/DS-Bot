@@ -409,7 +409,7 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
         type: 'button', className: 'bt-board-cancel', 'data-confirm': confirming || undefined, disabled: busy,
         'aria-label': confirming ? t('Click again to cancel') : t('Cancel card'), onClick: cancel,
       }, t('Cancel card')) : null,
-      notes.length > 0 ? h(Thread, {
+      notes.length > 0 || (open && steps > 0) ? h(Thread, {
         notes, roster, awaiting: open ? card.awaiting : undefined, worker: card.assignee, live: open ? live : undefined, busy,
         pick: open ? option => run(actions.boardNote(card.id, option)) : undefined,
       }) : null,

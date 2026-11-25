@@ -175,6 +175,9 @@ test('a waiting card shows its Bot at work, and an answer keeps how it got there
   // A turn that runs for the card without a note waiting shows under the assignee's mark.
   const woken = { type: CardDetail, props: { card: { ...asked, awaiting: undefined }, roster, actions: {}, live }, children: [] }
   assert.equal(all(find(woken, 'bt-board-waiting'), 'bt-board-step').length, 3)
+  // Also on a card nobody has written on yet: its first turn, on the brief.
+  const fresh = { type: CardDetail, props: { card: { ...asked, awaiting: undefined, notes: [] }, roster, actions: {}, live }, children: [] }
+  assert.equal(all(find(fresh, 'bt-board-waiting'), 'bt-board-step').length, 3)
   assert.equal(all({ type: CardDetail, props: { card: { ...asked, awaiting: undefined }, roster, actions: {} }, children: [] }, 'bt-board-waiting').length, 0)
   // No steps yet: the mark waits with its dots alone.
   assert.equal(all({ type: CardDetail, props: { card: asked, roster, actions: {} }, children: [] }, 'bt-board-trace').length, 0)

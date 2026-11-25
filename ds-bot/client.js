@@ -29038,7 +29038,7 @@ function CardDetail({ card, roster, actions, live, onOpenCard }) {
         "aria-label": confirming ? t("Click again to cancel") : t("Cancel card"),
         onClick: cancel
       }, t("Cancel card")) : null,
-      notes.length > 0 ? (0, import_react73.createElement)(Thread, {
+      notes.length > 0 || open && steps > 0 ? (0, import_react73.createElement)(Thread, {
         notes,
         roster,
         awaiting: open ? card.awaiting : void 0,
