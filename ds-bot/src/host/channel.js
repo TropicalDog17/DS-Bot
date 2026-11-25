@@ -853,7 +853,9 @@ export function install(rt) {
     return undefined
   }
 
-  async function sendUser({ sessionId: ref, content, requestId = randomUUID() }) {
+  // steer: the message cuts into a turn that runs there at its next step, instead of
+  // waiting behind it; with no turn running it starts one, as a queued message does.
+  async function sendUser({ sessionId: ref, content, requestId = randomUUID(), steer = false }) {
     const past = rt.pastOwners.get(ref)
     const room = rt.roomOf(ref)
     const sessionId = ownThreadTarget(ref, past)
@@ -863,7 +865,7 @@ export function install(rt) {
     await ctx.sessionController.prompt({
       requestId,
       sessionId,
-      mode: 'queue',
+      mode: steer ? 'steer' : 'queue',
       content,
     }, AbortSignal.timeout(30_000))
   }

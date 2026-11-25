@@ -18,6 +18,8 @@
 //                phone through the Main Bot's IM chat; onCardNote hears a reply there
 //                to a push about a card.
 //                wake tells a Bot that its wait on a herdr pane is over, where it asked.
+//                cardBusy says whether a card's thread is in a turn; tellCard puts DS
+//                Bot's own note in that thread (a nudge, not the user's message).
 //   dsBotBridge  the tools a Bot on a local agent CLI (Claude Code, Codex, ACP) may call
 //                through DS Bot's MCP bridge. Only the team tools cross by default; a
 //                companion names the tools it registers so those Bots get them too.
@@ -80,6 +82,7 @@ export function notesService(rt) {
     const target = reach(typeof botId === 'string' ? rt.botOf(botId) : undefined, { cardId })
     return target.where === 'card' ? target.sessionId : undefined
   }
+  const inTurn = sessionId => rt.live?.get(sessionId)?.turn !== undefined
   // im/index.js calls this with a reply to a push about a card; false when no companion took it.
   rt.cardNote = async (note) => {
     for (const listener of cardNotes) {
@@ -103,6 +106,8 @@ export function notesService(rt) {
     // requestId is the note's id as a user message: an answer in the Bot's own chat or
     // in the group lists it in `heard` once a turn read the note.
     // A note with a cardId opens the thread if needed and goes there (where: 'card').
+    // There it steers: a card's thread runs long turns, and a note that waited behind one
+    // would reach the Bot only after the work it was meant to change.
     // A requestId of the caller's (an IM message's) takes the place of a new one, so the
     // Bot's answer also goes back where that message came from.
     async deliver({ botId, roomId, cardId, title, brief, text, requestId: given } = {}) {
@@ -125,7 +130,7 @@ export function notesService(rt) {
       const seed = opened && where === 'card' ? keepLines(brief, BRIEF_MAX) : ''
       const message = where === 'group' ? `@${bot.name} ${line}` : [seed, line].filter(Boolean).join('\n\n')
       const requestId = typeof given === 'string' && given !== '' ? given : randomUUID()
-      await rt.sendUser({ sessionId, content: [{ type: 'text', text: message }], requestId })
+      await rt.sendUser({ sessionId, content: [{ type: 'text', text: message }], requestId, ...(where === 'card' ? { steer: true } : {}) })
       return { sessionId, where: where === 'own' ? 'chat' : where, requestId }
     },
     // { botId, cardId, title?, text } -> { sessionId, requestId } | { error }. Opens the
@@ -152,6 +157,26 @@ export function notesService(rt) {
     },
     // A synchronous read for callers that already awaited roster.ready().
     hasCardThread: ({ botId, cardId }) => threadOf(botId, cardId) !== undefined,
+    // { botId, cardId } -> true while the card's thread is in a turn, false while it is
+    // open and quiet, undefined when the card has no thread. Synchronous, as hasCardThread.
+    cardBusy({ botId, cardId } = {}) {
+      const sessionId = threadOf(botId, cardId)
+      return sessionId === undefined ? undefined : inTurn(sessionId)
+    },
+    // { botId, cardId, note, text } -> { where: 'card' } | { error }. DS Bot's own note in
+    // the card's thread (not the user's message): it starts a turn there, or with
+    // steer: true cuts into the one that runs.
+    async tellCard({ botId, cardId, note, text, steer = false } = {}) {
+      await rt.load()
+      const bot = typeof botId === 'string' ? rt.botOf(botId) : undefined
+      if (bot === undefined) return { error: 'No such Bot.' }
+      const body = keepLines(text, NOTE_MAX)
+      if (body === '') return { error: 'Write a note first.' }
+      const sessionId = threadOf(botId, cardId)
+      if (sessionId === undefined) return { error: 'The card has no conversation.' }
+      await rt.deliver({ toId: bot.id, sessionId, role: 'wake', note: oneLine(note, 120) || `card ${cardId}`, text: body, ...(steer ? { steer: true } : {}) })
+      return { where: 'card' }
+    },
     // { botId } -> true while any conversation of the Bot is in a turn.
     async busy({ botId } = {}) {
       await rt.load()
@@ -162,8 +187,9 @@ export function notesService(rt) {
     },
     // { botId, cardId, roomId?, text } -> { where } | { error }. How a card the Bot opened
     // ended, to the Bot where it opened it: the group when it is still a member there,
-    // else its own chat. It reads as DS Bot's note, not as the user's message.
-    async cardEnded({ botId, cardId, roomId, text } = {}) {
+    // else its own chat. It reads as DS Bot's note, not as the user's message. quiet: the
+    // user ended the card themself, so the note does not ask the Bot to tell them.
+    async cardEnded({ botId, cardId, roomId, text, quiet = false } = {}) {
       await rt.load()
       const bot = typeof botId === 'string' ? rt.botOf(botId) : undefined
       if (bot === undefined) return { error: 'No such Bot.' }
@@ -175,13 +201,21 @@ export function notesService(rt) {
         await rt.deliver({ toId: bot.id, sessionId: target.sessionId, role: 'room', roomId, note: `card ${card} ended`, text: body })
         return { where: 'group' }
       }
-      await rt.deliver({ toId: bot.id, role: 'card', note: `Card ${card} ended in its own conversation`, text: body })
+      await rt.deliver({ toId: bot.id, role: quiet ? 'wake' : 'card', note: `Card ${card} ended in its own conversation`, text: body })
       return { where: 'chat' }
     },
-    // { botId, cardId } -> { closed: true | 'later' | false }. 'later': the thread's turn
-    // still runs and it closes when that turn ends.
-    async closeCard({ botId, cardId } = {}) {
+    // { botId, cardId, stop? } -> { closed: true | 'later' | false }. 'later': the thread's
+    // turn still runs and it closes when that turn ends. `stop` is why the card ended when
+    // someone else ended it: a turn that still runs hears it at its next step, so it does
+    // not work on for a card that is over.
+    async closeCard({ botId, cardId, stop } = {}) {
       if (typeof botId !== 'string' || typeof cardId !== 'string' || typeof rt.closeCardThread !== 'function') return { closed: false }
+      const sessionId = threadOf(botId, cardId)
+      const body = keepLines(stop, NOTE_MAX)
+      if (body !== '' && sessionId !== undefined && inTurn(sessionId)) {
+        await rt.deliver({ toId: botId, sessionId, role: 'wake', note: `card ${cardId} ended`, text: body, steer: true })
+          .catch(error => rt.warn?.('ds-bot: could not tell the thread of %s that it ended: %s', cardId, error))
+      }
       return { closed: await rt.closeCardThread(botId, cardId) }
     },
     // { botId, cardId?, roomId?, pane, text } -> { where } | { error }. Wakes a Bot whose
