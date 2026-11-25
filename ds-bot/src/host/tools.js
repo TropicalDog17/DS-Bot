@@ -283,7 +283,7 @@ export function install(rt) {
       if (sender === undefined) return 'Only Bots on the team can use message_bot.'
       // A user who wrote from IM does not read the other Bot's web chat: its answer comes
       // back here, to be passed on where the user is.
-      const fromIm = args.reply_to === 'user' && rt.live.get(exec.agent?.id)?.im === true
+      const fromIm = args.reply_to === 'user' && rt.replyOrigin?.of(exec.agent?.id) !== undefined
       if (fromIm) args = { ...args, reply_to: 'me' }
       const target = rt.findBot(args.to)
       if (target === undefined) return `No Bot named ${args.to}. Team: ${Object.values(state.bots).map(bot => bot.name).join(', ')}`
@@ -347,20 +347,25 @@ export function install(rt) {
         // sender's own chat are two conversations, though: one answer could come back to
         // only one of them, so their requests are sent and answered apart.
         const earlier = unreadRequest(agent, sender.id, toUser)
+        // A merged answer has one destination, so requests from different chats stay apart.
+        const sameOrigin = exchangeId => rt.replyOrigin?.matchesCarry(exec.agent?.id, state.works?.[exchangeId]?.imOrigin) ?? true
         const joinable = earlier !== undefined
-          && (toUser || ((earlier.message.source.senderPart ?? undefined) === fromPart && rt.sameWork(earlier.message.source.exchangeId, work)))
+          && (toUser || ((earlier.message.source.senderPart ?? undefined) === fromPart && rt.sameWork(earlier.message.source.exchangeId, work) && sameOrigin(earlier.message.source.exchangeId)))
         const before = joinable ? bodyOf(earlier.message) : undefined
         let long = await rt.attachLong(before ? `${before.text}\n\n${text}` : text, `Message from ${sender.name}.txt`)
         // Nothing went out, so a named request must not take this as a delivered
         // receipt: admitRequest drops the pending record instead, and a retry can send.
         if (long === undefined) { if (request !== undefined) request.unsent = true; return tooLong(text) }
-        const joins = before !== undefined && agent.inbox?.remove?.(earlier.message.id) === true
+        const joins = before !== undefined && (toUser || sameOrigin(earlier.message.source.exchangeId)) && agent.inbox?.remove?.(earlier.message.id) === true
         if (before !== undefined && !joins) long = await rt.attachLong(text, `Message from ${sender.name}.txt`) ?? long
         const working = rt.live.get(chat)?.turn !== undefined
         const steer = (args.when !== 'queue' && !toUser) || (joins && earlier.steered)
         const exchangeId = joins ? earlier.message.source.exchangeId : randomUUID()
         if (joins) rt.forgetDelivery?.(exchangeId)
-        else if (!toUser) rt.openWork(exchangeId, { from: sender.id, to: target.id, parent: work, ...(fromPart ? { fromPart } : {}) })
+        else if (!toUser) {
+          const imOrigin = rt.replyOrigin?.carry(exec.agent?.id)
+          rt.openWork(exchangeId, { from: sender.id, to: target.id, parent: work, fromPart, imOrigin })
+        }
         try {
           await rt.deliver({ fromId: sender.id, toId: target.id, ...(fromPart ? { fromPart } : {}), text: long.text, files: [...long.files, ...(joins ? before.files : [])], length: long.length, role: 'request', steer, exchangeId, ...(joins ? { merged: true } : {}), ...(toUser ? { audience: 'user' } : {}) })
         } catch (error) {

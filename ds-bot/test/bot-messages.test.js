@@ -9,6 +9,8 @@ import { Session } from '@deepseek-ai/dsh-session'
 import TokenMeter from '@deepseek-ai/dsh-token-meter'
 import { createRuntime } from '../index.js'
 import { fakeAttachments, fakeContext } from './fake-ctx.js'
+import { fakeAdapter } from './im-fixture.js'
+import { adapters } from '../src/host/im/platforms/index.js'
 import { install as installTurns } from '../src/host/turns.js'
 import { install as installParts } from '../src/host/parts.js'
 import { HANDOFF_ACK, SOURCE_KIND } from '../src/host/constants.js'
@@ -157,8 +159,17 @@ test('message_bot when "queue" waits for the current work, and reply_to "user" a
 
 // The user on their phone does not read the other Bot's web chat: its reply comes back.
 test('reply_to "user" from a turn the user started over IM comes back to the sender', async (t) => {
-  const { agents, emit, tool, stop } = await start(team())
+  const fake = fakeAdapter()
+  const telegram = adapters.telegram
+  adapters.telegram = fake
+  t.after(() => { adapters.telegram = telegram })
+  const { rt, agents, emit, tool, stop } = await start(team())
   t.after(stop)
+  const { id } = await rt.imEndpoint('im-add', { platform: 'telegram', botId: 'a', fields: { token: 'test-token' } })
+  const conn = rt.state.im.connections[id]
+  conn.paired.push({ id: 'u1' })
+  conn.chats['dm-u1'] = { kind: 'direct' }
+  rt.replyOrigin.rememberRequest('im:telegram:1', conn, 'dm-u1', 'u1')
 
   emit('a', 'turn/start', { turn: 1 })
   emit('a', 'user/message', { content: [{ type: 'text', text: 'docs?' }], source: { kind: 'user', rpcId: 'im:telegram:1' } })

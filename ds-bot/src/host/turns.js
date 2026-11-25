@@ -70,6 +70,7 @@ export function answerSender(rt, id, source, text, long) {
   const part = back === undefined && asker !== undefined ? threadCurrentOfPart(asker, source.senderPart) : undefined
   const target = back ?? part
   const name = rt.botOf(rt.selfOf(id))?.name ?? 'The other Bot'
+  const imOrigin = rt.state.works?.[source.exchangeId]?.imOrigin
   const work = rt.closeWork?.(source.exchangeId, name, text)
   // A reply that arrives after the user gave up the wait is a late answer: it closes
   // nothing, opens nothing, and says on it that the wait was already over.
@@ -86,6 +87,7 @@ export function answerSender(rt, id, source, text, long) {
     ...(length === undefined ? {} : { files: long.files, length }),
     role: 'reply',
     replyTo: source.exchangeId,
+    imOrigin,
     exchangeId,
     ...(work ? { work } : {}),
   }).catch((error) => {
@@ -105,6 +107,7 @@ export function answerSender(rt, id, source, text, long) {
       ...(long?.length === undefined ? {} : { files: long.files, length: said.length + long.length }),
       role: 'reply',
       replyTo: source.exchangeId,
+      imOrigin,
       ...(work ? { work } : {}),
     }).catch(again => rt.warn('ds-bot: reply failure notice not delivered: %s', again))
   })
@@ -907,7 +910,6 @@ export function install(rt) {
         entry.opened = false
         entry.joined = []
         entry.later = []
-        entry.im = false
         entry.steeredAt = undefined
         entry.carried = false
         let claimedPending
@@ -944,8 +946,6 @@ export function install(rt) {
       case 'user/message': {
         const source = event.data?.source
         if (source?.kind === 'user' && typeof source.rpcId === 'string') noteHeard(id, source.rpcId)
-        // The user wrote from a phone (an IM chat): it reads this Bot there, not in the web chat.
-        if (source?.kind === 'user' && typeof source.rpcId === 'string' && source.rpcId.startsWith('im:')) entry.im = true
         // A group round shows the member the user's lines; the turn that reads them heard them.
         if (source?.kind === SOURCE_KIND && source.role === 'room' && Array.isArray(source.requests)) {
           for (const requestId of source.requests) noteHeard(id, requestId)

@@ -173,7 +173,7 @@ export function install(rt) {
     capabilityStatuses: rt.capabilityStatusesView(),
     phone: rt.phoneView(),
     imStatus: rt.imStatusView?.() ?? {},
-    imVia: rt.imViaView?.() ?? {},
+    imVia: rt.replyOrigin?.viaView?.() ?? {},
     // Why this host cannot write the team, or null. It changes without a save — the
     // other dsh can quit while this window stays open and this host takes the lock
     // over — so a window learns that it may write again without a reload.
