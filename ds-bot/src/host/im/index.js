@@ -630,7 +630,7 @@ export function install(rt) {
     if (await rt.cardNote?.({ cardId: pushed.cardId, text: body, requestId }) === true) return true
     const thread = rt.cardSession?.(pushed.botId, pushed.cardId)
     if (thread !== undefined) {
-      await rt.sendUser({ sessionId: thread, content: [{ type: 'text', text: body }], requestId })
+      await rt.dispatch.sendUser({ sessionId: thread, content: [{ type: 'text', text: body }], requestId })
       return true
     }
     origin.forgetRequest(requestId)
@@ -848,7 +848,7 @@ export function install(rt) {
     const requestId = `im:${conn.platform}:${randomUUID()}`
     // The turn this starts belongs to this chat: its replies go back here and nowhere else.
     origin.rememberRequest(requestId, conn, msg.chat.key, msg.sender.id)
-    await rt.sendUser({ sessionId, content, requestId })
+    await rt.dispatch.sendUser({ sessionId, content, requestId })
   }
 
   const onAction = (conn) => async (action) => {

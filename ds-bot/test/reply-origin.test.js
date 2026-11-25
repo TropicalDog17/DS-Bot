@@ -361,10 +361,13 @@ test('two failed reply deliveries release the carry', async (t) => {
   const request = await dispatch(s)
   const { imOrigin } = s.rt.state.works[request.source.exchangeId]
   const attempted = []
-  t.mock.method(s.rt, 'deliver', async (reply) => {
-    attempted.push(reply)
-    throw new Error('the reply inbox is unavailable')
-  })
+  s.rt.dispatch = {
+    ...s.rt.dispatch,
+    sendReply: async (reply) => {
+      attempted.push(reply)
+      throw new Error('the reply inbox is unavailable')
+    },
+  }
   completeTurn(s, 'a', 1)
   s.emitEvent('b', 'turn/start', { turn: 1 })
   s.emitEvent('b', 'user/message', request)
@@ -541,9 +544,9 @@ test('a failed Dispatch save drops work and carry before delivery, while a web D
     }
     return save(options)
   })
-  const delivery = t.mock.method(s.rt, 'deliver')
   await assert.rejects(tool.execute(args, exec), /cannot persist Dispatch/)
-  assert.deepEqual(delivery.mock.calls, [])
+  assert.equal(s.agentOf('b').inbox.nextTurn.length, 0)
+  assert.equal(s.agentOf('b').inbox.nextStep.length, 0)
   assert.deepEqual(s.rt.state.works, {})
   assert.deepEqual(s.rt.state.imReplyOrigins, {})
   await s.flush()
@@ -556,7 +559,7 @@ test('a failed Dispatch save drops work and carry before delivery, while a web D
   s.emitEvent('a', 'user/message', { source: { kind: 'user', rpcId: 'web:1' }, content: text('Finish the docs') })
   const savesBeforeWeb = previousSaves.mock.calls.filter(({ arguments: [options] }) => options?.required).length
   assert.match(await tool.execute(args, exec), /It will answer the user in its own chat/)
-  assert.equal(delivery.mock.calls.length, 1)
+  assert.equal(s.agentOf('b').inbox.nextTurn.length, 1)
   assert.equal(s.agentOf('b').inbox.nextTurn[0].source.audience, 'user')
   assert.equal(previousSaves.mock.calls.filter(({ arguments: [options] }) => options?.required).length, savesBeforeWeb)
 })

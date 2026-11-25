@@ -52,7 +52,7 @@ export function install(rt) {
     const notice = notices.get(entry.id)
     if (notice === undefined || notice.told.has(toId) || !pending.has(entry.id)) return
     notice.told.add(toId)
-    void rt.deliver({ fromId: entry.botId, toId, role: 'approval', text: noticeText(entry, waited), recordExchange: false })
+    void rt.dispatch.sendNotice({ fromId: entry.botId, toId, role: 'approval', text: noticeText(entry, waited) })
       .catch(error => rt.warn('ds-bot: approval notice to %s failed: %s', toId, error))
   }
   const remind = (id) => {

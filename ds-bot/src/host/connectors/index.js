@@ -495,7 +495,7 @@ export function install(rt) {
     if (notes.length === 0) return
     await rt.save()
     for (const [botId, text] of notes) {
-      await rt.deliver({ toId: botId, role: 'connector', text }).catch(error => rt.warn('ds-bot: connector note to %s failed: %s', botId, error))
+      await rt.dispatch.sendNotice({ toId: botId, role: 'connector', text }).catch(error => rt.warn('ds-bot: connector note to %s failed: %s', botId, error))
     }
   }
 
@@ -819,7 +819,7 @@ export function install(rt) {
       found.request.status = 'canceled'
       found.request.settledAt = Date.now()
       await rt.save()
-      await rt.deliver({ toId: found.botId, role: 'connector', text: `The user dismissed your request to connect ${entryFor(found.request.connectorId)?.name ?? found.request.connectorId}. Carry on without it, or tell the user what you cannot do without it.` }).catch(() => {})
+      await rt.dispatch.sendNotice({ toId: found.botId, role: 'connector', text: `The user dismissed your request to connect ${entryFor(found.request.connectorId)?.name ?? found.request.connectorId}. Carry on without it, or tell the user what you cannot do without it.` }).catch(() => {})
       return true
     },
   }

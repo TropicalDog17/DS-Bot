@@ -576,7 +576,11 @@ function turnsHost() {
     botOf: id => rt.bots[id],
     selfOf: id => id,
     save: async () => {},
-    deliver: async (args) => { delivered.push(args) },
+    dispatch: {
+      sendReply: async (args) => { delivered.push(args) },
+      sendNotice: async (args) => { delivered.push(args) },
+      forgetDelivery() {},
+    },
     noteFailure() {},
     warn() {},
     switchJobs: () => [],
@@ -1697,14 +1701,17 @@ test('without file storage a message past 20,000 characters is not sent', async 
 // A request merged with another the recipient had not read goes out under the same id. If
 // the merged text never reaches the recipient, the dialog keeps the text that did.
 test('a merged request that does not go out leaves the delivered text in the dialog', async (t) => {
-  const { ctx, exchanges, stop } = await start(team())
+  const { ctx, agentOf, exchanges, tool, stop } = await start(team())
   t.after(stop)
-  await rt.deliver({ fromId: 'a', toId: 'b', role: 'request', text: 'Draft the plan', exchangeId: 'x-merge' })
+  const writer = agentOf('b')
+  writer.steer = (message) => { writer.calls.push(['steer', message]); writer.inbox.nextStep.push(message) }
+  await tool('message_bot', { to: 'Writer', message: 'Draft the plan' }, 'a')
+  const exchangeId = writer.inbox.nextStep[0].source.exchangeId
   const flush = ctx.sessions.flush
   ctx.sessions.flush = async () => { throw new Error('Session is gone') }
-  await assert.rejects(rt.deliver({ fromId: 'a', toId: 'b', role: 'request', text: 'Draft the plan\n\nAnd the budget', exchangeId: 'x-merge', merged: true }), /Session is gone/)
+  await assert.rejects(tool('message_bot', { to: 'Writer', message: 'And the budget' }, 'a'), /Session is gone/)
   ctx.sessions.flush = flush
-  assert.deepEqual((await exchanges()).map(entry => [entry.id, entry.text]), [['x-merge', 'Draft the plan']])
+  assert.deepEqual((await exchanges()).map(entry => [entry.id, entry.text]), [[exchangeId, 'Draft the plan']])
 })
 
 // The book is written before the message goes out: one it cannot keep is not sent.

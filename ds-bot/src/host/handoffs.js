@@ -178,7 +178,7 @@ export function install(rt) {
     if (late === undefined || text === '') return
     const waiting = late.waiting ?? works()[late.parent]?.to
     if (waiting === undefined || rt.botOf(waiting) === undefined) return
-    void rt.deliver({
+    void rt.dispatch.sendReply({
       fromName: late.name ?? 'the subagent', toId: waiting, text: LATE_ANSWER + text, role: 'reply',
       exchangeId: randomUUID(), recordExchange: false,
     }).catch(error => rt.warn('ds-bot: the late result of %s did not reach %s: %s', late.name ?? 'a subagent', waiting, error))
@@ -356,7 +356,7 @@ export function install(rt) {
       const said = reason === 'gone'
         ? target + ' is no longer on the team, so the work you handed it has no answer. The user gave up waiting for it; this is its result. Go on with the work you were given.'
         : 'No reply came back from ' + target + ', and the user gave up waiting for it. This is its result: go on with the work you were given.'
-      void rt.deliver({
+      void rt.dispatch.sendReply({
         fromId: work.to !== undefined && rt.botOf(work.to) !== undefined ? work.to : undefined,
         fromName: name, toId: waitingBot, text: said, role: 'reply', replyTo: id,
         exchangeId: randomUUID(), work: work.parent, abandoned: true, recordExchange: false,

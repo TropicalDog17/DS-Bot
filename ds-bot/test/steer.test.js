@@ -94,8 +94,14 @@ const start = async ({ services = {}, def = shellDef() } = {}) => {
   Object.assign(ctx, { get: name => (name === 'agents' ? agentMap : origGet(name)) })
   const rt = createRuntime(ctx, { home })
   await rt.load?.()
-  const origDeliver = rt.deliver
-  rt.deliver = (...args) => { deliveries.push(args); return origDeliver ? origDeliver(...args) : Promise.resolve() }
+  const origDispatch = rt.dispatch
+  const spy = fn => (...args) => { deliveries.push(args); return fn(...args) }
+  rt.dispatch = {
+    ...origDispatch,
+    sendReply: spy(origDispatch.sendReply),
+    sendNotice: spy(origDispatch.sendNotice),
+    sendGroupTurn: spy(origDispatch.sendGroupTurn),
+  }
   const emit = async (id, type, data) => {
     for (const listener of ctx.listeners.get('session/event') ?? []) {
       if (listener.length >= 2) await listener({ id }, { type, data })

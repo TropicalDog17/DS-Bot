@@ -150,7 +150,7 @@ test('ds-bot resolving a Bot\'s Agent again does not hide the tool twice', async
   t.after(stop)
   await rt.resolveAgent('writer')
   await rt.resolveAgent('writer')
-  await rt.deliver({ fromId: 'chief', toId: 'writer', text: 'hi', role: 'request' })
+  await rt.dispatch.sendBotRequest({ fromId: 'chief', toId: 'writer', rawMessage: 'hi', text: 'hi', when: 'queue', formatReceipt: () => 'ok' })
   assert.equal(hiddenIn('writer').length, 1)
 })
 

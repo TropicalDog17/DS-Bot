@@ -49,7 +49,8 @@ async function boardFixture(t, { sendNote, beforeCreate } = {}) {
   })
   const rt = createRuntime(ctx, { home, github: false, diagnosticsFile: false })
   await rt.load()
-  rt.deliver = async input => { deliveries.push(input) }
+  const record = async input => { deliveries.push(input) }
+  rt.dispatch = { ...rt.dispatch, sendNotice: record, sendReply: record, sendGroupTurn: record }
   const board = installBoard(boardCtx, { file: join(home, 'board.json'), adoptMs: -1, waitPollMs: -1, watchMs: -1 }, {
     ...rt.companions, identity: { ownerOfSession: rt.ownerOfSession }, tools: boardCtx.tools, connection: boardCtx.connection, now: () => 1000,
   })
@@ -267,7 +268,13 @@ function resumeFixture(t, notes, { group = room(), logs = {}, bots = {}, extras 
     selfOf: id => id === 'old-group-writer' ? 'writer' : id,
     resolveAgent: async id => { resolved.push(id); return { status: 'idle' } },
     postToRoom: async (...args) => { posts.push(args) },
-    deliver: async input => { deliveries.push(input) },
+    dispatch: {
+      attachOutbox() {},
+      sendGroupTurn: async input => { deliveries.push({ ...input, role: 'room' }) },
+      sendReply: async input => { deliveries.push(input) },
+      sendNotice: async input => { deliveries.push(input) },
+      resend: async input => { deliveries.push({ ...input, steer: false, resent: true }) },
+    },
     warn: (...warning) => {
       warnings.push(warning)
       if (warning[0] === 'ds-bot: picking up interrupted work failed: %s') settled.reject(warning[1])
