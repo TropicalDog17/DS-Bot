@@ -160,7 +160,8 @@ For a change to the Bot browser, check it in DSH Desktop. On Linux, the scripts 
 - Keep a change to one subject.
 - Do not edit `client.js` by hand. Change `src/client/`, run `npm run build` and commit both.
 - In `src/client/`, take colors from the `--bt-*` variables, corner radii from the steps 4, 6, 8, 10, 12, 16, 18, 20, 22, 999px and 50%, and springs from `motion.js`. A unit test checks this. The places written before the test are listed in `test/style-debt.json`; that list only gets shorter. When you remove one, run `node scripts/style-debt.mjs --write` to update it.
-- Follow the style of the code around your change. Write a comment only when the reason for the code is not clear from the code itself.
+- Follow the style of the code around your change. Let names, types and structure explain the code. Write a comment only for what the code cannot say and we cannot change: behavior forced by DSH, a vendor, a platform or a protocol (with its issue or RFC link), a license header, or the contract of a public API. When our own code needs a comment to be understood, rename, extract or type it instead.
+- Keep a lint or TypeScript suppression only for a style-only rule. When the rule catches real bugs, fix the code it flags.
 - Write commit messages in English. Use a short subject in the imperative mood ("Keep group replies visible") and explain the reason in the body.
 - The author of a commit is the person who made the change. When an AI tool helped, do not add it as an author or with a `Co-authored-by` line; turn that setting off in the tool.
 - Do not edit [CHANGELOG.md](CHANGELOG.md). Write the user-visible change in the Changelog field of the pull request instead.
