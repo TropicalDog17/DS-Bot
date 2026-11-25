@@ -1,19 +1,17 @@
 import { randomBytes, randomUUID } from 'node:crypto'
 import { constants } from 'node:fs'
 import { chmod, mkdir, open, readFile, rm, writeFile } from 'node:fs/promises'
-import { basename, isAbsolute, join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import { replaceFile } from '../files.ts'
 import { viewCardText } from '../parts.ts'
 import { questionTitle, questionsOf } from '../question-card.ts'
 import { imPlatform, IM_PLATFORMS } from '../../shared/im-platforms.ts'
 import { createReplyOrigin } from '../reply-origin.ts'
+import { createImOutbox } from './outbox.ts'
 import { adapters } from './platforms/index.ts'
 
 const RECONCILE_MS = 15_000
 const RUNTIME_SAVE_MS = 400
-const RETRY_MS = 5_000
-const RETRY_MAX_MS = 30_000
-const SEND_ATTEMPTS = 4
 const TYPING_MS = 4_000
 const NUMBERS = /^\s*\d+(\s+\d+)*\s*$/
 const PUSHED_MAX = 200
@@ -347,64 +345,38 @@ export function install(rt) {
 
   const runners = new Map()
   const statuses = new Map()
-  const sendStatuses = new Map()
-  const failedSends = new Map()
-  const pendingSends = new Map()
-  const setPendingSend = (id, chatKey, entry) => {
-    let chats = pendingSends.get(id)
-    if (chats === undefined) pendingSends.set(id, chats = new Map())
-    chats.set(chatKey, entry)
-  }
-  const clearPendingSend = (id, chatKey, entry) => {
-    if (entry === undefined) return
-    const chats = pendingSends.get(id)
-    if (chats?.get(chatKey) === entry) {
-      chats.delete(chatKey)
-      if (chats.size === 0) pendingSends.delete(id)
+  let stopped = false
+
+  const readPresented = async (path, limit) => {
+    if (!isAbsolute(path) || await rt.inData?.(await rt.real(path))) return undefined
+    let handle
+    try {
+      // O_NONBLOCK keeps a FIFO from stalling the chat's queue on open.
+      handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0))
+      const info = await handle.stat()
+      if (!info.isFile() || info.size > limit) return undefined
+      const data = await handle.readFile()
+      return data.length > limit ? undefined : data
+    } catch {
+      return undefined
+    } finally {
+      await handle?.close().catch(() => {})
     }
-    entry.resolve()
   }
-  const failedFor = (id, chatKey) => {
-    let chats = failedSends.get(id)
-    if (chats === undefined) failedSends.set(id, chats = new Map())
-    let jobs = chats.get(chatKey)
-    if (jobs === undefined) chats.set(chatKey, jobs = [])
-    return jobs
-  }
+
+  const outbox = createImOutbox({
+    isLive: id => connections()[id] !== undefined,
+    isStopped: () => stopped,
+    redact: value => rt.redactSecrets(value),
+    warn: (template, ...args) => rt.warn(template, ...args),
+    readFile: readPresented,
+    unavailableFileText: name => text('noFileOut', { name }),
+  })
+
   const setStatus = (id, next) => {
     // Adapter errors can echo platform responses that quote the token; keep them out of the UI and logs.
     if (typeof next.error === 'string' && next.error !== '') return statuses.set(id, { ...next, error: rt.redactSecrets(next.error), at: Date.now() })
     return statuses.set(id, { ...next, at: Date.now() })
-  }
-  const setSendStatus = (id, chatKey, next) => {
-    if (next === undefined) {
-      const byChat = sendStatuses.get(id)
-      if (byChat === undefined) return
-      byChat.delete(chatKey)
-      if (byChat.size === 0) sendStatuses.delete(id)
-      return
-    }
-    let byChat = sendStatuses.get(id)
-    if (byChat === undefined) sendStatuses.set(id, byChat = new Map())
-    const error = typeof next.error === 'string' && next.error !== '' ? rt.redactSecrets(next.error) : next.error
-    byChat.set(chatKey, { ...next, error, at: Date.now() })
-  }
-  const combinedStatus = (id) => {
-    const adapter = statuses.get(id)
-    if (adapter?.state === 'error' || adapter?.state === 'off') return adapter
-    const byChat = sendStatuses.get(id)
-    if (byChat !== undefined && byChat.size > 0) {
-      let picked
-      for (const entry of byChat.values()) {
-        if (picked === undefined || (picked.state !== 'error' && entry.state === 'error') || (picked.state === entry.state && entry.at > picked.at)) {
-          picked = entry
-        }
-      }
-      if (picked !== undefined && (picked.state === 'error' || adapter === undefined || adapter.state === 'ready' || adapter.state === 'connecting')) {
-        return picked
-      }
-    }
-    return adapter
   }
   const targetsOf = (conn) => {
     const out = []
@@ -439,132 +411,8 @@ export function install(rt) {
   })
   const stopWatchingSessions = rt.onSessionIdentityChange?.(origin.prune)
 
-  const failClass = (error) => {
-    if (error?.permanent === true || (typeof error?.status === 'number' && error.status >= 400 && error.status < 500 && error.status !== 429)) return 'permanent'
-    if (error?.unknown === true || error?.stopped === true) return 'drop'
-    return 'retry'
-  }
+  const enqueue = (conn, chatKey, job) => outbox.enqueue(conn.id, chatKey, job)
 
-  const enqueue = (conn, chatKey, job) => {
-    const runner = runners.get(conn.id)
-    if (runner === undefined) {
-      void Promise.resolve(job.onDrop?.()).catch(() => {})
-      return
-    }
-    let queue = runner.queues.get(chatKey)
-    if (queue === undefined) runner.queues.set(chatKey, queue = { jobs: [] })
-    job.attempts = 0
-    queue.jobs.push(job)
-    if (!queue.draining && queue.jobs.length === 1) void drain(conn, chatKey)
-  }
-  const failMessage = error => String(error?.message ?? error).slice(0, 300)
-  const retainFailed = (id, chatKey, job, errorText, insertBefore?) => {
-    const list = failedFor(id, chatKey)
-    const idx = insertBefore !== undefined ? list.indexOf(insertBefore) : -1
-    if (idx !== -1) list.splice(idx, 0, job)
-    else list.push(job)
-    setSendStatus(id, chatKey, { state: 'error', error: errorText })
-  }
-  const clearSettledSendStatus = (id, chatKey, runner, settled) => {
-    if (connections()[id] === undefined || (failedSends.get(id)?.get(chatKey)?.length ?? 0) > 0) return
-    const current = runners.get(id)
-    const activeDone = !runner.stopped && current === runner
-    const waiterDone = settled?.waiter !== undefined && current === settled.waiter.runner && (current.queues.get(chatKey)?.jobs.length ?? 0) === 0
-    if (activeDone || waiterDone) setSendStatus(id, chatKey, undefined)
-  }
-  const drain = async (conn, chatKey) => {
-    const runner = runners.get(conn.id)
-    const queue = runner?.queues.get(chatKey)
-    if (runner?.handle === undefined || queue === undefined || queue.draining) return
-    clearTimeout(queue.retry)
-    queue.retry = undefined
-    queue.draining = true
-    try {
-      while (!runner.stopped && queue.jobs.length > 0) {
-        const prior = pendingSends.get(conn.id)?.get(chatKey)
-        if (prior !== undefined) {
-          await prior.promise
-          continue
-        }
-        const job = queue.jobs[0]
-        if (job.canSend !== undefined) {
-          const allowed = await job.canSend()
-          if (runner.stopped) break
-          if (!allowed) {
-            queue.jobs.shift()
-            await Promise.resolve(job.onDrop?.()).catch(() => {})
-            continue
-          }
-        }
-        queue.sending = true
-        let sent
-        try {
-          sent = job.file === undefined ? await runner.handle.send(job.chat, job) : await sendFile(runner.handle, job)
-        } catch (error) {
-          queue.sending = false
-          const settled = queue.stoppedSend
-          queue.stoppedSend = undefined
-          const how = failClass(error)
-          if (runner.stopped || connections()[conn.id] === undefined) {
-            queue.jobs.shift()
-            const waiter = settled?.waiter
-            const replay = waiter !== undefined && !waiter.runner.stopped && runners.get(conn.id) === waiter.runner ? waiter : undefined
-            if (connections()[conn.id] === undefined || stopped || how === 'drop') {
-              await Promise.resolve(job.onDrop?.()).catch(() => {})
-              clearSettledSendStatus(conn.id, chatKey, runner, settled)
-              clearPendingSend(conn.id, chatKey, settled)
-            } else if (replay !== undefined) {
-              let nextQueue = replay.runner.queues.get(chatKey)
-              if (nextQueue === undefined) replay.runner.queues.set(chatKey, nextQueue = { jobs: [] })
-              job.attempts = 0
-              nextQueue.jobs.unshift(job)
-              clearPendingSend(conn.id, chatKey, settled)
-              if (!nextQueue.draining) void drain(replay.conn, chatKey)
-            } else {
-              retainFailed(conn.id, chatKey, job, failMessage(error), settled?.firstRetained ?? queue.firstRetained)
-              clearPendingSend(conn.id, chatKey, settled)
-            }
-            break
-          }
-          if (how === 'retry') {
-            job.attempts += 1
-            if (job.attempts < SEND_ATTEMPTS) {
-              const backoff = Math.min(RETRY_MS * 2 ** (job.attempts - 1), RETRY_MAX_MS)
-              const asked = Number(error?.retryAfter) > 0 ? Math.min(error.retryAfter * 1000, RETRY_MAX_MS) : backoff
-              setSendStatus(conn.id, chatKey, { state: 'retrying', error: failMessage(error) })
-              queue.retry = setTimeout(() => { void drain(conn, chatKey) }, asked)
-              queue.retry.unref?.()
-              return
-            }
-            queue.jobs.shift()
-            retainFailed(conn.id, chatKey, job, `Send failed after ${job.attempts} attempts: ${failMessage(error)}`)
-            rt.warn('ds-bot: im send to %s failed after %d attempts: %s', chatKey, job.attempts, failMessage(error))
-            continue
-          }
-          queue.jobs.shift()
-          if (how === 'permanent') {
-            retainFailed(conn.id, chatKey, job, failMessage(error))
-            rt.warn('ds-bot: im send to %s failed: %s', chatKey, failMessage(error))
-          } else {
-            await Promise.resolve(job.onDrop?.()).catch(() => {})
-            clearSettledSendStatus(conn.id, chatKey, runner, undefined)
-          }
-          continue
-        }
-        queue.sending = false
-        queue.jobs.shift()
-        const settled = queue.stoppedSend
-        queue.stoppedSend = undefined
-        if (connections()[conn.id] !== undefined) job.after?.(sent)
-        clearSettledSendStatus(conn.id, chatKey, runner, settled)
-        clearPendingSend(conn.id, chatKey, settled)
-        if (runner.stopped || runners.get(conn.id) !== runner) break
-      }
-    } finally {
-      queue.sending = false
-      queue.draining = false
-    }
-  }
   const rememberPush = async (id, messageId, entry) => {
     if (messageId === undefined || messageId === null) return
     const data = (await runtimeOf(id)).data
@@ -604,29 +452,6 @@ export function install(rt) {
     }
     origin.forgetRequest(requestId)
     return pushed
-  }
-
-  const readPresented = async (path, limit) => {
-    if (!isAbsolute(path) || await rt.inData?.(await rt.real(path))) return undefined
-    let handle
-    try {
-      // O_NONBLOCK keeps a FIFO from stalling the chat's queue on open.
-      handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0))
-      const info = await handle.stat()
-      if (!info.isFile() || info.size > limit) return undefined
-      const data = await handle.readFile()
-      return data.length > limit ? undefined : data
-    } catch {
-      return undefined
-    } finally {
-      await handle?.close().catch(() => {})
-    }
-  }
-  const sendFile = async (handle, job) => {
-    const name = basename(job.file.path)
-    const data = typeof handle.sendFile === 'function' ? await readPresented(job.file.path, handle.fileLimit ?? 0) : undefined
-    if (data === undefined) return handle.send(job.chat, { text: job.file.label + text('noFileOut', { name }) })
-    return handle.sendFile(job.chat, { name, data, caption: job.file.caption })
   }
 
   const sendText = (conn, chat, body, buttons?, after?) => enqueue(conn, chat.key, { chat, text: body, buttons, after })
@@ -998,8 +823,9 @@ export function install(rt) {
       setStatus(conn.id, { state: 'error', error: 'This dsh runs on a Node without WebSocket', at: Date.now() })
       return
     }
-    const runner = { handle: undefined, queues: new Map(), typing: undefined }
+    const runner = { handle: undefined, typing: undefined }
     runners.set(conn.id, runner)
+    const token = outbox.open(conn.id)
     setStatus(conn.id, { state: 'connecting', at: Date.now() })
     try {
       const env = await envFor(conn)
@@ -1019,7 +845,7 @@ export function install(rt) {
         return
       }
       runner.handle = handle
-      for (const chatKey of runner.queues.keys()) void drain(conn, chatKey)
+      outbox.ready(conn.id, token, handle)
       if (typeof runner.handle?.typing === 'function') {
         runner.typing = setInterval(() => {
           for (const { chatKey, chat, target } of targetsOf(fresh(conn.id) ?? conn)) {
@@ -1031,56 +857,21 @@ export function install(rt) {
       await diffCards()
     } catch (error) {
       runners.delete(conn.id)
+      await outbox.abortOpen(conn.id, token)
       setStatus(conn.id, { state: 'error', error: String(error?.message ?? error).slice(0, 300), at: Date.now() })
     }
   }
   const stop = async (id) => {
     const runner = runners.get(id)
     runners.delete(id)
+    const dropOnly = stopped || connections()[id] === undefined
     if (runner === undefined) {
-      sendStatuses.delete(id)
+      await outbox.detach(id, { dropOnly: true })
       if (statuses.get(id)?.state !== 'error') setStatus(id, { state: 'off', at: Date.now() })
       return
     }
-    runner.stopped = true
     if (runner.typing !== undefined) clearInterval(runner.typing)
-    const dropOnly = stopped || connections()[id] === undefined
-    if (dropOnly) {
-      sendStatuses.delete(id)
-    } else {
-      const failed = failedSends.get(id)
-      const byChat = sendStatuses.get(id)
-      if (byChat !== undefined) {
-        for (const chatKey of byChat.keys()) {
-          if ((failed?.get(chatKey)?.length ?? 0) === 0) byChat.delete(chatKey)
-        }
-        if (byChat.size === 0) sendStatuses.delete(id)
-      }
-    }
-    const dropped = []
-    for (const [chatKey, queue] of runner.queues) {
-      clearTimeout(queue.retry)
-      queue.retry = undefined
-      const rest = queue.jobs.splice(queue.sending ? 1 : 0)
-      const pending = pendingSends.get(id)?.get(chatKey)
-      if (!dropOnly && queue.sending && queue.stoppedSend === undefined) {
-        let resolve
-        const promise = new Promise((done) => { resolve = done })
-        queue.stoppedSend = { firstRetained: rest[0], promise, resolve }
-        setPendingSend(id, chatKey, queue.stoppedSend)
-      }
-      if (rest.length === 0) continue
-      if (dropOnly) {
-        for (const job of rest) dropped.push(Promise.resolve(job.onDrop?.()).catch(() => {}))
-        continue
-      }
-      const prevError = sendStatuses.get(id)?.get(chatKey)?.error
-      queue.firstRetained = rest[0]
-      if (pending !== undefined) pending.firstRetained ??= rest[0]
-      failedFor(id, chatKey).push(...rest)
-      setSendStatus(id, chatKey, { state: 'error', error: prevError || 'Stopped before delivery' })
-    }
-    await Promise.all(dropped)
+    await outbox.detach(id, { dropOnly })
     await Promise.resolve(runner.handle?.stop?.()).catch(() => {})
     if (statuses.get(id)?.state !== 'error') setStatus(id, { state: 'off', at: Date.now() })
   }
@@ -1096,7 +887,7 @@ export function install(rt) {
         else if (!wants && runners.has(conn.id)) await stop(conn.id)
       }
       for (const id of [...runners.keys()]) if (conns[id] === undefined) await stop(id)
-      for (const id of [...statuses.keys()]) if (conns[id] === undefined) { statuses.delete(id); sendStatuses.delete(id) }
+      for (const id of [...statuses.keys()]) if (conns[id] === undefined) { statuses.delete(id); outbox.remove(id) }
       for (const conn of Object.values(conns)) {
         if (conn.enabled === false || !runners.has(conn.id)) {
           if (statuses.get(conn.id)?.state !== 'error') setStatus(conn.id, { state: 'off', at: Date.now() })
@@ -1107,8 +898,6 @@ export function install(rt) {
     syncing = run.catch(() => {})
     return run
   }
-
-  let stopped = false
 
   const secretName = (conn, key) => `IM_${conn.platform.toUpperCase()}_${conn.id.slice(3, 9).toUpperCase()}_${secretField(key)}`
   const cleanFields = (platform, fields, base = {}) => {
@@ -1224,10 +1013,7 @@ export function install(rt) {
         await rt.secretEndpoint('secret-delete', { name }).catch(() => {})
       }
       delete connections()[id]
-      failedSends.delete(id)
-      sendStatuses.delete(id)
-      for (const entry of pendingSends.get(id)?.values() ?? []) entry.resolve()
-      pendingSends.delete(id)
+      outbox.remove(id)
       runtimes.delete(id)
       await rm(join(imDir, `${id}.json`), { force: true }).catch(() => {})
       await rt.save()
@@ -1287,26 +1073,7 @@ export function install(rt) {
         await sync()
       }
       if (!runners.has(conn.id)) return true
-      const chats = failedSends.get(conn.id)
-      failedSends.delete(conn.id)
-      const runner = runners.get(conn.id)
-      for (const [chatKey, pending] of pendingSends.get(conn.id) ?? []) {
-        pending.firstRetained = undefined
-        pending.waiter = { conn, runner }
-        setSendStatus(conn.id, chatKey, { state: 'retrying' })
-      }
-      for (const [chatKey, jobs] of chats ?? []) {
-        setSendStatus(conn.id, chatKey, { state: 'retrying' })
-        for (const job of jobs) enqueue(conn, chatKey, job)
-      }
-      for (const [chatKey, queue] of runner?.queues ?? []) {
-        if (queue.retry === undefined || queue.draining || queue.jobs.length === 0) continue
-        clearTimeout(queue.retry)
-        queue.retry = undefined
-        queue.jobs[0].attempts = 0
-        setSendStatus(conn.id, chatKey, { state: 'retrying' })
-        void drain(conn, chatKey)
-      }
+      outbox.retry(conn.id)
       return true
     },
     async 'im-login-start'(body) {
@@ -1442,8 +1209,8 @@ export function install(rt) {
   }, 'ds-bot: im')
 
   const imView = () => ({ connections: Object.values(connections()).map(viewOf), platforms: IM_PLATFORMS.filter(platform => adaptersFor().includes(platform.id)).map(platform => platform.id) })
-  const imStatusView = () => Object.fromEntries([...new Set([...statuses.keys(), ...sendStatuses.keys()])].map((id) => {
-    const status = combinedStatus(id)
+  const imStatusView = () => Object.fromEntries([...new Set([...statuses.keys(), ...outbox.statusIds()])].map((id) => {
+    const status = outbox.statusOf(id, statuses.get(id))
     return [id, { state: status.state, ...(status.error !== undefined ? { error: status.error } : {}), at: status.at }]
   }))
 

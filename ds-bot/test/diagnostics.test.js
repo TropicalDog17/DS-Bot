@@ -6,7 +6,8 @@ import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { cleanText, install as installDiagnostics, reportMarkdown } from '../src/host/diagnostics.ts'
-import { BLOCKING_CODES, failureLine, install as installTurns, turnFailure } from '../src/host/turns.ts'
+import { BLOCKING_CODES } from '../src/host/settlement.ts'
+import { install as installTurns } from '../src/host/turns.ts'
 import { errorCode } from '../src/host/channel.ts'
 import { SOURCE_KIND } from '../src/host/constants.ts'
 
@@ -190,37 +191,6 @@ test('errorCode tells refusals from DS Bot faults', () => {
   assert.equal(errorCode(Object.assign(new Error('no'), { code: 'ERR_SQLITE_ERROR' })), 'bot/internal')
   assert.equal(errorCode(Object.assign(new Error('no'), { code: 'ERR_INVALID_ARG_TYPE' })), 'bot/internal')
   assert.equal(errorCode(Object.assign(new Error('no'), { code: 'bot/read-only' })), 'bot/read-only')
-})
-
-test('turnFailure reads a usage limit a gateway wraps in another status as a quota failure', () => {
-  const session = '502: {"code":"502","message":"claude-code: You\'ve hit your session limit · resets 7:10am (UTC)","type":"upstream_error"}'
-  assert.deepEqual(turnFailure({ code: 'SERVER', status: 502, message: session }), { code: 'QUOTA', message: session, status: 502 })
-  assert.equal(turnFailure({ code: 'INVALID_REQUEST', status: 400, message: 'Budget has been exceeded! Current cost: 50.03, Max budget: 50' }).code, 'QUOTA')
-  assert.equal(turnFailure({ code: 'RATE_LIMIT', status: 429, message: 'gpt returned 429: The usage limit has been reached' }).code, 'QUOTA')
-  assert.equal(BLOCKING_CODES.has('QUOTA'), true)
-  assert.equal(turnFailure({ code: 'SERVER', status: 502, message: 'bad gateway' }).code, 'SERVER')
-  assert.equal(turnFailure({ code: 'RATE_LIMIT', status: 429, message: 'slow down' }).code, 'RATE_LIMIT')
-  assert.deepEqual(turnFailure({ code: 'AUTH', status: 401, message: 'usage limit' }), { code: 'AUTH', message: '', status: 401 })
-})
-
-test('turnFailure drops AUTH messages and keeps the facts', () => {
-  assert.deepEqual(turnFailure({ code: 'AUTH', message: 'bad key sk-12***34', status: 401 }), { code: 'AUTH', message: '', status: 401 })
-  assert.deepEqual(turnFailure({ code: 'RATE_LIMIT', message: ' slow down ', requestId: 'r1' }), { code: 'RATE_LIMIT', message: 'slow down', requestId: 'r1' })
-  assert.deepEqual(turnFailure(undefined), { code: 'UNKNOWN', message: '' })
-  assert.equal(failureLine({ code: 'SERVER', status: 503, message: 'busy' }), 'SERVER 503: busy')
-})
-
-test('a 403 content audit is not an AUTH failure, and keeps its body and request id', () => {
-  const body = 'upstream 403 request-id=00000000-0000-4000-8000-000000000000: {"error":{"message":"内容审计命中风险规则，请调整输入后重试","type":"content_policy_violation"}}'
-  assert.deepEqual(turnFailure({ code: 'AUTH', status: 403, message: body }), {
-    code: 'CONTENT_POLICY',
-    message: body,
-    status: 403,
-    requestId: '00000000-0000-4000-8000-000000000000',
-  })
-  assert.deepEqual(turnFailure({ code: 'AUTH', status: 401, message: 'invalid api key' }), { code: 'AUTH', message: '', status: 401 })
-  assert.deepEqual(turnFailure({ code: 'AUTH', status: 403, message: 'forbidden' }), { code: 'AUTH', message: '', status: 403 })
-  assert.equal(turnFailure({ code: 'AUTH', status: 403, message: body, requestId: 'r1' }).requestId, 'r1')
 })
 
 function turnsHost() {

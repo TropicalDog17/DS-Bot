@@ -5,7 +5,12 @@
   },
   "include": [
     "src/ambient.d.ts",
+    "src/host/diagnostics.ts",
     "src/host/dispatch.ts",
-    "test/dispatch.test.ts"
+    "src/host/settlement.ts",
+    "src/host/im/outbox.ts",
+    "test/dispatch.test.ts",
+    "test/settlement.test.ts",
+    "test/im-outbox.test.ts"
   ]
 }

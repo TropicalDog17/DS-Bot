@@ -12,9 +12,9 @@ const TEXT_MAX = 2000
 export const REPORT_ENTRIES = 20
 export const ISSUES_URL = 'https://github.com/Fei2411/DS-Bot/issues/new'
 
-const quote = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const quote = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
-const CREDENTIALS = [
+const CREDENTIALS: Array<[RegExp, string]> = [
   [/\bsk-[A-Za-z0-9_*.-]{6,}/g, 'sk-[hidden]'],
   [/\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{16,}/g, '[hidden]'],
   [/\bgithub_pat_[A-Za-z0-9_]{16,}/g, '[hidden]'],
@@ -27,7 +27,7 @@ const CREDENTIALS = [
   [/(["']?(?:api[_-]?key|authorization|x-api-key|password|secret)["']?\s*[:=]\s*["']?)[^\s"',}]{6,}/gi, '$1[hidden]'],
 ]
 
-export function cleanText(text, { redact = value => value, home = homedir() } = {}) {
+export function cleanText(text: unknown, { redact = (value: string) => value, home = homedir() }: { redact?: (value: string) => string; home?: string } = {}): string {
   let out = redact(String(text ?? ''))
   for (const [pattern, replacement] of CREDENTIALS) out = out.replace(pattern, replacement)
   if (home && home.length > 1) {
@@ -40,16 +40,16 @@ export function cleanText(text, { redact = value => value, home = homedir() } = 
   return out.length > TEXT_MAX ? `${out.slice(0, TEXT_MAX)}…` : out
 }
 
-const errorText = error => `${error.name && error.name !== 'Error' ? `${error.name}: ` : ''}${error.message}`
+const errorText = (error: Error) => `${error.name && error.name !== 'Error' ? `${error.name}: ` : ''}${error.message}`
 
-export function entryLine(entry) {
+export function entryLine(entry: Record<string, any>): string {
   const where = [entry.bot, entry.where].filter(Boolean).join(' · ')
   const code = entry.code ? ` [${entry.code}${entry.status ? ` ${entry.status}` : ''}]` : ''
   return `${new Date(entry.time).toISOString()} ${entry.level.toUpperCase()} ${entry.source}${where ? ` (${where})` : ''}${code} ${entry.text}`
 }
 
-export function reportMarkdown({ facts, client = {}, entries = [], clientEntries = [] }: Record<string, any>) {
-  const row = (label, value) => (value === undefined || value === null || value === '' ? null : `| ${label} | ${String(value).replace(/\|/g, '\\|')} |`)
+export function reportMarkdown({ facts, client = {}, entries = [], clientEntries = [] }: Record<string, any>): string {
+  const row = (label: string, value: unknown) => (value === undefined || value === null || value === '' ? null : `| ${label} | ${String(value).replace(/\|/g, '\\|')} |`)
   const lines = [
     '| | |',
     '|---|---|',
@@ -68,7 +68,7 @@ export function reportMarkdown({ facts, client = {}, entries = [], clientEntries
   const out = [...lines, '']
   out.push(recent.length === 0 ? 'No host errors recorded.' : `Recent host errors (${recent.length} of ${entries.length}, oldest first):`)
   if (recent.length > 0) out.push('```', ...recent.map(entryLine), '```')
-  const stacks = recent.filter(entry => entry.stack).slice(-3)
+  const stacks = recent.filter((entry: Record<string, any>) => entry.stack).slice(-3)
   for (const entry of stacks) out.push('', `<details><summary>Stack: ${entry.text.slice(0, 80).replace(/</g, '&lt;')}</summary>`, '', '```', entry.stack, '```', '</details>')
   if (clientEntries.length > 0) {
     out.push('', `Recent browser errors (${Math.min(clientEntries.length, 10)}):`, '```', ...clientEntries.slice(-10).map(entryLine), '```')
@@ -98,11 +98,11 @@ export const dshVersion = () => {
   return undefined
 }
 
-export function install(rt) {
+export function install(rt: Record<string, any>) {
   const { ctx, home, config } = rt
   const logPath = join(home, 'logs', 'diagnostics.jsonl')
   const toFile = config.diagnosticsFile !== false
-  let fresh = []
+  let fresh: Record<string, any>[] = []
   let writing = Promise.resolve()
   let fileFailed = false
   let stopped = false
@@ -112,9 +112,9 @@ export function install(rt) {
     return writing
   }, 'ds-bot: diagnostics log')
 
-  const clean = text => cleanText(text, { redact: rt.redactSecrets })
+  const clean = (text: unknown) => cleanText(text, { redact: rt.redactSecrets })
 
-  const earlier = toFile
+  const earlier: Promise<Record<string, any>[]> = toFile
     ? readFile(logPath, 'utf8').then(text => text.split('\n').filter(Boolean).slice(-KEEP).flatMap((line) => {
         try {
           const entry = JSON.parse(line)
@@ -126,7 +126,7 @@ export function install(rt) {
     : Promise.resolve([])
   let cleared = 0
 
-  const append = (entry) => {
+  const append = (entry: Record<string, any>) => {
     if (!toFile || stopped) return
     writing = writing.then(async () => {
       await mkdir(dirname(logPath), { recursive: true })
@@ -140,7 +140,7 @@ export function install(rt) {
     })
   }
 
-  const note = ({ level = 'error', source = 'host', text, stack, ...fields }) => {
+  const note = ({ level = 'error', source = 'host', text, stack, ...fields }: Record<string, any>) => {
     const entry: Record<string, any> = { time: Date.now(), level, source, text: clean(text) }
     for (const [key, value] of Object.entries(fields)) {
       if (value !== undefined && value !== null && value !== '') entry[key] = typeof value === 'string' ? clean(value) : value
@@ -153,8 +153,8 @@ export function install(rt) {
     return entry
   }
 
-  const warn = (template, ...args) => {
-    const error = args.find(arg => arg instanceof Error)
+  const warn = (template: unknown, ...args: unknown[]) => {
+    const error = args.find((arg): arg is Error => arg instanceof Error)
     const line = clean(format(template, ...args.map(arg => (arg instanceof Error ? errorText(arg) : arg))))
     const frames = typeof error?.stack === 'string' ? error.stack.split('\n').filter(item => /^\s+at /.test(item)).slice(0, STACK_LINES).map(item => item.trim()) : []
     ctx.logger.warn('%s', line)
@@ -180,7 +180,7 @@ export function install(rt) {
   const facts = () => {
     const bots = Object.values(rt.state.bots) as any[]
     const models = [...new Set(bots.map(bot => bot.model ?? bot.appliedModel).filter(Boolean))]
-    const count = (n, one, many) => `${n} ${n === 1 ? one : many}`
+    const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
     const groups = Object.keys(rt.state.rooms).length
     return {
       botVersion: ownVersion(),
@@ -193,15 +193,15 @@ export function install(rt) {
     }
   }
 
-  const sanitizeClient = (client) => {
-    const pick = (value, max) => (typeof value === 'string' ? clean(value.slice(0, max)) : undefined)
+  const sanitizeClient = (client: Record<string, any> | undefined) => {
+    const pick = (value: unknown, max: number) => (typeof value === 'string' ? clean(value.slice(0, max)) : undefined)
     return {
       surface: pick(client?.surface, 40),
       language: pick(client?.language, 20),
       userAgent: pick(client?.userAgent, 200),
     }
   }
-  const sanitizeClientEntries = list => (Array.isArray(list) ? list : []).slice(-20).flatMap((item) => {
+  const sanitizeClientEntries = (list: unknown) => (Array.isArray(list) ? list : []).slice(-20).flatMap((item: Record<string, any>) => {
     if (typeof item?.text !== 'string' || typeof item.time !== 'number') return []
     return [{ time: item.time, level: item.level === 'warn' ? 'warn' : 'error', source: 'browser', text: clean(item.text.slice(0, 500)), ...(typeof item.code === 'string' ? { code: clean(item.code.slice(0, 40)) } : {}) }]
   })

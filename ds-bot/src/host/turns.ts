@@ -1,100 +1,28 @@
-import { randomUUID } from 'node:crypto'
 import { carrierKeyOf } from '@deepseek-ai/dsh-scope'
-import { HANDOFF_ACK, LATE_ANSWER, MESSAGE_INLINE_MAX, REFERENCE_KIND, REPLY_KIND, SOURCE_KIND, STEER_CUT } from './constants.ts'
+import { HANDOFF_ACK, REFERENCE_KIND, REPLY_KIND, SOURCE_KIND, STEER_CUT } from './constants.ts'
 import { cleanText } from './diagnostics.ts'
 import { absoluteLinks } from './links.ts'
+import {
+  BLOCKING_CODES,
+  CUT_OFF_NOTE,
+  answersUser,
+  createSettlement,
+  cutOffText,
+  expectsReply,
+  failureLine,
+  prematureCutOff,
+  turnFailure,
+} from './settlement.ts'
 import { splitRef, textOf } from './text.ts'
 import { threadCurrentOfPart } from './threads.ts'
 import { viaOf } from '../shared/im-platforms.ts'
 import { reminderText } from './schedules.ts'
 import { usageChunk } from './usage.ts'
 
-export const BLOCKING_CODES = new Set(['MISSING_CREDENTIAL', 'INVALID_CREDENTIAL', 'AUTH', 'QUOTA', 'ACCOUNT_QUOTA', 'ACCOUNT_SIGN_IN_REQUIRED', 'ACCOUNT_SIGNED_OUT', 'ACCOUNT_TOKEN_INVALID', 'LOCAL_AGENT_MISSING', 'LOCAL_AGENT_SIGNIN', 'LOCAL_AGENT_QUOTA', 'LOCAL_AGENT_EXIT'])
+export { BLOCKING_CODES, cutOffText, failureLine, prematureCutOff, turnFailure }
+
 const KEY_CODES = new Set(['MISSING_CREDENTIAL', 'INVALID_CREDENTIAL', 'AUTH'])
 const SIGN_IN_CODES = new Set(['ACCOUNT_SIGN_IN_REQUIRED', 'ACCOUNT_SIGNED_OUT', 'ACCOUNT_TOKEN_INVALID'])
-
-// A failed turn's `LlmFailure`, kept to what can be shown and logged. Like DSH's own
-// error row, an AUTH failure loses its message: providers may echo part of the key.
-// DSH maps every HTTP 403 to AUTH, but an upstream also uses 403 for a content audit,
-// and the body says which one it is. A rekey cannot fix an audit, so it keeps its own
-// code; the audit body and request id stay for the card and the diagnostics.
-const CONTENT_POLICY = /content[\s_-]?polic|content[\s_-]?violation|content[\s_-]?filter|内容审计|内容安全|风险规则/i
-const REQUEST_ID = /(?:request[-_ ]?id|x-request-id)["'\s:=]+([A-Za-z0-9._:-]{6,})/i
-// A gateway in front of the model passes a spent plan or budget on under its own
-// status: a 502 for the upstream's refusal, a 400 for its own budget, a 429 for a
-// usage limit. DSH reads those as a server fault, a bad request or a rate limit, but
-// only the user can fix them, by waiting for the reset, adding budget or changing model.
-const USAGE_LIMIT = /session limit|usage limit|budget has been exceeded|quota exceeded|exceeded your current quota|insufficient[\s_-]?quota/i
-const WRAPS_USAGE_LIMIT = new Set(['SERVER', 'INVALID_REQUEST', 'RATE_LIMIT', 'UNKNOWN'])
-
-const requestIdOf = (message) => {
-  const found = REQUEST_ID.exec(message)
-  return found === null ? undefined : found[1].replace(/[.,;:)+]+$/, '')
-}
-
-export function turnFailure(error) {
-  const rawCode = typeof error?.code === 'string' && error.code !== '' ? error.code : 'UNKNOWN'
-  const raw = typeof error?.message === 'string' ? error.message.trim() : ''
-  const contentPolicy = rawCode === 'AUTH' && error?.status === 403 && CONTENT_POLICY.test(raw)
-  const usageLimit = WRAPS_USAGE_LIMIT.has(rawCode) && USAGE_LIMIT.test(raw)
-  const code = contentPolicy ? 'CONTENT_POLICY' : usageLimit ? 'QUOTA' : rawCode
-  const message = code === 'AUTH' || raw === '' ? '' : cleanText(raw).slice(0, 500)
-  const requestId = typeof error?.requestId === 'string' && error.requestId !== '' ? error.requestId : requestIdOf(raw)
-  return {
-    code,
-    message,
-    ...(typeof error?.status === 'number' ? { status: error.status } : {}),
-    ...(requestId === undefined ? {} : { requestId }),
-  }
-}
-
-export const failureLine = failure => `${failure.code}${failure.status ? ` ${failure.status}` : ''}${failure.message ? `: ${failure.message.slice(0, 200)}` : ''}`
-
-export function answerSender(rt, id, source, text, long?) {
-  const back = rt.roomOf(source.senderRoomId)?.sessions?.[source.senderSessionId]
-  const asker = source.senderPart === undefined ? undefined : rt.botOf(source.senderSessionId)
-  const part = back === undefined && asker !== undefined ? threadCurrentOfPart(asker, source.senderPart) : undefined
-  const target = back ?? part
-  const name = rt.botOf(rt.selfOf(id))?.name ?? 'The other Bot'
-  const imOrigin = rt.state.works?.[source.exchangeId]?.imOrigin
-  const work = rt.closeWork?.(source.exchangeId, name, text)
-  const late = work === undefined ? rt.abandonedWork?.(source.exchangeId) : undefined
-  const marker = late === undefined ? '' : LATE_ANSWER
-  const body = marker === '' ? (long?.text ?? text) : `${marker}${long?.text ?? text}`
-  const length = long === undefined ? undefined : late === undefined ? long.length : (long.length ?? text.length) + marker.length
-  const exchangeId = randomUUID()
-  void rt.dispatch.sendReply({
-    fromId: rt.selfOf(id),
-    toId: source.senderSessionId,
-    ...(target ? { sessionId: target } : {}),
-    text: body,
-    ...(length === undefined ? {} : { files: long.files, length }),
-    role: 'reply',
-    replyTo: source.exchangeId,
-    imOrigin,
-    exchangeId,
-    ...(work ? { work } : {}),
-  }).catch((error) => {
-    rt.warn('ds-bot: reply delivery failed: %s', error)
-    rt.dispatch.forgetDelivery(exchangeId)
-    rt.answerMissed?.(source.exchangeId)
-    const said = `${name} could not send its reply to you (${failureLine(turnFailure(error))}); what it had answered:\n`
-    void rt.dispatch.sendReply({
-      fromId: rt.selfOf(id),
-      toId: source.senderSessionId,
-      ...(target ? { sessionId: target } : {}),
-      text: `${said}${long?.text ?? text}`,
-      ...(long?.length === undefined ? {} : { files: long.files, length: said.length + long.length }),
-      role: 'reply',
-      replyTo: source.exchangeId,
-      imOrigin,
-      ...(work ? { work } : {}),
-    }).catch((again) => {
-      rt.replyOrigin?.release(imOrigin)
-      rt.warn('ds-bot: reply failure notice not delivered: %s', again)
-    })
-  })
-}
 
 export function attachReference(queued, source, text) {
   const post = queued?.findLast(item => item.botId === undefined && item.kickoff !== true)
@@ -154,22 +82,13 @@ const RETRY_PROMISE_TEXT = 'Your last reply said you would start working, but yo
 // The turn number a running turn gets when it started before this plugin was loaded and
 // dsh does not say which number it has. dsh numbers turns from 1, so this one is unused.
 const RECOVERED_TURN = -1
-const CUT_OFF_NOTE = '[cut off at the model\'s output limit; the answer is not complete]'
-const CUT_OFF_EMPTY_NOTE = '[cut off at the model\'s output limit before it wrote anything]'
-export const cutOffText = said => (said === '' ? CUT_OFF_EMPTY_NOTE : `${said}\n\n${CUT_OFF_NOTE}`)
-export function prematureCutOff(usage, route) {
-  const limit = Number(route?.maxTokens)
-  const output = Number(usage?.outputTokens)
-  const input = Number(usage?.inputTokens ?? 0) + Number(usage?.cacheReadTokens ?? 0) + Number(usage?.cacheWriteTokens ?? 0)
-  return Number.isFinite(limit) && limit > 0 && Number.isFinite(output) && output >= 0
-    && output < limit / 8 && input >= limit
-}
 
 const PROMISED_WORK = /(?:^(?:收到|好的|明白|好|行|没问题|了解)[，,、。.!！：\s]*(?:我(?:现在|这就|先|马上|立刻|去|来)?(?:开始|着手|去|来|准备)?(?:排查|检查|调查|查看|看看|搜索|搜一下|分析|处理|执行|运行|跑一下|修改|修复|实现|编写|整理|验证|测试|读一下|翻一下)(?!过了|过(?:[，,。.!！、；;\s]|$)|完了|完毕|好了)|(?:现在|马上|立刻)?(?:开始|着手)(?:执行|处理|排查|检查|调查|干活|开工)(?!过了|过(?:[，,。.!！、；;\s]|$)|完了|完毕|好了)|开工(?:[。！!，,\s]|$))|^(?:开工(?:[。！!，,\s]|$)|我(?:现在|这就|先|马上|立刻)(?:开始|着手|去)(?:排查|检查|调查|查看|搜索|分析|处理|执行|运行|修改|修复|实现|编写|整理|验证|测试)(?!过了|过(?:[，,。.!！、；;\s]|$)|完了|完毕|好了))|\b(?:(?:i\s+will|i'll|let\s+me|going\s+to)\s+(?:start|begin|check|look\s+into|investigate|search|run|inspect|read|fix|implement|work\s+on)\b|(?:starting|beginning)\s+(?:the\s+)?(?:investigation|check|search|work|execution|analysis)\b|^on\s+it[,.\s!]+(?:i'll|i\s+will|let\s+me|starting|checking)\b))/i
 export const promisesWork = text => typeof text === 'string' && text.trim().length <= 240 && PROMISED_WORK.test(text.trim())
 
 export function install(rt) {
   const { ctx, state } = rt
+  const settlement = rt.settlement ??= createSettlement(rt)
 
   const retryTurn = (id, info, note, text) => {
     const keeps = info !== undefined && (info.role === 'room' || expectsReply(info))
@@ -425,8 +344,6 @@ export function install(rt) {
     void rt.save().catch(() => {})
   }
 
-  const answersUser = info => info.role === 'request' && info.audience === 'user'
-  const expectsReply = info => info.role === 'request' || info.role === 'stopped'
   const speaksInGroup = (id, info) => rt.groupOwners.has(id) && !(info !== undefined && expectsReply(info))
 
   const showSteps = (id, entry, upTo) => {
@@ -437,8 +354,6 @@ export function install(rt) {
       if (text !== '') void rt.roomStepText?.(id, info, text, entry.shown === 0)?.catch(error => rt.warn('ds-bot: step text from %s not posted: %s', id, error))
     }
   }
-
-  const tellSender = (id, source, text, long?) => answerSender(rt, id, source, text, long)
 
   async function releaseBot(botId, sessionIds) {
     const text = `${rt.botOf(botId)?.name ?? 'The other Bot'} was deleted before it could answer your message.`
@@ -460,7 +375,7 @@ export function install(rt) {
     for (const source of rt.forgetBotWork?.(botId) ?? []) {
       if (!waiting.has(source.exchangeId)) waiting.set(source.exchangeId, [rt.chatOf(botId), source])
     }
-    for (const [id, source] of waiting.values()) tellSender(id, source, text)
+    for (const [id, source] of waiting.values()) settlement.answerSender(id, source, text)
   }
 
   const claimTrigger = (sessionId, entry, info) => {
@@ -625,22 +540,11 @@ export function install(rt) {
   const noteCutOffTurn = (id, { session, wroteNothing, outputTokens }: { session?: any, wroteNothing?: any, outputTokens?: any }) => {
     const route = session.requestHeader?.()?.config
     const ref = route?.provider && route?.model ? `${route.provider}/${route.model}` : undefined
-    const tokens = rt.sessionTokens?.(session)
-    const facts = [
+    settlement.recordCutOff(id, {
+      wroteNothing: Boolean(wroteNothing),
       ref,
-      Number.isFinite(tokens) && tokens > 0 ? `${tokens} tokens in` : undefined,
-      Number.isFinite(outputTokens) && outputTokens >= 0 ? `${outputTokens} tokens out` : undefined,
-    ].filter(Boolean)
-    rt.noteFailure({
-      level: 'warn',
-      source: 'turn',
-      code: 'MAX_TOKENS',
-      text: `${wroteNothing
-        ? 'the turn was cut off at the output limit before it wrote anything'
-        : 'the turn was cut off at the output limit, so its answer is not complete'}${facts.length > 0 ? ` (${facts.join(', ')})` : ''}`,
-      bot: rt.botOf(rt.selfOf(id))?.name ?? (rt.roomOf(id) ? undefined : 'unknown Bot'),
-      where: placeOf(id),
-      sessionId: id,
+      tokensIn: rt.sessionTokens?.(session),
+      outputTokens,
     })
   }
 
@@ -1095,35 +999,15 @@ export function install(rt) {
           return reply
         }
         const groupReply = () => rt.withRoomSteps?.(held, replyText()) ?? replyText()
-        const name = rt.botOf(rt.selfOf(id))?.name ?? 'The other Bot'
-        const answer = (source, reply) => {
-          if (!expectsReply(source) || answersUser(source)) return
-          if (failure !== undefined) {
-            tellSender(id, source, `${name} could not answer your message: its model call failed (${failureLine(failure)}). Tell the user if it matters; do not retry right away.`)
-          } else if (reply !== '' || reason?.kind === 'aborted') {
-            tellSender(id, source, reply !== '' ? reply : `${name} was stopped before it could answer your message.`)
-          }
-        }
-        const finish = (source, reply) => {
-          const work = rt.workOf?.(source)
-          if (!rt.ownsWork?.(rt.selfOf(id), work)) return answer(source, reply)
-          const asker = rt.workAsker(work)
-          if (failure !== undefined || reason?.kind === 'aborted') return answer(asker, reply)
-          if (rt.waitsWork(work)) return rt.holdWork(work, reply)
-          const text = rt.answerText(work, reply, name)
-          if (text.length <= MESSAGE_INLINE_MAX) return tellSender(id, asker, text)
-          void rt.attachLong(text, `Answer from ${name}.txt`)
-            .then(long => tellSender(id, asker, text, long))
-            .catch(error => rt.warn('ds-bot: answer from %s not sent: %s', name, error))
-        }
+        const aborted = reason?.kind === 'aborted'
         if (!retry && info?.role === 'room') {
           const waiter = roomWaiters.get(info.exchangeId)
           roomWaiters.delete(info.exchangeId)
           const stopped = stoppedRoomTurns.delete(info.exchangeId)
           if (waiter !== undefined) {
             if (failure !== undefined) waiter.fail(failure)
-            else waiter.resolve(reason?.kind === 'aborted' ? null : groupReply())
-          } else if (!stopped && reason?.kind !== 'aborted') {
+            else waiter.resolve(aborted ? null : groupReply())
+          } else if (!stopped && !aborted) {
             if (failure !== undefined) void rt.lateRoomFailure?.(id, info, failure)
             else void rt.lateRoomReply?.(id, info, groupReply(), { shown, toolCount })
           }
@@ -1132,16 +1016,16 @@ export function install(rt) {
           // first step) never names its call, so the call waiting on this Session fails.
           const inRound = failure !== undefined && info === undefined && rt.failRoomTurn?.(id, failure) === true
           if (failure !== undefined) { if (!inRound) void rt.lateRoomFailure?.(id, info ?? {}, failure) }
-          else if (reason?.kind !== 'aborted') void rt.lateRoomReply?.(id, info ?? {}, groupReply(), { shown, toolCount })
+          else if (!aborted) void rt.lateRoomReply?.(id, info ?? {}, groupReply(), { shown, toolCount })
         } else if (!retry && info !== undefined) {
-          finish(info, replyText())
+          void settlement.settle(id, info, { reply: replyText(), failure, aborted })
         }
         for (const request of joined) {
           if (request.info.role === 'room' && stoppedRoomTurns.delete(request.info.exchangeId)) continue
-          if (failure !== undefined || reason?.kind === 'aborted') {
+          if (failure !== undefined || aborted) {
             if (request.info.role === 'room') {
               if (failure !== undefined) void rt.lateRoomFailure?.(id, request.info, failure)
-            } else answer(request.info, '')
+            } else settlement.settleDirect(id, request.info, { reply: '', failure, aborted })
             continue
           }
           void rt.dispatch.sendReply({
