@@ -20,19 +20,26 @@ export function createReplyOrigin({
   const pendingReset = new Set()
   const requests = new Map()
   const resumedOrigins = new Map()
+  // A hold can be revoked by the turn that made it, only while that host runs.
+  const activeOn = new Map()
   const imVia = new Map()
 
   const connection = id => Object.values(connections()).find(conn => conn.id === id)
   const sameChat = (a, b) => a.connId === b.connId && a.chatKey === b.chatKey && a.senderId === b.senderId
 
-  function resolve(entry) {
+  function destination(entry) {
     if (entry === undefined) return undefined
     const conn = connection(entry.connId)
-    if (conn === undefined || !runners.has(conn.id)) return undefined
+    if (conn === undefined) return undefined
     if (entry.senderId !== undefined && !paired(conn, entry.senderId)) return undefined
     const chat = conn.chats?.[entry.chatKey]
     if (chat === undefined || entry.binding === undefined || bindingOf(conn, entry.chatKey) !== entry.binding) return undefined
     return { conn, chatKey: entry.chatKey, chat }
+  }
+
+  function resolve(entry) {
+    const route = destination(entry)
+    return route !== undefined && runners.has(route.conn.id) ? route : undefined
   }
 
   const of = sessionId => resolve(origins.get(sessionId))
@@ -58,6 +65,7 @@ export function createReplyOrigin({
 
   function release(token) {
     resumedOrigins.delete(token)
+    activeOn.delete(token)
     if (durableOf(token) === undefined) return undefined
     delete savedCarries()[token]
     return persist(() => durableOf(token) === undefined)
@@ -70,8 +78,11 @@ export function createReplyOrigin({
 
   function prune() {
     pruneRequests()
+    // The platform runner may still be starting when the team is first loaded.
     for (const [token, entry] of heldEntries()) {
-      if (entry.issuedBy !== undefined && !sessionExists(entry.issuedBy)) release(token)
+      if (entry.issuedBy === undefined) continue
+      if (!sessionExists(entry.issuedBy) || destination(entry) === undefined
+        || (entry.botId !== undefined && botOfSession?.(entry.issuedBy) !== entry.botId)) release(token)
     }
   }
 
@@ -83,12 +94,14 @@ export function createReplyOrigin({
     if (held.length >= MAX_PENDING) {
       const [oldest] = held.reduce((first, next) => next[1].at < first[1].at ? next : first)
       release(oldest)
+      warn?.('ds-bot: evicted the oldest IM reply origin at the limit of %d', MAX_PENDING)
     }
     const { connId, chatKey, senderId, binding, ready } = origin
     const token = randomUUID()
-    const entry = { connId, chatKey, senderId, binding, activeOn: sessionId, at: now() }
+    const entry = { connId, chatKey, senderId, binding, at: now() }
+    activeOn.set(token, sessionId)
     if (dispatch) Object.assign(entry, { issuedBy: sessionId, exchangeId, botId: botOfSession?.(sessionId) })
-    if (dispatch && savedCarries !== undefined) savedCarries()[token] = entry
+    if (dispatch && savedCarries !== undefined) savedCarries(true)[token] = entry
     else resumedOrigins.set(token, { ...entry, ready })
     return token
   }
@@ -107,7 +120,7 @@ export function createReplyOrigin({
   function drop(sessionId) {
     origins.delete(sessionId)
     mixed.add(sessionId)
-    for (const [token, held] of heldEntries()) if (held.activeOn === sessionId) release(token)
+    for (const [token, active] of activeOn) if (active === sessionId) release(token)
   }
 
   function reset(sessionId) {
@@ -124,7 +137,7 @@ export function createReplyOrigin({
       return
     }
     for (const [token, held] of heldEntries()) {
-      if (held.activeOn === sessionId && !sameChat(held, entry)) release(token)
+      if (activeOn.get(token) === sessionId && !sameChat(held, entry)) release(token)
     }
     const binding = Object.hasOwn(entry, 'binding') ? entry.binding : bindingOf(connection(connId), chatKey)
     const ready = entry.ready ?? previous?.ready
@@ -142,17 +155,11 @@ export function createReplyOrigin({
     const entry = heldOf(token)
     if (entry === undefined) return
     claim(sessionId, entry)
-    if (!mixed.has(sessionId)) entry.activeOn = sessionId
+    if (!mixed.has(sessionId)) activeOn.set(token, sessionId)
   }
 
   function detach(sessionId) {
-    let changed = false
-    for (const [token, held] of heldEntries()) {
-      if (held.activeOn !== sessionId) continue
-      delete held.activeOn
-      if (durableOf(token) !== undefined) changed = true
-    }
-    if (changed) void persist()
+    for (const [token, active] of activeOn) if (active === sessionId) activeOn.delete(token)
   }
 
   function rememberRequest(requestId, conn, chatKey, senderId) {
@@ -234,6 +241,7 @@ export function createReplyOrigin({
     pendingReset.clear()
     requests.clear()
     resumedOrigins.clear()
+    activeOn.clear()
     imVia.clear()
   }
 

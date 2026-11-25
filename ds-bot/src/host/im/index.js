@@ -439,18 +439,18 @@ export function install(rt) {
     const chat = conn?.chats?.[chatKey]
     if (chat === undefined) return undefined
     const target = chat.target ?? (chat.kind === 'direct' ? { botId: conn.botId } : undefined)
-    if (target?.botId !== undefined) return `bot:${target.botId}`
-    if (target?.roomId !== undefined) return `room:${target.roomId}`
+    if (target?.botId !== undefined && rt.botOf(target.botId) !== undefined) return `bot:${target.botId}`
+    if (target?.roomId !== undefined && rt.roomOf(target.roomId) !== undefined) return `room:${target.roomId}`
     return undefined
   }
   // The Session a Bot writes into now, for a card that carries no Session of its own.
   const chatOfBot = botId => rt.botOf(botId) === undefined ? undefined : rt.chatOf(botId)
   const origin = createReplyOrigin({
     connections, runners, paired, bindingOf, chatOfBot,
-    savedCarries: () => (state.imReplyOrigins ??= {}),
+    savedCarries: create => create ? (state.imReplyOrigins ??= {}) : state.imReplyOrigins,
     save: () => rt.save({ required: true }),
     warn: rt.warn,
-    botOfSession: rt.selfOf,
+    botOfSession: id => rt.botOf(rt.selfOf(id))?.id,
     roomOf: rt.roomOf,
     roomWorking: id => rt.roomActive?.(id) || (rt.roomWorkView?.()[id] ?? []).length > 0,
     isBotChat: id => rt.chatOwners.has(id),
@@ -1496,16 +1496,17 @@ export function install(rt) {
     void sync().catch(() => {})
   })
 
+  const syncOrigins = () => {
+    origin.prune()
+    return sync()
+  }
   let interval
   ctx.effect(() => {
     interval = setInterval(() => {
-      void rt.refresh().then(() => {
-        origin.prune()
-        return sync()
-      }).catch(() => {})
+      void rt.refresh().then(syncOrigins).catch(() => {})
     }, RECONCILE_MS)
     interval.unref?.()
-    void rt.load().then(() => sync()).catch(() => {})
+    void rt.load().then(syncOrigins).catch(() => {})
     return () => {
       stopped = true
       clearInterval(interval)

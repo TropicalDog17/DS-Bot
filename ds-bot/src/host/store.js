@@ -16,6 +16,29 @@ import { AMBIGUOUS_OLD_ROUTES, legacyRoute } from './local-agents/engines.js'
 // Object.prototype.
 export const own = (table, key) => (table != null && Object.hasOwn(table, key) ? table[key] : undefined)
 
+function cleanReplyOrigins(state) {
+  const entries = state.imReplyOrigins
+  if (entries === undefined) return false
+  if (entries === null || typeof entries !== 'object' || Array.isArray(entries)) {
+    delete state.imReplyOrigins
+    return true
+  }
+  let changed = false
+  const fields = ['connId', 'chatKey', 'senderId', 'binding', 'issuedBy', 'exchangeId', 'botId']
+  for (const [token, entry] of Object.entries(entries)) {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)
+      || !fields.every(field => typeof entry[field] === 'string' && entry[field] !== '')
+      || !Number.isFinite(entry.at)) {
+      delete entries[token]
+      changed = true
+    } else if (Object.hasOwn(entry, 'activeOn')) {
+      delete entry.activeOn
+      changed = true
+    }
+  }
+  return changed
+}
+
 export function install(rt) {
   const { ctx, home, statePath } = rt
 
@@ -217,7 +240,7 @@ export function install(rt) {
       migrated = true
     }
     if (state.works === null || typeof state.works !== 'object' || Array.isArray(state.works)) state.works = {}
-    if (state.imReplyOrigins !== undefined && (state.imReplyOrigins === null || typeof state.imReplyOrigins !== 'object' || Array.isArray(state.imReplyOrigins))) delete state.imReplyOrigins
+    if (cleanReplyOrigins(state)) migrated = true
     if (state.requests === null || typeof state.requests !== 'object' || Array.isArray(state.requests)) state.requests = {}
     // Group call batches (groups.js); a batch that is not whole is dropped.
     if (state.roomBatches === null || typeof state.roomBatches !== 'object' || Array.isArray(state.roomBatches)) state.roomBatches = {}
