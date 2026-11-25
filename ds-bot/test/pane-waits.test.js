@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { ARM_MS, WAITS_PER_BOT, WAIT_MAX_MS, createPaneWaits } from '../src/board/waits.js'
 
-function fixture({ wake, wakeAvailable = true, status, cardOfSession = () => undefined } = {}) {
+function fixture({ wake, wakeAvailable = true, status, cardId } = {}) {
   let data = { cards: { c_1: { id: 'c_1', status: 'active' } } }
   let clock = 0
   let readOnly = false
@@ -27,7 +27,7 @@ function fixture({ wake, wakeAvailable = true, status, cardOfSession = () => und
   const { tool, poll, dispose } = createPaneWaits({
     store,
     now: () => clock,
-    identity: { ownerOfSession: session => ({ botId: session, roomId: 'ops' }) },
+    identity: { ownerOfSession: session => ({ botId: session, roomId: 'ops', ...(cardId === undefined ? {} : { cardId }) }) },
     roster: { ready: async () => {}, bot: id => bots.has(id) ? { id } : undefined },
     herdr: {
       async status(pane) {
@@ -37,7 +37,6 @@ function fixture({ wake, wakeAvailable = true, status, cardOfSession = () => und
       async read(pane) { reads.push(pane); return { text: 'Tests passed.' } },
     },
     notes: wakeAvailable ? { async wake(message) { wakes.push(message); await wake?.(message) } } : {},
-    cardOfSession,
     every: () => () => {},
     warn: (...warning) => warnings.push(warning),
   })
@@ -55,7 +54,7 @@ function fixture({ wake, wakeAvailable = true, status, cardOfSession = () => und
 }
 
 test('wait_pane adds, replaces and stops a wait and adds its pane to the card', async () => {
-  const h = fixture({ cardOfSession: () => ({ id: 'c_1' }) })
+  const h = fixture({ cardId: 'c_1' })
   assert.match(await h.tool({ pane: 'w1:p1', until: ['done'], note: ' Check CI ' }), /^Waiting for herdr pane w1:p1 to be done\./)
   const [first] = h.waits()
   assert.deepEqual(first, { id: first.id, botId: 'writer', roomId: 'ops', cardId: 'c_1', pane: 'w1:p1', since: 0, until: ['done'], note: 'Check CI' })

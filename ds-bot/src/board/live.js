@@ -232,9 +232,10 @@ export function createLive({ identity, now = Date.now }) {
   }
 
   // The Sessions of this Bot (in this group, or its own chats when roomId is undefined).
-  const sessionsOf = (botId, roomId) => [...traces].filter(([id]) => {
+  const sessionsOf = (botId, roomId, cardId) => [...traces].filter(([id]) => {
     const owner = identity.ownerOfSession(id)
-    return owner !== undefined && owner.botId === botId && owner.roomId === roomId
+    return owner !== undefined && owner.botId === botId
+      && (cardId === undefined ? owner.cardId === undefined && owner.roomId === roomId : owner.cardId === cardId)
   })
 
   return {
@@ -242,18 +243,18 @@ export function createLive({ identity, now = Date.now }) {
     onFrame,
     // The newest turn of the Bot there that began at or after `since`, as the page shows
     // it at the board's level.
-    current({ botId, roomId, since }, level = DEFAULT_LEVEL) {
+    current({ botId, roomId, cardId, since }, level = DEFAULT_LEVEL) {
       if (level === 'off') return undefined
-      const found = sessionsOf(botId, roomId).map(([, trace]) => trace).filter(trace => trace.since >= since)
+      const found = sessionsOf(botId, roomId, cardId).map(([, trace]) => trace).filter(trace => trace.since >= since)
         .sort((a, b) => b.since - a.since)[0]
       if (found === undefined) return undefined
       const steps = shownAt(stepsOf(found), level)
       return steps.length === 0 ? undefined : { since: found.since, ...(found.endedAt === undefined ? {} : { endedAt: found.endedAt }), steps }
     },
     // The turn a reply came from (dsBotNotes onReply), trimmed to what a card keeps.
-    kept({ botId, roomId, since }, level = DEFAULT_LEVEL) {
+    kept({ botId, roomId, cardId, sessionId, since }, level = DEFAULT_LEVEL) {
       if (level === 'off') return undefined
-      const found = sessionsOf(botId, roomId).map(([, trace]) => trace)
+      const found = sessionsOf(botId, roomId, cardId).filter(([id]) => sessionId === undefined || id === sessionId).map(([, trace]) => trace)
         .filter(trace => Math.abs(trace.since - since) <= SAME_TURN_MS)
         .sort((a, b) => Math.abs(a.since - since) - Math.abs(b.since - since))[0]
       return found === undefined ? undefined : keep(found, level)

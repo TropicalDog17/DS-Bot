@@ -15,11 +15,11 @@ import { commandOf } from '../src/board/plugin.js'
 import { ARM_MS, WAITS_PER_BOT, WAIT_MAX_MS, addWait, check, wakeText } from '../src/board/waits.js'
 import { bridgeService, notesService, rosterService } from '../src/host/companions.js'
 import { homeLock } from '../src/host/home-lock.js'
-import { addCardThread, addCardThread as addCardThreadFor, cardThreadSession, closeCardThread } from '../src/host/threads.js'
+import { addCardThread, addCardThread as addCardThreadFor, cardOfThread, cardThreadSession, closeCardThread } from '../src/host/threads.js'
 
 // The board plugin knows the team only through DS Bot's public services, so the tests
 // build those services over a small fake team, exactly as the host provides them.
-function fakeTeam({ load = async () => {} } = {}) {
+function fakeTeam({ threads = true, load = async () => {} } = {}) {
   const state = {
     bots: { a: { id: 'a', name: 'Chief' }, b: { id: 'b', name: 'Writer' }, c: { id: 'c', name: 'Coder' } },
     rooms: { r1: { id: 'r1', name: 'Ops', members: ['a', 'b'], admin: 'a' } },
@@ -39,14 +39,14 @@ function fakeTeam({ load = async () => {} } = {}) {
     onSaved: () => () => {},
     sendUser: async input => { sent.push([input.sessionId, input.content[0].text]); requests.push(input.requestId) },
     deliver: async input => { delivered.push(input) },
-    // Card threads as parts.js keeps them, named ct-<card id>.
-    openCardThread: async (botId, cardId) => {
+    // Card threads as the host keeps them, named ct-<card id>.
+    openCardThread: threads ? async (botId, cardId) => {
       const bot = state.bots[botId]
       const known = cardThreadSession(bot, cardId)
       if (known !== undefined) return known
       addCardThread(bot, `ct-${cardId}`, cardId)
       return `ct-${cardId}`
-    },
+    } : undefined,
     closeCardThread: async (botId, cardId) => closeCardThread(state.bots[botId], cardId) !== undefined,
     imPush: async (push) => { pushes.push(push); return 1 },
     routingParts: (part) => { parts.add(part); return () => { parts.delete(part) } },
@@ -59,7 +59,16 @@ function fakeTeam({ load = async () => {} } = {}) {
   const parts = new Set()
   // Own chats a, b, c; group Sessions ga, gb; a talk between Writer and Coder, xb.
   const owners = { a: { botId: 'a' }, b: { botId: 'b' }, c: { botId: 'c' }, ga: { botId: 'a', roomId: 'r1' }, gb: { botId: 'b', roomId: 'r1' }, xb: { botId: 'b' } }
-  const identity = { ownerOfSession: id => (hasOwn(owners, id) ? owners[id] : undefined), subscribe: () => () => {} }
+  const identity = {
+    ownerOfSession: id => {
+      for (const bot of Object.values(state.bots)) {
+        const cardId = cardOfThread(bot, id)
+        if (cardId !== undefined) return { botId: bot.id, cardId }
+      }
+      return hasOwn(owners, id) ? owners[id] : undefined
+    },
+    subscribe: () => () => {},
+  }
   const notes = notesService(rt)
   const bridge = bridgeService(rt)
   // What turns.js does when a Bot's turn ends with an answer the user reads.
@@ -72,8 +81,9 @@ function fakeTeam({ load = async () => {} } = {}) {
 function host(t, { file, notes, now = Date.now, config = {}, threads = true, herdr, load } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'ds-bot-board-plugin-'))
   t.after(() => rmSync(dir, { recursive: true, force: true }))
-  const team = fakeTeam({ load })
-  if (!threads) notes = { ...team.notes, startCard: async () => ({ error: 'Card threads are not available.' }) }
+  // threads: false leaves out openCardThread, so notes cannot open a thread and says so,
+  // which is the host without card threads.
+  const team = fakeTeam({ threads, load })
   const registered = { tools: [], routes: [] }
   const tools = { register: (tool) => { registered.tools.push(tool); return () => { registered.tools.splice(registered.tools.indexOf(tool), 1) } } }
   const connection = { fetch: { register: (route) => { registered.routes.push(route); return () => { registered.routes.splice(registered.routes.indexOf(route), 1) } } } }
@@ -247,7 +257,7 @@ test('the Board page adds, moves, notes and cancels; notes reach the Bot through
   const mine = (await h.post('add', { title: 'Mine' })).value
   const mineId = Object.values(mine.cards).find(entry => entry.title === 'Mine').id
   await h.post('note', { id: mineId, text: 'remember' })
-  // The card started Writer's card thread; done closed it, so the later note goes to its chat.
+  // Without card threads, the notes reach the Bot's own chat and group.
   assert.match(h.team.sent[0][1], /^\[Card c_\w+ · "Đặt lịch khám răng"\] from the user\./)
   assert.deepEqual(h.team.sent.slice(1), [
     ['b', `Note on card ${card.id} "Đặt lịch khám răng": gọi trước 5h`],
@@ -390,7 +400,7 @@ test('a group card waits for the answer in its group; two notes wait from the fi
 })
 
 test('a chat card that waited before request ids still gets the next answer there', async (t) => {
-  const h = host(t)
+  const h = host(t, { threads: false })
   const id = Object.keys((await h.post('add', { title: 'Old wait', assignee: 'b' })).value.cards)[0]
   await h.handle.store.change(data => { data.cards[id].awaiting = { botId: 'b', since: 1000 } })
   h.team.reply({ botId: 'b', text: 'answer', since: 2000, heard: ['unknown'] })
@@ -610,15 +620,15 @@ test('a card handed to another Bot needs a brief, starts that Bot\'s card thread
   assert.equal(h.team.sent[0][0], thread)
   assert.match(h.team.sent[0][1], /^\[Card c_\w+ · "Draft the newsletter"\] from Chief\.\n\nTopic: the November release\.\nKeep it under 300 words\.\n\nThis conversation is for this card only\./)
 
-  // Every answer in the card thread is the card's; a note on the card goes to the thread.
-  h.team.reply({ botId: 'b', cardId: card.id, text: 'On it.', since: Date.now() })
+  // The thread's progress lands on the card, and a reply to a note names its request.
+  h.team.reply({ botId: 'b', cardId: card.id, sessionId: thread, text: 'On it.', since: Date.now() })
   await h.settle()
   await h.post('note', { id: card.id, text: 'mention the new board' })
   assert.deepEqual(h.team.sent.at(-1), [thread, `Note on card ${card.id} "Draft the newsletter": mention the new board`])
   assert.deepEqual(h.cards()[0].awaiting.cardId, card.id)
-  h.team.reply({ botId: 'b', cardId: card.id, text: 'Added it.', since: Date.now() })
+  h.team.reply({ botId: 'b', cardId: card.id, sessionId: thread, heard: [h.team.requests.at(-1)], text: 'Added it.', since: Date.now() })
   // Another Bot cannot answer for the card.
-  h.team.reply({ botId: 'c', cardId: card.id, text: 'not mine', since: Date.now() })
+  h.team.reply({ botId: 'c', cardId: card.id, sessionId: thread, text: 'not mine', since: Date.now() })
   await h.settle()
   assert.deepEqual(h.cards()[0].notes.map(note => [note.by, note.text]), [['b', 'On it.'], ['user', 'mention the new board'], ['b', 'Added it.']])
 
