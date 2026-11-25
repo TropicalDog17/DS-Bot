@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
+import { setTimeout as delay } from 'node:timers/promises'
 import { createRuntime } from '../index.js'
 import { AWAIT_MAX_MS } from '../src/board/cards.js'
 import { install as installBoard } from '../src/board/plugin.js'
@@ -173,7 +174,8 @@ test('a finished card closes its thread, after the turn running in it ends; the 
   assert.equal(rt.botOf('writer').openParts.length, 2)
   rt.live.delete('card1')
   rt.cardTurnEnded()
-  await new Promise(resolve => setTimeout(resolve, 20))
+  const deadline = performance.now() + 2000
+  while (archived.length === 0 && performance.now() < deadline) await delay(5)
   assert.deepEqual(rt.botOf('writer').openParts.map(part => part.card), ['c_2'])
   assert.deepEqual(archived, ['card1'])
   assert.equal(rt.chatOwners.has('card1'), false)
