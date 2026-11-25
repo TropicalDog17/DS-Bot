@@ -1,7 +1,5 @@
-// Run the unpackaged dsh Desktop shell on Linux for DS Bot screenshots.
 // dsh's own `dev:desktop` rejects Linux targets, so this mirrors apps/desktop/scripts/dev.ts
 // with a linux-x64 primary runtime and keeps every generated file outside the dsh checkout.
-// Run with dsh's tsx: <dsh>/node_modules/.bin/tsx launch.mts
 import { spawn, execFileSync } from 'node:child_process'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'

@@ -7,12 +7,6 @@ import { Context } from '@deepseek-ai/cordis'
 import { createRuntime } from '../index.js'
 import { fakeContext } from './fake-ctx.js'
 
-// #1545: a model listing that a Bot's startup started can still be in flight when its
-// host is disposed. It must then stop quietly: reading an injected service on the
-// disposed context throws ("cannot get property "llm" without inject"), which used to
-// surface as an unhandled rejection and fail whatever test happened to be running.
-// The same code once seeded the test state with a Bot that already has a model.
-
 const tick = ms => new Promise(resolve => setTimeout(resolve, ms))
 
 function stateWithModel() {
@@ -68,11 +62,9 @@ test('a model listing that outlives its host stops quietly instead of touching d
   t.after(() => process.off('unhandledRejection', onRejection))
 
   const { root, rt } = await startHost(t, { listDelayMs: 80 })
-  // Bootstrap starts a model sync in the background; its listing is still in flight.
   const reply = await rt.channelCall('state', {})
   assert.equal(reply.ok, true, JSON.stringify(reply))
   await root.fiber.dispose()
-  // Let the in-flight listing finish after the host is gone.
   await tick(250)
   assert.deepEqual(leaks.map(error => error?.message ?? String(error)), [])
 })
@@ -84,8 +76,6 @@ test('a Bot created with a model does not greet through a disposed host', async 
   t.after(() => process.off('unhandledRejection', onRejection))
 
   const { root, rt } = await startHost(t, { listDelayMs: 300 })
-  // A Bot made from inside the running host starts waiting for its model; the listing
-  // is still in flight when the host goes away.
   const bot = await rt.createBot({ name: 'Coder', role: 'Engineer', instructions: '', model: 'deepseek/deepseek-v4-flash' })
   assert.equal(bot.model, 'deepseek/deepseek-v4-flash')
   const warnings = []
@@ -93,7 +83,6 @@ test('a Bot created with a model does not greet through a disposed host', async 
   await root.fiber.dispose()
   await tick(600)
   assert.deepEqual(leaks.map(error => error?.message ?? String(error)), [])
-  // The work that outlives the host stops instead of reaching for a service that is gone.
   assert.deepEqual(warnings.filter(line => line.includes('without inject')), [])
 })
 
@@ -101,10 +90,8 @@ test('a model catalog asked for after the host is gone returns its last answer',
   const { root, rt } = await startHost(t, { listDelayMs: 1 })
   await rt.channelCall('state', {})
   await root.fiber.dispose()
-  // Fresh would list providers again; a disposed host reads no service for it.
   await assert.doesNotReject(() => rt.catalog({ fresh: true }))
 })
-
 
 test('unloading only DS Bot stops its model work while the parent LLM stays available', async (t) => {
   const { root, fork, rt } = await startHost(t, { listDelayMs: 80 })

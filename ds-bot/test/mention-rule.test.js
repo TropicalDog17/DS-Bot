@@ -3,15 +3,14 @@ import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
-import { mentionSpans, nameProblem, referenceSpans, speakerOf } from '../src/shared/mentions.js'
-import { mentionsIn } from '../src/host/groups.js'
-import { linkMentions, MENTION_ORIGIN } from '../src/client/text.js'
+import { mentionSpans, nameProblem, referenceSpans, speakerOf } from '../src/shared/mentions.ts'
+import { mentionsIn } from '../src/host/groups.ts'
+import { linkMentions, MENTION_ORIGIN } from '../src/client/text.ts'
 
 const bots = [{ id: 'a', name: '新 Bot' }, { id: 'b', name: '新 Bot 2' }, { id: 'c', name: 'Chief' }, { id: 'k', name: 'K' }]
 
-// The user's bubble is drawn by a module that needs the DSH platform; only its pure part runs here.
 const bundle = await build({
-  entryPoints: [fileURLToPath(new URL('../src/client/user-message.js', import.meta.url))],
+  entryPoints: [fileURLToPath(new URL('../src/client/user-message.ts', import.meta.url))],
   bundle: true, format: 'cjs', platform: 'node', write: false,
   external: ['react', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives'],
 })
@@ -71,7 +70,6 @@ test('the user bubble keeps the text around a mention, and a group only calls it
   assert.deepEqual(plain(userTextParts('@新 Bot 提权', bots)), [{ bot: bots[0], label: '新 Bot' }, { text: ' 提权' }])
   assert.deepEqual(plain(userTextParts('看 @a/b.md', bots)), [{ text: '看 @a/b.md' }])
   assert.deepEqual(plain(userTextParts('打开 @K.md', bots)), [{ text: '打开 @K.md' }])
-  // Text blocks join as the group host joins them, so "@新" + " Bot" is not "@新 Bot".
   const { text } = contentParts([{ type: 'text', text: 'hi @新' }, { type: 'text', text: ' Bot' }])
   assert.equal(text, 'hi @新\n Bot')
   assert.deepEqual(plain(userTextParts(text, bots).filter(part => part.bot)), [])
@@ -90,7 +88,6 @@ test('a Bot name is something "@" can call without a second reading', () => {
   assert.equal(nameProblem('  '), 'A Bot needs a name')
   for (const name of ['a@b', 'x`y', 'two\nlines']) assert.equal(nameProblem(name), 'A Bot name cannot contain @, ` or a line break')
   assert.match(nameProblem('All'), /calls everyone in a group/)
-  // 公开#178: a Bot called "User" spoke in the group log exactly like the user.
   for (const name of ['User', 'you', ' USER ']) assert.match(nameProblem(name), /stands for the user in a chat/)
   assert.equal(nameProblem('Users'), undefined)
 })

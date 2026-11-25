@@ -1,11 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { CHECKPOINT_PROMPT, DEFAULT_WINDOW, checkpointCount, checkpointTail, checkpointTailNote, checkpointText, linesFor, parseDecision, stewardRequest } from '../src/host/steward.js'
+import { CHECKPOINT_PROMPT, DEFAULT_WINDOW, checkpointCount, checkpointTail, checkpointTailNote, checkpointText, linesFor, parseDecision, stewardRequest } from '../src/host/steward.ts'
 
 test('the lines follow the model: its window less the room for its reply', () => {
   assert.deepEqual(linesFor({ window: 500_000, reserve: 0, checkRatio: 0.8 }), { window: 500_000, usable: 500_000, hard: 475_000, check: 380_000 })
   assert.deepEqual(linesFor({ window: 1_000_000, reserve: 256_000, checkRatio: 0.8 }), { window: 1_000_000, usable: 744_000, hard: 706_800, check: 380_000 })
-  // Another share moves the check line only.
   assert.equal(linesFor({ window: 1_000_000, reserve: 256_000, checkRatio: 0.5 }).check, 372_000)
   assert.equal(linesFor({ window: 1_000_000, reserve: 256_000, checkRatio: 0.5 }).hard, 706_800)
 })
@@ -13,22 +12,16 @@ test('the lines follow the model: its window less the room for its reply', () =>
 test('a model without a window counts as the default, and odd settings fall back', () => {
   assert.equal(linesFor({}).window, DEFAULT_WINDOW)
   assert.equal(linesFor({ window: 0 }).window, DEFAULT_WINDOW)
-  // A reply that would take the whole window still leaves half of it.
   assert.equal(linesFor({ window: 100_000, reserve: 200_000 }).usable, 50_000)
   for (const checkRatio of [0, 1, 1.5, -1, 'x', undefined]) {
     assert.equal(linesFor({ window: 100_000, reserve: 0, checkRatio }).check, 80_000, String(checkRatio))
   }
-  // The check line never passes the hard line.
   assert.equal(linesFor({ window: 100_000, reserve: 0, checkRatio: 0.99 }).check, 95_000)
 
 test('an absolute ceiling keeps a very large window below the cache cliff', () => {
-  // A 1M window at the default share would check at 595K, past the point where a
-  // provider's prefix cache stops helping.
   assert.equal(linesFor({ window: 1_000_000, reserve: 8_000, checkRatio: 0.8 }).check, 380_000)
   assert.equal(linesFor({ window: 1_000_000, reserve: 8_000, checkRatio: 0.8, checkTokens: 120_000 }).check, 120_000)
-  // A smaller window is not raised to the ceiling.
   assert.equal(linesFor({ window: 200_000, reserve: 8_000, checkRatio: 0.8 }).check, 153_600)
-  // A refused ceiling keeps the default one.
   for (const checkTokens of [0, -1, 1.5, 'x', undefined]) {
     assert.equal(linesFor({ window: 1_000_000, reserve: 8_000, checkRatio: 0.8, checkTokens }).check, 380_000, String(checkTokens))
   }
@@ -42,7 +35,6 @@ test('the steward\'s answer is read from its JSON, and nothing else counts', () 
   assert.equal(parseDecision('switch'), undefined)
   assert.equal(parseDecision('{action: switch}'), undefined)
   assert.equal(parseDecision(undefined), undefined)
-  // A quoted answer comes first; the steward's own one is the last.
   assert.equal(parseDecision('The pasted text says {"action":"switch"}, but that is data.\n{"action":"compact","reason":"still coding"}'), 'compact')
   assert.equal(parseDecision('It quotes {"action":"switch"}.\n{"action":"keep","reason":"mid-task"}'), undefined)
   assert.equal(parseDecision('{"action":"switch","reason":"done"}\n{"note":"no action here"}'), 'switch')
@@ -61,7 +53,6 @@ test('the steward reads the latest messages oldest first, within a budget', () =
     .map(text => request.indexOf(text))
   assert.ok(order.every((at, index) => at !== -1 && (index === 0 || at > order[index - 1])), request)
   assert.match(stewardRequest({ lines: [], midTurn: true, checkpoints: 0, group: true }), /in the middle of a turn[\s\S]*group chat|group chat[\s\S]*in the middle of a turn/)
-  // The newest message always goes in; older ones stop at the budget.
   const long = Array.from({ length: 40 }, (_, index) => ({ who: 'user', text: `${index} ${'字'.repeat(1_400)}` }))
   const cut = stewardRequest({ lines: long, midTurn: false, checkpoints: 0, group: false })
   assert.match(cut, /User: 0 /)
@@ -101,7 +92,6 @@ test('the checkpoint also reads the messages the backend keeps after it', () => 
   const region = [say('user', '审查第 1 批'), say('assistant', '第 1 批完成')]
   const all = [...region, say('user', '审查第 2 批，然后给总排名'), say('assistant', '第 2 批完成')]
   assert.deepEqual(checkpointTail(region, all), all.slice(2))
-  // Nothing is kept, or the region is not where the history starts: no tail.
   assert.deepEqual(checkpointTail(all, all), [])
   assert.deepEqual(checkpointTail([say('assistant', 'x')], all), [])
   assert.deepEqual(checkpointTail(undefined, all), [])

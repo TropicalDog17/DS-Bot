@@ -6,13 +6,9 @@ import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
 
-// jsdom comes from the harness that test/harness-resolve.mjs found, like the dsh packages.
 const PLUGIN = dirname(dirname(fileURLToPath(import.meta.url)))
 const { JSDOM } = createRequire(join(process.env.DSH_HARNESS ?? join(PLUGIN, '..', 'deepseek-harness'), 'package.json'))('jsdom')
 
-// The mailbox catalog row, bundled once and rendered with a minimal React stand-in whose
-// useState survives re-renders: hooks are numbered by expansion order, which is
-// stable because the tree expands the same way every pass.
 const { outputFiles } = await build({
   stdin: {
     contents: "export { MailCatalogRow, MailToolCell } from './src/client/connectors.js'\nexport { ConnectorsPage } from './src/client/connectors-page.js'",
@@ -159,7 +155,6 @@ test('a busy mail add blocks a second click and a good add clears the fields', a
   release({ accounts: [] })
   await flush()
   assert.equal(collect(n => String(n.props?.className ?? '').includes('bt-mail-form')).length, 0, 'form closed after a resolved add')
-  // The closed form unmounted; the stand-in keeps hook slots by index, so start them over.
   slots.length = 0
   render()
   click('Connect')
@@ -199,7 +194,6 @@ test('the mail send card is an editable show_view form card with the approval ru
   assert.ok(card.props.className.split(' ').includes('dv-q'), 'framed like the show_view answer cards')
   assert.equal( flatten(collect(n => n.props?.className === 'dv-view-title')[0]).join(''), 'Mail')
   assert.ok(collect(n => n.props?.className === 'dv-view-icon')[0], 'mail icon in header')
-  // Prefilled fields: subject, readOnly from, editable to, editable cc, multiline body.
   const subjectInput = collect(n => n.type === 'input' && n.props?.['aria-label'] === 'Subject')[0]
   const fromInput = collect(n => n.type === 'input' && n.props?.['aria-label'] === 'From')[0]
   const toInput = collect(n => n.type === 'input' && n.props?.['aria-label'] === 'To')[0]
@@ -213,7 +207,6 @@ test('the mail send card is an editable show_view form card with the approval ru
   assert.equal(bodyArea.props.value, body, 'body stays literal in textarea')
   const texts = collect(n => typeof n.props?.text === 'string' && n.props?.variant === 'compact').map(n => n.props.text)
   assert.ok(texts.some(text => text.includes('report\\.pdf \\(2 KB\\)')), 'attachments')
-  // Approval menu defaults to Needs approval.
   const ruleBtn = collect(n => n.type === 'button' && n.props?.className === 'bt-mail-rule-btn')[0]
   assert.equal(flatten(ruleBtn).join(''), 'Needs approval')
   ruleBtn.props.onClick()
@@ -222,11 +215,9 @@ test('the mail send card is an editable show_view form card with the approval ru
   assert.equal(ruleSets.length, 1)
   assert.equal(ruleSets[0].mode, 'allow-recipient')
   assert.equal(flatten(collect(n => n.type === 'button' && n.props?.className === 'bt-mail-rule-btn')[0]).join(''), 'Allow recipient')
-  // Manage rules opens Connectors settings.
   collect(n => n.type === 'button' && n.props?.className === 'bt-mail-rule-btn')[0].props.onClick()
   click('Manage rules')
   assert.equal(opened, true)
-  // Edit recipient and body in the card, then press Send.
   toInput.props.onChange({ target: { value: 'edited@corp.dev' } })
   collect(n => n.type === 'textarea' && n.props?.['aria-label'] === 'Write a message…')[0].props.onChange({ target: { value: 'Edited body' } })
   const send = collect(n => n.type === 'button' && n.props?.className === 'dv-q-submit')[0]
@@ -262,7 +253,6 @@ test('a failed mail add shows the host message inside the form', async () => {
   assert.ok(String(collect(n => String(n.props?.className ?? '').includes('bt-mail-form'))[0]?.props?.className ?? '').includes('bt-mail-form'), 'form stays open')
 })
 
-// The rows the host sends (`pending` is the row built in connectors/index.js).
 const githubAuth = { kind: 'oauth', client: { id: 'client' }, token: true }
 const github = extra => ({ id: 'github', name: 'GitHub', category: 'dev', auth: githubAuth, state: 'off', ...extra })
 const devicePending = userCode => ({ state: 'connecting', pending: { kind: 'device', userCode, verificationUri: 'https://github.com/login/device', expiresAt: 4102444800000 } })
@@ -291,7 +281,6 @@ test('a device sign-in shows its code on the clicked tile and says copied only o
   const page = pageWith(github(), actions)
   renderPage(page)
   sectionButton('Developer', 'Connect').props.onClick()
-  // The host's update reaches the page while the clipboard write is still running.
   page.roster = pageWith(pending).roster
   await flush()
   rerender()

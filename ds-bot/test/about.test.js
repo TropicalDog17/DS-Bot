@@ -5,7 +5,7 @@ import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
 
 const bundle = await build({
-  entryPoints: [fileURLToPath(new URL('../src/client/about.js', import.meta.url))],
+  entryPoints: [fileURLToPath(new URL('../src/client/about.ts', import.meta.url))],
   bundle: true, format: 'cjs', platform: 'node', write: false,
   external: ['react', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives'],
 })
@@ -33,8 +33,6 @@ runInNewContext(bundle.outputFiles[0].text, {
 })
 const { AboutPage, ownAppRow } = module.exports
 
-// The DS Bot row in Settings → About, with the row's hint and its buttons' text, class
-// and clicks. `update` is the value the update source holds.
 function page(update) {
   const calls = []
   const actions = new Proxy({ repoStars: async () => null }, {
@@ -53,7 +51,6 @@ function page(update) {
   }
 }
 
-// 公开#499: in the desktop app the DS Bot row shows the app's own update state.
 test('the six app update states set the DS Bot row\'s hint and button', () => {
   const cases = [
     [{ phase: 'checking' }, 'Checking for updates…', []],
@@ -97,7 +94,6 @@ test('an app update state is ignored outside the app', () => {
 test('ownAppRow maps each phase to its hint and button kind', () => {
   assert.equal(ownAppRow(null), null)
   assert.equal(ownAppRow('downloaded'), null)
-  // The bundled module's realm has its own Object, so compare the fields.
   const checking = ownAppRow({ phase: 'checking' })
   assert.equal(checking.hint, 'Checking for updates…')
   assert.equal(checking.button, null)

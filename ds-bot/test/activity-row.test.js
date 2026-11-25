@@ -6,12 +6,9 @@ import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
 
-// jsdom comes from the harness that test/harness-resolve.mjs found, like the dsh packages.
 const PLUGIN = dirname(dirname(fileURLToPath(import.meta.url)))
 const { JSDOM } = createRequire(join(process.env.DSH_HARNESS ?? join(PLUGIN, '..', 'deepseek-harness'), 'package.json'))('jsdom')
 
-// The activity row and the diagnostics it reports into, bundled once and run with a
-// minimal React stand-in; the row's DOM helpers only read `document` at call time.
 const { outputFiles } = await build({
   stdin: {
     contents: [
@@ -45,11 +42,6 @@ runInNewContext(outputFiles[0].text, {
 })
 const { findHost, rowVisible, freshInputAt, clientErrors } = module.exports
 
-// The shell renders its running status inside the flow, before the pending steering
-// rows, so hosting the row there puts it above an interjection's echo until the echo
-// commits to the transcript — the row first sits between two user messages and then
-// jumps below the new one. The row mounts at the flow (the column around the shell's
-// slot), where it stays after those rows, even under an extra wrapper.
 test('the activity row mounts at the flow around the running slot, not at the slot', () => {
   dom.window.document.body.innerHTML = '<div data-chat-flow id="flow"><div class="wrap"><div data-chat-running id="slot"></div></div></div>'
   const host = findHost()
@@ -72,10 +64,8 @@ test('the activity row stays after a pending steer echo, and after the message o
   findHost().appendChild(row)
   const echo = doc.getElementById('echo')
   const first = doc.getElementById('first')
-  // Document order is what the eye reads: the pending echo draws before the row.
   assert.ok(echo.compareDocumentPosition(row) & doc.defaultView.Node.DOCUMENT_POSITION_FOLLOWING, 'the pending steer draws above the row')
   assert.ok(first.compareDocumentPosition(echo) & doc.defaultView.Node.DOCUMENT_POSITION_FOLLOWING)
-  // The echo commits into the transcript: the row must still come after it.
   echo.remove()
   const committed = doc.createElement('div')
   committed.id = 'committed'
@@ -101,8 +91,6 @@ test('a missing chat flow is reported once per page, not on every retry', () => 
   assert.match(entries.at(-1).text, /activity row:/)
 })
 
-// The row hides while a reply streams — but a turn that streams first and runs a
-// tool after keeps the row once the tool starts.
 test('the row shows while a turn runs, also when text streamed before a tool', () => {
   const bot = {}
   const cases = [
@@ -119,8 +107,6 @@ test('the row shows while a turn runs, also when text streamed before a tool', (
   for (const [input, expected] of cases) assert.equal(rowVisible(input), expected, JSON.stringify(input))
 })
 
-// A queued message waits for the next turn; a transcript or steering send counts
-// as fresh input, and a steer the host saw counts from when it landed.
 test('fresh input ignores queued sends and takes the newest of the rest', () => {
   const submissions = [
     { placement: 'queued', time: 300 },

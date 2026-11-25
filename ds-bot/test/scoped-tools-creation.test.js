@@ -8,18 +8,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { createRuntime } from '../index.js'
-import { TEAM_TOOLS } from '../src/host/constants.js'
+import { TEAM_TOOLS } from '../src/host/constants.ts'
 import { fakeContext } from './fake-ctx.js'
 
-// tools.js keeps the DSH names a Bot Session never serves in one place; the
-// assemble must add none of them.
 const HIDDEN = ['ask_user_question', 'subagent', 'list_subagent_models', 'send_message']
 
-// A Bot-owned Session gets its Agent before ds-bot records the owner, so the
-// scoped show_view and the hidden-tool restrict used to wait for a later
-// resolveAgent that a held kickoff never ran. These tests drive each creation
-// path with another plugin's global show_view already in place and check the
-// Agent's own tool list before its first step.
 const TEAM = {
   version: 1,
   mainBotIds: ['a'],
@@ -43,15 +36,11 @@ let rt
 const start = (team = TEAM, services = {}, globals = [], shared = {}) => {
   const home = shared.home ?? mkdtempSync(join(tmpdir(), 'ds-bot-scoped-'))
   if (shared.home === undefined) writeFileSync(join(home, 'state.json'), JSON.stringify(team))
-  // `scoped` and `restricted` model each Session's own tool layer, and
-  // `liveAgents` the DSH registry: shared across two runtimes they keep a
-  // Session's Agent alive through a disable and re-enable.
   const scoped = shared.scoped ?? []
   const restricted = shared.restricted ?? []
   const liveAgents = shared.liveAgents ?? new Map()
   services.agents ??= { list: () => [...liveAgents.values()], get: id => liveAgents.get(id) }
   const ctx = fakeContext({ services })
-  // Another plugin's global show_view, in place before ds-bot loads.
   ctx.tools.register({ name: 'show_view', description: 'global', execute: async () => 'global' })
   for (const tool of globals) ctx.tools.register(tool)
   // DSH refuses a second global registration of one name — the throw that killed
@@ -75,7 +64,6 @@ const start = (team = TEAM, services = {}, globals = [], shared = {}) => {
           register: (tool) => {
             const entry = { sessionId, name: tool.name, tool }
             scoped.push(entry)
-            // DSH's disposer unregisters; the fake drops the record.
             return () => { const at = scoped.indexOf(entry); if (at !== -1) scoped.splice(at, 1) }
           },
           restrict: (filter) => {
@@ -114,9 +102,6 @@ const start = (team = TEAM, services = {}, globals = [], shared = {}) => {
     liveAgents.set(sessionId, agent)
     return agent
   }
-  // ask_user_question is served, so the deny list is not empty in a Bot scope;
-  // a Session's own registrations join its list and shadow globals of one name,
-  // as DSH's scope view does.
   ctx.tools.schemas = (agent) => {
     const view = new Map()
     for (const name of ['ask_user_question', 'show_view']) view.set(name, { name })
@@ -143,8 +128,6 @@ const start = (team = TEAM, services = {}, globals = [], shared = {}) => {
     sessionTitle: { rename: async () => {} },
     sessions: { flush: async () => {} },
   })
-  // Sessions named in shared.live get their Agent into the registry before the
-  // runtime and its first load — the state a restart leaves behind (#826).
   for (const liveId of shared.live ?? []) agentOf(liveId)
   let route
   const register = ctx.connection.fetch.register
@@ -256,8 +239,6 @@ test('a Session ds-bot does not own sees none of the team tools', async (t) => {
   await host.call('state', {})
   await host.agentCreated('plain1')
   assert.deepEqual(scopedNames(host, 'plain1'), [])
-  // Nothing of the team's reaches the global layer a plain session reads; the
-  // only team-named global is another plugin's show_view.
   const leaked = [...host.ctx.registeredTools.keys()].filter(name => TEAM_TOOLS.includes(name))
   assert.deepEqual(leaked, ['show_view'])
   assert.equal(host.ctx.registeredTools.get('show_view').description, 'global')
@@ -272,8 +253,6 @@ test("a group's own Session is scoped to group_relay alone", async (t) => {
 })
 
 test("another plugin's global recall cannot stop ds-bot or shadow its own", async (t) => {
-  // #703: a same-named global tool from another plugin must not fail apply(),
-  // and inside a Bot Session ds-bot's recall still wins.
   const host = start(TEAM, {}, [{ name: 'recall', description: 'foreign recall', execute: async () => 'foreign' }])
   t.after(host.stop)
   assert.equal(host.ctx.registeredTools.get('recall').description, 'foreign recall')
@@ -299,8 +278,6 @@ test('a group Session made for a member has the scoped tools before its first st
   await host.call('state', {})
   const stop = new AbortController()
   t.after(() => stop.abort())
-  // The user's post starts a round; Writer has no group Session yet, so the round
-  // makes one — which used to keep whatever tools a global registration left.
   host.emit('r1', 'user/message', { content: [{ type: 'text', text: 'launch moved' }], source: { kind: 'user' } })
   void host.tool('group_relay', {}, 'r1', { callId: 'r1', signal: stop.signal }).catch(() => {})
   await until(() => hasShowView(host, 's1'), 5000)
@@ -321,7 +298,6 @@ test('a fresh part Session has the scoped tools before its first step', async (t
   host.agentOf('b').status = 'running'
   const moved = await host.tool('update_bot', { work_dir: project }, 'b')
   assert.equal(String(moved).includes('From your next step on'), true)
-  // The next step sees the folder change and switches to a fresh part.
   const preStep = host.ctx.listeners.get('agent/pre-step').at(-1)
   const answer = await preStep(
     { agent: host.agentOf('b'), messages: [{ role: 'user', content: [{ type: 'text', text: 'go on' }], source: { kind: 'user' } }], step: 2, signal: AbortSignal.timeout(60_000) },
@@ -351,8 +327,6 @@ test("a deleted Bot's Session keeps none of the scope when it is adopted as a pl
   assert.equal((await host.call('delete-bot', { id: 'b' })).ok, true)
   assert.deepEqual(scopedNames(host, 'b'), [])
   assert.equal(host.restricted.some(entry => entry.sessionId === 'b'), false)
-  // The Session lives on unowned: adopting it into the DSH Agent must not bring
-  // the team tools back.
   const agent = (await host.call('add-agent', {})).value
   assert.equal((await host.call('agent-adopt', { agentId: agent.id, sessionId: 'b' })).ok, true)
   assert.deepEqual(scopedNames(host, 'b'), [])
@@ -374,7 +348,6 @@ test('a member who leaves the group loses the scoped tools', async (t) => {
   assert.equal((await host.call('update-room', { id: 'r1', remove: ['b'] })).ok, true)
   assert.deepEqual(scopedNames(host, 'sb'), [])
   assert.equal(host.restricted.some(entry => entry.sessionId === 'sb'), false)
-  // Resolving the archived Session again does not bring the tools back.
   await host.agentCreated('sb')
   assert.deepEqual(scopedNames(host, 'sb'), [])
 })
@@ -397,8 +370,6 @@ test('a Session that becomes a Bot\'s again gets the scope back', async (t) => {
   assert.ok(hasShowView(host, 'b'))
   assert.equal((await host.call('delete-bot', { id: 'b' })).ok, true)
   assert.deepEqual(scopedNames(host, 'b'), [])
-  // A Bot record naming the Session again — here written directly, the way an
-  // adopted state could carry it — serves the tools again.
   rt.state.bots.b = { id: 'b', name: 'Writer', role: 'Write', sessionId: 'b', createdAt: 2 }
   await rt.save()
   await host.agentCreated('b')
@@ -406,8 +377,7 @@ test('a Session that becomes a Bot\'s again gets the scope back', async (t) => {
 })
 
 // public#1508: a connector MCP tool whose property is a union with no type of its own
-// made Moonshot/KIMI refuse every turn, while other providers accepted it. The step's
-// assemble hands connector schemas on plain; other tools keep the schema they had.
+// made Moonshot/KIMI refuse every turn, while other providers accepted it.
 test('a connector tool schema reaches the model without unions, and other tools are left alone', async (t) => {
   const host = start()
   t.after(host.stop)
@@ -439,17 +409,11 @@ test('a connector tool schema reaches the model without unions, and other tools 
     title: 'Sort Order',
   })
   assert.equal(connector.parameters.type, 'object')
-  // Another tool's schema is the same object: it was already plain.
   assert.equal(assembled.tools.find(tool => tool.name === 'read').parameters, read)
-  // The same schema next step is served from the cache, unchanged.
   const again = listener(assembly, () => assembly)
   assert.equal(again.tools[0].parameters, connector.parameters)
 })
 
-// #826: after a DSH restart the creation path can miss a live Agent and nothing
-// scoped it again, so the Session ran its requests without the team tools. The
-// step's assemble scopes an owned Session the creation path missed and adds the
-// names the request list was already built without.
 const assemble = (host, agent, assembly = { tools: [], sections: [] }) => {
   const listener = host.ctx.listeners.get('system-prompt/assemble')
     .find(listener => /scopeTeamTools/.test(String(listener)))
@@ -460,8 +424,6 @@ test("a group Session the creation path missed is scoped at the step's assemble"
   const host = start()
   t.after(host.stop)
   await host.call('state', {})
-  // The Agent is live but agent/created never ran for it and no save re-synced
-  // the scopes — the state a restart left the reporter's group in.
   const agent = host.agentOf('r1')
   const assembled = await assemble(host, agent, { tools: [{ name: 'read' }], sections: [] })
   assert.deepEqual(scopedNames(host, 'r1'), ['group_relay'])
@@ -477,8 +439,6 @@ test("a Bot's own Session the creation path missed gets the whole scope at the a
   const expected = [...TEAM_TOOLS].filter(name => name !== 'read_browser').sort()
   assert.deepEqual(scopedNames(host, 'a').sort(), expected)
   assert.deepEqual(assembled.tools.map(tool => tool.name).sort(), ['read', ...expected].sort())
-  // The hidden DSH tools are masked and filtered as on the creation path: none
-  // of their names joined the list the assemble added.
   assert.ok(denied(host, 'a'), 'the blocking question tool is denied')
   assert.ok(!HIDDEN.some(name => assembled.tools.some(tool => tool.name === name)))
 })
@@ -504,9 +464,6 @@ test('the assemble passes an unowned Session through unchanged', async (t) => {
 })
 
 test('a Session the load itself scoped still gets its tools into the step\'s list', async (t) => {
-  // The restart case of #826: the Agent was already live when the runtime's
-  // first load scoped it — the names were never on a collected tool list, so
-  // the assemble must still add them to this step's.
   const host = start(TEAM, {}, [], { live: ['r1'] })
   t.after(host.stop)
   const assembled = await assemble(host, host.agentOf('r1'), { tools: [{ name: 'read' }], sections: [] })
@@ -515,8 +472,6 @@ test('a Session the load itself scoped still gets its tools into the step\'s lis
 })
 
 test('a PTC group Session gets its relay scoped but keeps run_code alone in the list', async (t) => {
-  // A group made under the PTC preset relays through run_code; adding the scoped
-  // group_relay to the list would make the hook pick the call it cannot declare.
   const host = start()
   t.after(host.stop)
   const agent = host.agentOf('r1')
@@ -526,8 +481,6 @@ test('a PTC group Session gets its relay scoped but keeps run_code alone in the 
 })
 
 test('a same-named global in the list is replaced by the scoped schema', async (t) => {
-  // Another plugin's global show_view was collected for the request; the scoped
-  // one that shadows it at execution replaces its schema in the list.
   const host = start()
   t.after(host.stop)
   const agent = host.agentOf('a')
@@ -548,9 +501,6 @@ test('the assemble adds the recovered names once, not on every step', async (t) 
 })
 
 test('a live Bot Session gets its team tools back after a disable and re-enable', async (t) => {
-  // A hot reload lifts the scope of Agents that are still live, and
-  // agent/created does not fire again: the sync at the next load must scope
-  // them before their next request.
   const shared = { scoped: [], restricted: [], liveAgents: new Map() }
   const first = start(TEAM, {}, [], shared)
   shared.home = first.home

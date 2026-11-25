@@ -6,8 +6,6 @@ import { test } from 'node:test'
 import { createRuntime } from '../index.js'
 import { fakeContext } from './fake-ctx.js'
 
-// #200, #205: a group change read the team, waited (for a Session or a folder check), and
-// then wrote what it had read. A Bot deleted, or another change made, in that wait was undone.
 const TEAM = {
   version: 1,
   mainBotIds: ['a'],
@@ -28,7 +26,6 @@ const TEAM = {
 }
 
 async function start(team = TEAM) {
-  // The project folder sits beside the team's data, which no Bot may work in.
   // The native realpath: on Windows the JS one keeps 8.3 short names.
   const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'ds-bot-room-races-')))
   const home = join(root, 'bot')
@@ -38,7 +35,6 @@ async function start(team = TEAM) {
   const ctx = fakeContext()
   const archived = []
   let sessions = 0
-  // While `hold` is set, the next Session waits until it is let go.
   let hold
   Object.assign(ctx, {
     llm: { listProviders: () => [], listModels: async () => [], resolveModelInfo: async () => ({}) },
@@ -78,8 +74,6 @@ async function start(team = TEAM) {
     releaseHold = { promise: new Promise(resolve => { release = resolve }) }
     return () => { releaseHold = undefined; release() }
   }
-  // While held, a folder check waits until it is let go: the check itself is quick
-  // file system work, so a change made "while it waits" needs the wait held open.
   const folderHeld = () => {
     const check = rt.cleanWorkDir
     let release
@@ -104,7 +98,6 @@ test('a Bot deleted while its group is made stays out of it, and so does the adm
   release()
   const room = await making
   assert.deepEqual(room.members, ['a', 'b'])
-  // The lead goes to the Main Bot member, as for a group made without a chosen admin.
   assert.equal(room.admin, 'a')
 })
 
@@ -117,7 +110,6 @@ test('a group left with one Bot by a deletion while it is made is not made', asy
   release()
   await assert.rejects(making, /A group chat needs at least two Bots/)
   assert.deepEqual(Object.keys(rt.state.rooms), ['r1'])
-  // Its Session was made already, so it is archived, not left over.
   assert.ok(archived.includes('s1'))
 })
 

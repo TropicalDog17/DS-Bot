@@ -5,16 +5,10 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import { format } from 'node:util'
 import * as repeatReminder from '@deepseek-ai/dsh-repeat-tool-reminder'
-// Fei2411/DS-Bot#978: the real guard counts by tool name and canonical arguments;
-// the group relay stream is synthesized, so that integration test does not need an LLM adapter.
 
 import { validateJsonSchemaValue } from '@deepseek-ai/dsh-tools'
 import { createRuntime } from '../index.js'
 import { fakeContext } from './fake-ctx.js'
-
-// Fei2411/DS-Bot#37: under DSH Desktop's default PTC preset a model may call only
-// run_code, so the group_relay call made for a group chat's Session was turned down
-// and no group message reached its Bots.
 
 const TEAM = {
   version: 1,
@@ -143,7 +137,6 @@ test('a legacy round without roundId returns the same result as a new one', asyn
   const tool = rt.teamTools.find(def => def.name === 'group_relay')
   assert.deepEqual(validateJsonSchemaValue(tool.parameters, {}), [])
   const exec = { agent: { id: 'room' }, callId: 'legacy', signal: AbortSignal.abort() }
-  // Each call names where its rows start in the group's book; the rest of the result is the same.
   const rest = (value) => {
     const { from, anchor, ...others } = JSON.parse(value)
     assert.ok(Number.isInteger(from) && typeof anchor === 'string')
@@ -183,8 +176,6 @@ test('nine consecutive synthesized calls add no repeat-tool reminder', async (t)
 })
 
 test('a group Session without either relay tool ends visibly instead of calling nothing', async (t) => {
-  // #826: the relay used to synthesize group_relay even when the Session did not
-  // declare it, and the "unknown tool" failure left no trace.
   const { relay, warnings, stop } = start()
   t.after(stop)
   const chunks = await drain(relay({ provider: 'deepseek', model: 'v4', sessionId: 'room', messages: [userText('Hello team')], tools: declared('read', 'write') }, () => {

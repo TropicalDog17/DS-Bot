@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { clip, createClock, escapeRegExp, estimateTokens, excerpt, isColor, normalize, splitRef, textOf, unquote } from '../src/host/text.js'
+import { clip, createClock, escapeRegExp, estimateTokens, excerpt, isColor, normalize, splitRef, textOf, unquote } from '../src/host/text.ts'
 
 test('textOf joins the text blocks only', () => {
   assert.equal(textOf([{ type: 'text', text: ' a ' }, { type: 'image' }, { type: 'text', text: 'b' }, { type: 'text', text: 3 }]), 'a \nb')
@@ -53,7 +53,6 @@ test('estimateTokens counts CJK as one token and other text as a third', () => {
   assert.equal(estimateTokens(''), 0)
   assert.equal(estimateTokens('你好'), 2)
   assert.equal(estimateTokens('abc'), 2)
-  // Summing 0.34 per character runs a hair over, so ceil may add one; it stays an upper bound.
   const tokens = estimateTokens('a'.repeat(100))
   assert.ok(tokens >= 34 && tokens <= 35, String(tokens))
 })

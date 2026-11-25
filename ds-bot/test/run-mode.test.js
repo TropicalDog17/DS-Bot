@@ -6,11 +6,11 @@ import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { createRuntime } from '../index.js'
-import { LocalAgentAdapter } from '../src/host/local-agents/adapter.js'
-import { AcpEngine } from '../src/host/local-agents/acp.js'
-import { probeSignIn } from '../src/host/local-agents/discover.js'
-import { agentAvatar, badgeOf, isLocalRoute, modelsFor } from '../src/client/agent-routes.js'
-import { avatarAfter, createPayload, runModeNotes, startModel } from '../src/client/bot-draft.js'
+import { LocalAgentAdapter } from '../src/host/local-agents/adapter.ts'
+import { AcpEngine } from '../src/host/local-agents/acp.ts'
+import { probeSignIn } from '../src/host/local-agents/discover.ts'
+import { agentAvatar, badgeOf, isLocalRoute, modelsFor } from '../src/client/agent-routes.ts'
+import { avatarAfter, createPayload, runModeNotes, startModel } from '../src/client/bot-draft.ts'
 import { fakeContext } from './fake-ctx.js'
 
 const FIXTURE = name => fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url))
@@ -56,8 +56,6 @@ const team = (bots = {}) => ({
   },
 })
 
-// DSH's provider registry, as far as these rules use it: one model provider, and the
-// routes the local agent adapter registers.
 function fakeLlm() {
   const routes = new Map()
   return {
@@ -100,7 +98,6 @@ async function start(t, { saved = team() } = {}) {
   const created = []
   const archived = []
   const selected = []
-  // What each Session's last request went to, which requestHeader() folds from the log.
   const lastRoute = new Map()
   const agents = new Map()
   const agentOf = (sessionId) => {
@@ -181,20 +178,15 @@ async function start(t, { saved = team() } = {}) {
     method: 'POST', body: JSON.stringify({ endpoint, payload }),
   }))).json()
   const tool = (name, args, sessionId) => rt.teamTools.find(def => def.name === name).execute(args, { agent: agentOf(sessionId), name, callId: 'c1' })
-  // `modelSelection`: where the step is about to go, as DSH captured it for the step.
   const preStep = (sessionId, messages = [], step = 1, modelSelection) => ctx.listeners.get('agent/pre-step').at(-1)(
     { agent: agentOf(sessionId), messages, step, signal: AbortSignal.timeout(60_000), ...(modelSelection === undefined ? {} : { modelSelection }) }, async () => 'next')
   const state = () => JSON.parse(readFileSync(join(home, 'state.json'), 'utf8'))
   const handoffOf = sessionId => agentOf(sessionId).calls.filter(([kind, message]) => kind === 'followup' && message.source?.role === 'handoff').map(([, message]) => textOf(message)).at(-1)
   const startCount = () => (existsSync(starts) ? readFileSync(starts, 'utf8').trim().split('\n').length : 0)
   await tool('list_bots', {}, 'a')
-  // Everything a route could not register for until the state load has finished.
   await until(() => llm.routes.has('local-acp-fake'), 'the custom routes')
   return { rt, ctx, llm, call, tool, preStep, state, agentOf, handoffOf, created, archived, selected, lastRoute, starts, startCount, root }
 }
-
-// -----------------------------------------------------------------------------
-// Who may change what a Bot runs on.
 
 test('a Bot cannot move itself or another Bot across run modes', async (t) => {
   const env = await start(t)
@@ -219,7 +211,6 @@ test('the user has to confirm a change of run mode', async (t) => {
   assert.equal(refused.ok, false)
   assert.match(refused.error.message, /needs a confirmation/)
   assert.equal(env.state().bots.b.model, DS)
-  // Between two CLIs too.
   await env.call('update-bot', { id: 'b', model: CLI, changeEngine: true })
   assert.equal((await env.call('update-bot', { id: 'b', model: CLI2 })).ok, false)
   assert.equal(env.state().bots.b.model, CLI)
@@ -240,7 +231,6 @@ test('a Bot without a model of its own still moves to a CLI only by the user, co
   }
   assert.equal(env.state().bots.c.model, undefined)
   assert.equal(env.state().bots.d.model, undefined)
-  // A model of DS Bot's own is an ordinary pick.
   assert.equal((await env.call('update-bot', { id: 'd', model: 'ds/pro' })).ok, true)
   assert.equal(env.state().bots.d.model, 'ds/pro')
 })
@@ -252,9 +242,6 @@ test('a Bot on a CLI keeps a model of it', async (t) => {
   assert.match(cleared.error.message, /keeps a model of it/)
   assert.equal(env.state().bots.c.model, CLI)
 })
-
-// -----------------------------------------------------------------------------
-// The switch.
 
 test('confirmed, the own chat and every group move on at once, with a handoff and no model call', async (t) => {
   const env = await start(t)
@@ -277,7 +264,6 @@ test('confirmed, the own chat and every group move on at once, with a handoff an
     assert.match(env.handoffOf(fresh), /You now run on Fake Agent\./)
     assert.ok(env.selected.some(([sessionId, ref]) => sessionId === fresh && ref === CLI), `${fresh} runs on the CLI`)
   }
-  // The other member is left alone.
   assert.equal(saved.bots.a.segments, undefined)
 })
 
@@ -301,7 +287,6 @@ test('a running turn moves on at its next step and keeps its input', async (t) =
   const input = createUserMessage({ content: [{ type: 'text', text: 'still needed' }], source: { kind: 'user' } })
   const step = await env.preStep('b', [input], 2)
   assert.deepEqual(step, { kind: 'reject' })
-  // A fresh part is made before the state names it.
   await until(() => env.archived.some(([id]) => id === 'b'), 'the fresh part')
   const fresh = env.state().bots.b.sessionId
   await until(() => env.agentOf(fresh).calls.some(([, message]) => textOf(message) === 'still needed'), 'the carried input')
@@ -312,8 +297,6 @@ test('coming back to the same run mode moves on again, in both directions', asyn
   const env = await start(t)
   env.lastRoute.set('b', { provider: 'ds', model: 'flash' })
   await env.call('update-bot', { id: 'b', model: CLI, changeEngine: true })
-  // The state names the fresh part before its handoff goes out; the earlier part is
-  // archived only once the move has finished.
   await until(() => env.archived.some(([id]) => id === 'b'), 'the move to the CLI')
   const onCli = env.state().bots.b.sessionId
   env.lastRoute.set(onCli, { provider: 'local-acp-fake', model: 'default' })
@@ -344,7 +327,6 @@ test('a part whose new route cannot be selected does not move on at every step',
   env.lastRoute.set('b', { provider: 'ds', model: 'flash' })
   await env.call('update-bot', { id: 'b', model: CLI, changeEngine: true })
   await until(() => env.state().bots.b.sessionId !== 'b', 'the fresh part')
-  // The next pre-step of a part that made its request elsewhere stays put once it failed to follow.
   const fresh = env.state().bots.b.sessionId
   const select = env.ctx.sessionController.selectModel
   env.ctx.sessionController.selectModel = async () => { throw new Error('no route') }
@@ -354,12 +336,10 @@ test('a part whose new route cannot be selected does not move on at every step',
   const stuck = env.state().bots.b.sessionId
   env.ctx.sessionController.selectModel = select
   env.lastRoute.set(stuck, { provider: 'ds', model: 'flash' })
-  // Meanwhile it takes no step on the other side: its input waits in its inbox.
   const input = createUserMessage({ content: [{ type: 'text', text: 'wait for me' }], source: { kind: 'user' } })
   assert.deepEqual(await env.preStep(stuck, [input]), { kind: 'enter', messages: [] })
   assert.deepEqual(env.agentOf(stuck).inbox.nextTurn.map(textOf), ['wait for me'])
   assert.equal(env.state().bots.b.sessionId, stuck)
-  // After the wait it tries again, and the input goes along.
   const now = Date.now.bind(Date)
   t.mock.method(Date, 'now', () => now() + 600_000)
   assert.deepEqual(await env.preStep(stuck), { kind: 'enter', messages: [] })
@@ -372,7 +352,6 @@ test('a fresh part whose run mode did not apply waits instead of running on the 
   const env = await start(t)
   env.lastRoute.set('b', { provider: 'ds', model: 'flash' })
   const select = env.ctx.sessionController.selectModel
-  // The fresh parts (s1, s2, …) cannot select the CLI.
   env.ctx.sessionController.selectModel = async (options) => {
     if (/^s\d+$/.test(options.sessionId) && options.provider === 'local-acp-fake') throw new Error('no route')
     return select(options)
@@ -380,27 +359,19 @@ test('a fresh part whose run mode did not apply waits instead of running on the 
   await env.call('update-bot', { id: 'b', model: CLI, changeEngine: true })
   await until(() => env.state().bots.b.sessionId !== 'b', 'the fresh part')
   const fresh = env.state().bots.b.sessionId
-  // It never made a request; the step it is about to take would go to a model.
   const input = createUserMessage({ content: [{ type: 'text', text: 'hello' }], source: { kind: 'user' } })
   assert.deepEqual(await env.preStep(fresh, [input], 1, { provider: 'ds', model: 'flash' }), { kind: 'enter', messages: [] })
   assert.deepEqual(env.agentOf(fresh).inbox.nextTurn.map(textOf), ['hello'])
   assert.equal(env.state().bots.b.sessionId, fresh)
-  // A step to what the Bot runs on goes on.
   assert.equal(await env.preStep(fresh, [], 1, { provider: 'local-acp-fake', model: 'default' }), 'next')
 })
-
-// -----------------------------------------------------------------------------
-// No Bot lands on a local agent, or leaves one, by itself.
 
 test('a fallback never crosses the line, in either direction', async (t) => {
   const env = await start(t, { saved: { ...team({ c: { id: 'c', name: 'Local', role: '', sessionId: 'c', createdAt: 3, model: 'local-acp-gone/default', appliedModel: 'local-acp-gone/default' } }) } })
   const { rt } = env
-  // A CLI that is gone stays the Bot's own.
   assert.equal(await rt.desiredModel(rt.botOf('c')), 'local-acp-gone/default')
-  // A model that is gone falls to a model, not to a CLI it last ran on.
   const lost = { id: 'x', model: 'ds/gone', appliedModel: CLI }
   assert.equal(await rt.desiredModel(lost), DS)
-  // Nothing picks a CLI as a default.
   assert.equal(await rt.defaultModel(), DS)
   await env.call('set-prefs', { defaultBotModel: 'ds/pro' })
   assert.equal(await rt.defaultBotModel(), 'ds/pro')
@@ -443,9 +414,6 @@ test('a short name does not reach a CLI, a full ref does', async (t) => {
   await assert.rejects(env.rt.resolveModel('local-acp-fake/not-there'), /not available/)
 })
 
-// -----------------------------------------------------------------------------
-// Opening a menu is not slow.
-
 test('state, models and a model menu start no CLI; a local Bot\'s menu starts its own, once', async (t) => {
   const env = await start(t)
   await env.call('state')
@@ -458,13 +426,9 @@ test('state, models and a model menu start no CLI; a local Bot\'s menu starts it
   const second = await env.call('local-agent-models', { route: 'local-acp-fake' })
   assert.deepEqual(second.value, first.value)
   assert.equal(env.startCount(), 1, 'the second look reads what the CLI said')
-  // What it said is now in the catalog, and a route nobody serves is not asked.
   assert.ok((await env.rt.catalog()).some(entry => entry.ref === 'local-acp-fake/fake-large'))
   assert.deepEqual((await env.call('local-agent-models', { route: 'nope' })).value, [])
 })
-
-// -----------------------------------------------------------------------------
-// The adapter.
 
 const message = (id, text, source = { kind: 'user' }) => ({ id, role: 'user', content: [{ type: 'text', text }], source })
 
@@ -553,7 +517,6 @@ test('a model the CLI does not take fails the turn and does not count as applied
   })
   assert.equal(adapter.live.get('s1')?.engineSession, undefined)
   assert.equal(records.s1?.model, undefined)
-  // A model it takes works in the same Session.
   const next = await send(adapter, 's1', [message('m1', 'hello')], { model: 'fake-large' })
   assert.match(next.text, /^ok: [^]*hello$/)
   assert.equal(records.s1.model, 'fake-large')
@@ -589,7 +552,6 @@ test('closing a Session answers what its CLI waits on and lets the process go', 
   assert.equal(adapter.live.has('s1'), false)
   assert.equal(engines[0].child, undefined)
   assert.notEqual(child.killed, false)
-  // The record stays, so opening that part again resumes the CLI session.
   assert.ok(records.s1.cliSessionId)
 })
 
@@ -610,9 +572,6 @@ test('a fresh CLI session gets a long handoff word for word', async (t) => {
   assert.ok(prompts[0].length < long.length + 30_000, 'the rest keeps its window')
 })
 
-// -----------------------------------------------------------------------------
-// Sign-in.
-
 test('the sign-in check gives only yes, no or unknown', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'dsb-signin-'))
   t.after(() => rmSync(dir, { recursive: true, force: true }))
@@ -630,15 +589,11 @@ test('the sign-in check gives only yes, no or unknown', async (t) => {
   }
   assert.equal(await probeSignIn(join(dir, 'missing'), check), null)
   assert.equal(await probeSignIn('x', undefined), null)
-  // A credential file says yes; its absence says nothing; its content never leaves.
   mkdirSync(join(dir, '.tool'))
   writeFileSync(join(dir, '.tool', 'auth.json'), '{"token":"secret-value"}')
   assert.equal(await probeSignIn('x', { file: ['.tool', 'auth.json'] }, { home: dir }), true)
   assert.equal(await probeSignIn('x', { file: ['.tool', 'none.json'] }, { home: dir }), null)
 })
-
-// -----------------------------------------------------------------------------
-// The form and the menus.
 
 const CATALOG = [
   { ref: 'ds/flash', provider: 'ds', id: 'flash', name: 'Flash' },
@@ -698,8 +653,6 @@ test('the confirmation says what the change does to this Bot', () => {
   assert.equal(toModel.length, 2)
 })
 
-// The page reads the run mode from the route's prefix, so a model of DSH's own
-// OpenCode provider is not shown as a local agent (#1059).
 test('only prefixed routes count as local agents on the page', () => {
   assert.equal(isLocalRoute('opencode/glm-5'), false)
   assert.equal(isLocalRoute('local-opencode/default'), true)

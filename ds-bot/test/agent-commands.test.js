@@ -1,10 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { install } from '../src/host/agent-commands.js'
+import { install } from '../src/host/agent-commands.ts'
 
-// A small host `commands` registry with the same contract the real one gives the
-// shield: global definitions, per-agent scoped definitions that shadow them, a merged
-// list(agent), find/execute, and a `commands/change` event on every registration.
 function world({ config = {} } = {}) {
   let dshRuns = 0
   const global = new Map()
@@ -34,8 +31,6 @@ function world({ config = {} } = {}) {
       return { result: await definition.handler({ rawInput }) }
     },
   }
-  // The child context a plugin mounted under an agent's context gets. The shield reads
-  // the service through reflection (`get`), as it does in the real host.
   const childOf = (sessionId) => {
     const commands = {
       list: agent => service.list(agent),
@@ -78,7 +73,7 @@ function world({ config = {} } = {}) {
       ctx: {
         plugin(definition) {
           definition.apply(childOf(sessionId))
-          return { dispose() { /* the agent scope disposes the fiber */ } }
+          return { dispose() {} }
         },
       },
     }
@@ -113,7 +108,6 @@ test('one Bot\u2019s shadow stays out of another Bot\u2019s commands', async () 
   w.registerGlobal('plan')
   const a = w.agent('a')
   const b = w.agent('b')
-  // Only a's agent is mounted, so only a is shadowed; b's scope is untouched.
   w.emit('agent/created', { agent: a })
   assert.match(w.service.find(a, 'plan').description, /Not available/)
   assert.equal(w.service.find(b, 'plan').description, 'global plan')
@@ -129,8 +123,6 @@ test('two mounted agents are both shielded, each with its own Session\u2019s ref
   w.rt.rooms.set('r1', { id: 'r1' })
   w.registerGlobal('plan')
   w.registerGlobal('goal')
-  // Both agents arrive after install, like the second and later Bots in a running team:
-  // the reflection (not `inject`) is what makes the second mount find the service too.
   const a = w.agent('a')
   const room = w.agent('r1')
   w.emit('agent/created', { agent: a })
@@ -143,8 +135,6 @@ test('two mounted agents are both shielded, each with its own Session\u2019s ref
   const fromGroup = await w.service.execute(room, '/goal 明天上线')
   assert.equal(fromBot.result.kind, 'error')
   assert.equal(fromGroup.result.kind, 'error')
-  // Each shadow answers for its own Session: neither refusal leaks into the other's
-  // surface, and no DSH handler ran for either agent.
   assert.match(fromBot.result.text, /Bot's chat/)
   assert.doesNotMatch(fromBot.result.text, /group chat/)
   assert.match(fromGroup.result.text, /group chat/)
@@ -185,11 +175,8 @@ test('a Bot whose agent arrives before its state entry gets the shield on the ne
   install(w.rt)
   w.registerGlobal('plan')
   const a = w.agent('a')
-  // The agent is created first, like a Bot created a moment ago: the state does not know
-  // the chat yet, so the shield mounts and registers nothing.
   w.emit('agent/created', { agent: a })
   assert.equal(w.service.find(a, 'plan').description, 'global plan')
-  // The Bot is saved; the shield re-checks and registers its shadows.
   w.rt.chatOwners.set('a', 'a')
   for (const listener of w.rt.saved) listener()
   assert.match(w.service.find(a, 'plan').description, /Not available/)

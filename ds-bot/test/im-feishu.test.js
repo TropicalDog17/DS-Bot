@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import { test } from 'node:test'
-import feishu, { decodeFrame, encodeFrame } from '../src/host/im/platforms/feishu.js'
+import feishu, { decodeFrame, encodeFrame } from '../src/host/im/platforms/feishu.ts'
 import { fakeWsServer } from './fake-ws.js'
 
 // A fake Feishu that answers only the calls the real service answers, with the
@@ -130,7 +130,6 @@ test('check asks for a tenant token and names the bot with it', async () => {
   assert.equal(account.name, 'fakebot')
   const token = fake.calls.find(call => call.path === '/open-apis/auth/v3/tenant_access_token/internal')
   assert.equal(token.params.app_id, 'cli_a1')
-  // The Bearer token is the token string, not the tenantToken() result object.
   const info = fake.calls.find(call => call.path === '/open-apis/bot/v3/info')
   assert.equal(info.auth, `Bearer ${fake.tokens[0]}`)
   await fake.close()
@@ -170,7 +169,6 @@ test('a ping gets a pong, a p2p is direct, a group counts only with a mention, d
   const endpoint = await until(() => fake.calls.find(call => call.path === '/callback/ws/endpoint'))
   assert.equal(endpoint.auth, `Bearer ${fake.tokens[0]}`)
   assert.deepEqual(endpoint.params, { AppID: 'cli_a1', AppSecret: 'sec' })
-  // The ping sent on connect gets a pong back.
   await until(() => fake.frames.some(({ frame }) => frame.method === 0 && frame.headers.some(h => h.key === 'type' && h.value === 'pong')))
   fake.push(ws, fake.dataFrame('event', message({ chat_type: 'p2p', chat_id: 'oc_1', message_id: 'om_1', message_type: 'text', content: JSON.stringify({ text: 'hello' }) }), { messageId: 'fm1' }))
   fake.push(ws, fake.dataFrame('event', message({ chat_type: 'group', chat_id: 'oc_2', message_id: 'om_2', message_type: 'text', content: JSON.stringify({ text: '@_user_1 ping' }), mentions: [{ key: '@_user_1', id: { open_id: 'ou_bot' } }] }), { messageId: 'fm2' }))
@@ -181,7 +179,6 @@ test('a ping gets a pong, a p2p is direct, a group counts only with a mention, d
   assert.equal(messages[1].mentioned, true)
   assert.equal(messages[1].text, 'ping')
   assert.equal(messages[2].mentioned, false)
-  // Each data frame was ACKed back with the {"code":200} payload.
   await until(() => fake.frames.filter(({ frame }) => frame.method === 1 && frame.headers.some(h => h.key === 'biz_rt')).length === 3)
 })
 
@@ -281,7 +278,6 @@ test('a dropped socket reconnects through a fresh endpoint and a renewed token',
   t.after(() => { handle.stop(); fake.close() })
   const ws = await until(() => fake.sockets[0])
   await until(() => fake.calls.filter(call => call.path === '/callback/ws/endpoint').length === 1)
-  // Move the clock past the token's expiry, so the next handshake has to renew it.
   const realNow = Date.now
   Date.now = () => realNow() + 7_300_000
   t.after(() => { Date.now = realNow })
@@ -340,8 +336,6 @@ test('a ws endpoint failure after the token is accepted is retried (#1119)', asy
   t.after(() => { handle.stop(); fake.close() })
   const failed = await until(() => statuses.find(status => status.state === 'retrying'))
   assert.match(failed.error, /fetch failed/)
-  // The token and bot identity were accepted first, so this covers the websocket
-  // handshake and not a second token failure.
   assert.equal(fake.calls.filter(call => call.path === '/open-apis/auth/v3/tenant_access_token/internal').length, 1)
   assert.ok(fake.calls.some(call => call.path === '/open-apis/bot/v3/info'))
   assert.equal(fake.sockets.length, 0)
@@ -383,7 +377,6 @@ test('an inbound image refreshes an expired tenant token before download', async
   fake.push(ws, image('om_1'))
   await until(() => messages.length === 1)
   assert.equal(messages[0].images[0].data, fake.imageBytes.toString('base64'))
-  // Two hours later the cached token is dead: the download has to renew it.
   const realNow = Date.now
   Date.now = () => realNow() + 7_300_000
   t.after(() => { Date.now = realNow })
@@ -415,8 +408,6 @@ test('a failed image download warns instead of staying silent', async (t) => {
   assert.equal(messages[0].images.length, 0, 'the message still arrives, without the image')
 })
 
-// #1417: the send path classified 5xx as retryable but carried no status, so the
-// queue could not tell a broken tunnel from a network blip and retried forever.
 test('a 5xx answer is retryable and carries its status; a 4xx answer is permanent', async () => {
   const responding = (status, body) => async (url) => (url.endsWith('/tenant_access_token/internal')
     ? { ok: true, status: 200, json: async () => ({ tenant_access_token: 'tok', expire: 7200 }) }
@@ -442,8 +433,6 @@ test('images arriving together after expiry share one token refresh', async (t) 
   const realNow = Date.now
   Date.now = () => realNow() + 7_300_000
   t.after(() => { Date.now = realNow })
-  // Slow token replies make a second refresh overtake the first download
-  // deterministically; the fake only accepts its newest token.
   fake.slowTokens(50)
   const image = (id) => fake.dataFrame('event', message({
     chat_type: 'p2p', chat_id: 'oc_1', message_id: id, message_type: 'image',

@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# Generates the small Office fixtures under test/fixtures/office/. Run with the
-# payload Python (app/build/runtime/primary-runtime/dependencies/python/python.exe):
-#   <payload python> dev/office-fixtures.py
-# Not shipped in the npm package.
 import io
 import os
 import sys
@@ -40,9 +36,7 @@ def make_docx():
     table.cell(1, 1).text = "42"
     doc.add_paragraph("Second paragraph with a field:")
     p = doc.add_paragraph()
-    fld = p.add_run()
-    instr = fld._element
-    instr.addprevious  # noqa - placeholder, real field added below via XML
+    p.add_run()
     doc.sections[0].header.paragraphs[0].text = "Report header"
     doc.sections[0].footer.paragraphs[0].text = "Confidential footer"
     doc.add_paragraph("Final closing paragraph.")
@@ -87,13 +81,11 @@ def touch_docx(path):
                     '<w:moveToRangeStart w:name="m1" w:id="14"/>'
                     '<w:moveTo w:id="16" w:author="Ana"><w:r><w:t xml:space="preserve"> moved</w:t></w:r></w:moveTo>'
                     '<w:moveToRangeEnd/>', 1)
-                # A comment anchored to the second paragraph.
                 text = text.replace(
                     "<w:r><w:t>Second paragraph with a field:</w:t></w:r>",
                     '<w:commentRangeStart w:id="0"/><w:r><w:t>Second paragraph with a field:</w:t></w:r>'
                     '<w:commentRangeEnd w:id="0"/>'
                     '<w:r><w:commentReference w:id="0"/></w:r>', 1)
-                # Deleted paragraph mark on the third paragraph.
                 idx = text.find("Final closing paragraph.")
                 if idx > 0:
                     open_p = text.rfind("<w:p", 0, idx)
@@ -103,14 +95,11 @@ def touch_docx(path):
                             + text[close_p:])
                 data = text.encode("utf8")
             zout.writestr(item, data)
-        # comments.xml + its relationship + content type.
         zout.writestr("word/comments.xml",
                       '<w:comments xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
                       '<w:comment w:id="0" w:author="Ana" w:initials="A" w:date="2026-10-01T00:00:00Z">'
                       '<w:p><w:r><w:t>Check this field.</w:t></w:r></w:p></w:comment></w:comments>')
         rels_name = "word/_rels/document.xml.rels"
-        # Rebuild rels + content types entries for comments.xml.
-    # Second pass: add rel + override.
     with zipfile.ZipFile(tmp) as zin, zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zout:
         for item in zin.namelist():
             data = zin.read(item)
@@ -136,7 +125,6 @@ def make_pptx():
     prs.slide_width = PInches(10)
     prs.slide_height = PInches(7.5)
     blank = prs.slide_layouts[6]
-    # Slide 1: title + content + picture + table + chart + group.
     s1 = prs.slides.add_slide(prs.slide_layouts[0])
     s1.shapes.title.text = "Overview"
     s1.placeholders[1].text = "Key numbers"
@@ -151,11 +139,9 @@ def make_pptx():
     box = grp.shapes.add_textbox(PInches(0.5), PInches(0.5), PInches(1.5), PInches(0.4))
     box.text_frame.text = "grouped"
     s1.notes_slide.notes_text_frame.text = "Speaker notes for the overview."
-    # Slide 2: hidden.
     s2 = prs.slides.add_slide(prs.slide_layouts[1])
     s2.shapes.title.text = "Hidden appendix"
     s2._element.set("show", "0")
-    # Slide 3: overlapping text boxes for the layout check.
     s3 = prs.slides.add_slide(blank)
     a = s3.shapes.add_textbox(PInches(1), PInches(1), PInches(3), PInches(2))
     a.text_frame.text = "First box"
@@ -175,7 +161,7 @@ def make_xlsx():
     ws["A3"] = "South"
     ws["B3"] = 17
     ws["C2"] = "=B2*2"
-    ws["C3"] = "=B3/0"  # error cell
+    ws["C3"] = "=B3/0"
     ws["C4"] = "=SUM(B2:B3)"
     ws["D1"] = "Report date"
     ws["D2"] = __import__("datetime").datetime(2026, 10, 1)

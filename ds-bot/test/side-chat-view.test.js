@@ -4,10 +4,8 @@ import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
 
-// The side chat's follow-up field shares the composer preference: while Enter sends,
-// a plain Enter asks; off, it is the field's own newline and the send button asks.
 const { outputFiles } = await build({
-  entryPoints: [fileURLToPath(new URL('../src/client/side-chat.js', import.meta.url))],
+  entryPoints: [fileURLToPath(new URL('../src/client/side-chat.ts', import.meta.url))],
   bundle: true, format: 'cjs', platform: 'browser', write: false, logLevel: 'silent',
   external: ['react', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives'],
 })
@@ -82,7 +80,6 @@ const chat = {
   id: 'c1',
   entries: [{ id: 'e1', question: 'What ran?', answer: 'Two reads.', status: 'answered' }],
 }
-// Mounts the view, types a follow-up, and returns the rendered tree accessor.
 const view = (prefs, ready = true) => {
   const asked = []
   const instance = mount({
@@ -112,7 +109,6 @@ test('with Enter sending off, a plain Enter is a newline and the send button ask
   assert.equal(event.prevented, false)
   assert.deepEqual(plain(asked), [])
   assert.equal(textarea(tree()).props.value, 'and then?')
-  // The explicit send control carries the same ask.
   sendButton(tree()).props.onClick()
   await tick()
   assert.deepEqual(plain(asked), [['b1', 'c1', 'and then?']])
@@ -120,14 +116,12 @@ test('with Enter sending off, a plain Enter is a newline and the send button ask
 })
 
 test('a roster still loading keeps a saved off and a first-time default', async () => {
-  // The pre-pull roster stays ready:false but already carries the window's saved prefs.
   const saved = view({ enterToSend: false }, false)
   const off = enter()
   textarea(saved.tree()).props.onKeyDown(off)
   await tick()
   assert.equal(off.prevented, false)
   assert.deepEqual(plain(saved.asked), [])
-  // A window with nothing saved keeps the default: Enter sends, it is not stuck off.
   const fresh = view({}, false)
   const on = enter()
   textarea(fresh.tree()).props.onKeyDown(on)

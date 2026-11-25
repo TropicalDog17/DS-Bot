@@ -4,11 +4,8 @@ import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
 
-// The composer's "+" bundled with a React stand-in that counts hook calls. React needs a
-// component to call the same hooks on every render: one render that calls a hook the
-// previous render did not is an error, and the composer's slot drops the "+" for good.
 const { outputFiles } = await build({
-  entryPoints: [fileURLToPath(new URL('../src/client/composer.js', import.meta.url))],
+  entryPoints: [fileURLToPath(new URL('../src/client/composer.ts', import.meta.url))],
   bundle: true, format: 'cjs', platform: 'browser', write: false, logLevel: 'silent',
   external: ['react', 'react-dom'],
 })
@@ -29,7 +26,6 @@ runInNewContext(outputFiles[0].text, {
 })
 const { ComposerPlus } = module.exports
 
-// Renders the "+" for a chat whose Bot is in the roster as `roster` says, and counts its hook calls.
 function render(roster) {
   hooks = 0
   const tree = ComposerPlus({

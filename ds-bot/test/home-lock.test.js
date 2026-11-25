@@ -7,7 +7,7 @@ import { hostname, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { createRuntime } from '../index.js'
-import { homeLock } from '../src/host/home-lock.js'
+import { homeLock } from '../src/host/home-lock.ts'
 import { fakeContext } from './fake-ctx.js'
 
 const tempHome = (t) => {
@@ -46,8 +46,6 @@ test('a same-host lock without a fresh heartbeat is taken over even while its pi
   writeFileSync(path, JSON.stringify({ pid: 101, host: hostname(), token: 'old' }))
   const old = new Date(Date.now() - 120_000)
   utimesSync(path, old, old)
-  // A crashed holder's pid may be reused by an unrelated process; the stopped heartbeat,
-  // not the pid, says the holder is gone.
   const late = homeLock(path, { pid: 202, isAlive: () => true })
   t.after(() => late.release())
   assert.equal(late.claim(), undefined)
@@ -142,7 +140,6 @@ function start(t, home) {
 test('while another dsh holds the team, the channel reads it, refuses changes, then takes over', async (t) => {
   const home = tempHome(t)
   writeFileSync(join(home, 'state.json'), JSON.stringify(TEAM))
-  // The test runner's parent process: alive, on this host, and not this process.
   writeFileSync(join(home, 'state.lock'), JSON.stringify({ pid: process.ppid, host: hostname(), token: 'other' }))
   const call = start(t, home)
 
@@ -153,13 +150,11 @@ test('while another dsh holds the team, the channel reads it, refuses changes, t
   assert.equal(refused.error.code, 'bot/read-only')
   assert.equal(JSON.parse(readFileSync(join(home, 'state.json'), 'utf8')).prefs, undefined)
 
-  // The other host saves a change: the reading host follows the file.
   writeFileSync(join(home, 'state.json'), JSON.stringify({ ...TEAM, revision: 8, prefs: { theme: 'light' } }))
   const followed = (await call('state', {})).value
   assert.equal(followed.revision, 8)
   assert.equal(followed.prefs.theme, 'light')
 
-  // The other host exits: the next request takes over and saves.
   rmSync(join(home, 'state.lock'))
   assert.equal((await call('set-prefs', { theme: 'dark' })).ok, true)
   const saved = JSON.parse(readFileSync(join(home, 'state.json'), 'utf8'))
@@ -188,11 +183,9 @@ test('a reading host follows the other host\'s keys, never writes them, and keep
   assert.match(asked, /^No card can be shown now\. The Bot team in .* is open in another dsh/)
   assert.deepEqual((await call('state', {})).value.secretRequests, {})
 
-  // The other host saves a second key; this one follows instead of keeping its first copy.
   writeKeys([key('FIRST_KEY', 'first-value-1'), key('SECOND_KEY', 'second-value-2')], 8)
   assert.deepEqual(await names(), ['FIRST_KEY', 'SECOND_KEY'])
 
-  // After taking over, a new key joins both instead of replacing the file with an old copy.
   writeKeys([key('FIRST_KEY', 'first-value-1'), key('SECOND_KEY', 'second-value-2'), key('THIRD_KEY', 'third-value-3')], 9)
   rmSync(join(home, 'state.lock'))
   assert.equal((await call('secret-set', { name: 'MINE', value: 'mine-value-1' })).ok, true)
@@ -200,10 +193,7 @@ test('a reading host follows the other host\'s keys, never writes them, and keep
   assert.deepEqual(saved, ['FIRST_KEY', 'MINE', 'SECOND_KEY', 'THIRD_KEY'])
 })
 
-// A quit can end the process without the plugin's cleanup (a shutdown timeout, a
-// handler that calls exit). The lock must still go with this process — and only
-// while the file is still this host's.
-const lockModule = new URL('../src/host/home-lock.js', import.meta.url).href
+const lockModule = new URL('../src/host/home-lock.ts', import.meta.url).href
 const runChild = code => new Promise((resolve, reject) => {
   execFile(process.execPath, ['--input-type=module', '-e', code], (error, stdout, stderr) => {
     if (error === null) resolve({ stdout, stderr })

@@ -1,17 +1,13 @@
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import { test } from 'node:test'
-import weixin from '../src/host/im/platforms/weixin.js'
+import weixin from '../src/host/im/platforms/weixin.ts'
 
-// A fake iLink: the QR endpoints drive the login states the test wants, the
-// getupdates long poll answers from a queued script, and sends are recorded.
 async function fakeIlink() {
   const calls = []
   const replies = {}
   let updates = []
   const state = { notified: false }
-  // A client that went away before the held long poll answered, and one promise
-  // per held poll (it resolves when that connection closes).
   const aborted = []
   const held = []
   const http = createServer((req, res) => {
@@ -20,7 +16,6 @@ async function fakeIlink() {
     req.on('end', () => {
       const params = JSON.parse(body || '{}')
       calls.push({ method: req.method, path: req.url, params, auth: req.headers.authorization, headers: req.headers })
-      // A raw body, for a proxy error page or any other non-JSON 200.
       if (replies.raw?.[req.url] !== undefined) {
         res.writeHead(200, { 'content-type': 'text/html' }); res.end(replies.raw[req.url])
         return
@@ -49,8 +44,6 @@ async function fakeIlink() {
           res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ errcode: -14, errmsg: 'session timeout' }))
           return
         }
-        // A long poll the test holds open: it answers only when the client goes away,
-        // which is how a stopped connection must end it.
         if (replies.holdUpdates === true) {
           const gone = new Promise(resolve => {
             res.on('close', () => {
@@ -87,7 +80,6 @@ const env = (fake, runtime = {}) => ({
   runtime: { get: () => runtime, set: patch => Object.assign(runtime, patch) },
   log: { warn: (...args) => console.error('[im-weixin]', ...args) },
 })
-// The same env, with the statuses and warnings kept for assertions.
 const tracked = (fake, runtime = {}) => {
   const statuses = []
   const warns = []
@@ -378,8 +370,6 @@ test('a network failure keeps its cause for diagnosis', async () => {
   }
 })
 
-// A missing ret only means success when the body is a real getupdates answer: a
-// proxy error page (non-JSON) or an empty object must not read as an idle poll.
 test('check refuses a non-JSON answer and an empty object without ret', async () => {
   const fake = await fakeIlink()
   try {

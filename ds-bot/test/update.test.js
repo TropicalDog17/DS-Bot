@@ -3,16 +3,14 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, test } from 'node:test'
-import { cleanVersion, install, newer, sourceOf } from '../src/host/update.js'
+import { cleanVersion, install, newer, sourceOf } from '../src/host/update.ts'
 
 const PKG = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
 const flush = async () => { for (let index = 0; index < 14; index += 1) await Promise.resolve() }
-// Longer chains than `flush` covers: wait until the update leaves 'installing'.
 const settle = async (rt) => { for (let index = 0; index < 200 && (await rt.updateCheck()).phase === 'installing'; index += 1) await Promise.resolve() }
 const realFetch = globalThis.fetch
 afterEach(() => { globalThis.fetch = realFetch })
 
-// The update module alone, on a stub plugin manager and a scripted fetch.
 function start({ source, registries, answers = {}, result = { application: 'restart-required' }, remove = { application: 'applied' }, enable = { application: 'applied', changed: true }, config = {}, profileDir, home }) {
   const fetched = []
   const installs = []
@@ -57,7 +55,6 @@ test('versions compare in semver order and lose their v and build metadata', () 
 test('the install source decides where a newer version is looked for', () => {
   assert.deepEqual(sourceOf('ds-bot@^0.1.0'), { kind: 'registry' })
   assert.deepEqual(sourceOf('@scope/ds-bot@latest'), { kind: 'registry' })
-  // A profile's own dependency entry says the same without the package name.
   assert.deepEqual(sourceOf('^0.1.0'), { kind: 'registry' })
   assert.deepEqual(sourceOf('npm:ds-bot@^0.1.0'), { kind: 'registry' })
   assert.deepEqual(sourceOf('link:E:/项目库/My Bots/ds-bot'), { kind: 'path' })
@@ -203,13 +200,11 @@ test('a check that finds nothing clears the version a check before it found', as
   const offered = await rt.updateCheck()
   assert.equal(offered.available, true)
   assert.equal(offered.latest, '9.0.0')
-  // The profile now links a local checkout: the old registry offer must go.
   setSource('link:/work/ds-bot')
   const linked = await rt.updateCheck({ fresh: true })
   assert.equal(linked.available, false)
   assert.equal(linked.latest, null)
   assert.throws(() => rt.updateStart(), /No DS Bot update/)
-  // Back on the registry with no copy answering: the offer stays cleared.
   delete answers[latest]
   setSource(`^${PKG.version}`)
   const gone = await rt.updateCheck({ fresh: true })
@@ -243,8 +238,7 @@ test('a failed install reports why and can be tried again', async () => {
 })
 
 // Under HMR the manager refuses a spec the profile already depends on with
-// 'already-installed'; the update then removes the bundle and installs it again,
-// leaving a note at <home>/update.json for the start that reloads the new copy.
+// 'already-installed'.
 const NOTE = `${PKG.name}@9.0.0`
 const newHome = () => mkdtempSync(join(tmpdir(), 'ds-bot-update-home-'))
 const noteIn = home => JSON.parse(readFileSync(join(home, 'update.json'), 'utf8'))
@@ -288,7 +282,6 @@ test('an already-installed refusal removes the bundle, reinstalls and leaves a n
   assert.deepEqual(calls, ['install1', 'install2'])
   assert.deepEqual(installs, [[NOTE, { registry: 'https://registry.example/' }], [NOTE, { registry: 'https://registry.example/' }]])
   assert.deepEqual(removes, [PKG.name])
-  // The note was written before the removal — and still carries no error on success.
   const note = noteIn(home)
   assert.equal(note.from, PKG.version)
   assert.equal(note.to, '9.0.0')

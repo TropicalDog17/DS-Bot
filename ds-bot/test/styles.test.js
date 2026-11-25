@@ -6,14 +6,11 @@ import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
 
-// jsdom and the real client module system come from the harness, as the dsh packages do.
 const PLUGIN = dirname(dirname(fileURLToPath(import.meta.url)))
 const harness = process.env.DSH_HARNESS ?? join(PLUGIN, '..', 'deepseek-harness')
 const requireHarness = createRequire(join(harness, 'package.json'))
 const { JSDOM } = requireHarness('jsdom')
 
-// The style helpers and the CSS they ship, bundled once with a minimal React for
-// motion.js; they run in each test's jsdom document through the vm context.
 const { outputFiles } = await build({
   stdin: {
     contents: "export { installStyles, installCompiledStyles } from './src/client/styles.js'",
@@ -33,7 +30,6 @@ const react = {
 }
 
 const tick = () => new Promise(resolve => setImmediate(resolve))
-// DS Bot's style tags in a document, all of them or those of one group.
 const tagged = (document, tag) => [...document.head.querySelectorAll('style')]
   .filter(style => style.dataset.dshBot !== undefined && (tag === undefined || style.dataset.dshBot === tag))
 
@@ -54,8 +50,6 @@ const clientModules = await (async () => {
 })()
 const { createClientModuleSystem, parseBootManifest } = clientModules
 
-// A fresh jsdom document, the bundled style helpers bound to it, and a real
-// ClientModuleSystem that materializes the pretend modules named in `rows`.
 const bench = (rows) => {
   const { window } = new JSDOM('<!doctype html><html><head></head><body></body></html>')
   const module = { exports: {} }
@@ -79,7 +73,6 @@ const bench = (rows) => {
     entries: rows.map(id => ({ id, url: `/modules/${id}.js?rev=${rev}`, rev })),
     batches: rows.length ? [{ phase: 'application', url: `/boot.js?rev=${rev}`, rev, entries: [...rows] }] : [],
   })
-  // A bench with no modules never builds the system; the helpers stay undefined.
   const system = rows.length === 0 ? undefined : inside(() => {
     window.__ModuleLoader__ = { mode: 'queue', pendingQueue: [], load() {} }
     return createClientModuleSystem(window.__ModuleLoader__, { id: 'shell', exports: {} }, {
@@ -93,8 +86,6 @@ const bench = (rows) => {
   return { window, module, materialize, register, update }
 }
 
-// #228: our style tags carry the client module id, so another module's materialization
-// cannot claim them and its teardown cannot delete them.
 test('every DS Bot style is owned by the ds-bot client module', async () => {
   const { window, module, register, materialize, update } = bench(['other'])
   const { installStyles, installCompiledStyles } = module.exports
@@ -120,7 +111,6 @@ test('every DS Bot style is owned by the ds-bot client module', async () => {
   assert.equal(plain.dataset.plugin, 'ds-bot')
   assert.equal(compiled.dataset.plugin, 'ds-bot')
 
-  // A newer revision of that module replaces it: what it claimed goes, ours stay.
   update('r2')
   await tick()
   if (claimed) assert.equal(stray.isConnected, false)
@@ -143,7 +133,6 @@ test('a compiled style removed from outside comes back, until its cleanup runs',
   dispose()
   await tick()
   assert.equal(style.isConnected, false)
-  // Later page changes cannot resurrect it.
   const late = document.createElement('style')
   document.head.appendChild(late)
   await tick()

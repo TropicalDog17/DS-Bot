@@ -1,7 +1,3 @@
-// A local agent Bot's context, the way every other Bot's is handled: DS Bot reads how
-// full the CLI session is from what the CLI reports, the steward decides past the
-// check line or after the CLI condensed on its own, the CLI condenses on request and
-// writes the handoff note, and the part moves on.
 import assert from 'node:assert/strict'
 import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -9,17 +5,16 @@ import { join } from 'node:path'
 import { format } from 'node:util'
 import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
-import { LocalAgentAdapter } from '../src/host/local-agents/adapter.js'
-import { AcpEngine, modelsFromProbe, usageOf } from '../src/host/local-agents/acp.js'
-import { ENGINES } from '../src/host/local-agents/engines.js'
-import { CodexEngine } from '../src/host/local-agents/codex.js'
-import { install as partsInstall } from '../src/host/parts.js'
+import { LocalAgentAdapter } from '../src/host/local-agents/adapter.ts'
+import { AcpEngine, modelsFromProbe, usageOf } from '../src/host/local-agents/acp.ts'
+import { ENGINES } from '../src/host/local-agents/engines.ts'
+import { CodexEngine } from '../src/host/local-agents/codex.ts'
+import { install as partsInstall } from '../src/host/parts.ts'
 import { fakeContext } from './fake-ctx.js'
 
 const FIXTURE = name => fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url))
 const recorded = name => JSON.parse(readFileSync(FIXTURE(`recorded/${name}`), 'utf8')).messages
 
-// Every event a driver session queues from here on.
 const drained = (session) => {
   const queue = []
   session.push = event => queue.push(event)
@@ -35,7 +30,6 @@ test('Devin CLI 3000.12.43, as recorded: context, prompt usage, commands, and it
   const { queue } = drained(session)
   for (const message of messages) if (message.method !== undefined) engine.onNotice(message.method, message.params)
   const contexts = queue.filter(event => event.type === 'context')
-  // One per answer: the copy marked as a subagent's is not the session's.
   assert.deepEqual(contexts, [{ type: 'context', used: 14493, size: 262000 }, { type: 'context', used: 14542, size: 262000 }, { type: 'context', used: 14833, size: 262000 }])
   assert.deepEqual(queue.filter(event => event.type === 'compaction').map(event => event.status), ['started', 'completed'])
   assert.ok(engine.commands.get(id).includes('compact'))
@@ -49,7 +43,6 @@ test('Codex 0.166, as recorded: the last request is the context, its usage count
   const { queue } = drained(thread)
   for (const message of messages) engine.onNotice(message.method, message.params)
   assert.deepEqual(queue.filter(event => event.type === 'context').map(event => [event.used, event.size]), [[25806, 475000], [25824, 475000], [29086, 475000], [26198, 475000]])
-  // The compaction's own report spends nothing.
   assert.deepEqual(queue.filter(event => event.type === 'usage')[0].usage, { inputTokens: 25801 - 12288, outputTokens: 5, cacheReadTokens: 12288 })
   assert.equal(queue.filter(event => event.type === 'usage').length, 3)
   assert.deepEqual(queue.filter(event => event.type === 'compaction').map(event => event.status), ['started', 'completed'])
@@ -109,7 +102,6 @@ test('an ACP agent: the context it reports, its compaction on request, and nothi
 
   const next = await turn(adapter, 's1', [...history, { id: 'a1', role: 'assistant', content: [{ type: 'text', text: first.text }] }, user('m2', 'and now')])
   assert.doesNotMatch(next.text, /Context compacted/)
-  // The compaction may have dropped the team rules it read as a prompt: they go again.
   assert.match(next.text, /ok: Updated team instructions/)
   assert.equal(adapter.contextOf('s1').used, 15050)
 })
@@ -234,7 +226,6 @@ test('the handoff note is one more prompt in the CLI session; the next turn send
   await turn(adapter, 's1', history)
   const note = await adapter.note('s1', 'write the note', AbortSignal.timeout(10_000))
   assert.equal(note, 'ok: write the note')
-  // What it spent counts for the Session it served.
   assert.deepEqual(usage.map(entry => [entry.sessionId, entry.kind, entry.provider]), [['s1', 'compaction', 'local-acp-fake']])
   const next = await turn(adapter, 's1', [...history, { id: 'a1', role: 'assistant', content: [{ type: 'text', text: 'ok' }] }, user('m2', 'go on')])
   assert.equal(next.text, 'ok: go on')
@@ -245,7 +236,6 @@ test('a one-off request runs in a session of its own and closes it', async (t) =
   t.after(() => adapter.dispose())
   await turn(adapter, 's1', [user('m1', 'hello')])
   const answer = await adapter.ask('s1', { system: 'You decide.', prompt: 'count-sessions', signal: AbortSignal.timeout(10_000) })
-  // The Bot's session and this one were open while it answered.
   assert.equal(answer, 'sessions: 2')
   assert.equal(adapter.live.size, 1)
   assert.equal((await turn(adapter, 's1', [user('m1', 'hello'), user('m2', 'count-sessions')])).text, 'sessions: 1')
@@ -390,9 +380,6 @@ test('a CLI that says its context is past its window fails the turn as an overfl
   await assert.rejects(adapter.collect(live, () => ({ event: Promise.resolve(queue.shift()), drop: () => {} })), error => error.code === 'CONTEXT_WINDOW_EXCEEDED')
 })
 
-// ---------------------------------------------------------------------------
-// The parts module with a part on a local agent CLI.
-
 const NOTE_SECTIONS = ['Goals', 'Constraints and preferences', 'Progress', 'Decisions', 'Facts to keep', 'Open threads', 'Next step', 'Where to look']
 const goodNote = marker => NOTE_SECTIONS.map(name => `## ${name}\n- ${marker}`).join('\n\n')
 const MESSAGES = [
@@ -511,7 +498,6 @@ test('past the check line, the steward on the CLI says switch: the CLI writes th
   run.idle()
   await run.settle()
   assert.equal(run.bot.sessionId, 's2', run.warnings.join(' | '))
-  // What the conversation runs on answers, not the team's default model.
   assert.deepEqual(run.calls.steward, [])
   assert.equal(run.calls.asks.length, 1)
   assert.equal(run.calls.notes.length, 1)
@@ -524,7 +510,6 @@ test('work still under way: the CLI condenses and the part stays', async () => {
   run.idle()
   await new Promise(resolve => setTimeout(resolve, 100))
   assert.equal(run.calls.compacts.length, 1)
-  // Under the agent's maintenance: no turn can start on the CLI session meanwhile.
   assert.equal(run.calls.compactsHeld, 1)
   assert.equal(run.bot.sessionId, 's1')
 })

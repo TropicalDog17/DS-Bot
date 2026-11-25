@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { failureLabel, knownFailure } from '../src/client/diagnostics.js'
+import { failureLabel, knownFailure } from '../src/client/diagnostics.ts'
 
 test('credential and account failures have short words', () => {
   const labels = {

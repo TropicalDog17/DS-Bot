@@ -6,8 +6,6 @@ import { test } from 'node:test'
 import { createRuntime } from '../index.js'
 import { fakeContext } from './fake-ctx.js'
 
-// Ids that name an inherited property: a lookup that misses Object.hasOwn would find
-// these on every table and could write onto Object.prototype.
 const BAD = ['__proto__', 'constructor', 'prototype', 'toString', 'hasOwnProperty']
 
 const TEAM = {
@@ -31,8 +29,6 @@ const TEAM = {
   prefs: {},
 }
 
-// An in-memory stand-in for DSH's schedule service, so schedule-create reaches the
-// Bot/group lookup it does.
 function scheduleService() {
   return {
     tasks: [],
@@ -79,9 +75,6 @@ function start() {
   return { ctx, call, tool, state, stop }
 }
 
-// Each endpoint's answer for an inherited name must be the same as for an id that is
-// simply not there; in particular never ok and never bot/internal unless an unknown
-// id gets that too.
 const ENDPOINTS = [
   ['update-bot', id => ({ id, role: 'x' })],
   ['delete-bot', id => ({ id })],
@@ -141,7 +134,6 @@ test('tools answer an inherited Bot name like any unknown name', async (t) => {
     assert.equal(await tool('message_bot', { to: id, message: 'hi' }, 'm1'), `No Bot named ${id}. Team: Chief, Writer`)
     assert.equal(await tool('update_bot', { bot: id, role: 'x' }, 'm1'), `No Bot named ${id}.`)
     assert.match(await tool('create_group', { members: [id, 'Writer'] }, 'm1'), new RegExp(`^No Bot named ${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`))
-    // Asking as a Bot named like this finds no caller either.
     assert.equal(await tool('update_bot', { name: 'King' }, id), 'Only Bots on the team can use update_bot.')
   }
   assert.deepEqual(Object.getOwnPropertyNames(Object.prototype), prototypeNames)

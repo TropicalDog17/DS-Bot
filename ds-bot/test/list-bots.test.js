@@ -12,7 +12,6 @@ const MINUTE = 60_000
 const HOUR = 60 * MINUTE
 const DAY = 24 * HOUR
 
-// Chief (Main) and Writer in Ops; Writer and Editor in Desk; Diary is a private Bot.
 const team = ({ questions = {}, views = {}, openPart = false } = {}) => ({
   version: 1,
   mainBotIds: ['a'],
@@ -49,19 +48,15 @@ async function start(cards) {
   })
   rt = createRuntime(ctx, { home })
   const list = (args, sessionId) => rt.teamTools.find(d => d.name === 'list_bots').execute(args, { agent: { id: sessionId } })
-  // Loading once fills the Session-owner indexes the tools look callers up in.
   await list({}, 'a')
   return { list, rt, stop: async () => { await ctx.dispose(); rmSync(home, { recursive: true, force: true, maxRetries: 5 }) } }
 }
 
-// #1501: a Bot's own chat may keep a part running in the background. A Bot working
-// there is not idle, and the line says it is another of its conversations.
 test('a Bot working in a background part is not idle', async (t) => {
   const { list, rt, stop } = await start({ openPart: true })
   t.after(stop)
   rt.live.set('b-bg', { turn: 1, since: Date.now() })
   assert.match(await list({}, 'a'), /- Writer \(Write\)\n {2}now: working in another of its conversations for less than a minute, for the user\n/)
-  // The foreground part running reads as before, and both are named.
   rt.live.set('b', { turn: 2, since: Date.now() })
   assert.match(await list({}, 'a'), /now: working in its own chat for less than a minute, for the user; working in another of its conversations for less than a minute, for the user/)
 })

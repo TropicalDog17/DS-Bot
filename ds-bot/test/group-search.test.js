@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { searchGroupBook } from '../src/host/group-search.js'
+import { searchGroupBook } from '../src/host/group-search.ts'
 
 const line = (seq, text, extra = {}) => ({ seq, time: 1_000 + seq, text, ...extra })
 

@@ -1,18 +1,8 @@
-// API-level smoke test of the Bot team on a mock bench (dev/bench.sh). It drives the main
-// flows through POST /api/bot, waits for the team to go quiet after each step, and checks
-// the saved state and the mock model's log. Run it on a freshly reset bench whose check
-// line is low enough for a few long replies to cross it, yet well above the ~16k tokens
-// of system prompt and tools, so a condensed part can fall back below it:
-//
-//   CONTEXT_WINDOW=100000 CHECK_RATIO=0.45 dev/bench.sh smoke 3096 8796 reset && node dev/smoke.mjs smoke 3096
-//
-// `--out <file>` writes a normalized transcript (names instead of ids, sorted where the
-// order depends on timing), so two runs, before and after a refactor, can be diffed.
 import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { modelsFor } from '../src/client/agent-routes.js'
+import { modelsFor } from '../src/client/agent-routes.ts'
 
 const [name, port, ...rest] = process.argv.slice(2)
 if (!name || !port) {
@@ -63,8 +53,6 @@ const state = () => readJson(join(HOME, 'bot', 'state.json'))
 const botNamed = wanted => Object.values(state().bots).find(bot => bot.name === wanted)
 const roomNamed = wanted => Object.values(state().rooms).find(room => room.name === wanted)
 
-// Quiet: no Bot shows an activity and the mock has taken no call for QUIET_MS. Deliveries
-// start a moment after a turn ends, so activity alone is not enough.
 async function settle() {
   const deadline = Date.now() + STEP_TIMEOUT_MS
   let calls = mockLog().length
@@ -83,7 +71,6 @@ async function settle() {
   throw new Error('the team did not go quiet')
 }
 
-// Ids differ between runs, so the transcript names Bots, groups and Sessions by owner.
 function normalized() {
   const current = state()
   const nameOf = id => current.bots[id]?.name ?? current.rooms[id]?.name ?? (id ? 'unknown' : null)
@@ -125,8 +112,6 @@ function normalized() {
   }
 }
 
-// What the mock said during a step, without timing-dependent order, clock times or filler
-// length.
 const said = calls => calls.flatMap(call => (call.out ?? []).map(block => (block.type === 'tool_use'
   ? `tool ${block.name} ${JSON.stringify(block.input).slice(0, 60)}`
   : block.type === 'text' ? `text ${block.text.replace(/…\(\d+\)$/, '…').replace(/\d\d-\d\d \d\d:\d\d/g, 'MM-DD hh:mm').slice(0, 60)}` : block.type))).sort()
@@ -168,7 +153,6 @@ let models = []
 await step('bootstrap: Chief waits for a model', () => api('state'), (value, calls) => {
   const current = state()
   const bots = Object.values(current.bots)
-  // The model card offers DS Bot models only; a CLI found on this machine is no pick there.
   models = modelsFor(value.models)
   return expect(bots.length === 1 && bots[0].name === 'Chief' && current.mainBotIds[0] === bots[0].id, 'expected one Main Bot named Chief')
     ?? expect(bots[0].model === undefined && bots[0].kickoff !== undefined, 'Chief should hold its greeting until a model is picked')
@@ -194,15 +178,12 @@ await step('Chief creates Writer, who replies', () => send(chief().id, '创建�
     ?? expect(kinds.includes('request') && kinds.includes('reply'), `expected a request and a reply, got ${kinds}`)
 })
 
-// The mock calls dsh's ask_user_question for 阻塞提问 whenever the request offers it.
 await step('a Bot is not offered dsh\'s blocking question tool', () => send(botNamed('Writer').id, '阻塞提问'), (_value, calls) => {
   const asked = calls.some(call => (call.out ?? []).some(block => block.type === 'tool_use' && block.name === 'ask_user_question'))
   return expect(!asked, 'Writer called ask_user_question')
     ?? expect(saidText(calls, /^收到：阻塞提问/), 'expected Writer to answer in its reply')
 })
 
-// show_view: an options card waits in state.views. The key is the chat's Session
-// id — the Bot id until its chat first moves to a fresh part (chatOf).
 await step('Writer shows an options view', () => send(botNamed('Writer').id, '视图选项'), () => {
   const chat = botNamed('Writer').sessionId ?? botNamed('Writer').id
   const view = state().views?.[chat]
@@ -224,7 +205,6 @@ await step('the view answer reaches Writer and clears the card', () => {
     ?? expect(calls.some(call => call.last?.trimStart().startsWith('{"kind":"answer_to_pending_view"')), 'the answer did not arrive as the Bot\'s next message')
 })
 
-// Several decisions go on one card, and one answer settles them all.
 await step('Writer asks three questions on one card', () => send(botNamed('Writer').id, '多问'), () => {
   const chat = botNamed('Writer').sessionId ?? botNamed('Writer').id
   const card = state().questions?.[chat]
@@ -242,8 +222,6 @@ await step('one answer settles the whole card', () => {
     ?? expect(calls.some(call => call.last?.trimStart().startsWith('{"kind":"answer_to_pending_question"')), 'the answer did not arrive as the Bot\'s next message')
 })
 
-// A display-only view just under the byte limit lives on the recorded call; re-reading
-// the part brings it back with its arguments.
 await step('Writer shows a view just under the byte limit', () => send(botNamed('Writer').id, '大视图'), (_value, calls) => {
   return expect(calls.some(call => (call.out ?? []).some(block => block.type === 'tool_use' && block.name === 'show_view')), 'Writer did not call show_view')
 })
@@ -289,7 +267,6 @@ await step('Chief sets the group notice', () => send(chief().id, '改群 研发�
 
 await step('Chief reads the group', () => send(chief().id, '看群 研发群'), (_value, calls) => expect(saidText(calls, /^群里最近/), 'no read_group_chat answer'))
 
-// Group memory: what the group keeps stays in the group.
 const groupFact = '研发群的产物放在 out 目录'
 const memoryFile = (...path) => {
   try { return readFileSync(join(HOME, 'bot', 'memory', ...path, 'MEMORY.md'), 'utf8') } catch { return '' }
@@ -304,8 +281,6 @@ await step('the group memory panel shows it', () => api('memory-view', { roomId:
 await step('members recall it in the group', () => send(roomNamed('研发群').id, '回忆 out'), (_value, calls) => expect(saidText(calls, new RegExp(`记忆里有：[\\s\\S]*\\[group · MEMORY\\.md\\] ${groupFact}`)), 'no member found it'))
 await step('a member\'s own chat does not read it', () => send(botNamed('Writer').id, '回忆 out'), (_value, calls) => expect(saidText(calls, /记忆里有：\nNothing in your memory and the team memory mentions "out"/), 'Writer\'s own chat found it'))
 await step('a Bot outside the group does not read it', async () => {
-  // A message sent before the new Bot's kickoff turn starts runs first, before its
-  // session has the memory tools; wait for the kickoff's model call to land.
   const mark = mockLog().length
   const outsider = await api('create-bot', { name: 'Outsider', role: 'Tester', instructions: 'Test.' })
   for (const deadline = Date.now() + STEP_TIMEOUT_MS; Date.now() < deadline; await sleep(200)) {
@@ -325,7 +300,6 @@ for (const round of [1, 2, 3]) {
 
 await step('Writer searches its own chat across parts', () => send(botNamed('Writer').id, '查记录 长文'), (_value, calls) => expect(saidText(calls, /共 \d+ 段/), 'read_own_chat did not span parts'))
 
-// `earlier` pages backwards from the part the chat shows now.
 await step('earlier part pages load', () => api('earlier', { sessionId: botNamed('Writer').sessionId }), page => expect(Array.isArray(page?.items) && page.items.some(item => item.kind === 'user'), `no user lines in the part before (${JSON.stringify(page).slice(0, 80)})`))
 await step('the big view survives the switch to an earlier part', async () => {
   let cursor
@@ -337,9 +311,6 @@ await step('the big view survives the switch to an earlier part', async () => {
   } while (cursor)
 }, found => expect(found?.view?.children?.length === 4 && found.view.children.every(node => node.type === 'text' && node.text === 'x'.repeat(1900)), 'the earlier part lost the view blueprint'))
 
-// Work still under way (the mock steward reads 阶段未完 in the latest user message): the
-// part is condensed in place with DS Bot's checkpoint, not switched, and the condensed
-// messages stay searchable. Then work that reaches a stopping point switches again.
 const writerParts = () => (botNamed('Writer').segments ?? []).length
 const partsBeforeWork = writerParts()
 const workMark = mockLog().length
@@ -365,8 +336,6 @@ for (const round of [1, 2, 3, 4]) {
 
 await step('exchange log between Chief and Writer', () => api('exchange', { a: chief().id, b: botNamed('Writer').id }), entries => expect(entries.length >= 2, `got ${entries.length}`))
 
-// Writer hands Chief's work on to Coder and waits, and the team view shows it; Coder's
-// result goes up to Chief with Writer's answer.
 await step('Writer waits for the work it handed on, then answers with it', async () => {
   await send(chief().id, '转告 Writer: 转告 Coder: 慢慢做 3')
   const writer = botNamed('Writer').id
@@ -410,7 +379,6 @@ rmSync(project, { recursive: true, force: true })
 
 await step('pin Coder', () => api('set-flags', { id: botNamed('Coder').id, pinned: true }), () => expect(botNamed('Coder').pinned === true, 'not pinned'))
 
-// A team has one Main Bot: setting another moves the role.
 await step('hand the Main Bot role to Coder and back', async () => {
   await api('set-main', { id: botNamed('Coder').id, main: true })
   const moved = [...state().mainBotIds]
@@ -434,7 +402,6 @@ await step('delete the copy', async () => {
   return copy.id
 }, id => expect(state().bots[id] === undefined, 'copy still there'))
 
-// The mock answers 查能力 with the mcp__ tools and catalog skills it sees in the request.
 const echoName = 'smoke-echo'
 const skillName = 'smoke-guide'
 const skillDescription = 'Smoke test skill'

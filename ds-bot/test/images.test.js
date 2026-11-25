@@ -3,8 +3,8 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { install as imagesInstall, offloadTargets } from '../src/host/images.js'
-import { assembleLlmStream } from '../src/host/models.js'
+import { install as imagesInstall, offloadTargets } from '../src/host/images.ts'
+import { assembleLlmStream } from '../src/host/models.ts'
 
 test('offloadTargets selects live images from prior user and tool messages', () => {
   const events = [

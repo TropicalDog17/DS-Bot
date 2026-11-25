@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { isPass, mentionsIn, referenceNote, stripOwnName } from '../src/host/groups.js'
-import { attachReference } from '../src/host/turns.js'
+import { isPass, mentionsIn, referenceNote, stripOwnName } from '../src/host/groups.ts'
+import { attachReference } from '../src/host/turns.ts'
 
 const members = [{ name: 'M' }, { name: 'Mx' }, { name: 'K' }, { name: 'Writer' }]
 const names = ({ all, found }) => ({ all, found: found.map(member => member.name) })
@@ -53,7 +53,6 @@ test('a reference takes out only its own "@label", so a typed call with the same
   assert.deepEqual(names(mentionsIn('Read @Writer, then @Writer please answer.', members, writer)), { all: false, found: ['Writer'] })
   assert.deepEqual(names(mentionsIn('see @Writer', members, writer)), { all: false, found: [] })
   assert.deepEqual(names(mentionsIn('see @Writer and @Writer', members, [...writer, ...writer])), { all: false, found: [] })
-  // "@Kate" is not the reference "K", so the "@K" after it is the one taken out.
   assert.deepEqual(names(mentionsIn('@Kate, @K', [...members, { name: 'Kate' }], [{ labels: ['K'] }])), { all: false, found: ['Kate'] })
   assert.deepEqual(names(mentionsIn('@K notes and @K', members, [{ labels: ['K notes'] }])), { all: false, found: ['K'] })
 })

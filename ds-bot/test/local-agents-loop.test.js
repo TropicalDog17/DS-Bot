@@ -1,5 +1,3 @@
-// A real DSH agent turn through the local-agent adapter: the loop, its tool
-// dispatch and its steering deliver to the fake ACP CLI, not stubs.
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { mkdtempSync, rmSync } from 'node:fs'
@@ -11,9 +9,9 @@ import { LocalAttachmentStore } from '@deepseek-ai/dsh-attachment-local'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { mountAgentLoopTestDependencies, mountAgentLoopTestHarness } from '@deepseek-ai/dsh-agent-loop-testkit'
-import { LocalAgentAdapter } from '../src/host/local-agents/adapter.js'
-import { AcpEngine } from '../src/host/local-agents/acp.js'
-import { output } from '../src/host/tools.js'
+import { LocalAgentAdapter } from '../src/host/local-agents/adapter.ts'
+import { AcpEngine } from '../src/host/local-agents/acp.ts'
+import { output } from '../src/host/tools.ts'
 
 const FIXTURE = fileURLToPath(new URL('./fixtures/fake-acp.mjs', import.meta.url))
 const TEAM = ['message_bot', 'approve_agent_action']
@@ -63,8 +61,6 @@ const eventTypes = agent => agent.session.snapshotEvents().map(event => event.ty
 test('a real loop turn streams the CLI answer and ends completed', async (t) => {
   const { ctx, agent, adapter } = await boot()
   t.after(async () => { await adapter.dispose(); await ctx.fiber.dispose() })
-  // The first turn replays the conversation (system section first); the next
-  // message goes out as a delta prompt carrying the new text verbatim.
   send(agent, 'kick off')
   await waitForIdle(ctx, agent)
   send(agent, 'hello there')
@@ -99,7 +95,6 @@ test('input during a running turn reaches the CLI as the next prompt', async (t)
   send(agent, 'and this too')
   await waitForIdle(ctx, agent)
   const all = texts(agent)
-  // Both inputs reached the CLI as prompts in order — never two prompts at once.
   assert.match(all, /ok: and this too/)
   assert.equal((all.match(/ok: /g) ?? []).length, 2)
   for (const event of agent.session.snapshotEvents().filter(event => event.type === 'turn/end'))

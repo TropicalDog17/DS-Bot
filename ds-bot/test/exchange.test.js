@@ -6,7 +6,7 @@ import { setImmediate } from 'node:timers/promises'
 import { build } from 'esbuild'
 
 const bundle = await build({
-  entryPoints: [fileURLToPath(new URL('../src/client/exchange.js', import.meta.url))],
+  entryPoints: [fileURLToPath(new URL('../src/client/exchange.ts', import.meta.url))],
   bundle: true, format: 'cjs', platform: 'node', write: false,
   external: ['react', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives'],
 })
@@ -29,8 +29,6 @@ function rig(initial) {
   let top = 0
   let layouts = []
   let effects = []
-  // Like a browser, clamp a scroll write to the content's actual range. Layout
-  // effects run after the rendered message rows have changed that range.
   const scroller = {
     clientHeight: 200,
     get scrollHeight() { return height },

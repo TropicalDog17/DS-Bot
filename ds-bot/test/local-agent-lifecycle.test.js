@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
-import { install } from '../src/host/local-agents/index.js'
-import { refreshSearchDirs } from '../src/host/local-agents/discover.js'
+import { install } from '../src/host/local-agents/index.ts'
+import { refreshSearchDirs } from '../src/host/local-agents/discover.ts'
 
 test('disposing during initial CLI discovery drains the scan without touching an inactive context', async () => {
   const root = new Context()

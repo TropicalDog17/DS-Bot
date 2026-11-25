@@ -1,12 +1,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { format } from 'node:util'
-import { install as partsInstall } from '../src/host/parts.js'
+import { install as partsInstall } from '../src/host/parts.ts'
 import { fakeContext } from './fake-ctx.js'
-
-// #1105: a handoff note written by a reasoning model on a long context keeps getting
-// cut off at the output limit. The note now asks for the least reasoning, gives a
-// cut-off retry more output room, and may fall back to one other served route.
 
 const MESSAGES = [
   { id: 'm1', role: 'user', content: [{ type: 'text', text: 'Finish the migration' }], source: { kind: 'user' } },
@@ -16,7 +12,6 @@ const MESSAGES = [
 const NOTE_SECTIONS = ['Goals', 'Constraints and preferences', 'Progress', 'Decisions', 'Facts to keep', 'Open threads', 'Next step', 'Where to look']
 const note = marker => NOTE_SECTIONS.map(name => `## ${name}\n- ${marker}`).join('\n\n')
 
-// The chunks a real adapter sends for one reply.
 function* chunksOf(reply) {
   yield { type: 'block-start', index: 0, blockType: 'text' }
   if (reply.text !== '') yield { type: 'text-delta', index: 0, text: reply.text }
@@ -26,8 +21,6 @@ function* chunksOf(reply) {
   yield { type: 'finish', reason: { kind: reply.kind ?? 'stop', ...(reply.failure === undefined ? {} : { failure: reply.failure }) } }
 }
 
-// A Bot's own chat part with the note writer around it. `replies` are answered in
-// order by the model stream; `info` holds resolveModelInfo per route.
 async function switchPart({ replies, info = {}, fallback, route = {}, oldNote, retryPolicy }) {
   const requests = []
   const warnings = []
@@ -213,8 +206,6 @@ test('a note with missing sections or an empty reply still retries, and the retr
 })
 
 test('another route from defaultModel is never called, even when it is different and available', async () => {
-  // The conversation must not leave the provider the user chose: a note failing on its
-  // own route never sends the same messages to another provider.
   const run = await switchPart({
     replies: [
       { text: '## Goals\n- cut off', kind: 'max-tokens' },
@@ -229,7 +220,6 @@ test('another route from defaultModel is never called, even when it is different
   assert.equal(run.defaultCalls(), 0)
   assert.match(run.packageText, /put this note together without the model/)
   assert.doesNotMatch(run.packageText, /cut off/)
-  // Past the hard line the existing honest fallback still carries the earlier note.
   assert.match(run.packageText, /carried over unchanged/)
   assert.ok(run.warnings.some(line => /no usable note in 2 attempts on deepseek\/v4/.test(line)), run.warnings.join(' | '))
 })
@@ -269,8 +259,6 @@ test('handoff note retries transient TRANSPORT failures within the provider retr
 })
 
 test('a reply that calls a tool instead of writing the note is asked again without tools', async () => {
-  // A route that carries on with the work answers with a progress line and a tool call.
-  // The warning names that, not missing headings, and the retry says not to call tools.
   const run = await switchPart({
     replies: [
       { text: 'Import works. Next I will run lint.', call: 'bash', kind: 'tool-calls', usage: { outputTokens: 402 } },

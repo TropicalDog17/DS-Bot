@@ -5,8 +5,6 @@ import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
 
-// cells.js and user-message.js import react; the client tests bundle them and stub
-// react, as the other client tests do.
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const bundle = await build({
   stdin: {
@@ -39,7 +37,6 @@ runInNewContext(bundle.outputFiles[0].text, {
 })
 const { AssistantCell, UserMessageCell } = module.exports
 
-// Renders the named components of an element tree, leaving the rest as elements.
 const expand = (node, names) => {
   if (Array.isArray(node)) return node.flatMap(child => expand(child, names))
   if (node === null || typeof node !== 'object') return node
@@ -100,7 +97,6 @@ test('a Bot reply in its own chat shows when it went out under the bubbles', () 
 test('a reply without a real time, and the flat layout whose head already shows one, draw no extra time', () => {
   assert.equal(times(bubbles(AssistantCell(assistantProps({ time: undefined })))).length, 0)
   const flat = bubbles(AssistantCell(assistantProps({}, { layout: 'flat' })))
-  // The speaker head keeps the turn's one time; nothing repeats it under the bubbles.
   assert.equal(find(flat, node => node.props?.className === 'bt-group-time').length, 1)
   assert.equal(times(flat).length, 0)
 })

@@ -1,22 +1,4 @@
 #!/bin/sh
-# One-command check of this checkout on both ends, with the mock model only:
-#   unit     npm test
-#   build    client.js matches src/client (build-client.mjs --check)
-#   lint     npm run lint (warnings do not fail)
-#   smoke    a fresh smoke bench and dev/smoke.mjs
-#   web      a fresh Web bench and dev/ui-shots.mjs (sidebar, private chat, group, settings)
-#   desktop  a fresh Desktop (desktop-linux/desktop.sh), the same shots, browser-check.mjs,
-#            and read-check.mjs on the sample pages (dev/read-pages.mjs on 88n4)
-# Every process it starts is stopped at the end, also on failure or Ctrl-C.
-#
-#   dev/check.sh [--skip step,step] [--only step,step] [--out <dir>]
-#
-# Screenshots and logs go to --out (default: shots/check-<YYYYMMDD-HHMM> beside ds-bot/ in
-# the main worktree).
-# Ports follow SLOT=n (0-9, default 0): Web 31n0/88n0, smoke 31n1/88n1, and the Desktop
-# ports of desktop.sh. Bench data: <checkout>/.dsh-test-check-web, -check-smoke and
-# .dsh-test-desktop-check. Web shots need Chrome or Chromium (CHROME_BIN, see ui-shots.mjs);
-# the Desktop step needs xvfb-run and ffmpeg and about 1 GB of memory.
 set -u
 PLUGIN="$(cd "$(dirname "$0")/.." && pwd)"
 ROOT="$(dirname "$PLUGIN")"
@@ -70,8 +52,6 @@ wanted() {
 }
 
 port_free() { ! node -e "const s=require('net').connect($1,'127.0.0.1');s.on('connect',()=>process.exit(0));s.on('error',()=>process.exit(1))"; }
-# One retry: on this shared server a bench's dsh web once exited at start with an empty log
-# while other sessions used the same dsh checkout, and the next start worked.
 bench_reset() {
   dev/bench.sh "$@" reset && return 0
   echo "bench $1 did not start; retrying once"
@@ -118,7 +98,6 @@ step_desktop() {
   mkdir -p "$OUT/desktop-browser"
   SHOT_DISPLAY=":$DISPLAY_NUM" XAUTHORITY="$home/.xauth" COOKIE_PORT="$COOKIE_PORT" \
     node dev/desktop-linux/browser-check.mjs "$DSH_HARNESS" "$OUT/desktop-browser" "$RENDERER_PORT" || status=1
-  # The reader check on the sample pages only (--offline): real sites change under it.
   pages_port=88${SLOT}4
   if need_ports "$pages_port"; then
     setsid node dev/read-pages.mjs "$pages_port" </dev/null >"$home/read-pages.log" 2>&1 &
@@ -147,7 +126,6 @@ for step in $STEPS; do
   log="$OUT/logs/$step.log"
   printf '== %-8s ' "$step"
   start=$(date +%s)
-  # A subshell keeps each step's cd to itself; login token URLs stay out of the logs.
   ( "step_$step" ) >"$log.raw" 2>&1 </dev/null
   status=$?
   grep -v 'token=' "$log.raw" >"$log"

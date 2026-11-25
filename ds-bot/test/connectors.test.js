@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { apply } from '../index.js'
-import { signIn } from '../src/host/connectors/index.js'
+import { signIn } from '../src/host/connectors/index.ts'
 import { fakeContext } from './fake-ctx.js'
 
 const fresh = () => `ghp_${randomBytes(16).toString('hex')}`
@@ -40,7 +40,6 @@ const teamHome = () => {
   return home
 }
 
-// A loader that hands out a fake MCP client and records each mount.
 function setup({ fail = false, github = { api: 'https://gh.test' } } = {}) {
   const home = teamHome()
   const mounts = []
@@ -69,7 +68,6 @@ function capture(ctx) {
   ctx.connection.fetch.register = (route) => { ctx.route = route; return register(route) }
 }
 
-// Calls the /api/bot route the way the client does.
 async function call(ctx, endpoint, payload) {
   const response = await ctx.route.fetch(new Request('http://localhost/api/bot', { method: 'POST', body: JSON.stringify({ endpoint, payload }) }))
   return response.json()
@@ -90,7 +88,6 @@ test('connecting saves the token, kept out of every Bot shell, and mounts GitHub
   assert.equal(connected.ok, true, JSON.stringify(connected))
   const gh = connected.value.connectors.find(r => r.id === 'github'); assert.equal(gh.state, 'ready'); assert.equal(gh.account, 'octo')
   assert.equal(mounts.length, 1)
-  // The mount points at the local gateway; the token never reaches its config.
   assert.equal(mounts[0].config.transport, 'streamable-http')
   assert.equal(mounts[0].config.serverName, 'github')
   assert.match(mounts[0].config.url, /^http:\/\/127\.0\.0\.1:\d+\/c\/github$/)
@@ -132,7 +129,6 @@ test('a failed MCP connection shows the error without the token, and Try again m
   const github = result.value.connectors.find(r => r.id === 'github')
   assert.equal(github.state, 'error')
   assert.ok(!github.error.includes(token), github.error)
-  // The mount authenticates to the gateway with a nonce, so no secret is in the error.
   assert.match(github.error, /refused/)
   await call(ctx, 'connector-retry', { id: 'github' })
   assert.equal(mounts.length, 2)

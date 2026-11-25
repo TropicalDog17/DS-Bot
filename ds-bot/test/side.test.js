@@ -4,7 +4,7 @@ import { hostname, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { createRuntime } from '../index.js'
-import { SIDE_MARKER } from '../src/host/side.js'
+import { SIDE_MARKER } from '../src/host/side.ts'
 import { fakeContext } from './fake-ctx.js'
 
 const user = text => ({ role: 'user', content: [{ type: 'text', text }] })
@@ -47,7 +47,6 @@ const team = (extra = {}) => ({
 })
 
 function makeSession(id, { messages, header, seq = 4, toolHistory, events }) {
-  // The anchor fold reads this log. `eventAt` is closed to new callers.
   const history = events ?? []
   const session = {
     id,
@@ -76,8 +75,6 @@ function makeSession(id, { messages, header, seq = 4, toolHistory, events }) {
   return session
 }
 
-// The same register / stateOf face as ctx.sessionProjections: fold the unit
-// the host registers over snapshotEvents().
 function projectionRegistry(ctx) {
   const units = new Map()
   return {
@@ -109,9 +106,6 @@ function deferred() {
   }
 }
 
-// `gate` holds each model call open so a test can see the entry while it is
-// still answering. `scripts` are the chunk lists for successive calls; anything
-// further gets a short stop. `side` seeds chat files: { botId: [chats] }.
 async function setup({ state = team(), scripts = [], gate = false, messages, seq = 4, events, foreignLock = false, side = {} } = {}) {
   const home = mkdtempSync(join(tmpdir(), 'dsb-side-'))
   writeFileSync(join(home, 'state.json'), JSON.stringify(state))
@@ -256,7 +250,6 @@ test('a side question answers from a snapshot and writes nothing into the sessio
   assert.equal(request.toolHistory, toolHistory)
   assert.notEqual(request.tools, header.tools)
   assert.deepEqual(request.tools.map(tool => tool.name), ['read', 'pwsh'])
-  // The pending tool call did not make the snapshot; the pair list is empty.
   assert.deepEqual(request.messages.slice(0, -1).map(message => message.role), ['user'])
   assert.equal(request.messages[0].content[0].text, 'Look at the file')
   const prompt = promptOf(request)
@@ -355,7 +348,6 @@ test('a chat answering one question refuses a second, and recent skips it', asyn
   const busy = await env.call('side-ask', { sessionId: 's-now', chatId: first.value.chatId, text: 'two' })
   assert.equal(busy.ok, false)
   assert.equal(busy.error.message, 'Wait for the answer, or cancel it.')
-  // `recent` sees the answering last entry and starts a fresh chat instead.
   const recent = await env.call('side-ask', { sessionId: 's-now', recent: true, text: 'two' })
   assert.equal(recent.ok, true)
   assert.notEqual(recent.value.chatId, first.value.chatId)
@@ -373,7 +365,6 @@ test('recent reuses the most recently updated quiet chat', async (t) => {
   ]
   const env = await setup({ side: { b1: chats }, gate: true })
   t.after(() => env.stop())
-  // 'newer' ends in an answering entry while its question is still open.
   const held = await env.call('side-ask', { sessionId: 's-now', chatId: 'newer', text: 'wait' })
   assert.equal(held.ok, true)
   const picked = await env.call('side-ask', { sessionId: 's-now', recent: true, text: 'follow-up' })
@@ -408,7 +399,6 @@ test('a follow-up carries the chat\'s finished pairs in order and skips the rest
     ['user', 'second'],
     ['assistant', 'two.'],
   ])
-  // The assembler reads `source` on every assistant message.
   assert.deepEqual(messages[2].source, { kind: 'model', provider: 'deepseek', model: 'aside-model' })
   assert.ok(promptOf(env.requests[0]).endsWith('follow-up'))
 })

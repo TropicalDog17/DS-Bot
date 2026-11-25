@@ -3,10 +3,10 @@ import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
-import { contentText } from '../src/client/text.js'
+import { contentText } from '../src/client/text.ts'
 
 const bundle = await build({
-  entryPoints: [fileURLToPath(new URL('../src/client/cells.js', import.meta.url))],
+  entryPoints: [fileURLToPath(new URL('../src/client/cells.ts', import.meta.url))],
   bundle: true, format: 'cjs', platform: 'node', write: false,
   external: ['react', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives'],
 })
@@ -31,7 +31,6 @@ runInNewContext(bundle.outputFiles[0].text, {
 })
 const { AssistantCell, TurnTailCell, ThinkingRow, CellEmpty } = module.exports
 
-// Renders the named components of an element tree, leaving the rest as elements.
 const expand = (node, names) => {
   if (Array.isArray(node)) return node.flatMap(child => expand(child, names))
   if (node === null || typeof node !== 'object') return node
@@ -103,8 +102,6 @@ test('the turn tail entry notes when the turn ended and shows the pause before t
   assert.equal(find(out, node => node.props?.className === 'bt-time-sep').length, 1)
 })
 
-// #206: the user reads a Bot's reply in its own chat, so it folds only where rendering
-// all of it would slow the chat down.
 test('a Bot reply in its own chat stays whole up to 20,000 characters', () => {
   const reply = text => {
     const { props } = cellProps()
@@ -116,8 +113,6 @@ test('a Bot reply in its own chat stays whole up to 20,000 characters', () => {
   assert.equal(reply('w'.repeat(25_000)), 'w'.repeat(600))
 })
 
-// #465: the thinking row stays a switchable extra, and the one activity row is
-// never given up to it.
 test('the thinking row shows only with its switch on, and the activity row is never yielded to it', () => {
   const cell = (prefs, blocks, steps) => {
     effects.length = 0
@@ -133,16 +128,13 @@ test('the thinking row shows only with its switch on, and the activity row is ne
   }
   const reason = [{ kind: 'reasoning', text: 'Weighing it' }]
   const thinking = { turn: 3, step: 1, status: 'running', blocks: reason }
-  // Off: a thinking step draws nothing — the empty mark — and notes nothing.
   const off = cell({}, reason, [thinking])
   assert.equal(off.out?.type, CellEmpty)
   assert.deepEqual(off.noted, [])
-  // On: the live row shows — and still notes nothing, so the activity row stays.
   const on = cell({ thinking: true }, reason, [thinking])
   assert.equal(find(on.out, node => node.type === ThinkingRow).length, 1)
   assert.equal(on.noted.filter(id => id.startsWith('think:')).length, 0)
   assert.deepEqual(on.noted, [])
-  // A reply streaming in does give the activity row its one note, on or off.
   const replying = { turn: 3, step: 1, status: 'running', blocks: [{ kind: 'reasoning', text: 'Weighing it' }, { kind: 'text', text: 'Done' }] }
   for (const prefs of [{}, { thinking: true }]) {
     const { noted } = cell(prefs, replying.blocks, [replying])
@@ -159,7 +151,6 @@ test('a Bot reply drops DSML closing tags left after a tool call', () => {
     { kind: 'tool-call' },
   ]
   assert.equal(markdownOf(props)[0].props.text, '做到第 3 题。')
-  // A message whose text is only the tags leaves no empty reply behind.
   props.node.data.blocks = [
     { kind: 'text', text: '</DSML invoke>\n</DSML calls>' },
     { kind: 'tool-call' },
@@ -167,7 +158,6 @@ test('a Bot reply drops DSML closing tags left after a tool call', () => {
   assert.equal(markdownOf(props).length, 0)
 })
 
-// #1517: the post/event path uses the same cleanup, keeping Markdown paragraph breaks and indentation.
 test('content text and Bubbles drop DSML closing tags while keeping Markdown structure', () => {
   assert.equal(contentText([{ type: 'text', text: '正文\n</DSML invoke>' }]), '正文')
   assert.equal(contentText([{ type: 'text', text: '</DSML invoke>\n</DSML calls>' }]), '')

@@ -54,7 +54,6 @@ async function start() {
   const questions = async () => (await (await route.fetch(new Request('http://localhost/api/bot', {
     method: 'POST', body: JSON.stringify({ endpoint: 'state', payload: {} }),
   }))).json()).value.questions
-  // Loading once fills the Session-owner indexes turns.js filters events by.
   await rt.teamTools.find(d => d.name === 'list_bots').execute({}, { agent: { id: 'chief' } })
   return { emit, ask, questions, stop: async () => { await ctx.dispose(); rmSync(home, { recursive: true, force: true, maxRetries: 5 }) } }
 }
@@ -83,7 +82,6 @@ test('a card asked in a visible turn stays at its call', async (t) => {
   await ask('writer', 'call-2')
   assert.equal((await questions()).writer.callId, 'call-2')
 
-  // A message that asks for an answer in the recipient's own chat is visible too.
   emit('writer', 'turn/end', { turn: 1, reason: { kind: 'completed' } })
   emit('writer', 'turn/start', { turn: 2 })
   emit('writer', 'user/message', { content: text('[Message from Chief · the user sees your reply here]\nIntroduce yourself'), source: { kind: 'bot', role: 'request', audience: 'user', senderSessionId: 'chief', senderName: 'Chief', exchangeId: 'x2', hop: 0 } })

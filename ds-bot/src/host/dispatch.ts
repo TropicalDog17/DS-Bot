@@ -1,7 +1,3 @@
-// Dispatch: the single deep module that delivers every message into a Bot or group
-// Session — Bot-to-Bot Requests (with idempotency, unread-inbox coalescing, work/origin
-// lifecycle, and long-text attachments), Bot Replies, group turns, system/companion
-// notices, user prompts, and restart resends through an explicit outbox seam.
 import { createHash, randomUUID } from 'node:crypto'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import {
@@ -12,11 +8,10 @@ import {
   SOURCE_KIND,
   TEXT_KEPT,
   TEXT_SHOW_MAX,
-} from './constants.js'
-import { headOf, textOf } from './text.js'
-import { reach, threadCurrentOfPart } from './threads.js'
+} from './constants.ts'
+import { headOf, textOf } from './text.ts'
+import { reach, threadCurrentOfPart } from './threads.ts'
 
-// A request name this long is a mistake, not an identity.
 export const NAME_MAX = 200
 
 const EXCHANGE_ROLES = new Set(['request', 'reply', 'stopped'])
@@ -349,11 +344,9 @@ function headerFor(
     asker?: string
   } = {},
 ): string {
-  // What came back for work another Bot gave this one says where its answer goes.
   const goesOn = asker === undefined
     ? ''
     : ` · for the work ${asker} asked you for; your answer goes to ${asker} once everything you handed on is back`
-  // A wait the user gave up reads as its own thing: the other Bot never answered.
   if (abandoned) return `[Waiting given up · ${fromName} did not hand back this work; go on with the work it was for${goesOn}]`
   if (deferred && role === 'reply') return `[Reply from ${fromName} · you read it during your last task; go on with the work it is for now${goesOn}]`
   if (deferred && role === 'report') return `[Group chat "${roomName}" · replies to your post · you read them during your last task; go on with the work they are for now${goesOn}]`
@@ -369,8 +362,6 @@ function headerFor(
   if (role === 'report') return `[Group chat "${roomName}" · replies to your post${goesOn}]`
   if (role === 'kickoff') return '[Bot team setup]'
   if (role === 'continue') return '[Retry after a failed turn]'
-  // The editor can be the user or a Bot (its own tool call, or a Main Bot's):
-  // the header stays neutral about who changed the profile.
   if (role === 'update') return '[Your profile was updated — follow the latest version]'
   if (role === 'secret') return '[Secret card]'
   if (role === 'card') return `[${note} · tell the user here]`
@@ -380,8 +371,6 @@ function headerFor(
   return `[Message from ${fromName}]`
 }
 
-// An unread direct request from `senderId` already sitting in `agent.inbox` can absorb a
-// second message sent for the same work and destination so unread requests do not pile up.
 function unreadRequest(agent: ResolvedAgent, senderId: string, toUser: boolean): { message: InboxMessage; steered: boolean } | undefined {
   const queued: Array<[InboxMessage, boolean]> = [
     ...(agent.inbox?.nextStep ?? []).map((message): [InboxMessage, boolean] => [message, true]),
@@ -439,7 +428,6 @@ export function createDispatch(deps: DispatchDeps): Dispatch {
   } = deps
 
   let outbox: DispatchOutbox | undefined
-  // This run's name: a request receipt left pending by another run has an unknown outcome.
   const run = randomUUID()
   const inflight = new Map<string, Promise<string>>()
 
@@ -474,7 +462,6 @@ export function createDispatch(deps: DispatchDeps): Dispatch {
   }
 
   const admit = async (request: RequestIdentity, work: () => Promise<string>): Promise<AdmissionOutcome> => {
-    // Check and record synchronously before the first await so concurrent calls admit once.
     const record = own(receipts(), request.key)
     if (record !== undefined) {
       const seen = verdict(request, record)
@@ -603,7 +590,6 @@ export function createDispatch(deps: DispatchDeps): Dispatch {
       const fromName = senderName ?? from?.name ?? 'You'
       const room = roomOf(roomId)
       const asker = work === undefined ? undefined : botOf(state.works?.[work]?.from)?.name
-      // Session events reject `undefined` members, so optional fields are omitted instead.
       const source: Record<string, unknown> = {
         kind: SOURCE_KIND,
         form: 'relay',

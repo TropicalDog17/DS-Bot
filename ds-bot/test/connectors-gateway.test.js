@@ -2,14 +2,14 @@ import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { createServer } from 'node:http'
 import { test } from 'node:test'
-import { createGateway } from '../src/host/connectors/gateway.js'
+import { createGateway } from '../src/host/connectors/gateway.ts'
 
 for (const refreshing of [false, true]) {
   test(`an upstream stream error cannot crash the engine${refreshing ? ' during refresh' : ''}`, () => {
     const script = `
       import assert from 'node:assert/strict'
       import { createServer } from 'node:http'
-      import { createGateway } from ${JSON.stringify(new URL('../src/host/connectors/gateway.js', import.meta.url).href)}
+      import { createGateway } from ${JSON.stringify(new URL('../src/host/connectors/gateway.ts', import.meta.url).href)}
       const upstream = createServer((req, res) => {
         res.writeHead(${refreshing ? 401 : 200}, { 'content-type': 'text/event-stream' })
         res.write('data: {}\\n\\n')

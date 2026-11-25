@@ -1,8 +1,3 @@
-// Lint with the oxlint that `npm run harness` installs in dev/harness, or that a
-// deepseek-harness checkout installs, so ds-bot needs no copy of its own. The places are
-// DSH_HARNESS, else dev/harness, else a checkout beside this checkout, else beside the main
-// worktree (a git worktree has no deepseek-harness of its own).
-// Usage: npm run lint [-- <oxlint options>]
 import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'

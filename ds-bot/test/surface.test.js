@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { freePriority, groupsFor, readMode, surfaceGroups, writeMode } from '../src/client/surface.js'
-import { STORAGE } from '../src/client/storage.js'
+import { freePriority, groupsFor, readMode, surfaceGroups, writeMode } from '../src/client/surface.ts'
+import { STORAGE } from '../src/client/storage.ts'
 
 test('Bot mode mounts both groups; Agent mode mounts neither', () => {
   assert.deepEqual(groupsFor({ mode: 'bot' }), { shell: true, conversation: true })
@@ -92,8 +92,6 @@ test('a group whose install throws stays unmounted and is tried again', (t) => {
   assert.equal(attempts, 2)
 })
 
-// 公开#149: another plugin held a cell at the same priority, so one step of the
-// conversation group threw after the styles, the header and the chat cells were on.
 test('a group whose step throws takes back the steps before it, so Agent mode leaves nothing behind', (t) => {
   t.mock.method(console, 'warn', () => {})
   const live = new Set()
@@ -132,11 +130,9 @@ test('remount takes a mounted group off and installs it again', (t) => {
   groups.remount('shell', groupsFor({ mode: 'bot' }))
   assert.deepEqual(log, ['conversation cells', 'conversation tokens', 'conversation styles', 'shell theme', 'shell styles', 'install shell', 'install conversation'])
   log.length = 0
-  // Without a wanted set remount falls back to the last reconciled one.
   groups.remount('shell')
   assert.deepEqual(log, ['conversation cells', 'conversation tokens', 'conversation styles', 'shell theme', 'shell styles', 'install shell', 'install conversation'])
   log.length = 0
-  // A group the surface does not want stays off — remount only retries mounts.
   groups.reconcile(groupsFor({ mode: 'agent' }))
   log.length = 0
   groups.remount('shell', groupsFor({ mode: 'agent' }))
@@ -144,8 +140,6 @@ test('remount takes a mounted group off and installs it again', (t) => {
   groups.dispose()
 })
 
-// A withdraw that throws on the way down does not strand the conversation
-// group: the remount still takes the shell off and puts both back.
 test('a failed shell withdraw does not strand the conversation group', (t) => {
   t.mock.method(console, 'warn', () => {})
   const log = []
@@ -163,7 +157,6 @@ test('a shadow goes below every entry of its cell, so a same-priority plugin doe
   assert.equal(freePriority([entry({}), entry({ priority: -10 })], { priority: -100 }), -100)
   assert.equal(freePriority([entry({}), entry({ priority: -100 })], { priority: -100 }), -101)
   assert.equal(freePriority([entry({ priority: -200 })], { priority: -100 }), -201)
-  // Keyed and list cells: only the same key or id share the cell.
   assert.equal(freePriority([entry({ key: 'tool-call', priority: -100 }), entry({ key: 'user', priority: -300 })], { key: 'tool-call', priority: -100 }), -101)
   assert.equal(freePriority([entry({ id: 'usage', priority: -100 })], { id: 'activity', priority: -100 }), -100)
   assert.equal(freePriority([entry({ priority: -100 })], {}), undefined)

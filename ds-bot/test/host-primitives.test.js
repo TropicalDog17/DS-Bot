@@ -9,11 +9,7 @@ import { test } from 'node:test'
 // bubble, with its fold, time and IM tag, stopped mounting). Here every name the
 // client reads is checked against what the DSH the tests run on really exports.
 
-// Names the client reads only behind a fallback, for DSH releases on either side of
-// a change. Each needs a reason, so a stale entry is easy to spot and drop.
 const OPTIONAL = {
-  // Releases before 0.2.1-alpha.3 drew user text with it; later ones by the
-  // conversation.user.text factory (user-message.js draws with either).
   projectUserText: 'user text before DSH 0.2.1-alpha.3',
 }
 
@@ -35,12 +31,11 @@ function hostExports() {
   return undefined
 }
 
-// `import * as ui from '…primitives'` then `ui.Name`, and `import { Name } from '…primitives'`.
 function clientReads() {
   const dir = new URL('../src/client/', import.meta.url)
   const reads = new Map()
   const note = (name, file) => reads.set(name, [...(reads.get(name) ?? []), file])
-  for (const file of readdirSync(dir).filter(name => name.endsWith('.js'))) {
+  for (const file of readdirSync(dir).filter(name => name.endsWith('.ts'))) {
     const source = readFileSync(new URL(file, dir), 'utf8')
     for (const [, ns] of source.matchAll(/import \* as (\w+) from '@deepseek-ai\/dsh-client-ui-primitives'/g)) {
       for (const [, name] of source.matchAll(new RegExp(`\\b${ns}\\.([A-Za-z_$][\\w$]*)`, 'g'))) note(name, file)
@@ -62,7 +57,5 @@ test('every UI primitive the client reads is one the DSH under test exports, or 
   assert.ok(reads.size > 0)
   const missing = [...reads].filter(([name]) => !exported.has(name) && !(name in OPTIONAL))
   assert.deepEqual(missing.map(([name, files]) => `${name} (${[...new Set(files)].join(', ')})`), [])
-  // A fallback the client no longer reads is no longer one. A DSH release older than the
-  // change (the matrix still runs 0.2.0-rc.2) exports the name, so that is not checked.
   for (const name of Object.keys(OPTIONAL)) assert.ok(reads.has(name), `${name} is listed as optional but the client does not read it`)
 })

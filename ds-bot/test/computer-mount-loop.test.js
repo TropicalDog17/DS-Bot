@@ -1,4 +1,3 @@
-// Real DSH loop + tool/prompt contract tests for Computer Use mount/save timing (#1412).
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
@@ -6,8 +5,8 @@ import { mountAgentLoopTestDependencies, mountAgentLoopTestHarness } from '@deep
 import { createUserMessage, LlmAdapter } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { install as installComputer } from '../src/host/computer/index.js'
-import { output } from '../src/host/tools.js'
+import { install as installComputer } from '../src/host/computer/index.ts'
+import { output } from '../src/host/tools.ts'
 
 const tick = (ms = 10) => new Promise(resolve => setTimeout(resolve, ms))
 
@@ -157,14 +156,12 @@ test('bot created while provider mounts receives cua tools once ready, even if s
   await tick(20)
   assert.equal(rt.computerStatus().state, 'loading')
 
-  // Bot A completes save before mount finishes and runs Turn 1 while still loading.
   const agentA = await root.agentLoop.create(SessionId('bot-a'), { provider: 'mock', model: 'm' })
   state.bots['bot-a'] = { id: 'bot-a', name: 'BotA' }
   await rt.save()
   const turnA1 = await runTurn(agentA, 'before ready')
   assert.deepEqual(turnA1.tools, [])
 
-  // Bot B starts createSession during mount, then mount finishes BEFORE state.bots['bot-b'] is saved.
   const agentB = await root.agentLoop.create(SessionId('bot-b'), { provider: 'mock', model: 'm' })
   await tick(15)
   mountGate.resolve()
@@ -193,7 +190,6 @@ test('bot created after provider is ready lifts initial deny when buildBot saves
   await tick(30)
   assert.equal(rt.computerStatus().state, 'ready')
 
-  // Mimic roster.buildBot: createSession emits agent/created + resolves before state.bots[id] + rt.save().
   const agent = await root.agentLoop.create(SessionId('bot-late'), { provider: 'mock', model: 'm' })
   await tick(15)
   state.bots['bot-late'] = { id: 'bot-late', name: 'BotLate' }
@@ -213,14 +209,12 @@ test('off bots and plain sessions on our provider stay masked when computer tool
   await tick(30)
   assert.equal(rt.computerStatus().state, 'ready')
 
-  // Both agents enter 'deny' mode before `cua` finishes registering.
   state.bots['bot-off'] = { id: 'bot-off', name: 'BotOff', computer: { level: 'off' } }
   await rt.save()
   const offAgent = await root.agentLoop.create(SessionId('bot-off'), { provider: 'mock', model: 'm' })
   const plainAgent = await root.agentLoop.create(SessionId('plain-1'), { provider: 'mock', model: 'm' })
   await tick(15)
 
-  // Now `cua` registers asynchronously and emits tools/change.
   toolGate.resolve()
   await tick(30)
 
@@ -248,7 +242,6 @@ test('disposing a superseded agent does not strip computer tools from its replac
   const newAgent = await root.agentLoop.create(SessionId('bot-swap'), { provider: 'mock', model: 'm' })
   await tick(15)
 
-  // Old agent disposes after newAgent already took over the session id in `applied`.
   root.emit('agent/disposed', { agent: oldAgent })
   await tick(15)
 
@@ -265,14 +258,11 @@ test('refreshComputer prefers live registry agent when an undisposed old agent s
   state.bots['bot-replace-off'] = { id: 'bot-replace-off', name: 'BotReplaceOff', computer: { level: 'off' } }
   await rt.save()
 
-  // Old undisposed agent occupies `applied` first, while `agents.list()` later lists `newAgent` for the same id.
   const oldAgent = { session: { id: 'bot-replace-off' }, id: 'bot-replace-off', ctx: root.extend() }
   root.emit('agent/created', { agent: oldAgent })
   await tick(15)
 
   const newAgent = await root.agentLoop.create(SessionId('bot-replace-off'), { provider: 'mock', model: 'm' })
-  // Refresh synchronously before `newAgent`'s async `agent/created` overwrites `applied`,
-  // while `oldAgent` is still undisposed in `applied` and `agents.list()` holds `newAgent`.
   await rt.save()
   await tick(15)
   root.emit('agent/disposed', { agent: oldAgent })

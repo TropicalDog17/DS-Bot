@@ -6,12 +6,9 @@ import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
 
-// jsdom comes from the harness that test/harness-resolve.mjs found, like the dsh packages.
 const PLUGIN = dirname(dirname(fileURLToPath(import.meta.url)))
 const { JSDOM } = createRequire(join(process.env.DSH_HARNESS ?? join(PLUGIN, '..', 'deepseek-harness'), 'package.json'))('jsdom')
 
-// The Create Bot form, bundled once and rendered with the minimal React stand-in of
-// connectors-page.test.js: hooks are numbered by expansion order, effects never run.
 const { outputFiles } = await build({
   stdin: { contents: "export { CreateBot } from './src/client/create-bot.js'", resolveDir: PLUGIN },
   bundle: true, format: 'cjs', platform: 'browser', write: false, logLevel: 'silent',

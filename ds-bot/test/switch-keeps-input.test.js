@@ -8,11 +8,6 @@ import { fakeContext } from './fake-ctx.js'
 
 let rt
 
-// #280: a switch that fails while the plugin is being unloaded must not lose the input
-// it carried — a turn's claimed messages and whatever the old part held. The old
-// part's durable inbox keeps them (the fake persists it across starts), a switch is
-// marked in state.switching until its input is handed on, a retry does not double,
-// and the restart pass hands marked input on or wakes the part that kept it.
 const TEAM = {
   version: 1,
   mainBotIds: ['a'],
@@ -33,8 +28,6 @@ const TEAM = {
 // The error every ctx service lookup gives once the plugin's fiber is disposed.
 const INACTIVE = 'cannot get required service "sessions" in inactive context'
 
-// `fail.create`/`fail.resolve`/`fail.flush`: true fails with the inactive-context
-// error; an Error value fails with it, so an ordinary error is testable too.
 async function start({ fail = {}, services = {}, home: reuse, state: seed = TEAM } = {}) {
   const root = reuse === undefined
     ? realpathSync.native(mkdtempSync(join(tmpdir(), 'ds-bot-switch-')))
@@ -45,7 +38,6 @@ async function start({ fail = {}, services = {}, home: reuse, state: seed = TEAM
   for (const dir of [team, project]) mkdirSync(dir, { recursive: true })
   if (reuse === undefined) writeFileSync(join(home, 'state.json'), JSON.stringify(seed))
 
-  // The real inbox is durable; the fake keeps it in a file so a "restart" sees it.
   const inboxPath = join(home, 'fake-inbox.json')
   const inboxSeed = () => {
     try { return JSON.parse(readFileSync(inboxPath, 'utf8')) } catch { return {} }
@@ -137,8 +129,6 @@ async function start({ fail = {}, services = {}, home: reuse, state: seed = TEAM
     },
     sessionTitle: { rename: async () => {} },
     sessions: {
-      // A number fails that call; true fails them all, so a test can break the flush
-      // of the handed-on input without breaking the fresh part's own write before it.
       flush: async () => {
         flushes += 1
         if (fail.flush === true || fail.flush instanceof Error || fail.flush === flushes) throw errorOf(fail.flush)
@@ -158,7 +148,6 @@ async function start({ fail = {}, services = {}, home: reuse, state: seed = TEAM
   const tool = (name, args, sessionId) => rt.teamTools.find(d => d.name === name).execute(args, { agent: agentOf(sessionId), name, callId: 'c1' })
   const preStep = (sessionId, messages = [], step = 1) => ctx.listeners.get('agent/pre-step').at(-1)(
     { agent: agentOf(sessionId), messages, step, signal: AbortSignal.timeout(60_000) }, async () => 'next')
-  // A Session event as DSH emits it, on the Session the test's Agent holds.
   let seq = 0
   const emit = (sessionId, type, data) => {
     const session = agentOf(sessionId).session
@@ -188,14 +177,11 @@ const text = message => message.content.map(block => block.text ?? '').join('\n'
 const inboxTexts = agent => [...agent.inbox.nextStep, ...agent.inbox.nextTurn].map(text)
 const PAUSE = 'DS Bot paused your turn for a context check. Go on with it now from where you stopped.'
 const said = (id, body, exchangeId) => ({ id, role: 'user', content: [{ type: 'text', text: body }], source: { kind: 'user', ...(exchangeId ? { exchangeId } : {}) } })
-// A folder outside the team workspace asks for approval once; then the move is allowed.
 const services = {
   sandboxPolicy: { resolve: () => ({ mode: 'workspace-write' }) },
   approval: { request: async () => 'allowed-once' },
 }
 
-// Writer's own chat gets a working folder while it is mid-turn; its next step starts
-// the switch and carries that step's input along.
 const moveWriter = async (host, input, step = 2) => {
   host.agentOf('b').status = 'running'
   assert.equal((await host.tool('update_bot', { work_dir: host.project }, 'b')).includes('From your next step on'), true)
@@ -203,20 +189,16 @@ const moveWriter = async (host, input, step = 2) => {
 }
 
 test('a move that fails while the plugin unloads hands its input back to the part it left', async (t) => {
-  // The first flush writes the fresh part's handoff; the second moves the input.
   const fail = { flush: 2 }
   const host = await start({ fail, services })
   t.after(host.stop)
   host.agentOf('b').inbox.nextTurn.push(said('h1', 'waiting input', 'e-held'))
   await moveWriter(host, [said('m1', 'Now build it', 'e-carry'), said('m2', 'and this too', 'e-carry2')])
 
-  // The fresh part took over, then moving the input failed while unloaded.
   await until(() => host.infos.some(line => line.includes('plugin unloaded')))
   assert.equal(host.state().bots.b.sessionId, 's1')
-  // The part stays marked until the restart pass hands the input on.
   assert.deepEqual(host.state().switching, { b: { botId: 'b' } })
 
-  // carry went back in order at the front of next-turn; the held message stayed put.
   assert.deepEqual(inboxTexts(host.agentOf('b')), ['Now build it', 'and this too', 'waiting input'])
   assert.equal(host.warnings.length, 0)
   assert.ok(host.infos.some(line => line.includes('input kept in part')))
@@ -230,11 +212,8 @@ test('a move that never started keeps carry and one pause note in the inbox; a r
   await until(() => host.infos.some(line => line.includes('plugin unloaded')))
   assert.equal(host.warnings.length, 0)
   assert.deepEqual(inboxTexts(host.agentOf('b')), [PAUSE, 'keep me'])
-  // The part stayed put and kept its input, so it stays marked.
   assert.deepEqual(host.state().switching, { b: { botId: 'b' } })
 
-  // A retry that also fails neither loses nor doubles the note; a folder move waits
-  // out its retry cooldown, so the retry comes in as an overflow switch.
   const retry = () => Promise.all((host.ctx.listeners.get('agent/request-error') ?? [])
     .map(listener => listener({ agent: host.agentOf('b'), failure: { code: 'CONTEXT_WINDOW_EXCEEDED' }, signal: AbortSignal.timeout(60_000) }, async () => undefined)))
   await retry()
@@ -242,7 +221,6 @@ test('a move that never started keeps carry and one pause note in the inbox; a r
   assert.deepEqual(inboxTexts(host.agentOf('b')), [PAUSE, 'keep me'])
   assert.deepEqual(host.state().switching, { b: { botId: 'b' } })
 
-  // With the plugin live again the same input moves on — the note still only once.
   fail.create = false
   fail.flush = false
   await retry()
@@ -251,7 +229,6 @@ test('a move that never started keeps carry and one pause note in the inbox; a r
   assert.equal(forwarded.filter(line => line === PAUSE).length, 1)
   assert.equal(forwarded.filter(line => line === 'keep me').length, 1)
   assert.deepEqual(inboxTexts(host.agentOf('b')), [])
-  // The move finished and nothing stayed behind, so the mark is gone.
   assert.deepEqual(host.state().switching, {})
 })
 
@@ -263,7 +240,6 @@ test('an ordinary failure during the move is still a warning, not the unload not
   await until(() => host.warnings.some(line => line.includes('did not move on to a fresh part')))
   await until(() => host.warnings.some(line => line.includes('was not handed on')))
   assert.equal(host.infos.filter(line => line.includes('plugin unloaded')).length, 0)
-  // The input is back in the part's inbox even for an ordinary failure.
   assert.deepEqual(inboxTexts(host.agentOf('b')), [PAUSE, 'keep me'])
 })
 
@@ -274,13 +250,11 @@ test('an ordinary failure in the move that never started wakes the part at once'
   await moveWriter(host, [said('m1', 'keep me', 'e1')])
   await until(() => host.warnings.some(line => line.includes('was not handed on')))
   const sends = host.agentOf('b').calls.filter(([kind]) => kind === 'send')
-  // One wake on the first message, in the order the inbox kept them.
   assert.deepEqual(sends.map(([, message, target, wakeup]) => [text(message), target, wakeup]), [
     [PAUSE, 'next-turn', true],
     ['keep me', 'next-turn', false],
   ])
   assert.deepEqual(inboxTexts(host.agentOf('b')), [PAUSE, 'keep me'])
-  // An unload instead would not wake it: no send calls at all.
   const failOff = { create: true, flush: true }
   const silent = await start({ fail: failOff, services })
   t.after(silent.stop)
@@ -289,8 +263,6 @@ test('an ordinary failure in the move that never started wakes the part at once'
   assert.equal(silent.agentOf('b').calls.filter(([kind]) => kind === 'send').length, 0)
 })
 
-// #1501: a Bot's own chat may keep a part live in the background. A switch that fails
-// there keeps its input in that part's thread, not in the foreground chat the user reads.
 const BACKGROUND = {
   ...TEAM,
   bots: { ...TEAM.bots, b: { ...TEAM.bots.b, openParts: [{ sessionId: 'bb', segments: [] }] } },
@@ -299,12 +271,10 @@ const BACKGROUND = {
 test('a background part that cannot move on keeps its input in its own thread', async (t) => {
   const host = await start({ services, state: BACKGROUND, fail: { create: new Error('disk full') } })
   t.after(host.stop)
-  // The Bot's folder changed while its background part was still at work in the old one.
   host.rt.botOf('b').workDir = host.project
   assert.deepEqual(await host.preStep('bb', [said('m1', 'keep me', 'e1')], 2), { kind: 'reject' })
   await until(() => host.warnings.some(line => line.includes('did not move on to a fresh part')))
   await settle()
-  // The stopped input is handed to that part, and the foreground chat sees none of it.
   assert.deepEqual(host.agentOf('bb').calls.map(([kind, message]) => [kind, text(message)]), [['followup', PAUSE], ['followup', 'keep me']])
   assert.deepEqual(host.agentOf('b').calls, [])
 })
@@ -319,8 +289,6 @@ test('a marked earlier part hands its kept input on after a restart, once, and i
   assert.deepEqual(host.state().switching, { b: { botId: 'b' } })
   await host.stop({ keep: true })
 
-  // The restart: the kept input sits in the earlier part's (durable fake) inbox; a
-  // copy of one message already reached the fresh part before the unload.
   const second = await start({ home: host.home, services })
   t.after(second.stop)
   second.agentOf('s1').inbox.nextTurn.push(said('m1-copy', 'Now build it', 'e-carry'))
@@ -329,7 +297,7 @@ test('a marked earlier part hands its kept input on after a restart, once, and i
   const delivered = second.agentOf('s1').calls
     .filter(([kind, message]) => (kind === 'followup' || kind === 'inject') && message.source?.role !== 'handoff')
     .map(([, message]) => message.source?.exchangeId)
-  assert.equal(delivered.filter(id => id === 'e-carry').length, 0) // already pending — not sent twice
+  assert.equal(delivered.filter(id => id === 'e-carry').length, 0)
   assert.equal(delivered.filter(id => id === 'e-held').length, 1)
   assert.deepEqual(inboxTexts(second.agentOf('b')), [])
   assert.deepEqual(second.archived, [['b', { stopActivity: true }]])
@@ -349,7 +317,6 @@ test('a marked part that stayed current is woken for its kept input, once, in or
   t.after(second.stop)
   await second.rt.heldBack()
 
-  // The inbox kept the input; the wake re-sends it through send() so the driver runs.
   const sends = second.agentOf('b').calls.filter(([kind]) => kind === 'send')
   assert.deepEqual(sends.map(([, message, target, wakeup]) => [text(message), target, wakeup]), [
     [PAUSE, 'next-turn', true],
@@ -360,8 +327,6 @@ test('a marked part that stayed current is woken for its kept input, once, in or
   assert.deepEqual(second.state().switching, {})
 })
 
-// #571: archiving with stopActivity drops the tasks the earlier part still owns, so
-// the archive waits for the task move the switch started.
 test('an earlier part is stopped only after its tasks moved to the fresh part', async (t) => {
   const host = await start({ services })
   t.after(host.stop)
@@ -399,7 +364,6 @@ test('a failed task move leaves the earlier part unarchived and marked for retry
 test('unmarked earlier parts are never resolved by the restart pass', async (t) => {
   const host = await start({ services })
   await moveWriter(host, [])
-  // The fresh part is the Bot's before the switch ends and drops its mark.
   await until(() => host.state().bots.b.sessionId === 's1' && Object.keys(host.state().switching).length === 0)
   await host.stop({ keep: true })
 
@@ -416,7 +380,6 @@ test('a state write that fails as a switch ends is warned about, not left unhand
   t.after(() => { process.off('unhandledRejection', note) })
   const host = await start({ services })
   t.after(host.stop)
-  // The write that drops the switch's mark fails, as on a full disk.
   const save = host.rt.save
   host.rt.save = () => (host.rt.state.bots.b.sessionId === 's1' && Object.keys(host.rt.state.switching).length === 0
     ? Promise.reject(new Error('disk full'))
@@ -427,9 +390,6 @@ test('a state write that fails as a switch ends is warned about, not left unhand
   assert.deepEqual(unhandled, [])
 })
 
-// A turn cut off at the output limit with nothing written, twice in a row, is the
-// shape a route whose real window is smaller than configured leaves behind. The part
-// moves on the way an overflow moves it, without a note at the same size (#1104).
 const cutOffServices = { ...services, tokenMeter: { measure: () => ({ totalTokens: 129_000 }) } }
 const GROUP_TEAM = {
   ...TEAM,
@@ -457,14 +417,11 @@ test('a Bot cut off at the output limit with nothing written moves on to a fresh
   }
   await until(() => host.state().bots.b.sessionId === 's1')
 
-  // The diagnostics name the route and the input size, so a wrong window is findable.
   const entries = (await host.rt.diagnostics.entries()).filter(entry => entry.code === 'MAX_TOKENS')
   assert.equal(entries.length, 2)
   assert.match(entries[0].text, /^the turn was cut off at the output limit before it wrote anything \(gateway\/step-5, 129000 tokens in\)$/)
   assert.deepEqual([entries[0].level, entries[0].bot, entries[0].where], ['warn', 'Writer', 'own chat'])
 
-  // The old part is archived and the fresh one opens with the deterministic handoff:
-  // no model call, and the cut-off turn is not replayed.
   await until(() => host.archived.length > 0)
   assert.deepEqual(host.archived, [['b', { stopActivity: true }]])
   const handoff = text(host.agentOf('s1').calls.find(([kind]) => kind === 'followup')[1])
@@ -499,8 +456,6 @@ test('a cut-off turn that wrote text does not move the part without usage to tel
   const idle = () => host.ctx.emit('agent/status', { agent, status: 'idle' })
   for (const turn of [1, 2]) {
     host.emit('b', 'turn/start', { turn })
-    // No usage: the model's output limit cannot be ruled out, so this stays a cut-off
-    // answer and the part stays.
     host.emit('b', 'assistant/message', { message: { content: [{ type: 'text', text: `Half ${turn}` }] } })
     host.emit('b', 'turn/end', { turn, reason: { kind: 'max-tokens' } })
     idle()
@@ -510,10 +465,6 @@ test('a cut-off turn that wrote text does not move the part without usage to tel
   assert.deepEqual(host.created, [])
 })
 
-// #1461: an OpenAI-compatible route whose real window is smaller than the declared one
-// stops an oversized request with finish `length` and a short answer, not an error. The
-// turn wrote a line, so #1109's nothing-written count never moved the part, and every
-// later turn stopped at the same wall.
 const shortCutOff = (host, turn, usage) => {
   host.emit('b', 'turn/start', { turn })
   host.emit('b', 'assistant/message', { message: { content: [{ type: 'text', text: `Half ${turn}` }] }, usage })
@@ -526,8 +477,6 @@ test('a short answer cut off twice in a row makes room like an overflow', async 
   const agent = host.agentOf('b')
   agent.session.requestHeader = () => ({ config: { provider: 'gateway', model: 'step-5', maxTokens: 16384 } })
   const idle = () => host.ctx.emit('agent/status', { agent, status: 'idle' })
-  // The second turn reads most of its prompt from the provider's cache: the request is
-  // still the whole prompt, so it counts the same.
   const sizes = [{ inputTokens: 129_000, outputTokens: 40 }, { inputTokens: 4_000, cacheReadTokens: 125_000, outputTokens: 40 }]
   for (const [index, usage] of sizes.entries()) {
     shortCutOff(host, index + 1, usage)
@@ -535,8 +484,6 @@ test('a short answer cut off twice in a row makes room like an overflow', async 
     await settle()
   }
   await until(() => host.state().bots.b.sessionId === 's1')
-  // The diagnostics name the route, the input and what came out, so the too-large
-  // window can be found from them.
   const entries = (await host.rt.diagnostics.entries()).filter(entry => entry.code === 'MAX_TOKENS')
   assert.equal(entries.length, 2)
   assert.match(entries[0].text, /the turn was cut off at the output limit, so its answer is not complete \(gateway\/step-5, 129000 tokens in, 40 tokens out\)$/)
@@ -570,7 +517,6 @@ test('a group conversation cut off with nothing written moves on too', async (t)
   }
   await until(() => host.state().rooms.r1.sessions.b === 's1')
   assert.equal(host.state().rooms.r1.segments.b[0].fallback, 'cutoff')
-  // The old part is archived just after the switch is saved.
   await until(() => host.archived.length > 0)
   assert.deepEqual(host.archived, [['gb', { stopActivity: true }]])
 })

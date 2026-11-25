@@ -3,10 +3,9 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { readAvatar } from '../src/host/avatar.js'
-import { MAX_AVATAR_IMAGE } from '../src/host/constants.js'
+import { readAvatar } from '../src/host/avatar.ts'
+import { MAX_AVATAR_IMAGE } from '../src/host/constants.ts'
 
-// Only the magic bytes matter to the reader; the rest of a fixture need not decode.
 const file = (magic, size = 32) => Buffer.concat([magic, Buffer.alloc(size, 7)])
 const PNG = file(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
 const JPEG = file(Buffer.from([0xff, 0xd8, 0xff, 0xe0]))
@@ -25,8 +24,6 @@ const tempDir = (t) => {
 test('a data URL is stored under the type its bytes really are', async () => {
   assert.equal(await readAvatar(pngUrl), pngUrl)
   assert.equal(await readAvatar(jpegUrl), jpegUrl)
-  // The mime in the data URL is not trusted: the bytes decide, and the base64 is
-  // rewritten in its canonical form.
   assert.equal(await readAvatar(asDataUrl('image/png', JPEG)), jpegUrl)
   assert.equal(await readAvatar(asDataUrl('image/gif', WEBP)), asDataUrl('image/webp', WEBP))
   assert.equal(await readAvatar(asDataUrl('image/jpeg', GIF)), asDataUrl('image/gif', GIF))
@@ -39,7 +36,6 @@ test('a local image file is read, and a relative path starts in baseDir', async 
   writeFileSync(join(dir, 'photo.png'), PNG)
   assert.equal(await readAvatar(join(dir, 'photo.png')), pngUrl)
   assert.equal(await readAvatar('photo.png', { baseDir: dir }), pngUrl)
-  // The extension does not decide the type either.
   writeFileSync(join(dir, 'photo.jpg'), PNG)
   assert.equal(await readAvatar(join(dir, 'photo.jpg')), pngUrl)
 })
@@ -101,7 +97,6 @@ test('an empty value or a link is refused', async () => {
   await assert.rejects(readAvatar('   '), /Give an image path/)
   await assert.rejects(readAvatar('ftp://example.com/photo.png'), /must be a local image path or a data URL/)
   await assert.rejects(readAvatar('file:///tmp/photo.png'), /must be a local image path or a data URL/)
-  // A link is never fetched, so it reaches nothing on this machine or its network.
   await assert.rejects(readAvatar('http://127.0.0.1:1/photo.png'), /not downloaded here.*pass its path, or pass a data URL/)
   await assert.rejects(readAvatar('HTTPS://example.com/photo.png'), /not downloaded here/)
   // Nor is a network path opened, which on Windows connects and signs in to that host.

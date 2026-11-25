@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { createBrowserChannel, pageText, partEnd } from '../src/host/browser.js'
+import { createBrowserChannel, pageText, partEnd } from '../src/host/browser.ts'
 
 const ids = items => items.map(item => item.id)
 
@@ -21,7 +21,6 @@ test('a read wakes the waiting window and resolves with its result', async () =>
   assert.deepEqual({ botId: request.botId, from: request.from }, { botId: 'bot-a', from: 40 })
   assert.equal(channel.result({ id: request.id, ok: true, page: { title: 'Example' } }), true)
   assert.deepEqual(await read, { page: { title: 'Example' } })
-  // A repeated answer is ignored.
   assert.equal(channel.result({ id: request.id, ok: true, page: {} }), false)
   channel.dispose()
 })
@@ -44,7 +43,6 @@ test('a request handed to a lost poll is handed out again after the resend time'
   const lost = channel.wait('window-1', { 'bot-a': {} })
   const read = channel.read('bot-a')
   const [request] = await lost
-  // Within the resend time the next poll waits; a request it already got is not repeated.
   clock = 20
   const next = channel.wait('window-1', { 'bot-a': {} })
   clock = 60
@@ -120,7 +118,6 @@ test('pageText reads Markdown in parts cut at line breaks, and each part lists t
   const first = pageText(page, { size: 80 })
   assert.match(first, /Note: the page was too large to read whole \(reading took longer than 1500 ms\); the text stops there\./)
   const cut = partEnd(text, 0, 80)
-  // The first part ends at a line break, after a whole table row.
   assert.equal(text[cut - 1], '\n')
   assert.ok(cut <= 80 && cut >= 48)
   assert.ok(first.includes(`Text as Markdown; [#n] marks a link or control, listed below (characters 0–${cut} of ${text.length}; call read_browser with from: ${cut} for more):\n${text.slice(0, cut)}\n`))
@@ -130,7 +127,6 @@ test('pageText reads Markdown in parts cut at line breaks, and each part lists t
   assert.match(rest, new RegExp(`characters ${cut}–${text.length} of ${text.length}\\):`))
   assert.match(rest, /\[#7\] link "r5" → https:\/\/example\.com\/5$/)
   assert.doesNotMatch(rest, /\[#1\] link/)
-  // A mark the list does not have, and a part with too many marks.
   assert.doesNotMatch(pageText({ ...page, text: 'see [#99]' }), /Links and controls/)
   assert.match(pageText(page, { itemsMax: 2 }), /Links and controls in this part \(the first 2 of 7\):\n\[#1\][^\n]*\n\[#2\][^\n]*$/)
 })

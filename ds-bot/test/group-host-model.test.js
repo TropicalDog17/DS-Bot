@@ -6,9 +6,6 @@ import { test } from 'node:test'
 import { createRuntime } from '../index.js'
 import { fakeContext } from './fake-ctx.js'
 
-// #1310: a group's own Session never asks the model, but DSH resolves its selection before
-// every step. A Session left on a model the provider no longer serves failed with
-// UNKNOWN_MODEL, whatever the members ran on.
 const TEAM = {
   version: 1,
   mainBotIds: ['a'],

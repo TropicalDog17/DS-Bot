@@ -5,11 +5,10 @@ import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
 
 const bundle = await build({
-  entryPoints: [fileURLToPath(new URL('../src/client/fold.js', import.meta.url))],
+  entryPoints: [fileURLToPath(new URL('../src/client/fold.ts', import.meta.url))],
   bundle: true, format: 'cjs', platform: 'node', write: false,
   external: ['react'],
 })
-// Hooks keep their state between renders, so a click and the render after it can be followed.
 let slots = []
 let at = 0
 const react = {
@@ -47,16 +46,12 @@ test('a text folds past 1,500 characters or 25 lines, and shows its first ten li
   assert.equal(foldPreview(lines(25)), null)
   assert.equal(foldPreview(lines(26)), lines(10))
   assert.equal(foldPreview('x'.repeat(1501)), 'x'.repeat(600))
-  // Within the ten lines the preview ends at a line end, at most 600 characters in.
   const wide = Array.from({ length: 20 }, () => 'y'.repeat(100)).join('\n')
   assert.equal(foldPreview(wide), Array.from({ length: 5 }, () => 'y'.repeat(100)).join('\n'))
-  // A character outside the BMP is not cut in half.
   assert.equal(foldPreview(`${'x'.repeat(599)}😀${'x'.repeat(1000)}`), 'x'.repeat(599))
 })
 
 test('the preview closes a code fence it cuts open, in Markdown only', () => {
-  // A fence the cut opened loses its language tag, so a downstream renderer
-  // (dsh-ui cards) does not claim a half message.
   const code = `Here:\n\`\`\`js\n${lines(30)}\n\`\`\``
   assert.equal(foldPreview(code), `Here:\n\`\`\`\n${lines(8)}\n\`\`\``)
   assert.equal(foldPreview(code, FOLD_AT, false), `Here:\n\`\`\`js\n${lines(8)}`)
@@ -66,16 +61,12 @@ test('the preview closes a code fence it cuts open, in Markdown only', () => {
   assert.equal(foldPreview(closed), `\`\`\`\na\n\`\`\`\n${lines(7)}`)
 })
 
-// #520: a card message is the fence marker, then one very long line — the
-// newline cut left an empty fence, so no preview and nothing on open either.
 test('a long message that opens with a card fence still previews its start', () => {
   const card = `\`\`\`dsh-ui\n${'x'.repeat(2000)}`
   const preview = foldPreview(card)
   assert.equal(preview, `\`\`\`\n${'x'.repeat(590)}\n\`\`\``)
 })
 
-// Leading blank lines are not part of the preview; an all-blank message does
-// not fold at all.
 test('the preview starts at the first visible character', () => {
   assert.equal(foldPreview(`\n\n\n${'x'.repeat(1500)}`), 'x'.repeat(600))
   assert.equal(foldPreview(`${' '.repeat(2000)}\n${'\n'.repeat(30)}`), null)
@@ -96,7 +87,6 @@ test('the note for the model at the start of a long message stays out of the cha
 
 test('a long text opens and closes in place; a short one has no control', async () => {
   fresh()
-  // Values from the bundle's realm compare by content only.
   assert.deepEqual(JSON.parse(JSON.stringify(render('short'))), { shown: 'short', control: null })
   fresh()
   const text = lines(40)
@@ -126,7 +116,6 @@ test('a message kept only in part is read whole on request, and says when it is 
   await buttons(folded.control)[0].props.onClick()
   assert.equal(render(start, { whole }).shown.length, 30_000)
   assert.deepEqual(buttons(render(start, { whole }).control).map(words), ['Show less'])
-  // Closed and opened again, it is not read twice.
   buttons(render(start, { whole }).control)[0].props.onClick()
   await buttons(render(start, { whole }).control)[0].props.onClick()
   assert.equal(reads, 1)
@@ -150,23 +139,17 @@ test('a message kept only in part is read whole on request, and says when it is 
   assert.match(words(render(short, { whole: lost }).control), /^Only the start of this message is kept here/)
 })
 
-// #718: the copy of a code block the preview cut must reach the whole block.
 test('a folded preview also yields the whole code block it cut', () => {
   const inner = lines(30)
   const view = foldView(`Here:\n\`\`\`js\n${inner}\n\`\`\`\nafter`)
   assert.equal(view.head, `Here:\n\`\`\`\n${lines(8)}\n\`\`\``)
   assert.equal(view.code, inner)
-  // The markdown before the block, and the part of the block the preview keeps:
-  // the half block is drawn by DS Bot, so the host's copy control never sees it.
   assert.equal(view.prose, 'Here:')
   assert.equal(view.codeHead, lines(8))
-  // A block that never closes yields to the end of the text.
   assert.equal(foldView(`\`\`\`js\n${inner}`).code, inner)
-  // No fence is cut: nothing extra to copy.
   assert.equal(foldView(lines(30)).code, undefined)
   const closed = foldView(`\`\`\`\na\n\`\`\`\n${lines(30)}`)
   assert.equal(closed.code, undefined)
-  // The folded state hands the code to the caller; a cut message cannot.
   fresh()
   const folded = render(`Here:\n\`\`\`js\n${inner}\n\`\`\``, {})
   assert.equal(folded.code, inner)
@@ -176,15 +159,11 @@ test('a folded preview also yields the whole code block it cut', () => {
   assert.equal(render('short', { whole: { length: 300_000 } }).code, undefined)
 })
 
-// #718: a close is bare — a marker line with an info string inside a block is
-// content — and an indented fence's indent is not part of the block's code.
 test('the copied block follows Markdown fence rules', () => {
   const inner = `${lines(15)}\n\`\`\`literal\n${lines(15)}`
   assert.equal(foldView(`\`\`\`js\n${inner}\n\`\`\`\nafter`).code, inner)
-  // Indent the opening fence up to three spaces: the same indent leaves the code.
   const padded = lines(30).split('\n').map(line => `  ${line}`).join('\n')
   assert.equal(foldView(`  \`\`\`\n${padded}\n  \`\`\``).code, lines(30))
-  // A close padded with trailing spaces still closes; a longer marker does too.
   assert.equal(foldView(`\`\`\`\n${lines(30)}\n\`\`\`  \nafter`).code, lines(30))
   assert.equal(foldView(`\`\`\`\n${lines(30)}\n\`\`\`\`\nafter`).code, lines(30))
 })

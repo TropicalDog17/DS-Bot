@@ -16,7 +16,6 @@ const TEAM = {
   },
   rooms: {},
   exchanges: [],
-  // Chief's turn 7 answers another Bot, so the chat does not show it.
   exchangeTurns: { m1c: [7] },
   questions: {},
 }
@@ -30,7 +29,6 @@ function start({ pages = {}, services = {}, team = TEAM } = {}) {
   const ctx = fakeContext({ services })
   ctx.sessionController = {
     resolveAgent: async sessionId => ({ agent: { session: { id: sessionId, seq: 100 } } }),
-    // Two pages per Session, newest first, keyed by the cursor that asks for them.
     page: async ({ address, beforeSeq }) => pages[`${address.sessionId}:${beforeSeq ?? 'end'}`] ?? { records: [], hasMore: false },
   }
   const routes = {}
@@ -51,7 +49,6 @@ function start({ pages = {}, services = {}, team = TEAM } = {}) {
   return { ctx, call, stop, routes }
 }
 
-// Reads Server-Sent Events off a response, one `{ event, data }` per call.
 function reader(response) {
   const source = response.body.getReader()
   const decoder = new TextDecoder()
@@ -88,11 +85,9 @@ test('the live feed tells a window about saves, new chat entries and the reply b
   assert.equal(saved.event, 'revision')
   assert.equal(saved.data.revision > TEAM.revision, true)
 
-  // The feed's own listener sits right before im's on session/event; the others need a live dsh.
   const onEvent = ctx.listeners.get('session/event').at(-2)
   onEvent({ id: 'm1c' }, userMessage('hello', 60))
   assert.deepEqual(await next(), { event: 'message', data: { botId: 'm1', sessionId: 'm1c', item: { kind: 'user', text: 'hello', time: 60 } } })
-  // A group Session or an earlier part is not a Bot's own chat now.
   onEvent({ id: 'm1' }, userMessage('old', 1))
   onEvent({ id: 'm1c' }, botMessage('hidden', 61, 7))
 
@@ -112,7 +107,6 @@ test('the live feed tells a window about saves, new chat entries and the reply b
   assert.deepEqual(await next(), { event: 'stream', data: { ...target, text: 'there' } })
   assert.deepEqual(await next(), { event: 'stream', data: { ...target, phase: 'end' } })
 
-  // Status changes in a burst come as one notice.
   const onStatus = ctx.listeners.get('agent/status').at(-1)
   for (const id of ['b2', 'm1c', 'b2']) onStatus({ agent: { id }, status: 'running' })
   onStatus({ agent: { id: 'not-a-bot' }, status: 'running' })
@@ -129,7 +123,6 @@ test('a window that stops reading the feed is dropped', { timeout: 10_000 }, asy
   const response = await routes['/api/bot/feed'].fetch(new Request('http://localhost/api/bot/feed'))
   const onEvent = ctx.listeners.get('session/event').at(-2)
   for (let index = 0; index < 1000; index += 1) onEvent({ id: 'm1c' }, userMessage(`line ${index}`, index))
-  // What was queued before the drop still arrives, then the stream ends.
   const next = reader(response)
   let count = 0
   while (await next() !== undefined) count += 1
@@ -153,7 +146,6 @@ test('the chat endpoint pages a Bot\'s own chat from the newest part back', asyn
     items: [{ kind: 'user', text: 'second', time: 70, seq: 41 }, { kind: 'bot', text: 'reply', time: 71, seq: 42 }],
     cursor: { part: 1, beforeSeq: 41 },
   })
-  // The current part's first message has the line that marks where the part began.
   const second = (await call('chat', { botId: 'm1', cursor: first.cursor })).value
   assert.deepEqual(second.items, [{ kind: 'divider', time: 50 }, { kind: 'user', text: 'first', time: 60, seq: 40 }])
   assert.deepEqual(second.cursor, { part: 0 })
@@ -171,7 +163,6 @@ test('a show_view call in a part reads back as a view row with its blueprint', a
         records: [
           record(userMessage('look', 70), 41),
           record(showView(71, { title: 'A long note', view: { type: 'stack', children: [0, 1, 2, 3].map(() => ({ type: 'text', text: 'x'.repeat(1900) })) } }), 42),
-          // A view needs no title; a call the tool refused leaves no row. Other tools stay out too.
           record(showView(72, { view: { type: 'text', text: 'y' } }), 43),
           record(showView(72, { title: 'Refused', view: { type: 'nope' } }), 45),
           record({ type: 'tool/call', time: 73, data: { callId: 'c3', name: 'list_bots', arguments: '{}' } }, 44),

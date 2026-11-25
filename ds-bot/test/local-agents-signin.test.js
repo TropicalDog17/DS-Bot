@@ -7,15 +7,12 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
-import { ENGINES } from '../src/host/local-agents/engines.js'
-import { probeSignIn } from '../src/host/local-agents/discover.js'
+import { ENGINES } from '../src/host/local-agents/engines.ts'
+import { probeSignIn } from '../src/host/local-agents/discover.ts'
 
-// jsdom comes from the harness that test/harness-resolve.mjs found, like the dsh packages.
 const PLUGIN = dirname(dirname(fileURLToPath(import.meta.url)))
 const { JSDOM } = createRequire(join(process.env.DSH_HARNESS ?? join(PLUGIN, '..', 'deepseek-harness'), 'package.json'))('jsdom')
 
-// The sign-in row of the Local agents page, bundled once and rendered with a minimal
-// React stand-in whose useState survives re-renders (#1083).
 const { outputFiles } = await build({
   stdin: {
     contents: "export { AgentSignInRow } from './src/client/local-agents-page.js'\nexport { shortVersion } from './src/client/agent-cards.js'\nexport { AgentBadge } from './src/client/agent-badge.js'",
@@ -60,7 +57,6 @@ const react = {
 }
 const dom = new JSDOM('<!doctype html><body></body>')
 const module = { exports: {} }
-// The clipboard is swapped per test: the row reads it when the button is clicked.
 const nav = { clipboard: { writeText: async () => {} } }
 runInNewContext(outputFiles[0].text, {
   module, exports: module.exports,
@@ -72,7 +68,6 @@ runInNewContext(outputFiles[0].text, {
 })
 const { AgentSignInRow, shortVersion, AgentBadge } = module.exports
 
-// The settings Row the page passes in: label and hint on the left, controls on the right.
 const Row = ({ label, hint, children }) => ({
   type: 'div',
   props: {

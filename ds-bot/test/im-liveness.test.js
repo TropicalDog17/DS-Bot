@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import { setImmediate as flush } from 'node:timers/promises'
 import { test } from 'node:test'
-import dingtalk from '../src/host/im/platforms/dingtalk.js'
-import feishu, { decodeFrame, encodeFrame } from '../src/host/im/platforms/feishu.js'
+import dingtalk from '../src/host/im/platforms/dingtalk.ts'
+import feishu, { decodeFrame, encodeFrame } from '../src/host/im/platforms/feishu.ts'
 
 const FIELDS = { appId: 'fixture', appSecret: 'fixture', clientId: 'fixture', clientSecret: 'fixture' }
 const adapters = { feishu, dingtalk }
@@ -35,7 +35,6 @@ function fixture(t, name, { autoOpen = true, constructFailures = 0, pauseHandsha
     close() {
       this.closed += 1
       this.readyState = 2
-      // A broken path need not send a close event, even after close() is called.
     }
     receive(data) { this.dispatchEvent(new MessageEvent('message', { data })) }
   }

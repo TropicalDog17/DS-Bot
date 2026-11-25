@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { dateLocale, hostText, language, t } from '../src/client/i18n.js'
+import { dateLocale, hostText, language, t } from '../src/client/i18n.ts'
 
 test('copy is English: keys fill their slots and host messages show as sent', () => {
   assert.equal(t('Message {name}', { name: 'Chief' }), 'Message Chief')

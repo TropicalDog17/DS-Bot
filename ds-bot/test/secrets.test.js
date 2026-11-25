@@ -7,13 +7,12 @@ import { test } from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
 import { ShellEnvRegistry } from '@deepseek-ai/dsh-shell-env'
 import { createRuntime } from '../index.js'
-import { install as installDiagnostics } from '../src/host/diagnostics.js'
-import { inject as hostInject, name as hostName } from '../src/host/entry.js'
-import { canUse, encodeUrlComponent, install as installSecrets, normalizeName, redactDeep, redactor, SECRET_NAME } from '../src/host/secrets.js'
-import { install as installStore } from '../src/host/store.js'
+import { install as installDiagnostics } from '../src/host/diagnostics.ts'
+import { inject as hostInject, name as hostName } from '../src/host/entry.ts'
+import { canUse, encodeUrlComponent, install as installSecrets, normalizeName, redactDeep, redactor, SECRET_NAME } from '../src/host/secrets.ts'
+import { install as installStore } from '../src/host/store.ts'
 import { fakeContext } from './fake-ctx.js'
 
-// Test values are random on every run, so a leak can only come from this run.
 const fresh = () => `t-${randomBytes(12).toString('hex')}`
 
 test('names are normalized, then checked', () => {
@@ -61,11 +60,9 @@ test('redaction replaces URL-encoded values', () => {
 test('a short key (4 to 7 characters) is replaced only where it stands alone', () => {
   const redact = redactor([{ name: 'PIN', value: '4821' }, { name: 'PW', value: 'cat$1' }, { name: 'SECRET_WORD', value: 'secret' }])
   assert.equal(redact('pin 4821, again "4821"'), 'pin [secret:PIN], again "[secret:PIN]"')
-  // Inside a longer number or word it is left alone.
   assert.equal(redact('order 148210 and x4821'), 'order 148210 and x4821')
   assert.equal(redact('login cat$1@host'), 'login [secret:PW]@host')
   assert.equal(redact('concat$12'), 'concat$12')
-  // A label already written is not matched again, even when it holds the value.
   assert.equal(redact('secret and 4821'), '[secret:SECRET_WORD] and [secret:PIN]')
   assert.equal(redact('中文4821中文'), '中文4821中文')
 })
@@ -138,7 +135,6 @@ function start({ home = mkdtempSync(join(tmpdir(), 'ds-bot-secrets-')) } = {}) {
   return { ctx, home, call, tool, view, env, listeners, delivered, streamed, contributors, stop }
 }
 
-// Bootstrap would create a Main Bot when none exists; this team has one, so it only loads.
 test('a card saves a key the Bot never sees, and the shell gets it', async (t) => {
   const bench = start()
   t.after(bench.stop)
@@ -170,7 +166,6 @@ test('a card saves a key the Bot never sees, and the shell gets it', async (t) =
   team = await bench.view()
   assert.equal(team.secretRequests.b2[0].status, 'saved')
   assert.deepEqual(team.secrets.map(secret => secret.name), ['DEMO_TOKEN'])
-  // Nothing the browser gets holds the value.
   assert.ok(!JSON.stringify(team).includes(value))
   assert.ok(!readFileSync(join(bench.home, 'state.json'), 'utf8').includes(value))
 
@@ -180,7 +175,6 @@ test('a card saves a key the Bot never sees, and the shell gets it', async (t) =
   assert.match(note.text, /^\[Secret card\]\nThe user saved DEMO_TOKEN for every Bot\. Use it as \$DSH_SECRET_DEMO_TOKEN in bash, or \$env:DSH_SECRET_DEMO_TOKEN in PowerShell\./)
   assert.ok(!note.text.includes(value))
 
-  // Every Bot (own chat or group Session) gets the variable; other Sessions do not.
   assert.deepEqual(bench.env('b2', 'echo $DSH_SECRET_DEMO_TOKEN'), { DSH_SECRET_DEMO_TOKEN: value })
   assert.deepEqual(bench.env('g-b2'), { DSH_SECRET_DEMO_TOKEN: value })
   assert.deepEqual(bench.env('not-a-bot'), {})
@@ -189,7 +183,6 @@ test('a card saves a key the Bot never sees, and the shell gets it', async (t) =
   assert.deepEqual(Object.keys(live[0].variables), ['DSH_SECRET_DEMO_TOKEN'])
   assert.equal(live[0].variables.DSH_SECRET_DEMO_TOKEN.description, 'DS Bot secret DEMO_TOKEN: 测试')
 
-  // Asking again only names the variable.
   const again = await bench.tool('request_secret', { name: 'DEMO_TOKEN', purpose: 'x' }, 'b2')
   assert.equal(again.concluded, false)
   assert.match(again.text, /already saved and you may use it: \$DSH_SECRET_DEMO_TOKEN/)
@@ -207,7 +200,6 @@ test('a Bot outside the scope gets an allow card, and allowing resolves it', asy
   assert.equal((await bench.call('secret-set', { requestId: request.id, value, scope: 'bot' })).value.scope.join(), 'b2')
   assert.deepEqual(bench.env('c3'), {})
 
-  // Coder asks too, while a second Writer card would be superseded by the first answer.
   const asked = await bench.tool('request_secret', { name: 'DEMO_TOKEN', purpose: 'build' }, 'c3')
   assert.match(asked.text, /let you use DEMO_TOKEN/)
   ;[request] = (await bench.view()).secretRequests.c3
@@ -221,24 +213,20 @@ test('a Bot outside the scope gets an allow card, and allowing resolves it', asy
   assert.deepEqual(bench.env('c3'), { DSH_SECRET_DEMO_TOKEN: value })
   assert.match(bench.delivered.at(-1).text, /^\[Secret card\]\nThe user let you use DEMO_TOKEN\./)
 
-  // Settings: narrow the scope, which turns a new card back into an allow card.
   await bench.call('secret-update', { name: 'DEMO_TOKEN', scope: ['b2', 'nope'] })
   assert.deepEqual((await bench.view()).secrets[0].scope, ['b2'])
   await bench.tool('request_secret', { name: 'DEMO_TOKEN', purpose: 'build' }, 'c3')
   const pending = (await bench.view()).secretRequests.c3.at(-1)
   assert.equal(pending.kind, 'allow')
-  // Widening it resolves the waiting card and tells Coder.
   await bench.call('secret-update', { name: 'DEMO_TOKEN', scope: 'all' })
   assert.equal((await bench.view()).secretRequests.c3.at(-1).status, 'saved')
   assert.match(bench.delivered.at(-1).text, /The user saved DEMO_TOKEN, and you may use it now\./)
 
-  // Replacing the value keeps the scope; the old value is no longer injected.
   const next = fresh()
   await bench.call('secret-set', { name: 'demo_token', value: next })
   assert.deepEqual(bench.env('c3'), { DSH_SECRET_DEMO_TOKEN: next })
   assert.equal((await bench.view()).secrets[0].scope, 'all')
 
-  // Deleting turns a waiting allow card into a fill card and drops the variable.
   await bench.call('secret-update', { name: 'DEMO_TOKEN', scope: ['b2'] })
   await bench.tool('request_secret', { name: 'DEMO_TOKEN', purpose: 'build' }, 'c3')
   await bench.call('secret-delete', { name: 'DEMO_TOKEN' })
@@ -307,14 +295,10 @@ test('tool results and model requests lose the values', async (t) => {
   t.after(bench.stop)
   const value = fresh()
   await bench.call('secret-set', { name: 'DEMO_TOKEN', value })
-  // The team tools' listener (working_directory) registers first; the schedule list's
-  // registers after this one.
   const execute = bench.listeners['tools/execute'].filter(listener => listener.name !== 'listOwnSchedules' && listener.name !== 'computerTrack').at(-1)
   const ok = await execute({}, async () => ({ isError: false, value: { kind: 'foreground', stdout: { text: `${value}\n`, truncated: false } }, content: [{ type: 'text', text: value }], meta: { stdout: value } }))
   assert.equal(ok.isError, false)
   assert.deepEqual(ok.value, { kind: 'foreground', stdout: { text: '[secret:DEMO_TOKEN]\n', truncated: false } })
-  // The rest of a changed result stays whole and loses the values too: a wrapper
-  // further out still reads its content and meta, and they are already redacted.
   assert.deepEqual(ok.content, [{ type: 'text', text: '[secret:DEMO_TOKEN]' }])
   assert.equal(ok.meta.stdout, '[secret:DEMO_TOKEN]')
   const logged = await (async () => {
@@ -325,8 +309,6 @@ test('tool results and model requests lose the values', async (t) => {
       meta: { stdout: value },
       additionalContexts: [{ role: 'user', content: [{ type: 'text', text: value }] }],
     }))
-    // A logging wrapper reads `content` right after its next() — before the
-    // registry re-renders a success result from its value.
     assert.equal(result.content.length, 1)
     return result
   })()
@@ -339,7 +321,6 @@ test('tool results and model requests lose the values', async (t) => {
   const plain = { isError: false, value: 'nothing here' }
   assert.equal(await execute({}, async () => plain), plain)
 
-  // The usage meter registers after the secrets listener.
   const stream = bench.listeners['llm/stream'].at(-2)
   const passed = []
   const next = () => { passed.push(true); return (async function* () {})() }
@@ -354,7 +335,6 @@ test('tool results and model requests lose the values', async (t) => {
   assert.equal(sent.provider, 'p')
   assert.ok(!JSON.stringify(sent).includes(value))
   assert.ok(JSON.stringify(options).includes(value))
-  // The rewritten request passes through, even when a value sits inside its own label.
   stream(sent, next)
   assert.equal(passed.length, 1)
   stream({ ...options, system: 'clean', messages: [] }, next)
@@ -367,16 +347,13 @@ test('a restarted host resolves its team Sessions and their keys before the firs
   writeFileSync(join(home, 'secrets.json'), JSON.stringify({ version: 1, secrets: [{ name: 'DEMO_TOKEN', value, purpose: 'p', scope: 'all', requestedBy: 'b2', createdAt: 1, updatedAt: 1 }] }))
   const bench = start({ home })
   t.after(bench.stop)
-  // apply() has just returned: no endpoint or tool has run yet, but a restored
-  // Session's first shell call already resolves its Bot and its variables.
   assert.deepEqual(bench.env('b2'), { DSH_SECRET_DEMO_TOKEN: value })
   assert.deepEqual(bench.env('g-b2'), { DSH_SECRET_DEMO_TOKEN: value })
   assert.deepEqual(bench.env('elsewhere'), {})
 })
 
 test('a secrets file that cannot be read blocks every write instead of being overwritten', async (t) => {
-  // A directory reads as EISDIR on every platform; no chmod games needed. It has to
-  // exist before the plugin loads, or the first read has already found the file empty.
+  // A directory reads as EISDIR on every platform; no chmod games needed.
   const home = mkdtempSync(join(tmpdir(), 'ds-bot-secrets-'))
   mkdirSync(join(home, 'secrets.json'))
   const bench = start({ home })
@@ -386,7 +363,6 @@ test('a secrets file that cannot be read blocks every write instead of being ove
   assert.equal(denied.ok, false)
   assert.match(denied.error.message, /secrets\.json could not be read \(EISDIR\)\. DS Bot does not change it/)
   assert.ok(statSync(file).isDirectory())
-  // While it stays unreadable, nothing is written; once it is gone, saving works.
   rmSync(file, { recursive: true })
   const saved = await bench.call('secret-set', { name: 'TEST_TOKEN', value: '12345678' })
   assert.equal(saved.ok, true, JSON.stringify(saved.error))
@@ -535,16 +511,13 @@ test('read-only host with secrets loaded before store.load does not touch files 
     rmSync(dshHome, { recursive: true, force: true })
   })
 
-  // Before rt.load(), secrets must not chmod a locked team's secrets.json.
   assert.equal(statSync(secPath).mode & 0o777, modeBefore)
 
-  // Calling collect before explicit rt.load() must load state & resolve secrets without modifying secrets.json mode.
   const first = ctx.shellEnv.collect({ agent: { session: { header: { id: 'main' } } }, arguments: {} })
   assert.equal(first.DSH_SECRET_API_KEY, v1)
   await rt.load()
   assert.equal(statSync(secPath).mode & 0o777, modeBefore)
 
-  // Writer updates an existing secret and adds a new key while this host stays read-only.
   chmodSync(secPath, 0o644)
   const v2 = fresh()
   const extra = fresh()
@@ -561,7 +534,6 @@ test('read-only host with secrets loaded before store.load does not touch files 
   const third = ctx.shellEnv.collect({ agent: { session: { header: { id: 'main' } } }, arguments: {} })
   assert.equal(third.DSH_SECRET_NEW_KEY, extra)
 
-  // Corrupt secrets file under read-only must not create .broken-* files on disk.
   writeFileSync(secPath, 'not valid json\n')
   await rt.refresh()
   const broken = readdirSync(team).filter(name => name.startsWith('secrets.json.broken-'))

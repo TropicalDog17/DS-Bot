@@ -4,14 +4,14 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { createRuntime } from '../index.js'
-import { handoffHold } from '../src/host/browser-plugins.js'
-import { mountBrowserPlugin } from '../src/host/browser/mount.js'
-import { createSession } from '../src/host/browser/session.js'
-import { toolDefs as refsTools } from '../src/host/browser/refs.js'
-import { toolDefs as scriptTools } from '../src/host/browser/script.js'
-import { runTask, toolDefs as taskTools } from '../src/host/browser/task.js'
-import { REPLY_KIND } from '../src/host/constants.js'
-import { handoffReply, historyEntry, install as installParts, readReply, replyText } from '../src/host/parts.js'
+import { handoffHold } from '../src/host/browser-plugins.ts'
+import { mountBrowserPlugin } from '../src/host/browser/mount.ts'
+import { createSession } from '../src/host/browser/session.ts'
+import { toolDefs as refsTools } from '../src/host/browser/refs.ts'
+import { toolDefs as scriptTools } from '../src/host/browser/script.ts'
+import { runTask, toolDefs as taskTools } from '../src/host/browser/task.ts'
+import { REPLY_KIND } from '../src/host/constants.ts'
+import { handoffReply, historyEntry, install as installParts, readReply, replyText } from '../src/host/parts.ts'
 import { fakeContext } from './fake-ctx.js'
 
 const TEAM = {
@@ -148,11 +148,8 @@ test('only a handoff raised in the Bot\'s own chat keeps its call and drops the 
   await rt.load()
 
   const raised = { by: 'bot', reason: 'login', note: 'Sign in', callId: 'call-1' }
-  // The part that raised it rides along, so its answer can come back to that part.
   assert.deepEqual(handoffHold(rt, 'b2', { ...raised, sessionId: 'b2' }), { ...raised, sessionId: 'b2' })
-  // A group turn runs in another Session: no card there, so no call to answer.
   assert.deepEqual(handoffHold(rt, 'b2', { ...raised, sessionId: 'room-session' }), { by: 'bot', reason: 'login', note: 'Sign in' })
-  // Another Bot's chat is no more its own.
   assert.deepEqual(handoffHold(rt, 'b2', { ...raised, sessionId: 'm1' }), { by: 'bot', reason: 'login', note: 'Sign in' })
   assert.deepEqual(handoffHold(rt, 'b2', { by: 'bot', reason: 'login', note: 'Sign in', sessionId: 'b2' }), { by: 'bot', reason: 'login', note: 'Sign in' })
   assert.deepEqual(handoffHold(rt, 'b2', { by: 'bot', reason: 'other', note: '' }), { by: 'bot', reason: 'other', note: '' })
@@ -259,7 +256,6 @@ test('browser-give-back tells the Bot how the handoff went and clears the hold',
   assert.equal(payload.outcome, 'done')
   assert.match(payload.message, /finished this step/)
 
-  // The user may take over first; the card then answers the same call.
   rt.browserChannel.setHold('b2', BOT_HOLD)
   await call('browser-takeover', { botId: 'b2' })
   assert.equal((await call('browser-give-back', { botId: 'b2', callId: 'call-1', outcome: 'skip' })).value, true)
@@ -269,8 +265,6 @@ test('browser-give-back tells the Bot how the handoff went and clears the hold',
   assert.match(skipped.message, /Do not retry it/)
 })
 
-// #1501: a Bot's own chat may keep a part live in the background. A handoff raised
-// there is answered there, not in the foreground chat the user is reading.
 test('browser-give-back answers the part that raised the handoff', async (t) => {
   const seed = { ...TEAM, bots: { ...TEAM.bots, b2: { ...TEAM.bots.b2, openParts: [{ sessionId: 'b2-bg', segments: [] }] } } }
   const { rt, call, sent, ensured, stop } = start(seed)
@@ -282,7 +276,6 @@ test('browser-give-back answers the part that raised the handoff', async (t) => 
   assert.equal(sent.length, 1)
   assert.equal(sent[0].sessionId, 'b2-bg')
   assert.deepEqual(sent[0].message.source, { kind: REPLY_KIND, callId: 'call-1', outcome: 'answered' })
-  // The foreground chat, where the user is, gets none of it.
   assert.equal(sent.some(entry => entry.sessionId === 'b2'), false)
 })
 
@@ -291,7 +284,6 @@ test('browser-give-back answers an open handoff once, and a plain hold without a
   t.after(stop)
   await rt.load()
 
-  // The panel's Give back has no call: nothing to tell the Bot.
   rt.browserChannel.setHold('b2', { by: 'user', reason: 'takeover', note: 'The user is controlling this browser.' })
   assert.equal((await call('browser-give-back', { botId: 'b2' })).value, true)
   assert.equal(rt.browserChannel.holdOf('b2'), null)
@@ -305,7 +297,6 @@ test('browser-give-back answers an open handoff once, and a plain hold without a
   assert.match(returned.message, /Do not assume this step is finished/)
   assert.match(returned.message, /browser_snapshot/)
 
-  // A second answer finds nothing held.
   const again = await call('browser-give-back', { botId: 'b2', callId: 'call-1', outcome: 'done' })
   assert.equal(again.ok, false)
   assert.equal(again.error.code, 'bot/forbidden')
@@ -361,7 +352,6 @@ test('a handoff answer carries its reason, so it reads on its own', () => {
   assert.deepEqual(readReply(plain.text).handoff, { callId: 'call-3', reason: 'captcha', note: '', outcome: 'skipped' })
   assert.equal(replyText(plain.text), '[Browser handoff] captcha\nAnswer: skipped')
 
-  // The panel sends no outcome: that only returns control, without claiming completion.
   const returned = handoffReply(BOT_HOLD, undefined)
   assert.equal(JSON.parse(returned.text).outcome, 'returned')
   assert.match(JSON.parse(returned.text).message, /Do not assume this step is finished/)

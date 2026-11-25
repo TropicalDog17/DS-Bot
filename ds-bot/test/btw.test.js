@@ -4,7 +4,7 @@ import { hostname, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { createRuntime } from '../index.js'
-import { trimToolBoundary } from '../src/host/btw.js'
+import { trimToolBoundary } from '../src/host/btw.ts'
 import { fakeContext } from './fake-ctx.js'
 
 const user = text => ({ role: 'user', content: [{ type: 'text', text }] })
@@ -41,7 +41,6 @@ const team = (extra = {}) => ({
 })
 
 function makeSession(id, { messages, header, seq = 4, toolHistory, events }) {
-  // The anchor fold reads this log. `eventAt` is closed to new callers.
   const history = events ?? []
   const session = {
     id,
@@ -70,8 +69,6 @@ function makeSession(id, { messages, header, seq = 4, toolHistory, events }) {
   return session
 }
 
-// The same register / stateOf face as ctx.sessionProjections: fold the unit
-// the host registers over snapshotEvents().
 function projectionRegistry(ctx) {
   const units = new Map()
   return {
@@ -91,8 +88,6 @@ function projectionRegistry(ctx) {
   }
 }
 
-// The ask path is gone; saved cards stay readable until deleted. `btw` seeds
-// card files: { botId: { partId: [cards] } }.
 async function setup({ state = team(), messages, seq = 4, events, foreignLock = false, btw = {} } = {}) {
   const home = mkdtempSync(join(tmpdir(), 'dsb-btw-'))
   writeFileSync(join(home, 'state.json'), JSON.stringify(state))
@@ -202,7 +197,6 @@ test('a saved card rides the current part\'s view, whole and read-only', async (
   assert.equal(view.ok, true, view.error?.message)
   assert.equal(view.value.btwCards.b1.length, 2)
   assert.equal(view.value.btwCards.b1[0].id, 'first')
-  // Read-only: no model call, no Session write, no state revision.
   assert.equal(env.requests.length, 0)
   assert.equal(env.session.writes, 0)
   assert.equal(saved.revision, 3)
@@ -387,7 +381,6 @@ test('an earlier part page carries that part\'s cards, read from its file', asyn
   assert.equal(page.ok, true, page.error?.message)
   assert.equal(page.value.btw.length, 2)
   assert.equal(page.value.btw[0].id, 'there')
-  // The owning host's lazy read still records the restart this file kept.
   assert.equal(page.value.btw[1].status, 'failed')
   assert.equal(page.value.btw[1].error, 'DS Bot restarted before this answer finished.')
   const file = cardsFile(env.home, 'b1', 's-old')

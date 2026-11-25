@@ -5,7 +5,7 @@ import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
 
 const bundle = await build({
-  entryPoints: [fileURLToPath(new URL('../src/client/member-status.js', import.meta.url))],
+  entryPoints: [fileURLToPath(new URL('../src/client/member-status.ts', import.meta.url))],
   bundle: true, format: 'cjs', platform: 'node', write: false,
   external: ['react', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives'],
 })
@@ -25,7 +25,6 @@ runInNewContext(bundle.outputFiles[0].text, {
 const { busyMembers, summaryText, MemberDock, MemberState, StopMemberWork, StopRoomWork, memberWork } = module.exports
 // Values from the bundle's realm compare by content only.
 const plain = value => JSON.parse(JSON.stringify(value))
-// The dock's capsule in an element tree.
 const capsuleOf = (node) => {
   if (node === null || typeof node !== 'object') return null
   if (node.props.className === 'bt-mw-pill') return node
@@ -59,7 +58,6 @@ const team = {
   roomsById: { r1: { id: 'r1', name: 'Ops', members: ['a', 'b', 'c', 'd'] }, r2: { id: 'r2', name: 'Docs', members: ['a', 'b'] } },
 }
 
-// #156: a member waiting for an approval keeps its work here, so Stop stays.
 test('a member waiting for approval in this group can still be stopped', async () => {
   const stopped = []
   const room = team.roomsById.r1
@@ -76,7 +74,6 @@ test('an approval for work elsewhere never offers to stop work in this group', (
   const room = team.roomsById.r1
   const entry = busyMembers(room, { rooms: { r2: [{ botId: 'a', since: 1 }] }, approvals: [{ botId: 'a', roomId: 'r2', at: 1 }] }, team)[0]
   assert.equal(StopMemberWork({ entry, bot: team.byId.a, room, actions: {} }), null)
-  // Work here stays stoppable while it runs.
   const working = busyMembers(room, { rooms: { r1: [{ botId: 'a', since: 1 }] }, approvals: [] }, team)[0]
   assert.ok(StopMemberWork({ entry: working, bot: team.byId.a, room, actions: {} }))
 })
@@ -94,7 +91,6 @@ test('a failed stop is reported and never answers the approval', async () => {
   await new Promise(resolve => setImmediate(resolve))
   assert.deepEqual(reported, [['connection lost', 'stop']])
 })
-// #592: DSH's own stop reaches only the round; a member the round moved on from kept working.
 test('the stop button of a group\'s details stops all work there, and shows only while work is here', async () => {
   const stopped = []
   const room = team.roomsById.r1
@@ -105,10 +101,8 @@ test('the stop button of a group\'s details stops all work there, and shows only
   button.props.onClick()
   await Promise.resolve()
   assert.deepEqual(stopped, ['r1'])
-  // Members busy only in their own chats or in another group have nothing here to stop.
   assert.equal(shown({ bots: { a: { since: 1, tool: 'pwsh' }, b: { since: 1, roomId: 'r2' } }, rooms: { r2: [{ botId: 'b', since: 1 }] }, approvals: [] }), null)
   assert.equal(shown({ bots: {}, rooms: { r2: [{ botId: 'a', since: 1 }] }, approvals: [{ botId: 'a', roomId: 'r2', at: 1 }] }), null)
-  // A turn waiting for an approval here still holds its work.
   assert.ok(shown({ bots: {}, rooms: { r1: [{ botId: 'a', since: 1 }] }, approvals: [{ botId: 'a', roomId: 'r1', at: 1 }] }))
 })
 
@@ -123,7 +117,6 @@ test('a failed stop of a group\'s work is reported', async () => {
   await new Promise(resolve => setImmediate(resolve))
   assert.deepEqual(reported, [['connection lost', 'stop']])
 })
-// The capsule's label and what a click on it asks for.
 const dock = (sessionId, work) => {
   const calls = []
   const actions = { showDetails: id => calls.push(['details', id]), openSession: id => calls.push(['session', id]) }
@@ -135,8 +128,6 @@ const dock = (sessionId, work) => {
 
 test('one capsule names who waits and who works, without the round\'s speaker, and opens the details', () => {
   const work = {
-    // Anvil runs in its own chat too; its work here wins. Coral's work in r2 shows
-    // there and on its own chat, not here (#473).
     bots: { a: { since: 1, tool: 'pwsh' }, b: { since: 1, roomId: 'r2', tool: 'edit' } },
     rooms: { r1: [{ botId: 'a', since: 1, tool: 'write' }, { botId: 'd', since: 1, speaking: true }], r2: [{ botId: 'b', since: 1, tool: 'edit' }] },
     approvals: [{ botId: 'c', roomId: 'r1' }],
@@ -162,7 +153,6 @@ test('the capsule says what a member does in its call\'s own words, and that it 
 })
 
 test('a member\'s line runs a clock from its turn\'s start or its approval\'s', () => {
-  // The clock renders as `{since}` here; it ticks on its own.
   const flat = node => (node === null || node === '' ? '' : typeof node === 'string' ? node
     : node.props.at !== undefined ? `{${node.props.at}}` : node.children.map(flat).join(''))
   const stateText = entry => flat(MemberState({ entry, bot: { id: 'a', name: 'Anvil' }, room: { id: 'r1' }, roster: team }))

@@ -20,8 +20,6 @@ const team = () => ({
   revision: 1,
 })
 
-// One Agent per Session, as dsh keeps them; restrict() calls are recorded with their
-// lifts, so a test can read what each Session has masked right now.
 async function setup({ served = ['read', 'bash', 'write', 'edit', 'web_search'], state = team() } = {}) {
   const home = mkdtempSync(join(tmpdir(), 'ds-bot-main-router-'))
   writeFileSync(join(home, 'state.json'), JSON.stringify(state))
@@ -121,7 +119,6 @@ test('handing the Main Bot role over lifts the mask on the old one and puts it o
   assert.deepEqual(masked('writer').sort(), ['bash', 'edit', 'write'])
   assert.equal(guard('bash', 'chief'), undefined)
   assert.match(guard('bash', 'writer'), /does not do the work itself/)
-  // The team tools stay with both.
   assert.equal(registered.get('writer').has('message_bot'), true)
   assert.equal(registered.get('chief').has('message_bot'), true)
 })

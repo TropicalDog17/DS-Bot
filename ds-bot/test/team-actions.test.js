@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { createSource } from '../src/client/sources.js'
-import { clearFront, teamActions } from '../src/client/team-actions.js'
+import { createSource } from '../src/client/sources.ts'
+import { clearFront, teamActions } from '../src/client/team-actions.ts'
 
-// The requests the actions send, and how many of them read the team again after.
 function bench() {
   const sent = []
   let pulls = 0
@@ -30,7 +29,6 @@ test('every window reaches the host model providers, and key changes read the te
     ['provider-models', { baseURL: 'https://gateway.example/v1', api: 'openai-completions', key: '' }],
     ['provider-remove', { provider: 'router' }],
   ])
-  // Reads (the list and a model discovery) leave the team as it is.
   assert.equal(pulls(), 4)
 })
 
@@ -54,7 +52,6 @@ test('the details status line asks the host for one Bot\'s current part', async 
   const { actions, sent, pulls } = bench()
   await actions.runStats('chief')
   assert.deepEqual(sent, [['run-stats', { botId: 'chief' }]])
-  // A read: it does not pull the whole team again.
   assert.equal(pulls(), 0)
 })
 

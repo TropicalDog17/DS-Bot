@@ -1,5 +1,3 @@
-// Waits a Bot gave up: one hand-off that will not come back is closed with an explicit
-// result, so the work above it goes on instead of waiting forever.
 import assert from 'node:assert/strict'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -30,8 +28,6 @@ const seed = () => ({
   revision: 0,
 })
 
-// A host over the plugin's own folder. Starting the same folder again is a restart:
-// the first host is closed before the second one starts.
 async function startHost(home, team, options = {}) {
   if (team !== undefined) writeFileSync(join(home, 'state.json'), JSON.stringify(team))
   const ctx = fakeContext()
@@ -107,13 +103,10 @@ async function startHost(home, team, options = {}) {
   const call = async (endpoint, payload) => (await route.fetch(new Request('http://localhost/api/bot', {
     method: 'POST', body: JSON.stringify({ endpoint, payload }),
   }))).json()
-  // Loading once fills the Session-owner indexes turns.js filters events by.
   await tool('list_bots', {}, 'a')
   return { ctx, agents, agentOf, emit, emitScoped, tool, call, home, stop: () => ctx.dispose() }
 }
 
-// The plugin folder of a test, and the hosts over it. A second host over the same
-// folder is a restart. Everything is closed and removed when the test ends.
 function bench(t) {
   const home = mkdtempSync(join(tmpdir(), 'ds-bot-handoff-results-'))
   const hosts = []
@@ -132,7 +125,6 @@ const settled = async (check) => {
   for (let count = 0; count < 200 && !check(); count += 1) await delay(5)
 }
 
-// Each Session takes up the newest message it was sent as its next turn.
 function turnTaker(agents, emit) {
   const turns = new Map()
   const open = (id, message) => {
@@ -154,14 +146,11 @@ function turnTaker(agents, emit) {
   return { take, open, end, userTurn }
 }
 
-// The works the team file holds, once the saves made so far are done.
 const worksIn = async ({ call, home }) => {
   await call('set-prefs', {})
   return JSON.parse(readFileSync(join(home, 'state.json'), 'utf8')).works ?? {}
 }
 
-// Chief asks Writer for work, and Writer hands it on to Tester and ends its turn, so
-// Writer waits for a reply that never comes.
 async function waitingForTester(start) {
   const host = await start(seed())
   const { agents, emit, tool } = host
@@ -188,7 +177,6 @@ test('giving up one wait closes that branch and the work above it goes on', asyn
   assert.deepEqual(waiting.b.waits.map(item => item.to), ['c'])
   assert.equal(waiting.b.waits[0].id, child)
 
-  // The user picks the wait in the Bot's menu.
   const before = callsOf(agents, 'b').length
   assert.equal((await call('abandon-work', { id: child })).ok, true)
   const after = await worksIn(host)
@@ -201,7 +189,6 @@ test('giving up one wait closes that branch and the work above it goes on', asyn
   const quiet = (await call('state', {})).value.work.waiting
   assert.equal(quiet.b, undefined)
 
-  // Writer is brought back with that result, and its answer goes up to Chief.
   await settled(() => callsOf(agents, 'b').length === before + 1)
   const back = callsOf(agents, 'b').at(-1)[1]
   assert.match(textOf(back.content), /^\[Waiting given up · Tester did not hand back this work/)
@@ -222,16 +209,13 @@ test('a reply that arrives after the wait was given up is a late answer', async 
   await call('abandon-work', { id: child })
   const before = await worksIn(host)
 
-  // Tester finally answers the request it still had.
   turns.take('c')
   turns.end('c', 'here is the late answer')
   await settled(() => callsOf(agents, 'b').length === 3)
   const after = await worksIn(host)
-  // The wait was settled once already: no second result, no wait again.
   assert.equal(after[parent].results.length, before[parent].results.length)
   assert.equal(after[child], undefined)
   assert.equal((await call('state', {})).value.work.waiting.b, undefined)
-  // Its content still reaches Writer, marked as the late answer it is.
   const late = callsOf(agents, 'b').at(-1)[1]
   assert.match(textOf(late.content), /\[Late answer: the user had already given up waiting for this work/)
   assert.match(textOf(late.content), /here is the late answer/)
@@ -265,7 +249,6 @@ test('giving up one branch leaves the other open works of the same work', async 
   assert.equal((await call('state', {})).value.work.waiting.b.waits.length, 1)
   assert.equal(callsOf(agents, 'a').length, 0, 'Chief hears nothing until Writer is done')
 
-  // Editor's real reply still comes back, and Writer settles upward once with both.
   await settled(() => callsOf(agents, 'b').length === before + 1)
   turns.take('d')
   turns.end('d', 'editor done')
@@ -315,18 +298,15 @@ test('a restart gives up a wait whose target no longer exists, and only those', 
     } catch { return false }
   })
   const works = await worksIn(host)
-  // The deleted Bot and the deleted group are given up, each with a result above.
   assert.equal(works['gone-bot'], undefined)
   assert.equal(works.p1.results[0].abandoned, true)
   assert.equal(works.p1.results[0].abandonedReason, 'gone')
   assert.match(works.p1.results[0].text, /is no longer on the team/)
   assert.equal(works['gone-room'], undefined)
   assert.equal(works.p3.results[0].abandoned, true)
-  // A target that still exists and has not answered keeps waiting, even across a restart.
   assert.ok(works['live-bot'] !== undefined)
   assert.deepEqual(works.p2.open, ['live-bot'])
   assert.equal(works.p2.results.length, 0)
-  // Writer hears about the wait that was given up for it.
   await settled(() => callsOf(host.agents, 'b').length >= 1)
   assert.match(textOf(callsOf(host.agents, 'b').at(-1)[1].content), /^\[Waiting given up · the other Bot did not hand back this work/)
 })
@@ -353,7 +333,6 @@ test('a restart leaves a subagent wait alone, whatever the Session read says', a
     }
     const { home, start } = bench(t)
     const host = await start(team, { inspect })
-    // The sweep ran: the work for the deleted Bot is settled.
     await settled(() => {
       try {
         return JSON.parse(readFileSync(join(home, 'state.json'), 'utf8')).works?.['gone-bot'] === undefined
@@ -362,7 +341,6 @@ test('a restart leaves a subagent wait alone, whatever the Session read says', a
     const works = await worksIn(host)
     assert.equal(works['gone-bot'], undefined, label)
     assert.equal(works.p1.results[0].abandonedReason, 'gone', label)
-    // The run keeps waiting, and its Bot is not woken for it.
     assert.ok(works.r1 !== undefined, label)
     assert.deepEqual(works.p2.open, ['r1'], label)
     assert.equal(works.p2.results.length, 0, label)

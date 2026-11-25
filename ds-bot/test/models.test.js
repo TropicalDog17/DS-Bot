@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { install } from '../src/host/models.js'
+import { install } from '../src/host/models.ts'
 
 const PROVIDERS = {
   deepseek: [{ id: 'deepseek-v4.1-flash', name: 'DeepSeek V4.1 Flash' }, { id: 'deepseek-v4-pro' }],
@@ -78,7 +78,6 @@ test('choosing a Bot model leaves the user\'s DSH default model as it was', asyn
   const ctx = {
     llm: { listProviders: () => [], listModels: async () => [] },
     get: name => (name === 'agentDefaultModel' ? defaults : undefined),
-    // Like DSH: the selection is also saved as the default, in the background.
     sessionController: { selectModel: async ({ provider, model }) => { void defaults.saveSelection({ provider, model }) } },
   }
   const rt = { ctx, state: { bots: {} }, warn() {} }
@@ -100,8 +99,6 @@ test('a Bot with no model yet changes nothing until the user picks one', async (
   assert.equal(rt.cachedDefault(), 'ollama/kimi-k3')
 })
 
-// A runtime with two providers, a DSH default, and a session controller that, like
-// DSH, saves every Session selection as the default.
 function bench({ providers = { deepseek: ['v4-flash'], stepfun: ['step-5'] }, fallback = { provider: 'stepfun', model: 'step-5' }, reasoning = {}, services = {} } = {}) {
   let current = { ...fallback }
   const selected = []
@@ -163,22 +160,17 @@ test('a Bot model applies its thinking level, and only re-selects on a change', 
   await rt.applyModel(bot)
   assert.equal(selected.length, 1)
 
-  // A level the model does not serve is never sent: the model's default applies.
   bot.effort = 'max'
   await rt.applyModel(bot)
   assert.deepEqual(selected.at(-1), 'b1:deepseek/v4-flash')
   assert.equal(bot.appliedEffort, undefined)
 })
 
-// #1501: a Bot's own chat may keep a part running in the background. The Bot's model is
-// every part's model, so a change that reached only the foreground would leave that part
-// answering on the old route while the settings show the new one.
 test('a model change reaches the part of the own chat running in the background', async () => {
   const { rt, selected } = bench()
   const bot = { id: 'b1', sessionId: 'b1', model: 'deepseek/v4-flash', openParts: [{ sessionId: 'b1-bg', segments: [] }] }
   assert.equal(await rt.applyModel(bot), 'deepseek/v4-flash')
   assert.deepEqual(selected, ['b1:deepseek/v4-flash', 'b1-bg:deepseek/v4-flash'])
-  // The same values again write nothing.
   await rt.applyModel(bot)
   assert.equal(selected.length, 2)
 })
@@ -192,7 +184,6 @@ test('a thinking-level change reaches the background part too', async () => {
   await rt.applyModel(bot)
   assert.deepEqual(selected.slice(2), ['b1:deepseek/v4-flash:low', 'b1-bg:deepseek/v4-flash:low'])
   assert.equal(bot.appliedEffort, 'low')
-  // The same level again writes nothing more.
   await rt.applyModel(bot)
   assert.equal(selected.length, 4)
 })
@@ -218,7 +209,6 @@ test('group selections sync per Session even when the Bot-level fields already m
   delete bot.effort
   await rt.applyModel(bot)
   assert.deepEqual(selected.slice(3), ['b1:deepseek/v4-flash', 'g1:deepseek/v4-flash', 'g2:deepseek/v4-flash', 'g3:deepseek/v4-flash'])
-  // The provider's resolved default is not an explicit Bot choice to reapply.
   await rt.applyModel(bot)
   assert.equal(selected.length, 7)
   await rt.applyModel(bot, { force: true })
@@ -264,20 +254,16 @@ test('the catalog attaches thinking levels to models a Bot uses', async () => {
   assert.equal(entries.find(entry => entry.ref === 'stepfun/step-5')?.reasoning, undefined)
 })
 
-// #637: a hosted loop engine publishes a route that resolves models but refuses every
-// generation with HOSTED_ENGINE_ROUTE; once it refuses, nothing chooses it again.
 test('a route refused for not being a model endpoint is chosen nowhere again', async () => {
   const { rt, selected } = bench({ providers: { external: ['default'], deepseek: ['v4-flash'] }, fallback: { provider: 'external', model: 'default' } })
   const pinned = { id: 'b1', model: 'external/default', appliedModel: 'external/default' }
   const clean = { id: 'b2', model: 'deepseek/v4-flash' }
   rt.state.bots = { b1: pinned, b2: clean }
   await rt.routeRefused('external/default', pinned)
-  // The pinned Bot moves to what it would be given today and re-selects its Session.
   assert.equal(pinned.model, 'deepseek/v4-flash')
   assert.equal(pinned.appliedModel, 'deepseek/v4-flash')
   assert.equal(clean.model, 'deepseek/v4-flash')
   assert.deepEqual(selected, ['b1:deepseek/v4-flash'])
-  // Pickers, the deployment default and explicit naming keep it out too.
   assert.deepEqual((await rt.catalog({ fresh: true })).map(entry => entry.ref), ['deepseek/v4-flash'])
   assert.deepEqual(rt.cachedCatalog().map(entry => entry.ref), ['deepseek/v4-flash'])
   assert.equal(await rt.defaultModel(), 'deepseek/v4-flash')
@@ -286,7 +272,6 @@ test('a route refused for not being a model endpoint is chosen nowhere again', a
 
 test('a Bot on a clean record but a poisoned Session re-selects its own model', async () => {
   const { rt, selected } = bench({ providers: { external: ['default'], deepseek: ['v4-flash'] }, fallback: { provider: 'external', model: 'default' } })
-  // Its group Session ran on another Bot's route; its own record never named it.
   const bot = { id: 'b1', model: 'deepseek/v4-flash', appliedModel: 'deepseek/v4-flash' }
   rt.state.bots = { b1: bot }
   await rt.routeRefused('external/default', bot)
@@ -294,9 +279,6 @@ test('a Bot on a clean record but a poisoned Session re-selects its own model', 
   assert.deepEqual(selected, ['b1:deepseek/v4-flash'])
 })
 
-// Every Bot the route was pinned to may have its Session still on it, even one whose
-// record already names the replacement; re-pinning the record alone leaves that
-// Session failing on every turn.
 test('every Bot re-pinned off a refused route re-selects its Session', async () => {
   const { rt, selected } = bench({ providers: { external: ['default'], deepseek: ['v4-flash'] }, fallback: { provider: 'external', model: 'default' } })
   const failed = { id: 'b1', model: 'external/default', appliedModel: 'external/default' }
@@ -308,8 +290,6 @@ test('every Bot re-pinned off a refused route re-selects its Session', async () 
   assert.deepEqual([...selected].sort(), ['b1:deepseek/v4-flash', 'b2:deepseek/v4-flash'])
 })
 
-// The sync key must see the filtered catalog: the catalog itself does not change
-// on a refusal, so an unfiltered key would never run the sync again.
 test('a refusal changes the sync key, so the next sync applies what the records say', async () => {
   const { rt, selected } = bench({ providers: { external: ['default'], deepseek: ['v4-flash'] } })
   const bot = { id: 'b1', model: 'deepseek/v4-flash', appliedModel: 'deepseek/v4-flash' }
@@ -317,14 +297,11 @@ test('a refusal changes the sync key, so the next sync applies what the records 
   await rt.catalog()
   await rt.syncModels()
   await rt.routeRefused('external/default')
-  // The Session drifted meanwhile — its own picker can move it without telling us.
   delete bot.appliedModel
   await rt.syncModels()
   assert.deepEqual(selected, ['b1:deepseek/v4-flash'])
 })
 
-// A refused route is chosen again only once its provider serves other models: the same
-// placeholder registered again, even after it was unregistered, is still not an endpoint.
 test('an adapter update ends a refusal only when its provider serves other models', async () => {
   const { rt, providers, listeners } = bench({ providers: { external: ['default'], deepseek: ['v4-flash'] }, fallback: { provider: 'external', model: 'default' } })
   const adaptersUpdated = () => listeners.get('llm/adapters-updated')()
@@ -362,19 +339,16 @@ test('a key set or a sign-in lifts what blocked a Bot; a key removed, a sign-out
   }
   const { rt, listeners, providers } = bench({ services: { credentials } })
   const lifted = []
-  // Each listing also passes the providers listed with their key (the next test).
   rt.unblockBots = fix => { if (fix.keyed === undefined) lifted.push(fix) }
   await rt.catalog()
   providers.deepseek = ['v4-pro']
   await listeners.get('credentials/reference-updated')('DEEPSEEK_API_KEY')
   assert.ok((await rt.catalog()).some(entry => entry.ref === 'deepseek/v4-pro'))
   await listeners.get('credentials/reference-updated')('STEPFUN_API_KEY')
-  // Another plugin's record, such as an OAuth token refresh, is no sign-in.
   await listeners.get('credentials/record-updated')('llm-pi-ai/github-copilot')
   providers.deepseek = ['v4-flash']
   await listeners.get('credentials/record-updated')('deepseek-account-platform/default')
   assert.ok((await rt.catalog()).some(entry => entry.ref === 'deepseek/v4-flash'))
-  // The provider refused the token and its record went.
   records.clear()
   await listeners.get('credentials/record-updated')('deepseek-account-platform/default')
   listeners.get('llm/adapters-updated')()
@@ -429,7 +403,6 @@ test('a group\'s own Session is moved onto a served model, once, while its membe
   await rt.catalog()
   await rt.syncModels()
   assert.deepEqual(selected.sort(), ['r1:deepseek/v4-flash', 'r2-part:deepseek/v4-flash'])
-  // Nothing changed, so a later sync leaves them alone.
   rt.dropCatalog()
   await rt.syncModels()
   assert.equal(selected.length, 2)
@@ -470,10 +443,8 @@ test('a group Session whose selection failed is retried at the next sync, though
   await rt.catalog()
   await rt.syncModels()
   assert.deepEqual(selected, [])
-  // The same models, as every state refresh finds them.
   await rt.syncModels()
   assert.deepEqual(selected, ['r1:deepseek/v4-flash'])
-  // Selected now, so a later refresh asks for nothing.
   await rt.syncModels()
   assert.equal(selected.length, 1)
 })
@@ -490,7 +461,6 @@ test('a new group chat whose selection failed is retried at the next sync', asyn
     return select(request)
   }
   await rt.catalog()
-  // The catalog was synced before the group existed, as at a start with no group yet.
   await rt.syncModels()
   rt.state.rooms.r1 = { id: 'r1', members: [] }
   await rt.selectRoomSession('r1')
@@ -532,15 +502,12 @@ test('a group retry that cannot read the catalog logs and keeps the retry, it do
   await rt.catalog()
   await rt.syncModels()
   assert.deepEqual(selected, [])
-  // The cached catalog has run out and the provider list cannot be read now. Nothing
-  // awaits the promise bootstrap starts, so a rejection would end the host.
   const listProviders = rt.ctx.llm.listProviders
   rt.ctx.llm.listProviders = () => { throw new Error('providers unavailable') }
   const now = Date.now()
   t.mock.method(Date, 'now', () => now + 60_000)
   await assert.doesNotReject(rt.syncModels())
   assert.ok(warnings.some(line => /providers unavailable/.test(line)), warnings.join('\n'))
-  // The retry is kept: once the list can be read again, the next refresh selects.
   rt.ctx.llm.listProviders = listProviders
   await rt.syncModels()
   assert.deepEqual(selected, ['r1:deepseek/v4-flash'])

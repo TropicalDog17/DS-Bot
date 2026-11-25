@@ -13,7 +13,6 @@ const bundle = async (contents) => (await build({
   external: ['react', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives'],
 })).outputFiles[0].text
 
-// A stand-in React that draws one tree with effects left out.
 const react = {
   Component: class {}, createElement: (type, props, ...children) => ({ type, props: { ...props, children } }), Fragment: Symbol('Fragment'),
   useEffect() {}, useLayoutEffect() {}, useCallback: fn => fn, useRef: current => ({ current }), useMemo: make => make(), useId: () => 'id',
@@ -43,13 +42,9 @@ const walk = (node, match, out = []) => {
 const textOf = node => (typeof node === 'string' ? node : Array.isArray(node) ? node.map(textOf).join('') : node?.props ? textOf(node.props.children) : '')
 const roster = { byId: {}, roomsById: {}, bots: [], rooms: [], models: [], prefs: {} }
 const harnessRequire = createRequire(`${plugin}/dev/harness/package.json`)
-// The patch files are YAML; DSH's own parser reads them as a profile would.
 const { parse } = harnessRequire('yaml')
 const packageFile = (name, file) => harnessRequire.resolve(`${name}/package.json`).replace(/package\.json$/, file)
 
-// DSH's own settings shell, run as its browser module would: the child slots its
-// `sidebar.settings` entry and its General section declare are the ones DS Bot's seat
-// must declare in its place.
 function dshShellDeclarations() {
   const source = readFileSync(packageFile('@deepseek-ai/dsh-client-ui-settings-general', 'lib/client.js'), 'utf8')
   let factory
@@ -246,7 +241,6 @@ test('the settings file action shows only when the Host has a document to open',
   assert.equal(none.store.getSnapshot().status, 'unavailable')
 })
 
-// The dialog with DSH's ledger: renderSlot answers with a marker naming what it drew.
 function dialog({ page = 'general', id = null, sections, items = [], actions = {} } = {}) {
   const calls = []
   const drawn = []
@@ -349,14 +343,11 @@ test('a seat registration that DSH does not draw leaves DS Bot\'s own Settings d
   const held = heldSource()
   const { slots, installed } = installShell(held)
   assert.ok(slots.registered.some(row => row.options.name === 'sidebar.settings'))
-  // Another entry holds the seat at a lower priority, so SettingsShell never mounts.
   assert.equal(held.getSnapshot(), false)
   installed.dispose()
   assert.equal(held.getSnapshot(), false)
 })
 
-// SettingsShell drawn with its layout effects run, as React runs them on mount and
-// unmount.
 const mounted = async () => {
   const effects = []
   const recording = { ...react, useLayoutEffect: (fn) => effects.push(fn), useEffect() {} }
@@ -376,7 +367,6 @@ const mounted = async () => {
     useConnectionState: pick('connected'), useDesktopUpdate: pick({}), useSettingsShortcut: pick(undefined),
     reconnect() {}, openDesktopUpdate() {}, openOnboarding() {}, finishOnboarding() {}, holdSeat,
   })
-  // Each render returns the cleanups of the layout effects it ran, like one mount.
   const mount = (holdSeat) => {
     effects.length = 0
     shellModule.SettingsShell(props(holdSeat))
@@ -405,7 +395,6 @@ test('a remount that overlaps the old shell keeps the seat held until the last o
   assert.equal(held.getSnapshot(), true)
   for (const cleanup of second) cleanup()
   assert.equal(held.getSnapshot(), false)
-  // A release that runs twice does not take another mount's hold with it.
   const third = mount(seat.hold)
   for (const cleanup of first) cleanup()
   assert.equal(held.getSnapshot(), true)
@@ -424,7 +413,6 @@ test('the installer hands SettingsShell the hold through the seat\'s face', () =
   installed.dispose()
 })
 
-// Settings in Agent mode carries DS Bot's own rules only: the DSH page around it keeps its look.
 const styles = load(await bundle("export { botOwnCss, SHELL_CSS } from './src/client/styles.js'"))
 
 test('the Agent-mode sheet keeps DS Bot\'s own rules and drops the shell overrides', () => {

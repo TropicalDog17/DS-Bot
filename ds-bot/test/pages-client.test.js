@@ -86,7 +86,6 @@ test('the open page gets the main area edge, its exit flag and a close', () => {
 test('a page asks for the user: a dot on its button, and a notice whose Open leads to it', () => {
   const alerts = []
   const { service } = createPages({ alert: notice => alerts.push(notice) })
-  // Nothing for a page that is not there.
   service.alert('board', 'Coder replied on LIFE-782')
   service.mark('board', true)
   assert.equal(alerts.length, 0)

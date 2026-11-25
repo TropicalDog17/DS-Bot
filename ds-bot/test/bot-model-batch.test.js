@@ -1,10 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { SKIP_LOCAL_AGENT, SKIP_UNAVAILABLE, planModelChange, runModelChange, summarizeModelChange } from '../src/client/bot-model-batch.js'
-
-// #1502: one place to move several Bots to the same model. A Bot's run mode is its own
-// property, so a Bot on a local agent keeps it and is reported instead of being moved
-// onto a DS Bot model.
+import { SKIP_LOCAL_AGENT, SKIP_UNAVAILABLE, planModelChange, runModelChange, summarizeModelChange } from '../src/client/bot-model-batch.ts'
 
 const MODELS = [
   { ref: 'official/flash', name: 'Flash' },
@@ -72,7 +68,6 @@ test('a Bot that last ran on the model still needs a saved pick', () => {
   const plan = planModelChange([{ id: 'x', name: 'X', appliedModel: 'official/pro' }], 'official/pro', MODELS)
   assert.deepEqual(plan.map(entry => entry.action), ['change'])
 })
-
 
 test('a cleared selection is saved even when the last applied model matches', async () => {
   const bot = { id: 'unpicked', name: 'Bot', appliedModel: 'deepseek/deepseek-chat' }

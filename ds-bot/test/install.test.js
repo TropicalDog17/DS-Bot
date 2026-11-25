@@ -29,8 +29,6 @@ function start(state, { config = {}, services } = {}) {
   return { ctx, call, stop, rt }
 }
 
-// Listeners run in registration order; the team tools are not in this list
-// because they are registered per Bot session scope, not globally.
 test('apply registers listeners and effects in a fixed order', (t) => {
   const { ctx, stop } = start()
   t.after(stop)
@@ -97,7 +95,6 @@ test('apply registers listeners and effects in a fixed order', (t) => {
     'on agent/status',
     'on llm/stream',
     'on session/event',
-    // changes.js: the announced workspace/changes turn, remembered for the group row.
     'on session/event',
     'on llm/stream',
     'on agent/status',
@@ -158,8 +155,6 @@ test('the client channel answers from the saved state', async (t) => {
     questions: {},
   })
   t.after(stop)
-  // A team saved before the whale was stored gets it on its first Main Bot when loaded.
-  // A team saved with labs keeps the model each Bot last ran on and loses the lab.
   const loaded = (await call('state')).value
   const [chief, writer] = ['m1', 'b2'].map(id => loaded.bots.find(bot => bot.id === id))
   assert.deepEqual(loaded.mainBotIds, ['m1'])
@@ -173,11 +168,9 @@ test('the client channel answers from the saved state', async (t) => {
   assert.deepEqual(await call('send', { text: ' ' }), { ok: false, error: { code: 'bot/invalid', message: 'Nothing to send', details: {} } })
   assert.deepEqual(await call('nope'), { ok: false, error: { code: 'bot/not-found', message: 'Unknown endpoint nope', details: {} } })
   assert.deepEqual(await call('set-prefs', { accent: 'red' }), { ok: false, error: { code: 'bot/invalid', message: 'Accent must be a #rrggbb color', details: {} } })
-  // The motion level is kept unless it is the default, and only the three levels pass.
   assert.equal((await call('set-prefs', { motion: 'lively' })).value.motion, 'lively')
   assert.equal('motion' in (await call('set-prefs', { motion: 'normal' })).value, false)
   assert.deepEqual((await call('set-prefs', { motion: 'wild' })).error, { code: 'bot/invalid', message: 'Motion must be quiet, normal or lively', details: {} })
-  // So are the message layout and width, each with only its own values.
   assert.equal((await call('set-prefs', { layout: 'flat' })).value.layout, 'flat')
   assert.equal('layout' in (await call('set-prefs', { layout: 'bubble' })).value, false)
   assert.deepEqual((await call('set-prefs', { layout: 'grid' })).error, { code: 'bot/invalid', message: 'Layout must be bubble or flat', details: {} })
@@ -189,7 +182,6 @@ test('the client channel answers from the saved state', async (t) => {
   assert.equal((await call('set-prefs', { flatWidth: 70 })).value.flatWidth, 70)
   assert.equal('flatWidth' in (await call('set-prefs', { flatWidth: 100 })).value, false)
   assert.deepEqual((await call('set-prefs', { flatWidth: 40 })).error, { code: 'bot/invalid', message: 'Flat text width must be a whole percent from 50 to 100', details: {} })
-  // The thinking switch stores only true; false, null and unknown values leave nothing.
   assert.equal('thinking' in (await call('set-prefs', { thinking: 'yes' })).value, false)
   assert.equal('thinking' in (await call('set-prefs', { thinking: 1 })).value, false)
   assert.equal((await call('set-prefs', { thinking: true })).value.thinking, true)
@@ -197,15 +189,12 @@ test('the client channel answers from the saved state', async (t) => {
   assert.equal('thinking' in (await call('set-prefs', { thinking: false })).value, false)
   await call('set-prefs', { thinking: true })
   assert.equal('thinking' in (await call('set-prefs', { thinking: null })).value, false)
-  // Enter sends by default; false persists until the user turns it back on.
   assert.equal((await call('set-prefs', { enterToSend: false })).value.enterToSend, false)
   assert.equal((await call('set-prefs', { enterToSend: 'no' })).value.enterToSend, false)
   assert.equal('enterToSend' in (await call('set-prefs', { enterToSend: true })).value, false)
   await call('set-prefs', { enterToSend: false })
   assert.equal('enterToSend' in (await call('set-prefs', { enterToSend: null })).value, false)
-  // A refusal from the team code keeps its message for the user.
   assert.deepEqual((await call('delete-bot', { id: 'nobody' })).error, { code: 'bot/refused', message: 'Unknown Bot', details: {} })
-  // Off the Desktop profile there are no Bot browsers.
   assert.equal((await call('browser-wait', { clientId: 'w' })).error.code, 'bot/browser-off')
 })
 
@@ -231,7 +220,6 @@ test('in the Desktop profile read_browser is the last tool and reads through the
   const read = args => rt.teamTools.find(d => d.name === 'read_browser').execute(args, { agent: { id: 'b2' } })
 
   assert.match(await read({}), /browser panel is not open/)
-  // A window reports Writer's page (and drops ids that are not Bots), then answers the read.
   const poll = call('browser-wait', { clientId: 'w1', open: { b2: { url: 'https://example.com/', title: 'Example' }, nope: { url: 'https://x/' } } })
   await new Promise(resolve => setTimeout(resolve, 10))
   const reading = read({})
@@ -288,8 +276,6 @@ test('a custom agent keeps the local agents adapter live after install', async (
   assert.equal(entry.adapter.disposed, false, 'the adapter survives install')
 })
 
-// Local-agent routes have their own prefix (#1059): a Bot on DSH's own OpenCode
-// provider stays there, and DS Bot never registers a name another provider has.
 test('a Bot on DSH\'s opencode provider is not taken for a local agent', async (t) => {
   const bot = { id: 'b1', name: 'Zen', model: 'opencode/glm-5', appliedModel: 'opencode/glm-5' }
   const { ctx, stop, rt } = start({ version: 1, bots: { b1: bot }, localAgents: { custom: [], sessions: {} } })
@@ -320,7 +306,6 @@ test('a Bot saved on an old local-agent route moves to the prefixed one', async 
   const bots = rt.state.bots
   assert.equal(bots.b1.model, 'local-codex-cli/gpt-6.1-sol')
   assert.equal(bots.b1.appliedModel, undefined, 'the Sessions are selected again on the new route')
-  // The opencode CLI served this Bot's Session, so its old ref meant the CLI.
   assert.equal(bots.b2.model, 'local-opencode/grok-code')
   assert.equal(bots.b3.model, 'local-acp-a1/default')
   assert.equal(rt.state.localAgents.sessions.b1.route, 'local-codex-cli')

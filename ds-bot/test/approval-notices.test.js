@@ -5,11 +5,10 @@ import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
 
 const bundle = await build({
-  entryPoints: [fileURLToPath(new URL('../src/client/approval-notices.js', import.meta.url))],
+  entryPoints: [fileURLToPath(new URL('../src/client/approval-notices.ts', import.meta.url))],
   bundle: true, format: 'cjs', platform: 'node', write: false,
 })
 
-// One window: the platform's Notification, whether the page shows, and the work source.
 function windowWith({ permission = 'granted', visibility = 'visible' } = {}) {
   const shown = []
   const opened = []

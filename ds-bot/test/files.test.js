@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { clearTimeout as realClearTimeout, setTimeout as realTimeout } from 'node:timers'
-import { replaceFile } from '../src/host/files.js'
+import { replaceFile } from '../src/host/files.ts'
 
 const folder = (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'ds-bot-files-'))
@@ -70,7 +70,6 @@ test('a Windows file retry finishes while the application clock is frozen', asyn
       pending.then(() => true),
       new Promise(resolve => { deadline = realTimeout(resolve, 1000, false) }),
     ])
-    // Release the old implementation too, so a regression fails instead of hanging.
     t.mock.timers.runAll()
     await pending
     assert.equal(finished, true, 'the real filesystem must not wait for a mock timer tick')

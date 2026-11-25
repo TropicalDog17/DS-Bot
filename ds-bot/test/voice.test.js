@@ -5,8 +5,6 @@ import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
 
-// voice.js imports react; the client tests bundle it and stub react, as the
-// other client tests do.
 const bundle = await build({
   stdin: { contents: "export { watchReply } from './src/client/voice.js'", resolveDir: dirname(dirname(fileURLToPath(import.meta.url))) },
   bundle: true, format: 'cjs', platform: 'node', write: false, logLevel: 'silent',
@@ -49,7 +47,6 @@ test('watchReply waits for the reply, speaks it once, then stops', () => {
   for (const listener of listeners) listener()
   assert.deepEqual(consumed, ['first'])
   assert.equal(listeners.size, 0)
-  // A later publish must not speak the same reply again.
   text = 'again'
   assert.deepEqual(consumed, ['first'])
   assert.equal(calls.length, 1)

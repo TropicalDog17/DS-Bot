@@ -5,7 +5,7 @@ import { once } from 'node:events'
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import './harness-resolve.mjs'
-import { createReplyOrigin } from '../src/host/reply-origin.js'
+import { createReplyOrigin } from '../src/host/reply-origin.ts'
 
 const { startSwitchHarness } = await import('./im-fixture.js')
 

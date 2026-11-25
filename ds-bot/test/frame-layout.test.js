@@ -3,12 +3,10 @@ import { test } from 'node:test'
 import {
   RAIL_WIDTH, RAIL_SNAP, SIDEBAR_MIN, SIDEBAR_MAX, MIN_CHAT, FALLBACK_SIDEBAR_WIDTH,
   frameLayout, dragColumn, toggledPref, trackRoom, nextCollapsedWidth, userSidebarToggle, readSidebar, writeSidebar,
-} from '../src/client/frame-layout.js'
-import { createSource } from '../src/client/sources.js'
-import { teamActions } from '../src/client/team-actions.js'
+} from '../src/client/frame-layout.ts'
+import { createSource } from '../src/client/sources.ts'
+import { teamActions } from '../src/client/team-actions.ts'
 
-// The window, the shell sidebar's track width and what is open decide which left
-// column shows and how the Bot panel sits; the chat keeps MIN_CHAT.
 const at = (viewport, sidebarWidth, { pref = 'open', drawer = false, panel = null } = {}) =>
   frameLayout({ viewport, sidebarWidth, pref, drawer, panel })
 const details = (yielded = false) => ({ view: 'details', yielded })
@@ -21,33 +19,28 @@ test('a wide window keeps the open column and a shown panel', () => {
 })
 
 test('the panel folds when column, panel and chat together do not fit', () => {
-  // 280 + 320 + 420 = 1020 > 1000.
   const layout = at(1000, 280, { panel: details() })
   assert.deepEqual({ left: layout.left, panel: layout.panel }, { left: 'open', panel: 'folded' })
 })
 
 test('a yielded panel gets its room back from the rail', () => {
-  // 88 + 320 + 420 = 828 <= 1000.
   const layout = at(1000, 280, { panel: details(true) })
   assert.deepEqual({ left: layout.left, panel: layout.panel }, { left: 'rail', panel: 'shown' })
   assert.equal(layout.room, 1000 - RAIL_WIDTH)
 })
 
 test('a yielded browser panel shows beside the rail, and only covers the chat below its minimum', () => {
-  // 88 + 360 + 420 = 868.
   assert.equal(at(1000, 280, { panel: browser(true) }).panel, 'shown')
   const layout = at(760, 280, { panel: browser(true) })
   assert.deepEqual({ left: layout.left, panel: layout.panel }, { left: 'rail', panel: 'overlay' })
 })
 
 test('without a panel the column stays open while the chat fits, then folds to the rail', () => {
-  // 280 + 420 = 700 <= 800, > 690.
   assert.equal(at(800, 280).left, 'open')
   assert.equal(at(800, 280).room, 800 - 280)
   assert.equal(at(690, 280).left, 'rail')
   assert.equal(at(690, 280).room, 690 - RAIL_WIDTH)
   assert.equal(at(690, 280, { drawer: true }).left, 'drawer')
-  // A drawer floats over the rail's place: the chat keeps the room it had beside the rail.
   assert.equal(at(690, 280, { drawer: true }).room, 690 - RAIL_WIDTH)
 })
 
@@ -58,7 +51,6 @@ test('a rail preference keeps the rail beside a shown panel', () => {
 })
 
 test('a sidebar widened in Agent mode still folds the panel first', () => {
-  // 420 + 320 + 420 = 1160 > 1100.
   const layout = at(1100, 420, { panel: details() })
   assert.deepEqual({ left: layout.left, panel: layout.panel }, { left: 'open', panel: 'folded' })
 })
@@ -73,7 +65,6 @@ test('an unknown panel view folds by the details minimum', () => {
   assert.equal(at(1000, 280, { panel: { view: 'mystery', yielded: false } }).panel, 'folded')
 })
 
-// The switch hides the whole column: nothing is left beside the chat.
 test('a hidden column takes no room, and a panel shows or covers beside nothing', () => {
   const layout = at(1000, 280, { pref: 'hidden', panel: details() })
   assert.deepEqual({ left: layout.left, panel: layout.panel, room: layout.room }, { left: 'hidden', panel: 'shown', room: 1000 })
@@ -88,8 +79,6 @@ test('the switch hides the column and brings back the one it hid', () => {
   assert.equal(toggledPref('hidden', 'open'), 'open')
 })
 
-// The edge drag: a width in the open range, docked while the chat keeps its
-// room; short of the snap point the rail.
 test('a drag short of the snap point lands on the rail', () => {
   assert.deepEqual(dragColumn(RAIL_SNAP - 1, 1400), { left: 'rail', width: RAIL_WIDTH })
   assert.deepEqual(dragColumn(30, 1400), { left: 'rail', width: RAIL_WIDTH })
@@ -99,7 +88,6 @@ test('a drag past the snap point opens a column within its width range', () => {
   assert.deepEqual(dragColumn(RAIL_SNAP, 1400), { left: 'open', width: SIDEBAR_MIN })
   assert.deepEqual(dragColumn(333.4, 1400), { left: 'open', width: 333 })
   assert.deepEqual(dragColumn(900, 1400), { left: 'open', width: SIDEBAR_MAX })
-  // The chat keeps MIN_CHAT beside a docked column.
   assert.deepEqual(dragColumn(400, 800), { left: 'open', width: 800 - MIN_CHAT })
 })
 
@@ -120,8 +108,6 @@ test('the saved column reads back, and anything unknown falls back to the open d
   assert.deepEqual(readSidebar(storage), { pref: 'open', shown: 'open', width: FALLBACK_SIDEBAR_WIDTH })
 })
 
-// A flip of the shell's collapsed flag is the user's switch gesture only when we
-// did not request it and the window stayed on one side of the auto-collapse line.
 test('a sidebar flip we requested is not a user toggle', () => {
   const before = { collapsed: false, viewport: 1400 }
   assert.equal(userSidebarToggle({ before, after: { collapsed: true, viewport: 1400 }, requested: true }), false)
@@ -144,8 +130,6 @@ test('an unrequested flip on one side of the line is the user', () => {
   assert.equal(userSidebarToggle({ before: { collapsed: true, viewport: 800 }, after: { collapsed: false, viewport: 700 } }), true)
 })
 
-// A folded panel is open but not shown. The panel following the chat to another
-// subject is not the user asking to see it; the openers are.
 const bench = (folded, panelYield = false) => {
   const ui = createSource({ details: 'chief', view: 'details', renaming: false, tab: null, side: null, panelYield, leftDrawer: false })
   const roster = createSource({ byId: { chief: { id: 'chief' }, writer: { id: 'writer' } }, roomsById: {}, sideChats: {} })
@@ -178,8 +162,6 @@ test('openers on a panel that fits do not yield', () => {
   assert.equal(ui.getSnapshot().panelYield, false)
 })
 
-// A panel shown because the column yielded is not folded: its opener closes it,
-// and the other openers keep the yield it already has.
 test('the opener closes a panel the column yielded to', () => {
   const { ui, actions } = bench(false, true)
   actions.toggleDetails('chief')
@@ -194,8 +176,6 @@ test('openers keep a yield already given', () => {
   assert.equal(ui.getSnapshot().panelYield, true)
 })
 
-// New chat, Bot exchanges and voice mode start at the left column's edge, whichever
-// form the column has; the shell's own sidebar plays no part.
 test('the left column reports the edge the full-height panes start at', () => {
   assert.equal(at(809, 280).column, 280)
   assert.equal(at(600, 280, { pref: 'rail' }).column, RAIL_WIDTH)
@@ -217,18 +197,13 @@ test('opening new chat closes the floating drawer', () => {
 })
 
 test('only the part of the collapsed track inside the window counts as its room', () => {
-  // Desktop icon rail, frameless window, phone-width off-canvas sidebar, one still sliding out.
   assert.equal(trackRoom({ width: 56, right: 56 }), 56)
   assert.equal(trackRoom({ width: 0, right: 0 }), 0)
   assert.equal(trackRoom({ width: 280, right: 0 }), 0)
   assert.equal(trackRoom({ width: 280, right: 40 }), 40)
-  // A track offset from the window's edge still takes only its own width.
   assert.equal(trackRoom({ width: 56, right: 64 }), 56)
 })
 
-// The collapsed track is subtracted from our rail's push, so a track the frame does not
-// have leaves the rail over the conversation: the narrow web shell on a phone keeps none,
-// and the 56px platform guess must not stand in for it (#1084).
 test('a frame with no sidebar column keeps no collapsed track', () => {
   assert.equal(nextCollapsedWidth({ measured: null, collapsed: null, last: 56 }), 0)
 })
@@ -236,7 +211,6 @@ test('a frame with no sidebar column keeps no collapsed track', () => {
 test('a collapsed shell column counts its measured width, not a platform guess', () => {
   assert.equal(nextCollapsedWidth({ measured: 56, collapsed: true, last: 56 }), 56)
   assert.equal(nextCollapsedWidth({ measured: 0, collapsed: true, last: 56 }), 0)
-  // The column went away while the shell still reports itself collapsed: nothing to subtract.
   assert.equal(nextCollapsedWidth({ measured: null, collapsed: true, last: 56 }), 0)
 })
 

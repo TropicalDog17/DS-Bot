@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { stackReplies } from '../src/shared/group-replies.js'
+import { stackReplies } from '../src/shared/group-replies.ts'
 import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
 
 const bundle = await build({
-  entryPoints: [fileURLToPath(new URL('../src/client/cells.js', import.meta.url))],
+  entryPoints: [fileURLToPath(new URL('../src/client/cells.ts', import.meta.url))],
   bundle: true, format: 'cjs', platform: 'node', write: false,
   external: ['react', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives'],
 })
@@ -53,7 +53,6 @@ test('a view row renders as a view card from its blueprint', () => {
   ]
   const rows = [...ChatRows({ items, sessionId: 'b', roster, actions: {} })]
   assert.deepEqual(shape(rows), ['EarlierUser', 'WidgetCell', 'bot:done'])
-  // The card draws the blueprint, not nothing: run the cell and look inside.
   const cell = rows[1]
   const rendered = cell.type(cell.props)
   assert.equal(rendered.props.className, 'bt-q-inline')

@@ -4,8 +4,6 @@ import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
 
-// The tool cells and the card docks, bundled once and rendered with a minimal React:
-// components run as plain functions, effects are collected and run on demand.
 const { outputFiles } = await build({
   stdin: {
     contents: [
@@ -37,14 +35,12 @@ const react = {
   useSyncExternalStore: (subscribe, getSnapshot) => getSnapshot(),
 }
 const timers = new Set()
-// The observers CellEmpty sets on its slot, so a test can deliver a mutation.
 const observers = []
 class FakeObserver {
   constructor(fn) { this.fn = fn; this.off = false; observers.push(this) }
   observe() {}
   disconnect() { this.off = true }
 }
-// The markdown the host's renderer is given, and what DS Bot's copy controls write.
 const markdownTexts = []
 const copiedTexts = []
 const clipboard = {}
@@ -72,7 +68,6 @@ runInNewContext(outputFiles[0].text, {
 })
 const { ToolCell, TriggerCell, callTree, stackReplies, CellEmpty, Bubbles, QuestionDock, SettledQuestion, SecretDock, countCards, ViewMenuList, WidgetView, WidgetDock, SettledView, AnsweredView, ClosedView } = module.exports
 
-// Runs the effects collected since the last render; returns the cleanups.
 const mount = () => {
   const cleanups = effects.map(effect => effect()).filter(cleanup => typeof cleanup === 'function')
   effects = []
@@ -96,7 +91,6 @@ const find = (node, match) => {
   return match(node) ? node : find(node.props.children, match)
 }
 const count = (haystack, needle) => haystack.split(needle).length - 1
-// A cell that draws nothing leaves its empty mark (cells.js CellEmpty).
 const emptied = node => find(expand(node), each => each.props?.['data-bt-empty'] === true) !== undefined
 
 const writer = { id: 'writer', name: 'Writer', color: 'blue' }
@@ -123,14 +117,12 @@ test('a member\'s messages in a row stack under its name, and an event line star
     { botId: 'writer', text: 'e', time: 60, duration: 6000 },
   ]
   assert.deepEqual(JSON.parse(JSON.stringify(stackReplies(replies).map(item => [item.index, item.texts]))), [[0, ['a', 'b']], [2, []], [3, ['c']], [4, ['d']], [5, ['e']]])
-  // A stacked block carries its last message's time and how long that turn ran.
   const [stacked, event, single] = stackReplies(replies)
   assert.deepEqual([stacked.time, stacked.duration], [20, 2000])
   assert.deepEqual([event.time, event.duration], [30, undefined])
   assert.deepEqual([single.time, single.duration], [40, 4000])
 })
 
-// A time in the machine's own zone, some days back, so the test does not depend on the zone.
 const at = (daysAgo, hour, minute) => {
   const today = new Date()
   return new Date(today.getFullYear(), today.getMonth(), today.getDate() - daysAgo, hour, minute).getTime()
@@ -164,7 +156,6 @@ test('a group reply shows its time, and how long its turn ran', () => {
   assert.deepEqual(tooks.map(node => node.props.title), ['Ran for 1m 8s', 'Ran for 2s'])
 })
 
-// A user text sent while a relay runs joins the round's replies with its time.
 test('a user message inside a group relay shows its time', () => {
   const today = at(0, 14, 5)
   const replies = [
@@ -177,8 +168,6 @@ test('a user message inside a group relay shows its time', () => {
   assert.deepEqual(times.map(node => node.props.title), [`Today ${clockOf(today)}`])
 })
 
-// LEGACY: a round from when groups paused at a relay limit still shows the pause,
-// with nothing to press.
 test('an old paused round shows the pause as a plain line', () => {
   const replies = [{ kind: 'paused', names: ['Writer', 'Coder'], count: 6, time: at(0, 14, 5) }]
   const out = show(call('group_relay', 'direct', { content: { replies } }), { sessionId: 'room' })
@@ -187,8 +176,6 @@ test('an old paused round shows the pause as a plain line', () => {
   assert.equal(find(out, node => node.type === 'button'), undefined)
 })
 
-// #872: Bots that went back and forth without progress paused; the line names both
-// and says what lets them go on.
 test('a round the idle guard paused names the Bots and how they go on', () => {
   const replies = [{ kind: 'paused', idle: true, botId: 'chief', name: 'Chief', names: ['Writer'], count: 6, limit: 6, time: at(0, 14, 5) }]
   const out = show(call('group_relay', 'direct', { content: { replies } }), { sessionId: 'room' })
@@ -196,8 +183,6 @@ test('a round the idle guard paused names the Bots and how they go on', () => {
   assert.deepEqual(events, ['Chief and Writer went back and forth 6 times without progress and paused. Write here to go on'])
 })
 
-// The admin was alone with the user's message and passed: the round shows the
-// notice, so the user sees why nothing was answered.
 test('a group whose admin passed alone shows the notice', () => {
   const replies = [{ kind: 'admin-passed', botId: 'chief', name: 'Chief', time: at(0, 14, 5) }]
   const out = show(call('group_relay', 'direct', { content: { replies } }), { sessionId: 'room' })
@@ -205,7 +190,6 @@ test('a group whose admin passed alone shows the notice', () => {
   assert.deepEqual(events, ['Chief did not answer or call anyone; call a member with @Name'])
 })
 
-// The trigger of a post in a group chat carries the event's time, not the post's.
 test('a group post drawn from its trigger shows the time it came in', () => {
   const time = at(0, 16, 42)
   const node = {
@@ -235,7 +219,6 @@ const show = (root, options) => {
 }
 const shown = (root, options) => text(show(root, options))
 
-// One finished call of every kind ToolCell draws, and what it shows.
 const BRANCHES = [
   ['message_bot', { args: { to: 'Writer' } }, /Messaged.*Writer/],
   ['stop_bot', { args: { bot: 'Writer' } }, /Stopped.*Writer/],
@@ -331,8 +314,6 @@ test('every call that draws nothing leaves only the empty mark, so its seat can 
     const elements = findAll(expand(node), each => typeof each.type === 'string' && each.type !== 'fragment')
     return elements.length > 0 && elements.every(each => each.props?.['data-bt-empty'] === true && each.props.hidden === true)
   }
-  // A card the user is holding in the dock, an unfinished call, a name that
-  // resolves to nobody, an answerless reply: each marks itself, at any depth.
   for (const root of [
     call('ask_user', 'q-call'),
     call('show_view', 'v-call'),
@@ -347,10 +328,6 @@ test('every call that draws nothing leaves only the empty mark, so its seat can 
   }
 })
 
-// #667: the slot a node's cell renders into counts as emptied only while every
-// child in it is an empty mark — a row or seat hides on that mark, so a node
-// holding anything else must not be taken for empty. `slotOf` builds the slot
-// the way the DOM would: one child per rendered part, mark or not.
 const slotOf = (out) => {
   const slot = { childNodes: [], dataset: {} }
   const lift = (node) => {
@@ -368,13 +345,10 @@ const slotOf = (out) => {
 
 test('a node holding a visible event next to a mark is not emptied', () => {
   const actions = { noteLive() {}, noteCards() {} }
-  // Marks alone: emptied, so the row or seat wrapping the slot may hide.
   const alone = slotOf(ToolCell(props(call('ask_user', 'direct'), { actions })))
   mount()
   assert.equal(alone.dataset.btEmptied, '')
 
-  // A run_code node holding "Messaged Writer" and an answered question's mark:
-  // the event stays, so the node is not emptied.
   const mixed = slotOf(ToolCell(props(program([
     call('message_bot', 'program:ptc:1', { args: { to: 'Writer' } }),
     call('ask_user', 'program:ptc:2'),
@@ -392,7 +366,6 @@ test('a slot keeps its emptied state in step with what it holds', () => {
   const mark = () => ({ nodeType: 1, hasAttribute: name => name === 'data-bt-empty', closest: () => slot })
   const event = () => ({ nodeType: 1, hasAttribute: () => false, closest: () => slot })
   const text = () => ({ nodeType: 3, hasAttribute: () => false })
-  // Mounts one CellEmpty into the slot beside `siblings`; returns its unmount.
   const draw = (...siblings) => {
     const self = mark()
     CellEmpty({}).props.ref.current = self
@@ -401,15 +374,11 @@ test('a slot keeps its emptied state in step with what it holds', () => {
   }
   const changed = () => observers.filter(observer => !observer.off).forEach(observer => observer.fn())
 
-  // A mark mounted beside a visible part, or beside plain text another
-  // renderer left, does not empty the slot.
   draw(event(), mark())
   assert.ok(!('btEmptied' in slot.dataset))
   draw(text(), mark())
   assert.ok(!('btEmptied' in slot.dataset))
 
-  // A mark alone empties the slot; a visible part landing later takes the mark
-  // back, and that part leaving empties the slot again.
   const unmount = draw()
   assert.equal(slot.dataset.btEmptied, '')
   slot.childNodes = [...slot.childNodes, event()]
@@ -419,7 +388,6 @@ test('a slot keeps its emptied state in step with what it holds', () => {
   changed()
   assert.equal(slot.dataset.btEmptied, '')
 
-  // The last mark leaving takes the emptied state with it.
   unmount()
   assert.ok(!('btEmptied' in slot.dataset))
   effects = []
@@ -432,11 +400,8 @@ test('a hidden Bot-to-Bot turn draws none of its sub-calls', () => {
   assert.match(shown(root, { roster, turn: 2 }), /Chief needs a key.*Messaged/)
 })
 
-// The line a memory write that changed nothing draws.
 const memoryLine = (root, options) => find(show(root, options), node => node.props?.className === 'bt-event bt-event-error')
-// The buttons a line draws.
 const lineButtons = node => findAll(node, entry => entry.type === 'button')
-// A write that failed, with the kind of failure the host named.
 const failedWrite = (name, args, code, message) => call(name, `${name}:1`, {
   args, content: `Error: ${message}`, isError: true, error: { name: 'MemoryWriteError', code },
 })
@@ -446,12 +411,10 @@ test('a memory write that failed says so, and opens the memory it meant to chang
   const actions = { openMemory: id => opened.push(id) }
   const line = memoryLine(failedWrite('remember', { scope: 'Writer' }, 'memory/refused', 'Only Main Bots and group admins write the team memory.'), { actions })
   assert.match(text(line), /Couldn't save to memory/)
-  // The reason is ours, in our words: what the host said stays in the tool record.
   assert.match(text(line), /The memory refused this change/)
   assert.doesNotMatch(text(line), /team memory/)
   assert.equal(line.props.role, 'status')
   assert.equal(line.props.title, 'memory/refused')
-  // The way into the panel opens the scope the call named.
   lineButtons(line)[0].props.onClick()
   assert.deepEqual(opened, ['writer'])
 })
@@ -460,7 +423,6 @@ test('a removal that failed says it could not remove the entry, and why', () => 
   const line = memoryLine(failedWrite('forget', {}, 'memory/no-match', 'No entry in your memory matches "tea".'), {})
   assert.match(text(line), /Couldn't remove from memory/)
   assert.match(text(line), /No saved entry matched/)
-  // The entry the call named is not repeated in the notice.
   assert.doesNotMatch(text(line), /tea/)
 })
 
@@ -471,7 +433,6 @@ test('the reason follows the kind of failure, not the words of the host', () => 
   assert.match(reason('memory/refused'), /The memory refused this change/)
   assert.match(reason('memory/denied'), /The memory refused this change/)
   assert.match(reason('memory/failed'), /The memory could not be changed/)
-  // A failure this interface does not know still says what happened, in short.
   assert.match(reason('memory/bot-gone'), /The memory could not be changed/)
 })
 
@@ -496,7 +457,6 @@ test('a group write opens the memory of the group, and outside a group it has no
   assert.match(text(inGroup), /Couldn't save to memory/)
   lineButtons(inGroup)[0].props.onClick()
   assert.deepEqual(opened, ['room'])
-  // Outside a group chat there is no group memory to open.
   const outside = memoryLine(failed, { actions })
   assert.equal(lineButtons(outside).length, 0)
 })
@@ -521,7 +481,6 @@ test('a save that came later does not say the earlier one recovered', () => {
   const failed = failedWrite('remember', {}, 'memory/refused', 'Only Main Bots and group admins write the team memory.')
   const saved = call('remember', 'remember:2', { content: 'Saved to your memory, in MEMORY.md (MEMORY.md: 20 of 4000 characters).' })
   const out = shown(program([failed, saved]))
-  // The failure stands, with its own reason; the later save only says its own.
   assert.equal(count(out, "Couldn't save to memory"), 1)
   assert.equal(count(out, 'Only Main Bots and group admins write the team memory'), 0)
   assert.match(out, /Memory updated/)
@@ -538,7 +497,6 @@ test('a message line opens the exchange of the chat\'s Bot, from any part', () =
   assert.deepEqual(JSON.parse(JSON.stringify(opened)), [['chief', 'writer'], ['chief', 'writer']])
 })
 
-// The activity row reads one note per chat node.
 const notes = (root, options = {}) => {
   const log = []
   ToolCell(props(root, { ...options, actions: { noteLive: (sessionId, id, entry) => log.push({ sessionId, id, entry }) } }))
@@ -565,7 +523,6 @@ test('the live note follows the running sub-call of a program', () => {
   assert.equal(notes(call('message_bot', 'direct', { args: { to: 'Writer' }, running: true }))[0].entry.label, 'Asking Writer')
 })
 
-// A minimal cards store, as index.js keeps it.
 const cardStore = () => {
   const store = { state: {} }
   store.noteCards = (sessionId, ids, delta) => { store.state = countCards(store.state, sessionId, ids, delta) }
@@ -612,7 +569,6 @@ test('a secret request refused on a read-only window says so in one line', () =>
   const refused = 'No card can be shown now. The Bot team in /somewhere is open in another dsh (Web or Desktop, pid 4 on host-a). This window shows the team but cannot change it; close the other one and reload.'
   const root = program([call('request_secret', 'program:ro', { args: { name: 'DEMO_TOKEN' }, content: refused })])
   assert.match(shown(root), /Chief could not ask for a key: this window can only view the team/)
-  // Other refusals stay silent: they are written for the model.
   const wrong = 'Secret cards only work in your own chat. Tell the group you will ask the user in your own chat, and call request_secret there.'
   assert.equal(shown(program([call('request_secret', 'program:grp', { args: { name: 'DEMO_TOKEN' }, content: wrong })])), '')
 })
@@ -631,9 +587,6 @@ test('a card whose call is not drawn waits in the dock; a drawn one shows only a
   assert.match(docks(store, roster), /Which draft\?.*Chief needs a key/)
 })
 
-// React needs the same hooks on every render: the dock reads the Enter preference
-// before its early returns, so a card arriving or moving to the transcript never
-// changes the count.
 test('the question dock calls the same hooks whether its card shows or not', () => {
   const store = cardStore()
   const render = (roster) => {
@@ -649,7 +602,6 @@ test('the question dock calls the same hooks whether its card shows or not', () 
   assert.equal(empty.out, null)
   assert.notEqual(waiting.out, null)
   assert.equal(waiting.calls, empty.calls)
-  // The transcript drew the call: the dock steps back, still on the same hooks.
   store.state = { chief: { 'program:ptc:1': 1 } }
   const drawn = render(roster)
   assert.equal(drawn.out, null)
@@ -692,7 +644,6 @@ test('dock ownership is isolated by session, request id and card kind, not the c
   const store = cardStore()
   const roster = team({ questions: { chief: question('same-call', { id: 'same-id' }) }, secretRequests: { chief: [request('same-call', { id: 'same-id' })] } })
   const root = program([call('ask_user', 'same-call'), call('request_secret', 'secret-call')])
-  // Duplicate call ids are coalesced by callTree, so check each kind separately.
   const questionCall = call('ask_user', 'same-call')
   const secretCall = call('request_secret', 'same-call')
   const { unmount } = draw(root, store, { roster })
@@ -767,8 +718,6 @@ test('a pruned group relay still draws the replies that survived', () => {
   assert.match(text(gone), /The group replies could not be shown/)
 })
 
-// The prune marker's "]" must not end the scan, and a cut inside a string must
-// not hide the replies after it either.
 test('a group relay recovers replies after the prune marker with and without a roundId', () => {
   const between = '{"replies":[{"botId":"writer","text":"First."}[... tool result middle pruned ...],{"botId":"chief","text":"Last."}]}'
   const inside = '{"replies":[{"botId":"writer","text":"First."},{"botId":"chief","text":"cut[... tool result middle pruned ...]{"botId":"writer","text":"Last."}]}'
@@ -781,15 +730,12 @@ test('a group relay recovers replies after the prune marker with and without a r
   }
 })
 
-// Only the compactor's own marker splits the text: a reply that quotes a
-// bracketed ellipsis stays whole.
 test('a reply quoting a bracketed ellipsis is not mistaken for a prune marker', () => {
   const quoted = '{"replies":[{"botId":"writer","text":"Step [... details ...] done."}[... tool result middle pruned ...]{"botId":"chief","text":"Last."}]}'
   const out = show(call('group_relay', 'direct', { content: quoted }), { sessionId: 'room' })
   assert.match(text(out), /Step \[... details ...] done\..*Chief.*Last\./)
 })
 
-// #38: a PTC group round's replies vanished once the round ended.
 test('a PTC group relay shows its replies from the sub-call, live and after reload', async () => {
   const replies = [{ botId: 'writer', text: 'Hello from Writer.' }, { botId: 'chief', text: 'Hello from Chief.' }]
   const finished = program([call('group_relay', 'call-1-1:ptc:1', { content: { replies } })])
@@ -814,7 +760,6 @@ test('a PTC group relay shows its replies from the sub-call, live and after relo
   assert.deepEqual(JSON.parse(JSON.stringify(sets)), [{ replies: replies.slice(0, 1), speaking: ['chief'] }])
 })
 
-// #105: the secret and question cards of a PTC program showed nowhere.
 test('PTC secret and question cards show at their sub-calls and act on their own requests', async () => {
   const roster = team({ questions: { chief: question('call-1-2:ptc:1') }, secretRequests: { chief: [request('call-2-1:ptc:1')] } })
   const answers = []
@@ -839,7 +784,6 @@ test('PTC secret and question cards show at their sub-calls and act on their own
   assert.equal(shown(program([call('ask_user', 'call-1-2:ptc:1')]), { roster: team() }), '')
 })
 
-// #133: a DSH goal round showed its raw <goal_round> prompt as an event line.
 test('a goal round draws nothing, while another unknown trigger keeps its event line', () => {
   const trigger = source => expand(TriggerCell({
     node: { key: 'node', data: { source, turn: 2, content: text$('<goal_round>Keep going</goal_round>') }, location: { turn: { turn: 2 } } },
@@ -854,8 +798,6 @@ test('a goal round draws nothing, while another unknown trigger keeps its event 
   assert.match(text(trigger({ kind: 'webhook' })), /<goal_round>Keep going/)
 })
 
-// #212: the chat hands a trigger its event (seq, content, source) but no turn, so every post
-// in a group chat shared one reaction entry: a reaction on one showed on all of them.
 test('a reaction on a group post stays on that post, also after it draws again', () => {
   const ui = { visits: {}, reactions: {} }
   const actions = {
@@ -867,7 +809,6 @@ test('a reaction on a group post stays on that post, also after it draws again',
       ui.reactions = { ...ui.reactions, [key]: entry }
     },
   }
-  // The trigger node the chat builds for a user/message from a Bot.
   const post = (seq, turn, from, words) => ({
     key: `turn-trigger:${seq}`, kind: 'turn-trigger', anchorSeq: seq, location: { turn: { turn } },
     data: { kind: 'context', seq, time: 1, content: text$(words), source: { kind: 'bot', role: 'post', senderSessionId: from, senderName: from }, producer: {}, form: null },
@@ -877,7 +818,6 @@ test('a reaction on a group post stays on that post, also after it draws again',
     useRoster: select => select(team()), useSessions: select => select({ byId: {} }),
     useTurnClock: select => select({}), useUi: select => select(ui),
   })
-  // The handler a bubble's reaction menu calls, read before the menu draws.
   const reactOf = (node) => {
     if (Array.isArray(node)) return node.map(reactOf).find(Boolean)
     if (!node || typeof node !== 'object') return undefined
@@ -892,7 +832,6 @@ test('a reaction on a group post stays on that post, also after it draws again',
 
   reactOf(draw(first))('👍')
   assert.deepEqual([chips(draw(first)), chips(draw(sameTurn)), chips(draw(later))], [1, 0, 0])
-  // A fresh node for the same event, as after a reload, finds the reaction again.
   assert.equal(chips(draw(post(41, 3, 'writer', 'Draft is up'))), 1)
   reactOf(draw(later))('❤️')
   reactOf(draw(first))('👍')
@@ -907,22 +846,18 @@ test('a question or view card closed without an answer on it stays at its call, 
   const dismissed = show(call('ask_user', 'q-dismissed', { args: asked }), { roster })
   assert.equal(find(dismissed, node => node.props?.className === 'bt-q-gone'), undefined)
   assert.equal(text(find(dismissed, node => node.props?.className === 'bt-q-badge')), 'Dismissed')
-  // Compact while folded: the question and badge only, plus the fold button (no dismiss/option buttons).
   assert.equal(text(dismissed), 'Which draft?Dismissed')
   const qButtons = findAll(dismissed, node => node.type === 'button')
   assert.equal(qButtons.length, 1)
   assert.equal(qButtons[0].props?.className, 'bt-q-head bt-q-fold')
   assert.equal(qButtons[0].props?.['aria-expanded'], false)
-  // Without detail or options, no fold toggle is rendered.
   const bare = show(call('ask_user', 'q-bare', { args: bareAsked }), { roster })
   assert.equal(find(bare, node => node.type === 'button'), undefined)
-  // A card that asked several questions closes as one row for each.
   const many = show(call('ask_user', 'q-replied', { args: { questions: [{ header: 'PR #1207', question: 'Merge?', options: [{ label: 'Merge' }] }, { header: 'PR #1208', question: 'Merge?', options: [{ label: 'Merge' }] }] } }), { roster })
   assert.deepEqual(findAll(many, node => node.props?.className === 'bt-q-title').map(text), ['PR #1207 · Merge?', 'PR #1208 · Merge?'])
   assert.deepEqual(findAll(many, node => node.props?.className === 'bt-q-badge').map(text), ['Answered by message', 'Answered by message'])
   const replied = show(call('ask_user', 'q-replied', { args: asked }), { roster })
   assert.equal(text(find(replied, node => node.props?.className === 'bt-q-badge')), 'Answered by message')
-  // Answered on the card: the reply message carries the card, the call leaves no gap.
   const answered = show(call('ask_user', 'q-answered', { args: asked }), { roster })
   assert.ok(find(answered, node => node.props?.className === 'bt-q-gone') !== undefined)
   const view = show(call('show_view', 'v-dismissed', { args: pick }), { roster })
@@ -950,7 +885,6 @@ test('a hidden-turn card floats in the dock while pending, then leaves the dock 
     questions: { [chief.id]: { id: 'q-1', callId: 'q-hidden', ...asked } },
     views: { [chief.id]: { id: 'v-1', callId: 'v-hidden', ...pick } },
   })
-  // While pending, the hidden turn draws nothing and marks no cards, so the docks show both.
   const pendingCell = draw(root, store, { roster: pendingRoster })
   assert.equal(text(pendingCell.out), '')
   assert.deepEqual(store.state, {})
@@ -960,7 +894,6 @@ test('a hidden-turn card floats in the dock while pending, then leaves the dock 
   assert.match(text(pendingQuestionDock), /Which draft\?/)
   pendingCell.unmount()
 
-  // Once closed by message or dismiss, both docks empty and the hidden turn draws only the settled cards.
   const closedRoster = team({
     exchangeTurns: { [chief.id]: [1] },
     questions: {},
@@ -973,7 +906,6 @@ test('a hidden-turn card floats in the dock while pending, then leaves the dock 
   assert.equal(text(settledCell), 'Which draft?DismissedPick a laneAnswered by message')
   assert.deepEqual(findAll(settledCell, each => each.type === 'button').map(each => each.props?.className), ['bt-q-head bt-q-fold', 'bt-q-head bt-q-fold'])
 
-  // A card carried from an earlier part stays in the dock even if the current part drew the same call id.
   store.noteCards(chief.id, ['same-call'], 1)
   const carriedRoster = team({
     views: { [chief.id]: { id: 'v-2', callId: 'same-call', callSessionId: 'chief-old', ...pick } },
@@ -997,8 +929,6 @@ test('a show_view call the host refused draws nothing; a display-only card draws
     assert.ok(find(node, each => each.props?.className === 'bt-q-gone') !== undefined, 'the call leaves the hidden mark')
     assert.equal(text(node), '')
   }
-  // Refusals the host returned as text reach the cell as a done call; the shared
-  // check hides them so the model's retry stays the only card.
   gone(cell('Card', { type: 'nope' }))
   gone(cell('x'.repeat(8192), { type: 'text', text: 'hi' }))
   gone(cell('Pick', { type: 'options', id: 'o', options: [{ label: 'A' }] }))
@@ -1007,7 +937,6 @@ test('a show_view call the host refused draws nothing; a display-only card draws
   const title = find(card, node => node.props?.className === 'dv-view-title')
   assert.ok(title !== undefined)
   assert.equal(text(title), 'Status')
-  // A view needs no title: it then draws without a heading.
   const bare = cell('  ', { type: 'text', text: 'hi' })
   assert.equal(find(bare, node => node.props?.className === 'dv-view-title'), undefined)
   assert.ok(find(bare, node => typeof node.props?.className === 'string' && node.props.className.includes('dv-view-bare')) !== undefined)
@@ -1049,18 +978,15 @@ test('a view works its formulas out, draws a chart, and keeps html in a sandboxe
   assert.ok(find(chart, item => item.type === 'svg') !== undefined)
   const figure = find(chart, item => item.type === 'figure')
   assert.equal(figure.props['data-kind'], 'bar')
-  // The ⋯ menu sits in the card's head, not on the chart's axes (#476).
   const head = classed(chart, 'dv-view-head')
   assert.ok(find(head, item => typeof item.props?.className === 'string' && item.props.className.includes('dv-view-more')) !== undefined, 'the card head has the menu button')
   assert.equal(find(figure, item => typeof item.props?.className === 'string' && (item.props.className.includes('bt-chart-more') || item.props.className.includes('bt-chart-tools'))), undefined, 'the chart itself has no menu')
-  // A view without a chart has no ⋯ button.
   const metric = cell({ type: 'metric', label: 'Done', value: '3' })
   assert.equal(find(metric, item => typeof item.props?.className === 'string' && item.props.className.includes('dv-view-more')), undefined)
   for (const kind of ['hbar', 'line', 'area', 'donut']) {
     assert.ok(find(cell({ type: 'chart', kind, categories: ['A', 'B'], series: [{ values: [3, 5] }] }), item => item.type === 'svg') !== undefined, kind)
   }
 
-  // The ⋯ menu groups per chart when the view holds more than one (#476).
   const handle = (label, asTable = false) => ({ label, asTable, toggleTable: () => {}, copy: () => {}, save: () => {} })
   const menuItems = node => findAll(node, item => item.props?.role === 'menuitem').map(text)
   const single = expand(ViewMenuList({ charts: [handle('Revenue')], pick: run => run }))
@@ -1075,8 +1001,6 @@ test('a view works its formulas out, draws a chart, and keeps html in a sandboxe
     'View as chart', 'Copy data', 'Download image',
     'View as table', 'Copy data', 'Download image',
   ], 'each chart keeps its three actions and its table state')
-  // A table switch must not re-register the chart: the groups keep mount order,
-  // so the toggled chart stays first and its item reads back as the table (#476).
   const ordered = []
   expand(WidgetView({
     view: {
@@ -1103,8 +1027,6 @@ test('a view works its formulas out, draws a chart, and keeps html in a sandboxe
   assert.equal(frame.props.title, 'A greeting')
 })
 
-// The repair card's Retry reaches the Bot as a plugin trigger; the chat shows that it went
-// on, never the note to the Bot or the user's message again.
 test('a Retry after a failed turn shows as one event line', () => {
   const out = expand(TriggerCell({
     node: { key: 'trigger', kind: 'turn-trigger', location: { turn: { turn: 4 } }, data: { seq: 9, time: 1, content: text$('[Retry after a failed turn]\nYour last turn failed (AUTH) and the user has fixed it.'), source: { kind: 'bot', role: 'continue', exchangeId: 'c1' } } },
@@ -1115,9 +1037,6 @@ test('a Retry after a failed turn shows as one event line', () => {
   assert.equal(text(out), 'Went on after the failed turn')
 })
 
-// #718: a folded message's cut code block is drawn by DS Bot, so no copy control
-// exists that holds only the part shown; DS Bot's own is bound to the whole
-// block, and a short block keeps the host's normal rendering and copy.
 test('a folded code block leaves no copy of only its shown part', async () => {
   const inner = Array.from({ length: 40 }, (_, index) => `line ${index + 1}`).join('\n')
   const bubble = (texts) => expand(Bubbles({
@@ -1129,9 +1048,7 @@ test('a folded code block leaves no copy of only its shown part', async () => {
   markdownTexts.length = 0
   copiedTexts.length = 0
   const out = bubble([`Here:\n\`\`\`js\n${inner}\n\`\`\``])
-  // The markdown the host renders holds no fence, so it can draw no copy of the part.
   assert.ok(markdownTexts.length > 0 && markdownTexts.every(given => !given.includes('```')))
-  // DS Bot draws the part the preview keeps, and its copy holds the whole block.
   assert.equal(text(find(out, item => item.type === 'pre')), 'line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8')
   const [copy] = copyOf(out)
   assert.equal(copyOf(out).length, 1)
@@ -1139,7 +1056,6 @@ test('a folded code block leaves no copy of only its shown part', async () => {
   await Promise.resolve()
   assert.deepEqual(copiedTexts, [inner])
 
-  // A short block goes to the host whole, with the host's own copy and none of ours.
   markdownTexts.length = 0
   copiedTexts.length = 0
   const short = bubble(['```js\none\n```'])
@@ -1205,7 +1121,6 @@ test('an attachment starts the clipboard write inside its click before loading t
 test('settled and answered views summarize every outcome cleanly and derive fallback prompts when untitled', () => {
   const expandCard = (Component, props) => expand(h(Component, props))
 
-  // Options (multi-select with letter keys).
   const optsView = {
     type: 'options', id: 'pick', multi: true,
     options: [{ label: 'Alpha', description: 'First' }, { label: 'Beta' }, { label: 'Gamma' }],
@@ -1219,7 +1134,6 @@ test('settled and answered views summarize every outcome cleanly and derive fall
   assert.deepEqual(findAll(pickedSummary, node => node.props?.className === 'bt-key').map(text), ['B', 'A'])
   assert.deepEqual(findAll(pickedSummary, node => node.props?.className === 'bt-q-label').map(text), ['Beta', 'Alpha'])
 
-  // Confirm (confirmed -> accented badge; canceled -> neutral badge).
   const confirmView = { type: 'confirm', id: 'c1', confirmLabel: 'Deploy', cancelLabel: 'Hold' }
   const confirmed = expandCard(SettledView, { title: 'Ship build?', view: confirmView, answer: { action: 'c1', values: { confirmed: true } } })
   const confirmBadge = find(confirmed, node => node.props?.className === 'bt-q-badge')
@@ -1230,7 +1144,6 @@ test('settled and answered views summarize every outcome cleanly and derive fall
   assert.equal(text(cancelBadge), 'Hold')
   assert.equal(cancelBadge.props['data-accent'], undefined)
 
-  // Form (non-empty fields -> kv rows; empty submit -> accented badge; canceled -> neutral badge).
   const formView = {
     type: 'form', id: 'f1', submitLabel: 'Save', cancelLabel: 'Abort',
     fields: [{ id: 'host', label: 'Host' }, { id: 'note', placeholder: 'Notes', multiline: true }],
@@ -1246,7 +1159,6 @@ test('settled and answered views summarize every outcome cleanly and derive fall
   assert.equal(text(find(formCanceled, node => node.props?.className === 'bt-q-badge')), 'Abort')
   assert.equal(find(formCanceled, node => node.props?.className === 'bt-q-badge').props['data-accent'], undefined)
 
-  // Submit + slider / choice / toggle inputs.
   const inputsView = {
     type: 'stack',
     children: [
@@ -1272,7 +1184,6 @@ test('settled and answered views summarize every outcome cleanly and derive fall
   assert.equal(text(find(submitOnlyCard, node => node.props?.className === 'bt-q-badge')), 'Notify')
   assert.equal(find(submitOnlyCard, node => node.props?.className === 'bt-q-badge').props['data-accent'], '')
 
-  // Untitled fallback prompt & closed outcomes.
   const mdPrompt = expandCard(ClosedView, { title: '', view: { type: 'stack', children: [{ type: 'text', text: '# **Review plan**\nMore lines' }, confirmView] }, closed: 'replied' })
   assert.equal(text(find(mdPrompt, node => node.props?.className === 'bt-q-title')), 'Review plan')
   assert.equal(text(find(mdPrompt, node => node.props?.className === 'bt-q-badge')), 'Answered by message')

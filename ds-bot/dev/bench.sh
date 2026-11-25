@@ -1,16 +1,4 @@
 #!/bin/sh
-# Mock test bench: the scripted mock model (dev/mock-llm.mjs) plus a dsh web whose profile
-# links the plugin to this checkout, so edits need no reinstall (host code needs a restart;
-# src/client needs `npm run build` and a page reload).
-#
-#   dev/bench.sh <name> <web-port> <mock-port> [start|stop|reset|status]
-#
-# Data lives in <checkout>/.dsh-test-<name>; `reset` wipes its Bot team and Sessions before
-# starting. Processes are tracked by pid files and stopped by process group, never by name.
-# Environment: CONTEXT_WINDOW (the mock models' context window, in tokens, with an 8,000
-# token reply; default: the adapter's own), CHECK_RATIO (the plugin's checkRatio), MOCK_DELAY_MS, BOARD (1 turns on ds-bot/board),
-# DSH_HARNESS (the deepseek-harness checkout; default: beside this checkout, else at the
-# same place in the main worktree).
 set -eu
 NAME=${1:?usage: bench.sh <name> <web-port> <mock-port> [start|stop|reset|status]}
 WEB_PORT=${2:?usage: bench.sh <name> <web-port> <mock-port> [start|stop|reset|status]}
@@ -75,7 +63,6 @@ EOF
   (cd "$profile" && DSH_HOME="$HOME_DIR" pnpm install >/dev/null)
 }
 
-# Bench-only plugin config, layered over the profile with --patch.
 write_overlay() {
   overlay="$HOME_DIR/bench.patch.yml"
   printf '[]\n' > "$overlay"
@@ -90,7 +77,6 @@ write_overlay() {
       printf -- '      - { id: deepseek-v4-pro, contextWindow: %s, maxTokens: 8000 }\n' "$CONTEXT_WINDOW"
     } >> "$overlay"
   fi
-  # BOARD=1 turns on the separate ds-bot/board plugin, as a profile would.
   if [ -n "${BOARD:-}" ]; then
     [ "$(cat "$overlay")" != '[]' ] || : > "$overlay"
     printf -- '- insert:\n    - id: board\n      name: ds-bot/board\n' >> "$overlay"
@@ -106,8 +92,6 @@ start() {
     (cd "$PLUGIN" && MOCK_PORT="$MOCK_PORT" MOCK_DELAY_MS="${MOCK_DELAY_MS:-300}" MOCK_LOG="$HOME_DIR/mock.jsonl" \
       exec "$SETSID" sh -c 'set -eu; echo $$ >"$1"; shift; exec "$@"' sh "$HOME_DIR/mock.pid" \
       node dev/mock-llm.mjs "$HOME_DIR") </dev/null >"$HOME_DIR/mock.out" 2>&1 &
-    # The mock writes its own pid just before it starts; wait for the file so a
-    # status or stop right after start does not miss a mock still coming up.
     i=0
     while [ ! -f "$HOME_DIR/mock.pid" ] && [ $i -lt 50 ]; do i=$((i + 1)); sleep 0.1; done
   fi
@@ -118,8 +102,6 @@ start() {
       exec "$SETSID" sh -c 'set -eu; echo $$ >"$1"; shift; exec "$@"' sh "$HOME_DIR/web.pid" \
       pnpm -s dsh --profile web --patch apps/web/tests/pin-browse-picker.overlay.yml --patch "$HOME_DIR/bench.patch.yml" \
       --no-open --port "$WEB_PORT") </dev/null >"$log" 2>&1 &
-    # The process writes its own pid just before dsh starts; wait for that file so a
-    # start still in progress is not read as an exit.
     i=0
     while [ ! -f "$HOME_DIR/web.pid" ] && [ $i -lt 50 ]; do i=$((i + 1)); sleep 0.1; done
     i=0

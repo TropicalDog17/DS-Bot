@@ -54,7 +54,6 @@ async function start() {
     return register(options)
   }
   rt = createRuntime(ctx, { home })
-  // show_view lives in the agent scope; a Bot agent appearing registers it.
   await ctx.emitAsync('agent/created', { agent: ctx.scopeAgent('writer-now') })
   let seq = 0
   const emit = (id, type, data) => {
@@ -99,13 +98,11 @@ test('show_view registers an interactive card, refuses a group and a display-onl
   assert.equal(waiting.concluded, false)
   assert.equal((await team()).views['writer-now'], undefined)
 
-  // An interactive card cannot be told not to wait: refused, nothing stored.
   const skipped = await show('writer-now', { title: 'Pick', view: CHOICES, await_reply: false })
   assert.equal(skipped.text, 'This view has controls to submit, so it waits for the user\'s answer; call show_view without await_reply: false.')
   assert.equal(skipped.concluded, false)
   assert.equal((await team()).views['writer-now'], undefined)
 
-  // `__proto__` is no id: the answer object would lose the value to its prototype.
   const protoCall = await show('writer-now', { title: 'Pick', view: { ...CHOICES, id: '__proto__' } })
   assert.equal(protoCall.text, 'view.id: "__proto__" cannot be an id')
   const protoField = await show('writer-now', { title: 'Ask', view: { type: 'form', id: 'ask', fields: [{ id: '__proto__', label: 'Name' }] } })
@@ -117,7 +114,6 @@ test('show_view registers an interactive card, refuses a group and a display-onl
   assert.equal(shown.concluded, false)
   assert.equal((await team()).views['writer-now'], undefined)
 
-  // A question card and a view card in the same chat do not replace each other.
   await rt.teamTools.find(d => d.name === 'ask_user').execute(
     { question: 'Which name?', options: [{ label: 'Lookout' }] },
     { agent: { id: 'writer-now' }, callId: 'q-call', concludeTurn() {} },
@@ -133,7 +129,6 @@ test('show_view registers an interactive card, refuses a group and a display-onl
   assert.equal(typeof open.views['writer-now'].askedAt, 'number')
   assert.deepEqual(open.views['writer-now'].view, CHOICES)
 
-  // A hidden Bot-to-Bot turn keeps both the card and its call id.
   emit('writer-now', 'turn/end', { turn: 1, reason: { kind: 'completed' } })
   emit('writer-now', 'turn/start', { turn: 2 })
   emit('writer-now', 'user/message', { content: text('[Message from Chief]\nAsk them'), source: { kind: 'bot', role: 'request', senderSessionId: 'chief', senderName: 'Chief', exchangeId: 'x1', hop: 0 } })
@@ -186,11 +181,9 @@ test('view-reply claims the card, refuses a stale or invalid answer, and restore
   sent.length = 0
 
   failFlush(undefined)
-  // A Bot id, and an earlier part, both mean the current part.
   const answered = await call('view-reply', { sessionId: 'writer-old', viewId: pending.id, action: 'pick', values: { selected: ['B', 'nope'] } })
   assert.equal(answered.ok, true)
   assert.equal((await team()).views['writer-now'], undefined)
-  // The question card is a different store; answering the view does not claim it.
   assert.equal((await team()).questions['writer-now'].question, 'Keep me')
   assert.equal(sent.length, 1)
   assert.equal(sent[0].sessionId, 'writer-now')
@@ -253,7 +246,6 @@ test('a user message drops the open question and the open view together', async 
   const open = await team()
   assert.equal(open.questions['writer-now'], undefined)
   assert.equal(open.views['writer-now'], undefined)
-  // Both cards stay in the chat as answered by that message; nothing stays in a dock store.
   assert.deepEqual(open.closedCards, { 'writer-now': { 'q-call': 'replied', 'call-1': 'replied' } })
   assert.equal(open.closedViews, undefined)
 })
@@ -287,8 +279,6 @@ test('show_view measures the bytes the model sent, before unwrapping the provide
   const { show, stop } = await start()
   t.after(stop)
   await rt.teamTools.find(d => d.name === 'list_bots').execute({}, { agent: { id: 'chief' } })
-  // Nested { item: ... } wrappers all disappear in normalization: measured after
-  // unwrapping this card would pass with a fraction of the bytes it was sent with.
   let children = [{ type: 'text', text: 'x' }]
   while (viewBytes('', { type: 'stack', children }) <= VIEW_BYTE_LIMIT) children = { item: children }
   const wrapped = { type: 'stack', children }
@@ -353,7 +343,6 @@ test('ask_user puts several questions on one card, and one answer settles them a
   const card = (await team()).questions['writer-now']
   assert.equal(card.callId, 'many-call')
   assert.equal(card.allowCustom, true)
-  // The first question is also the card's own, for a reader that knows one question.
   assert.equal(card.question, 'Merge?')
   assert.equal(card.header, 'PR #1207')
   assert.deepEqual(card.questions.map(question => [question.header, question.question, question.multiSelect]), [['PR #1207', 'Merge?', false], ['PR #1208', 'Merge?', false], ['Notes', 'Which notes?', true]])
@@ -392,7 +381,6 @@ test('ask_user still takes one question in its first form', async (t) => {
   assert.equal(card.questions, undefined)
   assert.deepEqual([card.question, card.detail, card.multiSelect, card.callId], ['Ready?', 'Last call', true, 'one-call'])
   assert.deepEqual(card.options, [{ label: 'Yes' }, { label: 'No', description: 'Wait' }])
-  // One entry in `questions` is the same card.
   await tool.execute({ questions: [{ header: 'Go', question: 'Ready?', options: [{ label: 'Yes' }] }] }, exec)
   const single = (await team()).questions['writer-now']
   assert.equal(single.questions, undefined)

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { rectsOverlap } from '../src/client/browser-overlap.js'
+import { rectsOverlap } from '../src/client/browser-overlap.ts'
 
 test('overlay coverage requires positive rectangle intersection', () => {
   const panel = { left: 10, top: 20, right: 110, bottom: 120, width: 100, height: 100 }

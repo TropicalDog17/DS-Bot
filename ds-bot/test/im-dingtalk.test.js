@@ -1,11 +1,9 @@
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import { test } from 'node:test'
-import dingtalk from '../src/host/im/platforms/dingtalk.js'
+import dingtalk from '../src/host/im/platforms/dingtalk.ts'
 import { fakeWsServer } from './fake-ws.js'
 
-// A fake DingTalk: gettoken and the gateway REST on HTTP, the stream socket
-// carries SYSTEM pings and CALLBACK frames which must be ACKed.
 async function fakeDingtalk() {
   const calls = []
   const packets = []
@@ -93,7 +91,6 @@ test('system pings get a pong, a single chat and an @ group message land, every 
   t.after(() => { handle.stop(); fake.close() })
   const ws = await until(() => fake.sockets[0])
   await until(() => fake.calls.some(call => call.path === '/v1.0/gateway/connections/open'))
-  // The ping sent on connect gets a pong ACK.
   await until(() => fake.acks.includes('sys1'))
   fake.push(ws, callback({ conversationType: '1', senderStaffId: 'u1', senderNick: 'Fei', text: { content: 'hello' }, msgtype: 'text', msgId: 'm1', sessionWebhook: fake.webhook }, 'cb1'))
   fake.push(ws, callback({ conversationType: '2', conversationId: 'g1', senderStaffId: 'u2', text: { content: 'ping' }, msgtype: 'text', msgId: 'm2', isInAtList: true }, 'cb2'))
@@ -115,7 +112,6 @@ test('send replies through the sessionWebhook when live, else the robot API with
   await until(() => messages.length === 1)
   await handle.send({ key: 'u1', kind: 'direct' }, { text: 'answer' })
   assert.ok(fake.calls.some(call => call.path.startsWith('/webhook/')), 'replied through the sessionWebhook')
-  // A chat without a webhook goes through batchSend.
   await handle.send({ key: 'u9', kind: 'direct' }, { text: 'push' })
   assert.ok(fake.calls.some(call => call.path === '/v1.0/robot/oToMessages/batchSend'), 'robot batchSend used')
   const post = fake.calls.find(call => call.path === '/v1.0/robot/oToMessages/batchSend')
@@ -123,7 +119,6 @@ test('send replies through the sessionWebhook when live, else the robot API with
   assert.deepEqual(post.params.userIds, ['u9'])
   assert.equal(typeof post.params.msgParam, 'string')
   assert.deepEqual(JSON.parse(post.params.msgParam), { title: 'push', text: 'push' })
-  // A group without a sessionWebhook goes through groupMessages/send.
   await handle.send({ key: 'g1', kind: 'group' }, { text: 'group push' })
   const group = fake.calls.find(call => call.path === '/v1.0/robot/groupMessages/send')
   assert.equal(group.params.openConversationId, 'g1')
@@ -179,8 +174,6 @@ test('a connections/open failure after the token is accepted is retried (#1119)'
   t.after(() => { handle.stop(); fake.close() })
   const failed = await until(() => statuses.find(status => status.state === 'retrying'))
   assert.match(failed.error, /fetch failed/)
-  // The token was accepted first, so this covers the handshake and not a second
-  // token failure.
   assert.equal(fake.calls.filter(call => call.path.startsWith('/gettoken')).length, 1)
   assert.equal(fake.sockets.length, 0)
   down = false

@@ -5,23 +5,18 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
-import { columnOpened, createSwitchWindow, drawerOpened, rightColumnOpen } from '../src/client/right-panel.js'
+import { columnOpened, createSwitchWindow, drawerOpened, rightColumnOpen } from '../src/client/right-panel.ts'
 
-// jsdom comes from the harness that test/harness-resolve.mjs found, like the dsh packages.
 const PLUGIN = dirname(dirname(fileURLToPath(import.meta.url)))
 const { JSDOM } = createRequire(join(process.env.DSH_HARNESS ?? join(PLUGIN, '..', 'deepseek-harness'), 'package.json'))('jsdom')
 
 const document = attrs => new JSDOM(`<!doctype html><body><div ${attrs}><div data-rightbar-col></div></div></body>`).window.document
 
-// 公开#456: the Bot drawer and DSH's right column never share the window; whichever
-// the user asked for last wins. The column's state lives on the frame's attributes.
 test('the frame attributes read as the column state', () => {
   assert.equal(rightColumnOpen(document('')), true)
   assert.equal(rightColumnOpen(document('data-rightbar-collapsed')), false)
   assert.equal(rightColumnOpen(document('data-rightbar-fullscreen')), true)
-  // A narrow window presents the panel fullscreen with no track: both marks.
   assert.equal(rightColumnOpen(document('data-rightbar-collapsed data-rightbar-fullscreen')), true)
-  // No frame at all reads as closed.
   assert.equal(rightColumnOpen(new JSDOM('<!doctype html><body></body>').window.document), false)
 })
 
@@ -43,9 +38,6 @@ test('with no drawer open the column opens on its own', () => {
   assert.equal(columnOpened(false, true), null)
 })
 
-// The switch window holds "the Session moved" until `settle` calls back: inside
-// it a column opening is the switch revealing that Session's own column, past
-// it the user's own. A newer move restarts it and a stale settle is ignored.
 test('the switch window steers the verdict while it is open', () => {
   const ends = []
   const window = createSwitchWindow(done => ends.push(done))
@@ -70,10 +62,8 @@ test('a newer Session switch restarts the window and the old settle is stale', (
   assert.equal(window.pending, false)
 })
 
-// The drawer's top row, bundled once and run with a minimal React stand-in; the
-// row's components are vnodes, so only the drawer's own body runs.
 const bundle = await build({
-  entryPoints: [fileURLToPath(new URL('../src/client/details-drawer.js', import.meta.url))],
+  entryPoints: [fileURLToPath(new URL('../src/client/details-drawer.ts', import.meta.url))],
   bundle: true, format: 'cjs', platform: 'node', write: false,
   external: ['react', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives'],
 })
@@ -178,8 +168,6 @@ const textOf = (node) => {
   if (typeof node.type === 'function') return textOf(node.type(node.props))
   return (node.children ?? []).map(textOf).join('')
 }
-// A Bot's label and instructions are edited in the drawer through the Settings page's own
-// field. Finds the components the drawer returns by name, without running the others.
 const named = (node, name, expand = false, out = []) => {
   if (Array.isArray(node)) { for (const child of node) named(child, name, expand, out); return out }
   if (node === null || typeof node !== 'object') return out
@@ -272,22 +260,18 @@ test('the Bot label and instructions are keyed by Bot id and stay read-only when
 })
 
 test('every Bot gets the Sessions section and New session, not only local-agent Bots', () => {
-  // A plain cloud-model Bot (no engine badge) has chat parts too.
   const plain = drawer('a', {}, { ...roster, byId: { a: { id: 'a', name: 'Chief', sessionId: 'a' } } })
   assert.match(textOf(plain), /Sessions/)
   const entry = buttonsOf(plain).find(button => textOf(button).includes('New session'))
   assert.ok(entry, 'the New session button is there')
   assert.equal(entry.props.disabled, undefined)
-  // A local-agent Bot keeps the same section.
   const engine = drawer('a', {}, { ...roster, byId: { a: { id: 'a', name: 'Writer', sessionId: 'a', engine: 'claude-code', parts: ['a', 'a-old'] } } })
   const engineEntry = buttonsOf(engine).find(button => textOf(button).includes('New session'))
   assert.ok(engineEntry, 'the local-agent Bot still has it')
 })
 
-// A second instance of the drawer bundle whose React runs effects at once and keeps
-// one state slot, so the status line can resolve its host read and render.
 const runStatsBundle = await build({
-  entryPoints: [fileURLToPath(new URL('../src/client/details-drawer.js', import.meta.url))],
+  entryPoints: [fileURLToPath(new URL('../src/client/details-drawer.ts', import.meta.url))],
   bundle: true, format: 'cjs', platform: 'node', write: false,
   external: ['react', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives'],
 })
@@ -319,9 +303,7 @@ const { RunStats } = runStatsModule.exports
 test('the Bot status line needs the runStats action and then draws turns, speed, cache and context', () => {
   runStatsState = undefined
   const bot = { id: 'a', name: 'Chief', sessionId: 'a' }
-  // Without the action the line stays away instead of drawing itself empty.
   assert.equal(RunStats({ bot, part: 'a', running: false, actions: {} }), null)
-  // The host's figures, as the run-stats endpoint returns them.
   const values = {
     sessionStats: { turns: 12, decodeMs: 4000, decodeTokens: 150 },
     tokenUsage: { uncachedInputTokens: 50, cacheReadTokens: 900, cacheWriteTokens: 50, outputTokens: 400 },
@@ -329,7 +311,6 @@ test('the Bot status line needs the runStats action and then draws turns, speed,
   }
   let asked
   const actions = { runStats: (id) => { asked = id; return { then: ok => { ok(values) } } } }
-  // The first render starts the read; it has nothing to draw until the read lands.
   assert.equal(RunStats({ bot, part: 'a', running: false, actions }), null)
   const node = RunStats({ bot, part: 'a', running: false, actions })
   assert.equal(asked, 'a')
@@ -338,6 +319,5 @@ test('the Bot status line needs the runStats action and then draws turns, speed,
   assert.match(line, /38 tok\/s/)
   assert.match(line, /Cache hit 90%/)
   assert.match(line, /Context 41%/)
-  // Moving to another part clears the previous part's figures until the new read finishes.
   assert.equal(RunStats({ bot, part: 'a-2', running: false, actions: { runStats: () => ({ then() {} }) } }), null)
 })

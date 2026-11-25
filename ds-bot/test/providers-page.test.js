@@ -4,10 +4,8 @@ import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
 
-// The Models page's provider row, with a stateful little React so the refresh draft,
-// its checkboxes and Save/Cancel run as they do on the page.
 const { outputFiles } = await build({
-  entryPoints: [fileURLToPath(new URL('../src/client/providers-page.js', import.meta.url))],
+  entryPoints: [fileURLToPath(new URL('../src/client/providers-page.ts', import.meta.url))],
   bundle: true, format: 'cjs', platform: 'browser', write: false, logLevel: 'silent',
   external: ['react', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives'],
 })
@@ -56,8 +54,6 @@ runInNewContext(outputFiles[0].text, {
 const { ProviderRow } = module.exports
 const settle = () => new Promise(resolve => setImmediate(resolve))
 
-// ModelDraft is a plain function without hooks; expand it so its buttons are visible
-// without running the whole React hook tree a second time.
 const expandDraft = (node) => {
   if (Array.isArray(node)) return node.flatMap(expandDraft)
   if (node === null || typeof node !== 'object') return node

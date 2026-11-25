@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { apply } from '../index.js'
-import { foldCalls } from '../src/host/usage.js'
+import { foldCalls } from '../src/host/usage.ts'
 import { fakeContext } from './fake-ctx.js'
 
 const header = (provider, model) => ({ type: 'request/header', data: { header: { config: { provider, model } }, reason: 'change' } })
@@ -16,16 +16,13 @@ const tokens = row => [row.model, row.input, row.cacheRead, row.output]
 test('each billed attempt is one row, on the model its request named', () => {
   const { rows, state } = foldCalls([
     header('deepseek', 'v4-flash'),
-    // A failed attempt, then its retry: two billed attempts in one step.
     streamed('assistant/attempt', 1, 0, usage(10, 0)),
     { type: 'llm/retry-started', data: { turn: 1, step: 0 } },
     message(1, 0, usage(20, 3, 5)),
-    // A later sample of the same attempt replaces the earlier one.
     streamed('assistant/message', 1, 1, usage(30, 1)),
     message(1, 1, usage(30, 4, 2)),
     header('deepseek', 'v4-pro'),
     streamed('assistant/message', 2, 0, usage(7, 7)),
-    // No usage reported: nothing billed to count.
     message(2, 1, undefined),
   ])
   assert.deepEqual(rows.map(tokens), [['v4-flash', 10, 0, 0], ['v4-flash', 20, 5, 3], ['v4-flash', 30, 2, 4], ['v4-pro', 7, 0, 7]])
@@ -75,7 +72,6 @@ function start(home, { listedExtra, logsExtra, subagentsExtra, background = fals
     ...logsExtra,
   }
   for (const log of Object.values(logs)) log.forEach((event, seq) => { event.seq = seq })
-  // Child Session → the parent its header names, as DSH checks a page address.
   const subagents = { 's-sub': 's-b1', ...subagentsExtra }
   const pages = []
   const warnings = []
@@ -114,7 +110,6 @@ function start(home, { listedExtra, logsExtra, subagentsExtra, background = fals
   return { call, ctx, home, meter, pages, stop, warnings }
 }
 
-// Total tokens per owner name and use.
 const totals = (view) => {
   const sums = {}
   for (const [, owner, , kind, input, cacheRead, cacheWrite, output] of view.rows) {
@@ -125,7 +120,6 @@ const totals = (view) => {
   return sums
 }
 
-// Sessions whose owner the ledger holds; none until the ledger has its table.
 async function journaledSessions(home) {
   const path = join(home, 'usage.sqlite')
   if (!existsSync(path)) return []
@@ -149,18 +143,14 @@ test('the usage view counts every Session under its owner, by hour in the asked 
   const { call, meter, pages, stop } = start()
   t.after(stop)
   const view = (await call('usage', { timeZone: 'Asia/Shanghai' })).value
-  // Chief: both parts of its own chat and its subagent; its group Session counts as group use.
-  // The DSH Agent's Sessions count beside the Bots, not with the other sessions.
   assert.deepEqual(totals(view), { 'Chief/chat': 160 + 220 + 10, 'Chief/group': 330, 'DSH Agent/chat': 77, 'other/chat': 44 })
   assert.deepEqual(view.rows.map(row => row[0]), ['1970-01-01 08', '1970-01-01 09', '1970-01-01 09', '1970-01-01 09', '1970-01-01 10'])
   assert.deepEqual(view.models.map(model => model.key).sort(), ['deepseek/v4-flash', 'deepseek/v4-pro', 'kimi/k3'])
   assert.equal(view.scanning, false)
   assert.ok(!pages.includes('s-empty'))
 
-  // A Session's own requests are in its log, so the meter lets them through untouched.
   const passed = (async function* () { yield { type: 'usage', usage: usage(1, 1) } })()
   assert.equal(meter({ sessionId: 's-b1', messages: [] }, () => passed), passed)
-  // A checkpoint is outside every log: the meter counts it, once.
   const chunk = { type: 'usage', usage: usage(1000, 100) }
   const chunks = await drain(meter({ sessionId: 's-b1', purpose: 'compaction', provider: 'deepseek', model: 'v4-flash', messages: [] }, async function* () { yield chunk }))
   assert.deepEqual(chunks, [chunk])
@@ -169,9 +159,6 @@ test('the usage view counts every Session under its owner, by hour in the asked 
   assert.equal(totals(again)['Chief/compaction'], 1100)
 })
 
-// #1501: a Bot's own chat may keep a background thread that moved on. Both that
-// thread's Sessions are the Bot's, so their calls count for it, not for "other": the
-// Usage page must not show a Bot having spent nothing while it worked there.
 test('calls in a background thread count for the Bot they were made for', async (t) => {
   const { call, stop } = start(undefined, {
     background: true,
@@ -182,8 +169,6 @@ test('calls in a background thread count for the Bot they were made for', async 
   })
   t.after(stop)
   const view = (await call('usage', { timeZone: 'Asia/Shanghai' })).value
-  // Chief keeps the calls of both parts of its background thread; the unowned bucket
-  // still holds only the Session no Bot owns.
   assert.deepEqual(totals(view), { 'Chief/chat': 160 + 220 + 10 + 12 + 24, 'Chief/group': 330, 'DSH Agent/chat': 77, 'other/chat': 44 })
 })
 
@@ -209,12 +194,8 @@ test('a plain chat journals its owner before the first scan, so a deleted Bot ke
   const first = start()
   const { home } = first
   t.after(() => rmSync(home, { recursive: true, force: true, maxRetries: 5 }))
-  // Writer talks once, Usage is never opened: the meter lets the request
-  // through, but the Session's owner lands in the ledger on its own.
   const passed = (async function* () { yield { type: 'text', text: 'hi' } })()
   assert.equal(first.meter({ sessionId: 'b2', messages: [] }, () => passed), passed)
-  // The owner is written once the team and the ledger have loaded behind the meter:
-  // wait for its row, not for a fixed time, before the shutdown closes the ledger.
   for (let tries = 0; !(await journaledSessions(home)).includes('b2'); tries += 1) {
     assert.ok(tries < 200, 'the owner of b2 was never journaled')
     await new Promise(resolve => setTimeout(resolve, 20))
@@ -225,8 +206,6 @@ test('a plain chat journals its owner before the first scan, so a deleted Bot ke
   delete state.bots.b2
   writeFileSync(join(home, 'state.json'), JSON.stringify(state))
 
-  // Writer's old Session is still listed (archived, not deleted), so the scan
-  // reads its log and the journaled owner attributes it to the deleted Bot.
   const second = start(home, {
     listedExtra: [{ sessionId: 'b2', projections: { kind: 'cached', asOfSeq: 1, values: {} } }],
     logsExtra: { b2: [header('deepseek', 'v4-flash'), message(1, 0, usage(50, 5), HOUR)] },
@@ -255,9 +234,7 @@ test('a subagent Session is read through its parent, even a parent that is gone;
   const view = (await call('usage', { timeZone: 'Asia/Shanghai' })).value
   assert.equal(totals(view)['Chief/chat'], 160 + 220 + 10)
   assert.equal(totals(view)['other/chat'], 44 + 9)
-  // No parent on record: it cannot be addressed, so it is not asked for.
   assert.ok(!pages.includes('s-lost'))
-  // A scan reports one summarized line, not one per Session it could not read.
   const unread = () => warnings
     .map(([template, ...args]) => template === '%s' ? args[0] : template)
     .filter(line => line.includes('usage could not read'))
@@ -270,9 +247,6 @@ test('a subagent Session is read through its parent, even a parent that is gone;
   assert.equal(unread().length, 1)
 })
 
-// #654: a Session with no Agent attached seals once read to its tip, at the checkpoint
-// watermark its listing shows. Later scans skip it without a read while that watermark
-// stands; a warm scan clears the seal, and a moved watermark means the log grew.
 test('a cold Session seals at its checkpoint watermark and is read again once it warms or the watermark moves', async (t) => {
   t.mock.timers.enable({ apis: ['Date'], now: 10 * HOUR })
   const logX = [header('kimi', 'k3'), message(1, 0, usage(40, 4), 2 * HOUR)]
@@ -293,23 +267,18 @@ test('a cold Session seals at its checkpoint watermark and is read again once it
     t.mock.timers.tick(60_000)
     return (await call('usage', { timeZone: 'Asia/Shanghai' })).value
   }
-  // First scan: cold but never read, so read once and sealed.
   await call('usage', { timeZone: 'Asia/Shanghai' })
   assert.equal(reads, 1)
-  // Still cold at the same watermark: the seal skips it without any read.
   await scan()
   assert.equal(reads, 1)
-  // Listed warm, a scan reads it and clears the seal, since it may run.
   agentAvailable = true
   await scan()
   assert.equal(reads, 2)
-  // Cold again: read once more, then sealed at the watermark and skipped.
   agentAvailable = false
   await scan()
   assert.equal(reads, 3)
   await scan()
   assert.equal(reads, 3)
-  // The log grew and its checkpoint moved on: read again, and the new calls count.
   logX.push({ ...message(2, 0, usage(7, 7)), seq: 2 })
   watermark = 2
   const view = await scan()
@@ -319,7 +288,6 @@ test('a cold Session seals at its checkpoint watermark and is read again once it
   assert.equal(reads, 4)
 })
 
-// The ledger of the previous version has no seal watermark; it is kept, not rebuilt.
 test('a ledger from the previous version keeps its metered calls and gains the seal watermark', async (t) => {
   const first = start()
   const { home } = first

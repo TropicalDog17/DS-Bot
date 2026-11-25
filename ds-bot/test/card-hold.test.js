@@ -3,11 +3,9 @@ import assert from 'node:assert/strict'
 import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
-import { createSource, heldCardKey } from '../src/client/sources.js'
-import { teamActions } from '../src/client/team-actions.js'
+import { createSource, heldCardKey } from '../src/client/sources.ts'
+import { teamActions } from '../src/client/team-actions.ts'
 
-// Keep each component's hook state across renders. The tool-cell tests cover where
-// these components appear; this harness checks their edits and async lifetimes.
 const { outputFiles } = await build({
   stdin: {
     contents: [
@@ -122,8 +120,6 @@ const lease = () => {
 const Hold = props => useDockHold(props.sessionId, props.kind, props.id, props.actions, props.inline)
 const question = { id: 'question', question: 'Which draft?', options: ['Short', 'Detailed'], allowCustom: true, multiSelect: true }
 
-// Multiple slot instances may coexist briefly during a render. One cleanup must
-// not release another instance's ownership of that same request.
 test('dock ownership counts each instance once and releases only its own request', () => {
   const { actions, count, source } = lease()
   const props = { actions, sessionId: 'chief', kind: 'question', id: 'request' }
@@ -201,8 +197,6 @@ test('a question keeps its custom answer and selection while submitting, after f
   assert.equal(count('chief', 'question', question.id), 0)
 })
 
-// The Bot ask_user card shares the composer preference: while Enter sends, a plain
-// Enter answers; off, it is the field's own newline and the Submit button answers.
 test('the own-answer field honors the Enter preference', async () => {
   const enter = (extra = {}) => ({
     key: 'Enter', shiftKey: false, nativeEvent: { isComposing: false }, prevented: false,
@@ -243,7 +237,6 @@ test('the own-answer field honors the Enter preference', async () => {
   }
   await tick()
   assert.deepEqual(plain(shifted.sent), [])
-  // Mounted cards count as open for the letter keys; leave none behind.
   for (const instance of cards) instance.unmount()
 })
 
@@ -325,7 +318,6 @@ test('a pending view stays visible and busy while its request is in flight', asy
   const card = pending.render()
   assert.equal(card.props.style, undefined)
   assert.equal(childOf(card).props.busy, false)
-  // A second submit while the first is in flight is swallowed.
   childOf(card).props.onSubmit('pick', { selected: ['A'] })
   childOf(card).props.onSubmit('pick', { selected: ['B'] })
   const flying = pending.render()
@@ -336,11 +328,9 @@ test('a pending view stays visible and busy while its request is in flight', asy
   assert.deepEqual(sent, [['chief', 'view-1', 'pick', { selected: ['A'] }]])
   wait.reject(new Error('Temporary failure'))
   await tick()
-  // The rejection brings the card back to interactive, still holding what the user picked.
   const back = pending.render()
   assert.equal(back.props.style, undefined)
   assert.equal(childOf(back).props.busy, false)
-  // A failed dismiss recovers too, and a resolved dismiss stays mounted until roster swaps.
   const dismiss = deferred()
   result = dismiss.promise
   childOf(pending.render()).props.onDismiss()
@@ -361,7 +351,6 @@ test('a pending view stays visible and busy while its request is in flight', asy
   const settledDismiss = pending.render()
   assert.notEqual(settledDismiss.type, CellEmpty)
   assert.equal(childOf(settledDismiss).props.busy, false)
-  // Answering settles the view cleanly to CellEmpty.
   result = Promise.resolve()
   childOf(pending.render()).props.onSubmit('pick', { selected: ['B'] })
   await tick()
@@ -384,11 +373,9 @@ test('letter keys answer a card only while it is the sole open card with keys', 
   const firstView = mount(firstCard.type, firstCard.props)
   const secondView = mount(secondCard.type, secondCard.props)
   firstView.render()
-  // A lone card advertises its keys: both options and the own-answer row.
   assert.equal(all(firstView.render(), node => node.props.className === 'bt-key').length, 3)
   secondView.render()
   assert.equal(keys.size, 2)
-  // With two cards open neither shows letters for keys it will not answer.
   assert.equal(all(firstView.render(), node => node.props.className === 'bt-key').length, 0)
   const both = secondView.render()
   assert.equal(all(both, node => node.props.className === 'bt-key').length, 0)
@@ -397,12 +384,10 @@ test('letter keys answer a card only while it is the sole open card with keys', 
   const key = () => ({ key: 'a', target: null, preventDefault() { this.defaultPrevented = true } })
   const shared = key()
   for (const listener of [...keys]) listener(shared)
-  // Two open cards both stay silent rather than the first listener stealing the key.
   assert.equal(shared.defaultPrevented, undefined)
   assert.equal(answers.length, 0)
   firstView.unmount()
   assert.equal(keys.size, 1)
-  // Alone again, the surviving card brings its letters back.
   const alone = secondView.render()
   assert.equal(all(alone, node => node.props.className === 'bt-key').length, 3)
   assert.ok(options(alone).every(option => option.props['aria-keyshortcuts'] !== undefined))
@@ -434,7 +419,6 @@ test('a handoff card names the step and the site, with Skip, Take over and I\'m 
   assert.deepEqual(buttons(card).map(button => button.props.className), ['bt-q-btn', 'bt-q-btn', 'bt-q-submit'])
   assert.equal(byClass(card, 'bt-q-title').props.children[0], 'Sign-in needed')
   assert.equal(byClass(card, 'bt-q-detail').props.children[0], 'Sign in to the shop.')
-  // Only the host: the page's own title stays out of the card.
   assert.equal(byClass(card, 'bt-handoff-site').props.children[1].props.children[0], 'shop.example.com')
   assert.equal(byClass(card, 'bt-handoff-state'), undefined)
   const titles = reason => byClass(mount(PendingHandoff, { actions, sessionId: 'b2', bot: { id: 'b2' }, hold: handoff({ reason, note: '' }), hooks: {}, inline: true }).render(), 'bt-q-title').props.children[0]
@@ -454,7 +438,6 @@ test('a handoff card answers once, hides while its answer is on the way, and ret
   const pending = mount(PendingHandoff, { actions, sessionId: 'b2', bot: { id: 'b2' }, hold: handoff(), hooks: browser, inline: false })
   const card = pending.render()
   assert.equal(card.props.style, undefined)
-  // A second click while the first is in flight is swallowed.
   press(card, "I'm done")
   press(card, 'Skip')
   assert.deepEqual(plain(pending.render().props.style), { display: 'none' })
@@ -463,7 +446,6 @@ test('a handoff card answers once, hides while its answer is on the way, and ret
   assert.deepEqual(sent, [['b2', { callId: 'call-1', outcome: 'done' }]])
   wait.reject(new Error('Network down'))
   await tick()
-  // The rejection brings the card back, and says why.
   assert.equal(pending.render().props.style, undefined)
   assert.deepEqual(reported, [['Network down', 'handoff']])
   actions.browserGiveBack = (...args) => { sent.push(plain(args)); return Promise.resolve() }
@@ -486,14 +468,12 @@ test('Take over opens the browser and keeps the card, which then shows who has i
   press(pending.render(), 'Take over')
   await tick()
   assert.deepEqual(calls, [['takeover', 'b2'], ['open', 'b2']])
-  // The card stays up: only Skip and I'm done close it.
   assert.equal(pending.render().props.style, undefined)
   const taken = pending.render({ ...pending.props, hold: handoff({ by: 'user' }) })
   assert.deepEqual(buttons(taken).map(labelOf), ['Skip', "I'm done"])
   const state = byClass(taken, 'bt-handoff-state')
   assert.equal(state.props.role, 'status')
   assert.equal(state.props.children[1], 'You control this browser')
-  // A failed takeover frees the card for another try.
   actions.browserTakeover = async () => { throw new Error('Nope') }
   const reported = []
   actions.reportError = (error, where) => reported.push([error.message, where])
@@ -517,12 +497,10 @@ test('a handoff call draws its card only while the browser is held for that call
   }
   assert.equal(draw({ hold: handoff() }).type, PendingHandoff)
   assert.equal(draw({ hold: handoff() }).props.inline, true)
-  // Answered, another call's hold, no hold, a chat without the Bot, or no answer path: nothing, and no gap.
   for (const gone of [draw({ hold: undefined }), draw({ hold: handoff({ callId: 'call-2' }) }), draw({ hold: handoff(), roster: { byId: {} } }), draw({ hold: handoff(), actions: {} })]) {
     assert.equal(gone.type, CellEmpty)
     assert.equal(gone.props.className, 'bt-q-gone')
   }
-  // The dock draws it while the user is working in it.
   assert.equal(draw({ hold: handoff(), heldCards: { [JSON.stringify(['handoff', 'call-1'])]: 1 } }).type, CellEmpty)
 })
 
@@ -618,7 +596,6 @@ test('settled question and settled view cards expand and collapse cleanly with l
   let summary = find(tree, node => node.props?.className?.includes('bt-q-summary'))
   assert.deepEqual(all(summary, node => node.props?.className === 'bt-key').map(node => node.props.children.join('')), ['A', 'C'])
 
-  // Clicking the outer card expands it and locks out further outer card clicks while open.
   tree.props.onClick({ target: {} })
   tree = qInstance.render()
   assert.equal(tree.props['data-open'], '')
@@ -631,7 +608,6 @@ test('settled question and settled view cards expand and collapse cleanly with l
   assert.equal(rows.length, 3)
   assert.deepEqual(rows.map(row => row.props['data-chosen']), ['', undefined, ''])
 
-  // Toggling header button collapses: summary returns and expand lingers with data-leaving until timer fires.
   foldBtn.props.onClick()
   tree = qInstance.render()
   assert.equal(tree.props['data-open'], undefined)
@@ -643,7 +619,6 @@ test('settled question and settled view cards expand and collapse cleanly with l
   assert.equal(find(tree, node => node.props?.className?.includes('bt-q-expand')), undefined)
   qInstance.unmount()
 
-  // SettledView closed by message expands the full blueprint Card read-only.
   const viewBlueprint = {
     type: 'stack',
     children: [
@@ -693,7 +668,6 @@ test('a card with several questions keeps each pick and sends them all with one 
   const press = (at) => { options(form)[at].props.onClick(); form = view.render() }
   const pressed = () => options(form).map(option => option.props['aria-pressed'])
 
-  // Each question is a group of its own, with its tag, and nothing sends on a tap.
   assert.deepEqual(all(form, node => node.props.className === 'bt-q-part').map(part => words(find(part, node => node.props.className === 'bt-q-text'))), ['PR #1207Merge?', 'PR #1208Merge?CI is red', 'NotesWhich notes?Choose all that apply'])
   assert.equal(options(form).length, 6)
   assert.equal(all(form, node => node.type === 'textarea').length, 3)
@@ -704,11 +678,11 @@ test('a card with several questions keeps each pick and sends them all with one 
 
   press(0)
   assert.equal(submit().props.disabled, false)
-  press(1) // one choice: the second pick replaces the first
+  press(1)
   press(4)
-  press(5) // several choices: both stay
+  press(5)
   assert.deepEqual(pressed(), [false, true, false, false, true, true])
-  press(1) // a second tap takes the pick back
+  press(1)
   assert.deepEqual(pressed(), [false, false, false, false, true, true])
   all(form, node => node.type === 'textarea')[1].props.onChange({ target: { value: '  after the fix  ' } })
   form = view.render()

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { addCardThread, closeCardThread, reach, sessionsOf } from '../src/host/threads.js'
+import { addCardThread, closeCardThread, reach, sessionsOf } from '../src/host/threads.ts'
 
 test('reach prefers the card thread, then the group, then the Bot’s own chat', () => {
   const bot = { id: 'writer', sessionId: 'own' }

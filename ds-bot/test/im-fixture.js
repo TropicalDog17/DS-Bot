@@ -4,10 +4,8 @@ import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { createRuntime } from '../index.js'
 import { fakeContext } from './fake-ctx.js'
-import { adapters } from '../src/host/im/platforms/index.js'
+import { adapters } from '../src/host/im/platforms/index.ts'
 
-// A platform adapter that records sends/edits and lets the test feed inbound
-// messages, actions and statuses. `fail` makes send throw once per call queued.
 export const fakeAdapter = ({ buttons = true, fileLimit } = {}) => {
   const sent = []
   const files = []
@@ -37,7 +35,6 @@ export const fakeAdapter = ({ buttons = true, fileLimit } = {}) => {
           if (next !== undefined) throw next
           return { messageId: sent.length }
         },
-        // A file goes into `sent` too, so tests see it in order with the text around it.
         ...(fileLimit === undefined ? {} : {
           fileLimit,
           sendFile: async (chat, file) => {

@@ -1,9 +1,3 @@
-// Check the Bot browser reader in a running Desktop window (launch.mts): load the sample
-// pages (dev/read-pages.mjs) and real sites in one Bot's browser, run the reader in the
-// webview and time it, check what it reads, and ask the mock model "看网页结构" so the
-// chat shows what read_browser returned. Writes screenshots and each read (JSON and the
-// tool text) to <out-dir>.
-//   node read-check.mjs <dsh-repo> <out-dir> [cdp-port=9422] [pages-port=8833] [bot=Chief] [--offline]
 // Size the window first with window-size.mjs. Set SHOT_DISPLAY (the Xvfb display) and
 // XAUTHORITY to grab the screen: a CDP screenshot draws webview guests at a wrong offset.
 import { execFileSync } from 'node:child_process'
@@ -11,10 +5,9 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join, resolve } from 'node:path'
 import '../../test/harness-resolve.mjs'
-import { READ_PAGE_SCRIPT } from '../../src/client/read-page.js'
+import { READ_PAGE_SCRIPT } from '../../src/client/read-page.ts'
 
-// After the resolve hook above: browser.js imports @deepseek-ai/dsh-tools.
-const { pageText } = await import('../../src/host/browser.js')
+const { pageText } = await import('../../src/host/browser.ts')
 
 const offline = process.argv.includes('--offline')
 const [repo, outDir, port = '9422', pagesPort = '8833', botName = 'Chief'] = process.argv.slice(2).filter(arg => arg !== '--offline')
@@ -60,7 +53,6 @@ const go = async (text) => {
   await settled()
   await page.waitForTimeout(2000)
 }
-// The reader as the window runs it: executeJavaScript in the panel's visible webview.
 const readGuest = async (name) => {
   const started = Date.now()
   const read = await page.evaluate(code =>
@@ -71,7 +63,6 @@ const readGuest = async (name) => {
   console.log(`     ${name}: ${ms} ms (walk ${read.stats.ms} ms), ${read.text.length} characters, ${read.items.length} links and controls, ${read.stats.nodes} nodes${read.truncated ? `, cut: ${read.truncated}` : ''}`)
   return { ms, read }
 }
-// Resolves once one more reply carries the marker than before the question.
 const ask = async (text, marker) => {
   const replies = page.getByText(marker, { exact: false })
   const before = await replies.count()
@@ -81,16 +72,13 @@ const ask = async (text, marker) => {
   await page.keyboard.press('Enter')
   return replies.nth(before).waitFor({ timeout: 45_000 }).then(() => true, () => false)
 }
-// The newest reply, scrolled to its top so the shot shows the start of the result.
 const showReply = () => page.evaluate(() => {
   const fences = [...document.querySelectorAll('pre')]
   fences.at(-1)?.scrollIntoView({ block: 'start' })
 })
 
-// The sidebar shows rows or tiles; a label adds the role and status after commas.
 await page.locator([`.bt-row`, `.bt-tile`].flatMap(kind => [`${kind}[aria-label="${botName}"]`, `${kind}[aria-label^="${botName}, "]`]).join(', ')).first().click()
 await page.waitForTimeout(900)
-// The browser is a view of the Bot's panel now: details first, then the globe up top.
 if (await page.locator('.bt-panel').count() === 0) {
   await page.locator('.bt-pill').click()
   await page.waitForTimeout(700)

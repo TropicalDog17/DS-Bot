@@ -1,10 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { answerFailure, answerKeepsCard, proposalCards } from '../src/client/learning-card-model.js'
+import { answerFailure, answerKeepsCard, proposalCards } from '../src/client/learning-card-model.ts'
 
-// A skill proposal card that failed to answer once stays in the chat only while another
-// try could work. `bot/stale` says the host no longer holds the proposal, so the card has
-// to go instead of being pinned forever (#1339).
 const proposal = (id, at = 100) => ({ id, botId: 'bot-1', at, name: `skill-${id}`, kind: 'skill', action: 'create', content: 'Check the tests' })
 const stale = () => Object.assign(new Error('This proposal is no longer open'), { code: 'bot/stale' })
 const network = () => Object.assign(new Error('Could not reach DSH. Check that it is still running.'), { code: 'NETWORK' })
@@ -46,7 +43,6 @@ test('the host’s own proposals and its settled ones are drawn as before', () =
     proposals: [proposal('p6', 300)],
     settled: [{ ...proposal('p7', 100), outcome: 'approved' }, { ...proposal('p6', 300), outcome: 'declined' }],
   })
-  // A waiting copy of the same card wins over its settled row, and the order is by time.
   assert.deepEqual(cards.map(card => card.id), ['p7', 'p6'])
   assert.equal(cards[0].outcome, 'approved')
   assert.equal(cards[1].outcome, undefined)

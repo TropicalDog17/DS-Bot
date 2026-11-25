@@ -6,12 +6,9 @@ import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
 
-// jsdom comes from the harness that test/harness-resolve.mjs found, like the dsh packages.
 const PLUGIN = dirname(dirname(fileURLToPath(import.meta.url)))
 const { JSDOM } = createRequire(join(process.env.DSH_HARNESS ?? join(PLUGIN, '..', 'deepseek-harness'), 'package.json'))('jsdom')
 
-// The memory dialog's history page, bundled once and run with a minimal React
-// stand-in; state comes back from a seed list so each render is deterministic.
 const { outputFiles } = await build({
   stdin: {
     contents: "export { History, HistoryRow } from './src/client/memory-panel.js'",
@@ -51,8 +48,6 @@ runInNewContext(outputFiles[0].text, {
 })
 const { History, HistoryRow } = module.exports
 
-// A vnode tree's function components are run as they are found, so text and
-// handlers read as they would in the DOM.
 function* walk(node) {
   if (node === null || node === undefined || node === false) return
   if (Array.isArray(node)) { for (const item of node) yield* walk(item); return }
@@ -95,12 +90,10 @@ test('an undone row shows the muted label instead of the button', () => {
 
 test('undo asks for a second click before it calls memoryRestore', async () => {
   const calls = []
-  // confirming=false, busy=false: the first click only arms the confirm state.
   let tree = render(HistoryRow, { row: row(), undo: async r => calls.push(r) ?? true, now: NOW }, [false, false])
   await buttons(tree)[0].props.onClick()
   assert.deepEqual(calls, [])
   assert.deepEqual(setters[0], [true])
-  // confirming=true: the second click runs the undo.
   tree = render(HistoryRow, { row: row({ id: 'row-9' }), undo: async r => calls.push(r.id) ?? true, now: NOW }, [true, false])
   await buttons(tree)[0].props.onClick()
   assert.deepEqual(calls, ['row-9'])

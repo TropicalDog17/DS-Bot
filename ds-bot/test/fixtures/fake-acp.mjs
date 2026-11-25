@@ -1,26 +1,3 @@
-// A fake ACP agent for tests: newline JSON-RPC over stdio. The prompt text
-// picks its behavior so a test can drive each branch:
-//   contains "call-tool"    -> calls the dsbot MCP server's tools/call
-//   contains "two-calls"    -> two queued MCP calls
-//   contains "ask-permission" -> session/request_permission to the client
-//   contains "team-permission" / "other-permission" -> an MCP call to the dsbot / another
-//                              server that asks first, in the shape cursor-agent 2026.11.05 sends
-//   contains "hang"         -> never ends until session/cancel
-//   otherwise               -> a thought chunk, an activity line, "ok"
-// `--exit-after-turn` makes it exit once a prompt is answered, so a test can
-// watch the client reopen the agent.
-//   contains "devin-team" / "devin-other" -> the same, in the shape Devin CLI 3000.12.28 sends
-//   contains "show-mode"    -> answers with the mode the session is in
-//   contains "grow:<n>"     -> the context grows by <n> tokens with this prompt
-//   contains "count-sessions" -> answers with how many sessions are open
-//   "/compact"              -> condenses as Devin CLI 3000.12.43 does: the prompt ends
-//                              at once, then _cognition.ai/compaction started and
-//                              completed, then a "Context compacted" chunk
-// Every answered prompt reports usage_update and the prompt's usage the way Devin CLI
-// 3000.12.43 does (test/fixtures/recorded/devin-acp-3000.12.43.json); `--no-compact`
-// lists no compact command, `--no-usage` reports no usage.
-// `--cursor-modes` lists the modes cursor-agent 2026.11.05 does (agent, plan, ask)
-// and refuses any other, as it does.
 import { spawn } from 'node:child_process'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { createInterface } from 'node:readline'
@@ -162,7 +139,7 @@ async function runPrompt(session, prompt, requestId) {
     return
   }
   if (text.includes('count-sessions')) { finish(`sessions: ${sessions.size}`); return }
-  if (/\bhang\b/.test(text)) return // session/cancel releases it below
+  if (/\bhang\b/.test(text)) return
   if (text.includes('show-state')) { finish(`cwd: ${process.cwd()}; effort: ${session.thoughtLevel ?? 'default'}${legacyModels ? `; model: ${session.model ?? 'default'}` : ''}`); return }
   if (text.includes('show-mode')) { finish(`mode: ${session.mode}; refused: ${refusedModes}`); return }
   if (text.includes('late-permission')) {

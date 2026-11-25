@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { browserAddress, createBotBrowsers, PREVIEW_SCRIPT, READ_PAGE_SCRIPT, serveBrowserReads } from '../src/client/bot-browsers.js'
-import { migrateStorage, STORAGE } from '../src/client/storage.js'
+import { browserAddress, createBotBrowsers, PREVIEW_SCRIPT, READ_PAGE_SCRIPT, serveBrowserReads } from '../src/client/bot-browsers.ts'
+import { migrateStorage, STORAGE } from '../src/client/storage.ts'
 
 function createSource(initial) {
   let value = initial
@@ -78,11 +78,9 @@ test('each Bot gets its own partition, and only the shown tab is visible', async
   const [va, vb] = desktop.created
   assert.equal(va.attributes.partition, 'persist:bot:a')
   assert.equal(vb.attributes.partition, 'persist:bot:b')
-  // Agent mode withdraws the Bot styles; a guest must still stay out of the page flow.
   assert.equal(va.style.position, 'fixed')
   assert.equal(va.style.visibility, 'hidden')
   assert.equal(vb.style.visibility, 'visible')
-  // Hidden while the panel shows its own state, but kept at the panel's size.
   await browsers.show(b)
   assert.equal(vb.style.visibility, 'hidden')
   assert.equal(vb.style.width, '500px')
@@ -123,7 +121,6 @@ test('openTab activates the new tab; closing the active one activates a neighbor
   assert.equal(browsers.tabs.getSnapshot().a.active, t2)
   await browsers.closeTab('a', t2)
   assert.equal(browsers.tabs.getSnapshot().a, undefined)
-  // Another Bot's strip is untouched.
   const other = browsers.openTab('b')
   await browsers.closeTab('b', 'not-a-tab')
   assert.deepEqual(browsers.tabs.getSnapshot().b.ids, [other])
@@ -140,7 +137,6 @@ test('a navigation before the guest is ready waits for dom-ready, and the addres
   assert.deepEqual(view.loads, ['https://example.com/'])
   assert.equal(browsers.pages.getSnapshot()[tab].url, 'https://example.com/')
   assert.deepEqual(browsers.openPages(), { a: { url: 'https://example.com/', title: 'Title of https://example.com/' } })
-  // A new manager (a reload of the app) restores the saved strip.
   const again = createBotBrowsers({ bridge: desktop.bridge, createSource, storage: desktop.storage, document: desktop.doc })
   again.ensureTabs('a')
   const restored = again.tabs.getSnapshot().a
@@ -151,7 +147,6 @@ test('a navigation before the guest is ready waits for dom-ready, and the addres
   assert.deepEqual(desktop.created.at(-1).loads, ['https://example.com/'])
   assert.equal(await browsers.navigate(tab, 'file:///etc/passwd'), false)
   assert.match(browsers.pages.getSnapshot()[tab].error, /http/)
-  // Cloud metadata stays shut, typed or reached by a link; LAN pages open.
   assert.equal(await browsers.navigate(tab, '169.254.169.254/latest/meta-data'), false)
   assert.match(browsers.pages.getSnapshot()[tab].error, /metadata/)
   view.emit('did-start-navigation', { isMainFrame: true, url: 'http://169.254.169.254/' })
@@ -202,7 +197,6 @@ test('a page that asks for a new window opens a new tab in the same Bot', async 
   const popped = state.ids[1]
   assert.equal(state.active, popped)
   await tick()
-  // The popup tab loads its address in the same Bot partition.
   const guest = desktop.created.at(-1)
   assert.equal(guest.attributes.partition, 'persist:bot:a')
   guest.emit('dom-ready')
@@ -240,7 +234,6 @@ test('past six live guests the least recently shown one is released; forget drop
   const desktop = fakeDesktop()
   const browsers = createBotBrowsers({ bridge: desktop.bridge, createSource, storage: desktop.storage, document: desktop.doc })
   const ids = []
-  // Six tabs across three Bots, then a seventh pushes the oldest out.
   for (const botId of ['a', 'b']) for (let at = 0; at < 3; at += 1) ids.push(browsers.openTab(botId))
   const extra = browsers.openTab('c')
   for (const tabId of ids) await browsers.show(tabId, BOX)
@@ -252,7 +245,7 @@ test('past six live guests the least recently shown one is released; forget drop
   await browsers.forget('a')
   assert.equal(browsers.tabs.getSnapshot().a, undefined)
   for (const tabId of ids.slice(0, 3)) assert.equal(browsers.pages.getSnapshot()[tabId], undefined)
-  assert.deepEqual(desktop.released.length, 1 + 2) // tab a-1 was already released, a-2 and a-3 now
+  assert.deepEqual(desktop.released.length, 1 + 2)
 })
 
 test('retain forgets Bots that are gone, saved tabs included', async () => {
@@ -278,7 +271,6 @@ test('a bridge that keeps logins on disk forgets a deleted Bot’s storage, tabs
   await browsers.navigate(browsers.openTab('a'), 'example.com')
   await browsers.retain(['a', 'b', 'c'])
   assert.deepEqual(forgotten, [])
-  // a had a tab, b never had one; both go, c stays.
   await browsers.retain(['c'])
   assert.deepEqual(forgotten.sort(), ['bot:a', 'bot:b'])
   await browsers.retain(['c'])
@@ -294,18 +286,15 @@ test('a settled page leaves a text excerpt, shown or hidden, and no tab is ever 
   const view = desktop.created[0]
   view.executeJavaScript = async script => (script === PREVIEW_SCRIPT ? 'A page about examples.' : { url: view.url, title: view.getTitle(), text: 'hello', items: [] })
   view.emit('dom-ready')
-  // Hidden (t2 is on screen) and settled: the excerpt still arrives.
   await browsers.show(t2, BOX)
   view.emit('did-stop-loading')
   await tick()
   assert.equal(browsers.pages.getSnapshot()[t1].excerpt, 'A page about examples.')
-  // A failed or empty read keeps the excerpt the tab already has.
   view.executeJavaScript = async () => ''
   assert.equal(await browsers.preview(t1), false)
   view.executeJavaScript = async () => { throw new Error('gone') }
   assert.equal(await browsers.preview(t1), false)
   assert.equal(browsers.pages.getSnapshot()[t1].excerpt, 'A page about examples.')
-  // Switching tabs back and forth never asks a webview for a screenshot.
   await browsers.show(t1, BOX)
   await browsers.show(t2, BOX)
   await new Promise(resolve => setTimeout(resolve, 30))
@@ -331,7 +320,6 @@ test('serveBrowserReads answers each request once and re-polls when the open pag
   const stop = serveBrowserReads({ browsers, post, clientId: 'w1' })
   await tick()
   assert.deepEqual(calls[0], ['browser-wait', { clientId: 'w1', open: { a: { url: 'https://example.com/', title: 'Title of https://example.com/' } } }])
-  // The same request twice (a resend) is read once; the cached answer posts again.
   polls.at(-1)([{ id: 'read-1', botId: 'a' }, { id: 'read-1', botId: 'a' }])
   await tick(); await tick()
   const results = calls.filter(([endpoint]) => endpoint === 'browser-result')
@@ -340,7 +328,6 @@ test('serveBrowserReads answers each request once and re-polls when the open pag
   assert.equal(results[0][1].ok, true)
   assert.equal(results[0][1].page.text, 'hello')
   assert.ok(browsers.pages.getSnapshot()[tab].readAt > 0)
-  // A read for a Bot with no page reports the error.
   polls.at(-1)([{ id: 'read-2', botId: 'zzz' }])
   await tick(); await tick()
   assert.equal(calls.filter(([endpoint]) => endpoint === 'browser-result').at(-1)[1].ok, false)
@@ -378,7 +365,6 @@ test('serveBrowserReads answers a resend from the cache when the first submit fa
   }
   const stop = serveBrowserReads({ browsers, post, clientId: 'w1' })
   await tick()
-  // The first submit fails; the host's resend gets the cached answer, no re-read.
   polls.at(-1)([{ id: 'read-1', botId: 'a' }])
   await tick(); await tick()
   assert.equal(results.length, 1)

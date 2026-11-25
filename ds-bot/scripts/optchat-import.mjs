@@ -1,9 +1,7 @@
 #!/usr/bin/env node
-// Usage: node scripts/optchat-import.mjs <copy of old store> <namespace root> <botId>
-// Imports into <namespace root>/<botId>. Point it at a copy, never at a live store.
 import { join } from 'node:path'
-import { closeNamespace, openNamespace } from '../src/optchat/core.js'
-import { importStore } from '../src/optchat/import.js'
+import { closeNamespace, openNamespace } from '../src/optchat/core.ts'
+import { importStore } from '../src/optchat/import.ts'
 
 const [source, root, botId, label] = process.argv.slice(2)
 if (!source || !root || !botId) {

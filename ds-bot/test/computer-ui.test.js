@@ -82,7 +82,6 @@ test('the settings page draws the switch, the provider line and one level picker
     Section: ({ children }) => h2(children), Row: ({ children }) => h2(children), Switch,
   })
   function h2(children) { return { type: 'row', props: { children } } }
-  // The page title names the page; the first section carries no title of its own.
   assert.ok(texts(tree).some(text => text.includes('Let Bots use the computer')))
 })
 
@@ -145,8 +144,6 @@ test('the indicator lists entries with a localized Stop and Stop all', () => {
 })
 
 
-// A computer step row reads "app · action": the app from the step record or the
-// getApp selector, the action from the method; with no app just the action.
 test('a computer call row names the app and the action', () => {
   const live = { bots: { w1: { steps: [{ callId: 'c1', app: 'Notes' }] } } }
   const props = (call, botsLive = live) => ({
@@ -156,16 +153,12 @@ test('a computer call row names the app and the action', () => {
     actions: {},
     hooks: { useComputer: map => map(botsLive) },
   })
-  // arguments may arrive as a JSON string; the app comes from the step record
   const row = render('ComputerCallRow', props({ name: 'cua', callId: 'c1', argsRaw: '{"method":"click","params":{"appHandle":"h1"}}', content: [] }))
   assert.deepEqual(texts(row), ['Notes · Click'])
-  // getApp names its target by the selector, before any step record exists
   const getApp = render('ComputerCallRow', props({ name: 'cua', callId: 'c2', argsRaw: '{"method":"getApp","params":{"selector":"TextEdit"}}', content: [] }, { bots: {} }))
   assert.deepEqual(texts(getApp), ['TextEdit · Get App'])
-  // no app yet: just the action
   const caps = render('ComputerCallRow', props({ name: 'cua', callId: 'c3', argsRaw: '{"method":"getCapabilities","params":{}}', content: [] }, { bots: {} }))
   assert.deepEqual(texts(caps), ['Capabilities'])
-  // cua-driver: the tool suffix is the action
   const driver = render('ComputerCallRow', props({ name: 'cua_driver_native__screenshot', callId: 'c1', argsRaw: '{}', content: [] }))
   assert.deepEqual(texts(driver), ['Notes · Screenshot'])
 })

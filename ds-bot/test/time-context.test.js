@@ -3,8 +3,8 @@ import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { pathToFileURL } from 'node:url'
-import { install } from '../src/host/time-context.js'
-import { historyEntry } from '../src/host/parts.js'
+import { install } from '../src/host/time-context.ts'
+import { historyEntry } from '../src/host/parts.ts'
 import { fakeContext } from './fake-ctx.js'
 
 const NOW = Date.UTC(2026, 9, 12, 4, 30)
@@ -90,7 +90,6 @@ test('a loaded DSH clock gets no second clock in either listener order', async (
     ctx.sessionProjections = ctx.get('sessionProjections')
     // DSH 0.2.2's clock checks that its plugin is still loaded before each step.
     ctx.fiber = { assertActive() {} }
-    // Prepended listeners run last-registered first.
     ctx.on = (name, listener) => { ctx.listeners.set(name, [listener, ...(ctx.listeners.get(name) ?? [])]) }
     const rt = { ctx, config: { timeZone: 'UTC' }, load: async () => {}, isBotSession: () => true, async* eventsBackwards() {} }
     if (nativeFirst) { nativeClock(ctx, { timeZone: 'UTC' }); install(rt) } else { install(rt); nativeClock(ctx, { timeZone: 'UTC' }) }

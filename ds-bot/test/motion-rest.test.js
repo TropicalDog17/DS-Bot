@@ -1,9 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { REST_MS, installMotionRest } from '../src/client/motion-rest.js'
-
-// #1462: a working Bot's mark and its shimmering status loop forever, and each loop keeps
-// the window drawing every frame, so a window nobody looks at kept a core busy.
+import { REST_MS, installMotionRest } from '../src/client/motion-rest.ts'
 
 class FakeAnimation {
   constructor(target, iterations = Infinity) {
@@ -78,11 +75,9 @@ test('loops hold still once nobody has touched the window for a while and move o
   p.advance(REST_MS - 1)
   assert.deepEqual(states([body, shimmer, rise]), ['running', 'running', 'running'])
   p.advance(1)
-  // A finite animation plays out; only the loops wait.
   assert.deepEqual(states([body, shimmer, rise]), ['paused', 'paused', 'running'])
   p.touch()
   assert.deepEqual(states([body, shimmer]), ['running', 'running'])
-  // Each touch starts the wait again.
   p.advance(REST_MS / 2)
   p.touch('keydown')
   p.advance(REST_MS / 2)
@@ -107,7 +102,6 @@ test('a loop out of view holds still until it comes back into view', () => {
   assert.deepEqual(states([body, eyes, pill]), ['paused', 'paused', 'running'])
   p.see(row, true)
   assert.deepEqual(states([body, eyes, pill]), ['running', 'running', 'running'])
-  // Back in view while the window rests, it still waits for a touch.
   p.see(row, false)
   p.advance(REST_MS)
   p.see(row, true)
@@ -144,7 +138,6 @@ test('a loop that starts while the window rests holds still at once, and an ende
   assert.equal(p.observed(mark), true)
   p.touch()
   assert.equal(thinking.playState, 'running')
-  // The Bot stops working: its loop is gone, and so is the watch on its mark.
   p.animations.splice(0)
   p.changed('animationcancel')
   await settle()
@@ -170,7 +163,6 @@ test('a held loop that becomes finite plays out', async () => {
   const undo = installMotionRest({ doc: p.doc, win: p.win, now: p.now })
   p.advance(REST_MS)
   assert.equal(alert.playState, 'paused')
-  // Turning effects down makes the same animation run once instead of forever.
   alert.effect.getTiming = () => ({ iterations: 1 })
   p.changed('animationstart')
   await settle()
@@ -187,7 +179,6 @@ test('a hidden page rests at once and moves again when it shows', () => {
   p.doc.hidden = true
   p.changed('visibilitychange')
   assert.equal(loop.playState, 'paused')
-  // Input that arrives while hidden does not wake it.
   p.touch()
   assert.equal(loop.playState, 'paused')
   p.doc.hidden = false
@@ -212,7 +203,6 @@ test('a loop its own code paused stays paused, and undoing plays only what was h
   undo()
   assert.deepEqual(states([own, held]), ['paused', 'running'])
   assert.equal(p.count(), before)
-  // Nothing is left that could pause a loop later.
   p.advance(REST_MS * 2)
   assert.equal(held.playState, 'running')
 })

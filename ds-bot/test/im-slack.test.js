@@ -1,11 +1,9 @@
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import { test } from 'node:test'
-import slack from '../src/host/im/platforms/slack.js'
+import slack from '../src/host/im/platforms/slack.ts'
 import { fakeWsServer } from './fake-ws.js'
 
-// A fake Slack: the Web API answers from `replies`, apps.connections.open hands
-// back the fake Socket Mode URL; envelopes pushed by the test must be ACKed.
 async function fakeSlack() {
   const calls = []
   const replies = {}

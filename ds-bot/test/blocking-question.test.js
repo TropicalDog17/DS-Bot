@@ -26,10 +26,6 @@ const team = () => ({
   revision: 1,
 })
 
-// dsh keeps one Agent per Session and fires agent/created, waiting for its listeners,
-// the first time a Session resolves one. restrict() calls are recorded per Session and
-// throw when deny holds throwOn (a name in the Agent's own scope fails the whole list);
-// ctx.on() listeners are recorded per Session too, with their disposal.
 async function setup({ served = ['read', 'ask_user', QUESTION], goals, throwOn } = {}) {
   const home = mkdtempSync(join(tmpdir(), 'ds-bot-blocking-question-'))
   writeFileSync(join(home, 'state.json'), JSON.stringify(team()))
@@ -99,7 +95,6 @@ async function setup({ served = ['read', 'ask_user', QUESTION], goals, throwOn }
   return { ctx, rt, agentFor, hidden, hiddenIn, guard, sent, scopedListeners, stop }
 }
 
-// DSH's goal service, holding one goal per Session; block() records what was asked.
 function goalService() {
   const current = new Map()
   const blocked = []
@@ -116,7 +111,6 @@ function goalService() {
   }
 }
 
-// What DSH logs when /goal starts a goal: a snapshot change of the Session's goal log.
 const startGoal = (ctx, goals, sessionId) => {
   const goal = { id: `goal-${sessionId}`, revision: 1, objective: 'Ship it', phase: 'active', maxGoalRounds: 256 }
   goals?.current.set(sessionId, goal)
@@ -141,7 +135,6 @@ test('a Bot\'s own chat and its group Session lose dsh\'s blocking question tool
   assert.equal(hiddenIn('room-writer').length, 1)
   assert.deepEqual(hiddenIn('plain'), [])
   assert.deepEqual(hiddenIn('elsewhere'), [])
-  // The mask names only that tool, never ds-bot's own ask_user.
   for (const [sessionId, deny] of hidden.filter(([id]) => id !== 'plain')) assert.deepEqual([sessionId, deny], [sessionId, [QUESTION]])
 })
 
@@ -159,7 +152,6 @@ test('a profile without the tool gets no mask, which restrict() would refuse', a
   t.after(stop)
   await agentFor('writer')
   assert.deepEqual(hidden, [])
-  // The guard still holds should a later profile serve it.
   assert.match(guard(QUESTION, 'writer'), /Bots cannot use ask_user_question/)
 })
 
@@ -172,9 +164,6 @@ test('the guard refuses the blocking question tool in Bot Sessions only', async 
   assert.equal(guard('read', 'writer'), undefined)
 })
 
-// FeiZhuLulu/DS-Bot#77: a new Bot told never to use a question tool was opened
-// with "use ask_user", and a model that picked dsh's ask_user_question for it held the
-// Bot until the card was answered, with other Bots' messages queued behind it.
 test('a new Bot that rules out question tools opens without one and cannot block on dsh\'s', async (t) => {
   const { rt, hiddenIn, guard, sent, stop } = await setup()
   t.after(stop)
@@ -183,18 +172,14 @@ test('a new Bot that rules out question tools opens without one and cannot block
   const kickoff = sent.find(entry => entry.sessionId === receiver.id).message.content[0].text
   assert.doesNotMatch(kickoff, /ask_user|allowCustom/)
   assert.match(kickoff, /Where your instructions say otherwise, follow them\./)
-  // The Agent was made before Receiver was on the team; the kickoff trims its list.
   assert.equal(hiddenIn(receiver.id).length, 1)
   assert.match(guard(QUESTION, receiver.id), /Bots cannot use ask_user_question/)
 })
 
-// Fei2411/DS-Bot#133: /goal in a group chat started DSH's goal rounds, which the
-// group never answered, so round after round ran and showed the raw goal prompt.
 test('a Bot\'s chat and its group Sessions lose the goal tools; other Sessions keep them', async (t) => {
   const { agentFor, hidden, stop } = await setup({ served: ['read', 'ask_user', QUESTION, 'create_goal', 'update_goal', 'get_goal'] })
   t.after(stop)
   for (const id of ['chief', 'room-writer', 'plain']) await agentFor(id)
-  // A DSH Agent Session ('plain') has its own mask, which leaves the goal tools.
   assert.deepEqual(hidden.filter(([, deny]) => deny.includes('create_goal')), [
     ['chief', [QUESTION, 'create_goal', 'update_goal', 'get_goal']],
     ['room-writer', [QUESTION, 'create_goal', 'update_goal', 'get_goal']],
@@ -208,7 +193,6 @@ test('a goal started in a Bot chat or a group is blocked; one elsewhere runs', a
   const ids = ['writer', 'room', 'room-writer', 'plain']
   for (const id of ids) await agentFor(id)
   for (const id of ids) startGoal(ctx, goals, id)
-  // The block waits until DSH has handed the change to every listener.
   assert.deepEqual(goals.blocked, [])
   await until(() => goals.blocked.length === 3)
   await new Promise(resolve => setTimeout(resolve, 20))
@@ -228,8 +212,6 @@ test('without DSH\'s goal service a goal change is left alone', async (t) => {
   assert.deepEqual(warnings, [])
 })
 
-// Fei2411/DS-Bot#798: a Bot could call dsh's delegation tools; the child agents they
-// start run out of the user's sight and die with the part that started them.
 test('a Bot\'s chat and its group Sessions lose the delegation tools; other Sessions keep them', async (t) => {
   const servedDelegation = ['subagent', 'subagent_fork', 'list_subagent_models', 'send_message', 'interrupt_agent', 'list_agents', 'workflow']
   const { agentFor, hidden, stop } = await setup({ served: ['read', 'ask_user', QUESTION, ...servedDelegation] })
@@ -239,10 +221,6 @@ test('a Bot\'s chat and its group Sessions lose the delegation tools; other Sess
   assert.deepEqual(hidden.filter(([sessionId]) => sessionId === 'plain' || sessionId === 'elsewhere'), [])
 })
 
-// Fei2411/DS-Bot#973: an admin started an Agent Teams teammate it could not message,
-// list or stop; the teammate died and nobody heard of it. Agent Teams registers its
-// tools in each Agent's own scope, where restrict() cannot reach them; the guard test
-// below is what holds there.
 test('a Bot\'s chat and its group Sessions mask the Agent Teams tools; other Sessions keep them', async (t) => {
   const { agentFor, hidden, stop } = await setup({ served: ['read', 'ask_user', 'send_message', 'list_agents', ...AGENT_TEAMS] })
   t.after(stop)
@@ -262,9 +240,6 @@ test('the guard refuses the delegation tools in Bot Sessions only', async (t) =>
   assert.equal(guard('message_bot', 'writer'), undefined)
 })
 
-// restrict() throws away the whole list when one name sits in the Agent's own scope,
-// so each name is masked on its own after the group fails; what stays is covered by
-// the assembly filter and the guard.
 test('a delegation name restrict() cannot mask keeps the other masks and stays refused', async (t) => {
   const { rt, agentFor, hidden, guard, stop } = await setup({ served: ['read', 'ask_user', QUESTION, 'subagent', 'send_message'], throwOn: 'send_message' })
   t.after(stop)
@@ -273,24 +248,17 @@ test('a delegation name restrict() cannot mask keeps the other masks and stays r
   await agentFor('chief')
   assert.deepEqual(hidden, [['chief', [QUESTION]], ['chief', ['subagent']]])
   assert.deepEqual(warnings, [])
-  // The Session is marked anyway, so resolving it again adds no restrict entries.
   await rt.resolveAgent('chief')
   assert.deepEqual(hidden, [['chief', [QUESTION]], ['chief', ['subagent']]])
   assert.equal(guard('send_message', 'chief'), DELEGATION_REFUSAL)
 })
 
-// The standard preset registers subagent (model selection) in the Agent's own scope,
-// which restrict() and a same-name section cannot reach, so Bot Sessions filter the
-// hidden tools and their guidance sections out of the assembled prompt instead.
 test('Bot Sessions filter the hidden tools and their guidance out of the prompt assembly', async (t) => {
   const { rt, agentFor, scopedListeners, stop } = await setup({ served: ['read'] })
   t.after(stop)
   for (const id of ['chief', 'room-writer', 'plain']) await agentFor(id)
   const filters = scopedListeners.filter(record => record.event === 'system-prompt/assemble')
-  // Bot Sessions get the hidden-tools filter and the computer-use filter. The room's own
-  // Session and a plain Agent get neither while DS Bot has mounted no provider.
   assert.deepEqual(filters.map(record => record.sessionId), ['chief', 'chief', 'room-writer', 'room-writer'])
-  // Resolving the same Agent again adds no listener.
   await rt.resolveAgent('chief')
   assert.equal(scopedListeners.length, 4)
   const filtered = await filters[0].listener({}, {}, async () => ({
@@ -311,14 +279,12 @@ test('Bot Sessions filter the hidden tools and their guidance out of the prompt 
     variables: {},
   }))
   assert.deepEqual(current, { sections: [{ name: 'bot-identity' }], contexts: [], variables: {} })
-  // Fei2411/DS-Bot#973: Agent Teams' Team Lead guidance goes too.
   const team = await filters[0].listener({}, {}, async () => ({
     sections: [{ name: 'bot-identity' }, { name: 'team:policy' }, { name: 'tool:spawn_teammate' }],
     contexts: [],
     variables: {},
   }))
   assert.deepEqual(team.sections.map(section => section.name), ['bot-identity'])
-  // The computer-use filter keeps everything but the provider's own sections.
   const computer = await filters[1].listener({}, {}, async () => ({
     sections: [{ name: 'bot-identity' }, { name: 'computer-use:dsh-cua' }],
     contexts: [],
@@ -329,7 +295,6 @@ test('Bot Sessions filter the hidden tools and their guidance out of the prompt 
   for (const record of scopedListeners) assert.equal(record.disposed, true)
 })
 
-// DSH 0.2.2's schedule tools can deliver to a new Session, outside the team.
 test('a Bot schedules only into its own chat', async (t) => {
   const { ctx, stop } = await setup()
   t.after(stop)

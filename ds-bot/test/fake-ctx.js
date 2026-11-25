@@ -1,7 +1,3 @@
-// DSH's `attachments` service (dsh-attachment-local), in memory. A file ref has a
-// name and is read as a stream, in small chunks that split characters as a stream
-// may. An image ref, as a prompt's image block stores it, has no name: only
-// readImage reads it, and a file read refuses it as DSH does.
 export function fakeAttachments() {
   const files = new Map()
   let next = 0
@@ -43,14 +39,11 @@ export function fakeApproval(outcome = 'allowed-once') {
   }
 }
 
-// A stand-in for the plugin context that records what apply() registers, in order,
-// without starting any service.
 export function fakeContext({ services = {} } = {}) {
   const calls = []
   const disposers = []
   const registeredTools = new Map()
   const guards = []
-  // Listeners by event name, in registration order.
   const listeners = new Map()
   const sections = new Map()
   const contexts = new Map()
@@ -72,21 +65,16 @@ export function fakeContext({ services = {} } = {}) {
       listeners.set(name, [...(listeners.get(name) ?? []), listener])
       return () => {}
     },
-    // Calls the plain listeners of an event; middleware (with `next`) is not run.
     emit(name, payload) {
       for (const listener of listeners.get(name) ?? []) {
         if (listener.length < 2) listener(payload)
       }
     },
-    // emit, but waits for async listeners — for paths like agent/created whose
-    // work must finish before the test goes on.
     async emitAsync(name, payload) {
       for (const listener of listeners.get(name) ?? []) {
         if (listener.length < 2) await listener(payload)
       }
     },
-    // An Agent handle for sessionId whose own tool scope feeds the same map the
-    // global registrations use — how agent.ctx.tools.register looks to the host.
     scopeAgent(sessionId) {
       return {
         id: sessionId,
@@ -103,7 +91,6 @@ export function fakeContext({ services = {} } = {}) {
       const dispose = execute()
       if (typeof dispose === 'function') disposers.push(dispose)
     },
-    // Settles once every cleanup has, including the writes some of them wait for.
     dispose() {
       return Promise.allSettled(disposers.splice(0).reverse().map(dispose => dispose()))
     },

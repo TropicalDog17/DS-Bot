@@ -1,11 +1,9 @@
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import { test } from 'node:test'
-import discord from '../src/host/im/platforms/discord.js'
+import discord from '../src/host/im/platforms/discord.ts'
 import { fakeWsServer } from './fake-ws.js'
 
-// A fake Discord: REST answers from `replies`, the gateway sends an op-10 hello
-// and READY on identify, and lets the test push dispatch packets.
 async function fakeDiscord() {
   const calls = []
   const replies = {}

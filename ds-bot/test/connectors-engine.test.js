@@ -1,6 +1,3 @@
-// Engine-level connector tests: OAuth pieces on fake fetches, the gateway on a
-// real node:http upstream, and mail on fake transports. No network leaves the
-// test process (fakes listen on 127.0.0.1 or answer in memory).
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import { EventEmitter } from 'node:events'
@@ -13,11 +10,11 @@ process.env.DS_BOT_GITHUB_OAUTH_CLIENT_ID = 'test-gh-client'
 
 const { createRuntime } = await import('../index.js')
 const { fakeContext } = await import('./fake-ctx.js')
-const oauth = await import('../src/host/connectors/oauth.js')
-const { createGateway } = await import('../src/host/connectors/gateway.js')
-const { validateCapabilityName } = await import('../src/host/capabilities.js')
-const { mailSecretName } = await import('../src/host/connectors/mail/presets.js')
-const { connectImap } = await import('../src/host/connectors/mail/transport.js')
+const oauth = await import('../src/host/connectors/oauth.ts')
+const { createGateway } = await import('../src/host/connectors/gateway.ts')
+const { validateCapabilityName } = await import('../src/host/capabilities.ts')
+const { mailSecretName } = await import('../src/host/connectors/mail/presets.ts')
+const { connectImap } = await import('../src/host/connectors/mail/transport.ts')
 
 const addressAt = domain => `${'me'}@${domain}`
 
@@ -34,8 +31,6 @@ const teamHome = (extra = {}) => {
 const mounts = ctx => { const list = []; ctx.plugin = (given, config) => { const m = { config, disposed: false }; list.push(m); return { await: async () => {}, dispose: () => { m.disposed = true } } }; return list }
 const json = (body, status = 200, headers = {}) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...headers } })
 
-// --- oauth.js --------------------------------------------------------------
-
 const AS = {
   issuer: 'https://as.test',
   authorization_endpoint: 'https://as.test/auth',
@@ -48,7 +43,6 @@ const AS = {
 const notFound = () => new Response('not found', { status: 404 })
 
 test('discovery follows WWW-Authenticate, well-known, and the MCP origin fallback', async () => {
-  // WWW-Authenticate points at the PRM; the PRM names the AS.
   const calls = []
   const request = async (url, init = {}) => {
     url = String(url?.url ?? url)
@@ -68,7 +62,6 @@ test('discovery follows WWW-Authenticate, well-known, and the MCP origin fallbac
   assert.equal(found.scope, 'mcp:all')
   assert.equal(found.resource, 'https://mcp.test/mcp')
 
-  // No challenge: well-known PRM on the origin still works.
   const request2 = async (url) => {
     url = String(url?.url ?? url)
     if (url === 'https://mcp.test/mcp') return new Response('', { status: 401 })
@@ -79,7 +72,6 @@ test('discovery follows WWW-Authenticate, well-known, and the MCP origin fallbac
   const found2 = await oauth.discover('https://mcp.test/mcp', { fetch: request2 })
   assert.equal(found2.authorizationServerUrl, 'https://as2.test')
 
-  // Older servers: no PRM at all — AS metadata on the MCP origin.
   const request3 = async (url) => {
     url = String(url?.url ?? url)
     if (url === 'https://mcp.test/mcp') return new Response('', { status: 401 })
@@ -97,7 +89,6 @@ test('client resolution: CIMD only on the fixed port, DCR fallback, re-registrat
   const cimd = await oauth.resolveClient(entry, discovery, 'http://127.0.0.1:38517/callback', true)
   assert.equal(cimd.via, 'cimd')
   assert.equal(cimd.clientInformation.client_id, 'https://dsbot.app/oauth/client.json')
-  // A random port cannot use the metadata document: DCR.
   let persisted
   const request = async (url, init) => {
     url = String(url?.url ?? url)
@@ -109,17 +100,13 @@ test('client resolution: CIMD only on the fixed port, DCR fallback, re-registrat
   assert.equal(dcr.clientInformation.client_secret, 'sec')
   assert.equal(persisted.clientId, 'dcr-1')
   assert.deepEqual(persisted.redirectUris, ['http://127.0.0.1:9/callback'])
-  // Stored client is reused when the redirect URI matches…
   const stored = { via: 'dcr', clientId: 'dcr-1', redirectUris: ['http://127.0.0.1:9/callback'] }
   const reused = await oauth.resolveClient(entry, discovery, 'http://127.0.0.1:9/callback', false, stored, { fetch: request })
   assert.equal(reused.clientInformation.client_id, 'dcr-1')
-  // …and a new redirect URI re-registers.
   await oauth.resolveClient(entry, discovery, 'http://127.0.0.1:22/callback', false, stored, { fetch: request, persist: async info => { persisted = info } })
   assert.equal(persisted.redirectUris[0], 'http://127.0.0.1:22/callback')
-  // No CIMD and no DCR: needs-client.
   const none = await oauth.resolveClient(entry, { ...discovery, metadata: { authorization_endpoint: 'a', token_endpoint: 't' } }, 'http://127.0.0.1:9/callback', false)
   assert.equal(none, null)
-  // A catalog client always wins.
   const catalog = await oauth.resolveClient({ auth: { kind: 'oauth', client: { id: 'ghc' } } }, discovery, 'http://x', false)
   assert.equal(catalog.clientInformation.client_id, 'ghc')
 })
@@ -222,8 +209,6 @@ test('device flow: begin and poll honor authorization_pending and slow_down', as
   assert.equal(oauth.invalidGrant({ error: 'temporarily_unavailable' }), false)
 })
 
-// --- gateway.js ------------------------------------------------------------
-
 const listen = server => new Promise(resolve => server.listen(0, '127.0.0.1', () => resolve(server.address().port)))
 
 test('gateway guards the nonce, injects credentials, streams SSE and Mcp-Session-Id', async (t) => {
@@ -249,17 +234,14 @@ test('gateway guards the nonce, injects credentials, streams SSE and Mcp-Session
   await gw.listen()
   t.after(() => gw.close())
   const base = gw.urlFor('svc')
-  // Wrong or missing nonce: 404, upstream untouched.
   assert.equal((await fetch(base)).status, 404)
   assert.equal((await fetch(base, { headers: { Authorization: 'Bearer wrong' } })).status, 404)
   assert.equal(seen.length, 0)
-  // POST: credential swapped in, session id forwarded both ways.
   const post = await fetch(base, { method: 'POST', headers: { Authorization: `Bearer ${gw.nonce}`, 'content-type': 'application/json', 'mcp-session-id': 'sess-1' }, body: '{}' })
   assert.equal(post.status, 200)
   assert.equal(post.headers.get('mcp-session-id'), 'sess-1')
   assert.equal(seen[0].auth, 'Bearer REAL')
   assert.equal(seen[0].key, 'K')
-  // GET streams the SSE frames through unbuffered.
   const get = await fetch(base, { headers: { Authorization: `Bearer ${gw.nonce}`, 'mcp-session-id': 'sess-1' } })
   assert.equal(get.headers.get('mcp-session-id'), 'sess-1')
   const body = await get.text()
@@ -287,10 +269,8 @@ test('gateway read-only filters tools/list and refuses write tools/call', async 
   await gw.listen()
   t.after(() => gw.close())
   const head = { Authorization: `Bearer ${gw.nonce}`, 'content-type': 'application/json' }
-  // First tools/list learns the annotations and returns only read-only tools.
   const filtered = await (await fetch(gw.urlFor('svc'), { method: 'POST', headers: head, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }) })).json()
   assert.deepEqual(filtered.result.tools.map(tool => tool.name), ['read_thing'])
-  // A write call is refused locally; a read-only call goes through.
   const refused = await (await fetch(gw.urlFor('svc'), { method: 'POST', headers: head, body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'write_thing', arguments: {} } }) })).json()
   assert.match(refused.error.message, /read-only/)
   const allowed = await (await fetch(gw.urlFor('svc'), { method: 'POST', headers: head, body: JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'read_thing', arguments: {} } }) })).json()
@@ -317,8 +297,6 @@ test('gateway retries once on a 401 after the credential hook refreshes', async 
   assert.equal(refreshes, 1)
 })
 
-// --- engine -----------------------------------------------------------------
-
 test('refresh is single-flight, rotates the refresh token, and invalid_grant means sign-in again', async (t) => {
   const home = teamHome({ connectors: { notion: { oauth: { authorizationServerUrl: 'https://as.test', resource: 'https://mcp.test/mcp', scope: 's' }, client: { via: 'dcr', clientId: 'dcr-1' } } } })
   const ctx = fakeContext()
@@ -343,7 +321,6 @@ test('refresh is single-flight, rotates the refresh token, and invalid_grant mea
   assert.equal(rt.secretValue('CONNECTOR_NOTION_REFRESH'), 'RT-2')
   let logs = await rt.diagnostics.entries()
   assert.equal(logs.filter(row => /connector notion token refresh succeeded.*dcr/.test(row.text)).length, 1)
-  // invalid_grant on the next refresh: needs-sign-in, old secrets kept.
   globalThis.fetch = async (url, init) => String(url?.url ?? url) === 'https://as.test/token' ? json({ error: 'invalid_grant' }, 400) : request(url, init)
   assert.equal(await rt.connectorsInternals.refreshConnector('notion'), false)
   assert.equal(rt.connectorsInternals.statuses.get('notion').state, 'needs-sign-in', JSON.stringify(rt.connectorsInternals.statuses.get('notion')))
@@ -351,7 +328,6 @@ test('refresh is single-flight, rotates the refresh token, and invalid_grant mea
   logs = await rt.diagnostics.entries()
   assert.ok(logs.some(row => /connector notion token refresh failed.*dcr/.test(row.text)))
   assert.equal(JSON.stringify(logs).includes('RT-2'), false)
-  // A connector that needs sign-in again can still be asked for with a card.
   const ask = rt.teamTools.find(d => d.name === 'request_connector')
   const asked = String(await ask.execute({ id: 'notion', purpose: 'Search pages' }, { agent: { id: 'm1' }, concludeTurn: () => {} }))
   assert.doesNotMatch(asked, /already connected/)
@@ -381,7 +357,6 @@ test('refresh uses the client that signed in: cimd, catalog, and legacy inferenc
     await rt.secretEndpoint('secret-set', secret)
     return { rt, done: async () => { await ctx.dispose(); rmSync(home, { recursive: true, force: true }) } }
   }
-  // A CIMD sign-in refreshes with the published document id.
   {
     const { rt, done } = await make(
       { notion: { oauth: { authorizationServerUrl: 'https://as.test' }, client: { via: 'cimd', clientId: 'https://dsbot.app/oauth/client.json' } } },
@@ -391,7 +366,6 @@ test('refresh uses the client that signed in: cimd, catalog, and legacy inferenc
     assert.equal(seen.at(-1), 'https://dsbot.app/oauth/client.json')
     assert.equal(rt.state.connectors.notion.client.via, 'cimd')
   }
-  // A catalog sign-in refreshes with the current catalog client id.
   {
     const { rt, done } = await make(
       { github: { oauth: { authorizationServerUrl: 'https://as.test' }, client: { via: 'catalog' } } },
@@ -410,7 +384,6 @@ test('refresh uses the client that signed in: cimd, catalog, and legacy inferenc
     assert.equal(rt.state.connectors.notion.client.via, 'manual')
     assert.ok((await rt.diagnostics.entries()).some(row => /refresh succeeded.*manual/.test(row.text)))
   }
-  // Legacy rows have no `client`: CIMD when the AS supports it, else needs-sign-in.
   {
     asMeta = { ...AS, client_id_metadata_document_supported: true }
     const { rt, done } = await make(
@@ -458,8 +431,6 @@ test('connector-set offFor yields deny prefixes; empty client id keeps the token
   await rt.connectorEndpoint('connector-set', { id: 'notion', offFor: ['m1'] })
   assert.deepEqual(rt.connectorOffFor('m1'), ['mcp__notion__'])
   assert.deepEqual(rt.connectorOffFor('other'), [])
-  // No DS_BOT_GITHUB_OAUTH_CLIENT_ID at sign-in → token form only. (Set above,
-  // so here check the empty case through the row error path.)
   await assert.rejects(rt.connectorEndpoint('connector-connect', { id: 'nonexistent' }), /No such connector/)
 })
 
@@ -479,7 +450,6 @@ test('custom connectors get unique ids that never collide with the catalog', asy
   assert.ok(!ids.includes('github') && !ids.includes('notion'))
   assert.equal(new Set(ids).size, 2)
   assert.ok(ids.every(id => /^[a-z0-9-]{1,32}$/.test(id)))
-  // Both mounted through the gateway; no credential in their configs.
   assert.ok(ids.every(id => list.some(m => m.config.serverName === id)))
   assert.throws(() => validateCapabilityName('notion'), /reserved/)
   assert.equal(validateCapabilityName('my-tool'), 'my-tool')
@@ -488,7 +458,6 @@ test('custom connectors get unique ids that never collide with the catalog', asy
 test('import scan returns env names only and never writes the source files', async (t) => {
   const fakeHome = mkdtempSync(join(tmpdir(), 'dsb-fakehome-'))
   const appData = join(fakeHome, 'AppData', 'Roaming')
-  // Every supported platform location sees the same file.
   const dirs = [join(fakeHome, 'Library', 'Application Support', 'Claude'), join(fakeHome, '.config', 'Claude'), join(appData, 'Claude')]
   for (const dir of dirs) mkdirSync(dir, { recursive: true })
   const configPath = join(dirs[0], 'claude_desktop_config.json')
@@ -514,8 +483,6 @@ test('import scan returns env names only and never writes the source files', asy
   assert.equal(rt.secretValue(`CONNECTOR_${imported.created[0].toUpperCase()}_JIRA_TOKEN`), 'RAW-SECRET')
   assert.equal(readFileSync(configPath, 'utf8'), before)
 })
-
-// --- mail -------------------------------------------------------------------
 
 const fakeSession = () => {
   const calls = []
@@ -548,7 +515,7 @@ test('mail_search reconnects once after an idle drop or an unusable cached sessi
   made[0].gone()
   assert.equal(await search.execute({}, { agent: { id: 'm1' } }), 'No matching mail.')
   assert.equal(made.length, 2)
-  made[0].gone() // A late close from the old connection must not drop the new one.
+  made[0].gone()
   await search.execute({}, { agent: { id: 'm1' } })
   assert.equal(made.length, 2)
   made[1].usable = false
@@ -655,7 +622,6 @@ test('mail account add verifies before saving; a bad code fails cleanly; send ne
   const rt = createRuntime(ctx, { home, github: false, mail: { connect: factory } })
   t.after(async () => { await ctx.dispose(); rmSync(home, { recursive: true, force: true }) })
   await rt.load()
-  // 163 preset picked from the address; wrong code → clean error, nothing saved.
   await assert.rejects(rt.connectorEndpoint('mail-account-add', { address: addressAt('163.com'), password: 'WRONG' }), /app password|authorization code|refused/i)
   assert.equal(rt.mailView().accounts.length, 0)
   const view = await rt.connectorEndpoint('mail-account-add', { address: addressAt('163.com'), password: 'RIGHT' })
@@ -663,7 +629,6 @@ test('mail account add verifies before saving; a bad code fails cleanly; send ne
   assert.equal(view.accounts[0].address, addressAt('163.com'))
   await rt.loadSecrets()
   assert.equal(rt.secretValue(mailSecretName(addressAt('163.com'), 'PASSWORD')), 'RIGHT')
-  // The mail tools register once an account exists.
   const send = rt.teamTools.find(d => d.name === 'mail_send')
   const draft = rt.teamTools.find(d => d.name === 'mail_draft')
   assert.ok(send && draft)
@@ -675,7 +640,6 @@ test('mail account add verifies before saving; a bad code fails cleanly; send ne
   const request = rt.state.mailRequests.m1.at(-1)
   assert.equal(request.status, 'pending')
   assert.equal(sessions.get(addressAt('163.com')).calls.some(c => c[0] === 'send'), false)
-  // Cancel: nothing is sent; a new card, then Send, sends once.
   assert.equal(await rt.connectorEndpoint('mail-send-answer', { requestId: request.id, choice: 'cancel' }), true)
   assert.equal(sessions.get(addressAt('163.com')).calls.filter(c => c[0] === 'send').length, 0)
   await send.execute({ to: 'you@test.dev', subject: 'Hi2', body: 'B' }, { agent: { id: 'm1' }, callId: 'call-2', concludeTurn: () => {} })
@@ -692,7 +656,6 @@ test('mail account add verifies before saving; a bad code fails cleanly; send ne
   assert.equal(sent[0][1].subject, 'Hi2 edited')
   assert.equal(sent[0][1].text, 'Edited B')
   assert.deepEqual(rt.mailView().allowedRecipients, ['edited@test.dev', 'cc@test.dev'])
-  // Allowed recipients skip the draft card and send right away; an unknown recipient still requires confirmation.
   let concludedAllowed = false
   const autoReply = await send.execute({ to: 'edited@test.dev', subject: 'Auto', body: 'Quick' }, { agent: { id: 'm1' }, callId: 'call-3', concludeTurn: () => { concludedAllowed = true } })
   assert.match(String(autoReply), /Sent "Auto" to edited@test\.dev/)
@@ -701,7 +664,6 @@ test('mail account add verifies before saving; a bad code fails cleanly; send ne
   let concludedMixed = false
   await send.execute({ to: 'edited@test.dev', cc: 'stranger@test.dev', subject: 'Mixed', body: 'Hold' }, { agent: { id: 'm1' }, callId: 'call-4', concludeTurn: () => { concludedMixed = true } })
   assert.equal(concludedMixed, true, 'any unapproved recipient in cc still requires confirmation')
-  // Turning off drafts for a Bot sends without confirmation; restoring Needs approval brings the card back.
   await rt.connectorEndpoint('mail-rule-set', { mode: 'no-draft', botId: 'm1' })
   assert.deepEqual(rt.mailView().noDraftFor, ['m1'])
   let concludedNoDraft = false
@@ -710,7 +672,6 @@ test('mail account add verifies before saving; a bad code fails cleanly; send ne
   await rt.connectorEndpoint('mail-rule-set', { botId: 'm1', noDraft: false, removeRecipient: 'edited@test.dev, cc@test.dev' })
   assert.deepEqual(rt.mailView().noDraftFor, [])
   assert.deepEqual(rt.mailView().allowedRecipients, [])
-  // A draft never draws a card.
   const before = (rt.state.mailRequests.m1 ?? []).length
   assert.match(String(await draft.execute({ to: 'a@b.c', subject: 'D', body: 'x' }, exec)), /Draft saved/)
   assert.equal((rt.state.mailRequests.m1 ?? []).length, before)
@@ -774,8 +735,8 @@ test('removing one of two rows for the same address keeps the shared secret', as
   assert.equal(rt.secretValue(mailSecretName(address, 'PASSWORD')), undefined)
 })
 
-const { imapOptions } = await import('../src/host/connectors/mail/transport.js')
-const { IMAP_ID } = await import('../src/host/connectors/mail/presets.js')
+const { imapOptions } = await import('../src/host/connectors/mail/transport.ts')
+const { IMAP_ID } = await import('../src/host/connectors/mail/presets.ts')
 
 test('163 and 126 presets send the IMAP ID identity', () => {
   for (const domain of ['163.com', '126.com']) {
@@ -809,7 +770,6 @@ test('gateway destroys the upstream stream when the client disconnects', async (
     res.writeHead(200, { 'content-type': 'text/event-stream' })
     res.write('event: message\ndata: {}\n\n')
     res.on('close', () => { upstreamDestroyed = true })
-    // never ends on its own
   })
   const port = await listen(upstream)
   t.after(() => upstream.close())
@@ -817,7 +777,6 @@ test('gateway destroys the upstream stream when the client disconnects', async (
   await gw.listen()
   t.after(() => gw.close())
   const controller = new AbortController()
-  // The GET answer headers arrived; abort the body read.
   const res = await fetch(gw.urlFor('svc'), { headers: { Authorization: `Bearer ${gw.nonce}` }, signal: controller.signal })
   controller.abort()
   await res.body?.cancel().catch(() => {})
@@ -935,7 +894,7 @@ test('Google loopback catches a rejected sign-in callback instead of an unhandle
   await rt.load()
   const view = await rt.connectorEndpoint('mail-account-add', { address: addressAt('gmail.com'), google: true })
   const callback = new URL(view.pending[0].url).searchParams.get('redirect_uri')
-  await fetch(callback) // No code: googleCode rejects.
+  await fetch(callback)
   await new Promise(resolve => setImmediate(resolve))
   assert.ok((await rt.diagnostics.entries()).some(row => /mail Google sign-in failed/.test(row.text)))
 })
@@ -987,7 +946,7 @@ test('Google sign-in retries get a fresh URL and a success clears the pending ro
 })
 
 test('Google mailbox refresh reports success and failure without credentials or addresses', async () => {
-  const { install } = await import('../src/host/connectors/mail/index.js')
+  const { install } = await import('../src/host/connectors/mail/index.ts')
   const logs = []
   const secrets = new Map()
   const address = addressAt('gmail.com')
@@ -1034,7 +993,7 @@ test('gmail transport: search, read, draft, send, modify, trash, and one refresh
     if (u.includes('/trash')) return json({})
     return json({})
   }
-  const { connectGmail } = await import('../src/host/connectors/mail/transport.js')
+  const { connectGmail } = await import('../src/host/connectors/mail/transport.ts')
   const gmail = connectGmail({ address: addressAt('gmail.com') }, { token: () => 'G1', fetch: fakeFetch, refresh: async () => { refreshes += 1; return true } })
   const rows = await gmail.search({ subject: 'x' })
   assert.equal(rows.length, 1)
@@ -1043,7 +1002,6 @@ test('gmail transport: search, read, draft, send, modify, trash, and one refresh
   await gmail.send({ to: 'a@b', subject: 's', text: 'x' })
   await gmail.update({ uid: '1', seen: true })
   await gmail.update({ uid: '1', move: 'trash' })
-  // The 401 on the first read was refreshed exactly once, then retried.
   assert.equal(refreshes, 1)
   assert.ok(calls.some(c => c.includes('/drafts')) && calls.some(c => c.includes('/trash')) && calls.some(c => c.includes('/modify')))
 })
@@ -1071,7 +1029,6 @@ test('mail_send refuses attachments outside the working folder', async (t) => {
   const answer = await send.execute({ to: 'x@y', subject: 'S', body: 'B', attachments: ['../../etc/passwd'] }, { agent: { id: 'm1' }, callId: 'c1', concludeTurn: () => {} })
   assert.match(String(answer), /working folder/)
 })
-
 
 test('manual client fallback keeps and closes the original OAuth callback listener', async (t) => {
   const real = globalThis.fetch

@@ -1,7 +1,3 @@
-// Screenshots for the local-agents feature, against a manual bench:
-// mock-llm on 8876, dsh web on 3176, home .dsh-test-la. One custom ACP agent
-// points at test/fixtures/fake-acp.mjs so an abot can chat.
-//   node dev/shots-local-agents.mjs <dsh-repo> <out-dir>
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -26,14 +22,12 @@ const api = async (endpoint, payload) => {
   const result = await page.evaluate(([e, p]) => fetch('api/bot', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ endpoint: e, payload: p }) }).then(r => r.json()), [endpoint, payload])
   return result.value ?? result
 }
-// DOM clicks ignore every overlay; the notice and drawers never intercept them.
 const clickText = (text, scope = '') => page.evaluate(([t, s]) => {
   for (const el of document.querySelectorAll(`${s} button, ${s} [role=menuitem], ${s} a`)) if (el.innerText.trim() === t || el.innerText.trim().includes(t)) { el.click(); return true }
   return false
 }, [text, scope])
 const clickSel = sel => page.evaluate(s => { const el = document.querySelector(s); if (el) { el.click(); return true } return false }, sel)
 
-// Dismiss the preview notice (any dialog's last button), then give the Main Bot a model.
 await page.evaluate(() => { const d = document.querySelector('[role=dialog]'); const b = d?.querySelectorAll('button'); b?.[b.length - 1]?.click() })
 await page.waitForTimeout(800)
 let state = await api('state', {})
@@ -44,7 +38,6 @@ if (main && !main.model && await card.isVisible().catch(() => false)) {
   await page.waitForTimeout(2500)
 }
 
-// Settings -> Local agents.
 await clickSel('.bt-account')
 await page.waitForTimeout(600)
 await clickText('Bot settings') || await clickText('Bot 设置')
@@ -53,7 +46,6 @@ await clickText('Local agents', '.bt-settings-nav') || await clickText('本地 A
 await page.waitForTimeout(2500)
 await shot('settings-local-agents')
 
-// Custom ACP agent at the fake fixture: Add opens the form, Save commits it.
 await page.evaluate(() => { for (const el of document.querySelectorAll('button')) if (/Add agent|添加 Agent/.test(el.getAttribute('aria-label') ?? '') && el.offsetParent !== null) { el.click(); return } })
 await page.waitForTimeout(600)
 await page.evaluate((fixture) => {
@@ -69,7 +61,6 @@ await page.waitForTimeout(2500)
 await shot('local-agents-custom')
 await page.evaluate(() => document.querySelector('.bt-settings-nav')?.closest('[role=dialog]')?.querySelector('button')?.click())
 
-// An abot on the fake agent's route.
 await api('create-bot', { name: 'Kai' })
 state = await api('state', {})
 const kai = state.bots.find(bot => bot.name === 'Kai')
@@ -78,7 +69,6 @@ console.log('update-bot:', JSON.stringify(upd).slice(0, 120))
 await clickSel(`.bt-row[data-bot-id="${kai.id}"]`) || await clickSel(`.bt-tile[data-bot-id="${kai.id}"]`)
 await page.waitForTimeout(1500)
 
-// Model picker showing the local-agent routes.
 await clickText('conversation details') || await clickText('详情')
 await page.waitForTimeout(800)
 await clickSel('.bt-panel .bt-model-trigger')
@@ -89,7 +79,6 @@ await page.waitForTimeout(600)
 await clickText('Close') || await clickText('关闭')
 await page.waitForTimeout(600)
 
-// Chat: streamed text plus thought rows and the badge.
 const box = page.locator('[contenteditable="true"], textarea').last()
 await page.evaluate(() => { const el = [...document.querySelectorAll('[contenteditable="true"], textarea')].at(-1); el?.focus() })
 await box.click().catch(() => {})
@@ -98,7 +87,6 @@ await page.keyboard.press('Enter')
 await page.waitForTimeout(8000)
 await shot('abot-chat-badge-thoughts')
 
-// Sessions control in the details drawer.
 await clickText('conversation details') || await clickText('详情')
 await page.waitForTimeout(800)
 await shot('abot-sessions')

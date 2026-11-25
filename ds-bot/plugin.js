@@ -5,7 +5,7 @@
 // patch, nothing would then open Settings or switch back to the classic view. After a
 // failed activation the browser half still loads: it says the Bot team did not start,
 // and Settings and its Mode switch keep working.
-export { name, inject } from './src/host/entry.js'
+export { name, inject } from './src/host/entry.ts'
 
 export async function apply(ctx, config = {}) {
   const host = await import('./index.js')

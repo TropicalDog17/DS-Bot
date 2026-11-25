@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import { createRuntime } from '../index.js'
 import { fakeContext } from './fake-ctx.js'
-import { reminderText } from '../src/host/schedules.js'
+import { reminderText } from '../src/host/schedules.ts'
 
 const TEAM = {
   version: 1,
@@ -21,7 +21,6 @@ const TEAM = {
   questions: {},
 }
 
-// An in-memory stand-in for DSH's schedule service.
 function scheduleService() {
   const tasks = new Map()
   let next = 1
@@ -130,7 +129,6 @@ test('tasks are created on the Bot’s current part, listed by Bot, and deleted'
 
   await schedule.create('w1', { title: 'Old part', prompt: 'x', every_seconds: 3600 })
   await schedule.create('outside', { title: 'Not ours', prompt: 'x', every_seconds: 3600 })
-  // A task past its firing reads overdue; an inactive one is finished.
   schedule.tasks.set('schedule-late', { sessionId: 'w2', record: { id: 'schedule-late', kind: 'at', title: 'Late', prompt: 'x', scheduledAt: '2020-01-01T00:00:00.000Z' } })
   schedule.tasks.set('schedule-done', { sessionId: 'w2', record: { id: 'schedule-done', kind: 'at', title: 'Done', prompt: 'x', scheduledAt: '2020-01-01T00:00:00.000Z' }, status: 'inactive' })
   const listed = (await call('schedules', {})).value
@@ -236,12 +234,9 @@ test('on DSH 0.2.2 a Bot reads and changes only the tasks of its own chat', asyn
   assert.deepEqual(await check('schedule_list', 'chief', 'w2'), { kind: 'allow' })
   assert.deepEqual(await check('schedule_edit', 'chief', 'outside'), { kind: 'allow' })
 
-  // schedule_list asks the tool for the Host range that holds the caller's page and
-  // keeps the caller's own tasks. Other modules wrap tools/execute too.
   schedule.tasks.set('own2', { record: { id: 'own2', kind: 'at', title: 'Mine too', prompt: 'x', scheduledAt: '2030-01-01T00:00:00.000Z' }, target: { kind: 'session', sessionId: 'w2' }, status: 'active' })
   const list = ctx.listeners.get('tools/execute').find(listener => listener.name === 'listOwnSchedules')
   const asked = []
-  // The tool's own page: the catalog order, cut at offset and limit.
   const run = (sessionId, args) => {
     const exec = { name: 'schedule_list', arguments: args, agent: { id: sessionId } }
     return list(exec, async () => {
@@ -260,7 +255,6 @@ test('on DSH 0.2.2 a Bot reads and changes only the tasks of its own chat', asyn
   assert.deepEqual(asked.at(-1), { limit: 4, offset: 0 })
   assert.deepEqual(both.result.value.items.map(task => task.id), ['own', 'own2'])
   assert.deepEqual((await run('w2', { offset: 5 })).result.value, { items: [], shown: 0, total: 2, limit: 100, offset: 5 })
-  // A page out of DSH's range goes to DSH as asked, and what comes back is still narrowed.
   const wide = await run('w2', { limit: 501 })
   assert.deepEqual(asked.at(-1), { limit: 501 })
   assert.deepEqual(wide.result.value.items.map(task => task.id), ['own', 'own2'])

@@ -1,18 +1,12 @@
 #!/usr/bin/env node
-// The README logo: the whale in the middle and the other first characters on a ring
-// around it, drawn from the plugin's own character table. Writes a light and a dark
-// version (the dark one uses the dark inks, as the app does in dark mode).
-//
-//   node dev/logo.mjs [out dir]        default: ../docs/images (logo.svg, logo-dark.svg)
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { SHAPES, bodyOf, holes, maskBox } from '../src/client/characters.js'
-import { GRADIENTS, INKS } from '../src/client/inks.js'
+import { SHAPES, bodyOf, holes, maskBox } from '../src/client/characters.ts'
+import { GRADIENTS, INKS } from '../src/client/inks.ts'
 
 const BOX = 600
 const CENTER = BOX / 2
 const WHALE = { shape: 'whale', color: 'deepseek', size: 300 }
-// Clockwise from the top.
 const RING = [
   { shape: 'star', color: 'aurora' },
   { shape: 'wave', color: 'rose' },
@@ -44,8 +38,6 @@ function logo(mode) {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${BOX} ${BOX}" width="${BOX}" height="${BOX}" role="img" aria-label="DS Bot">${orbit}${marks.join('')}</svg>\n`
 }
 
-// One character in a `size` box centered on (x, y). The eyes are cut out of the body,
-// so they show the page behind the logo.
 function character({ shape, color, size, x, y }, mode, id) {
   const def = SHAPES[shape]
   const scale = size / def.size

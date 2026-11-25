@@ -5,18 +5,18 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
-import { LocalAgentAdapter } from '../src/host/local-agents/adapter.js'
-import { AcpEngine, stdioBridgePath } from '../src/host/local-agents/acp.js'
-import { CodexEngine } from '../src/host/local-agents/codex.js'
-import { JsonRpcPeer, wireProcess } from '../src/host/local-agents/jsonrpc.js'
-import { ClaudeEngine } from '../src/host/local-agents/claude.js'
-import { LoopbackMcp, flattenSchema } from '../src/host/local-agents/mcp.js'
-import { cleanEnv } from '../src/host/local-agents/discover.js'
-import { ENGINES, validateCustom, isLocalAgentRoute, cliMode, acpMode } from '../src/host/local-agents/engines.js'
-import { AGENT_BADGES, agentAvatar, badgeOf, isLocalRoute } from '../src/client/agent-routes.js'
-import { INKS } from '../src/client/inks.js'
-import { install as partsInstall } from '../src/host/parts.js'
-import { install as modelsInstall } from '../src/host/models.js'
+import { LocalAgentAdapter } from '../src/host/local-agents/adapter.ts'
+import { AcpEngine, stdioBridgePath } from '../src/host/local-agents/acp.ts'
+import { CodexEngine } from '../src/host/local-agents/codex.ts'
+import { JsonRpcPeer, wireProcess } from '../src/host/local-agents/jsonrpc.ts'
+import { ClaudeEngine } from '../src/host/local-agents/claude.ts'
+import { LoopbackMcp, flattenSchema } from '../src/host/local-agents/mcp.ts'
+import { cleanEnv } from '../src/host/local-agents/discover.ts'
+import { ENGINES, validateCustom, isLocalAgentRoute, cliMode, acpMode } from '../src/host/local-agents/engines.ts'
+import { AGENT_BADGES, agentAvatar, badgeOf, isLocalRoute } from '../src/client/agent-routes.ts'
+import { INKS } from '../src/client/inks.ts'
+import { install as partsInstall } from '../src/host/parts.ts'
+import { install as modelsInstall } from '../src/host/models.ts'
 import { fakeContext } from './fake-ctx.js'
 
 const FIXTURE = name => fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url))
@@ -26,7 +26,6 @@ const user = (id, text) => ({ id, role: 'user', content: [{ type: 'text', text }
 const system = (id, text) => ({ id, role: 'system', content: [{ type: 'text', text }], source: { kind: 'system-prompt' } })
 const toolResult = (id, callId, text, isError = false) => ({ id, role: 'tool', content: [{ type: 'text', text }], toolCallId: callId, isError, source: { kind: 'tool', callId } })
 
-// An adapter wired to the fake CLIs: every engine route spawns `node fixture`.
 function makeAdapter({ records = {}, preset = 'workspace-write', acp = FIXTURES.acp, acpArgs = [], codex = FIXTURES.codex, codexArgs = [], claude = FIXTURES.claude, claudeArgs = [], cwdFor, attachments, fs, rt } = {}) {
   const files = { acp, codex, claude }
   const spawned = []
@@ -54,7 +53,6 @@ function makeAdapter({ records = {}, preset = 'workspace-write', acp = FIXTURES.
   return adapter
 }
 
-// Wait for the agent process behind a live session to exit.
 async function waitForDead(adapter, sessionId = 's1') {
   for (let attempt = 0; attempt < 300; attempt += 1) {
     if (adapter.live.get(sessionId)?.engineSession?.dead === true) return
@@ -63,7 +61,6 @@ async function waitForDead(adapter, sessionId = 's1') {
   throw new Error('the agent process did not exit')
 }
 
-// Collect a stream into {text, thinking, calls, finish} for assertions.
 async function collect(stream) {
   const out = { text: '', thinking: '', calls: [], finish: undefined, usage: undefined }
   for await (const chunk of stream) {
@@ -97,7 +94,6 @@ test('a first turn replays the conversation, a later one sends only the delta', 
   assert.match(first.text, /^ok: /)
   assert.match(first.thinking, /thought about/)
   assert.equal(first.finish.kind, 'stop')
-  // The record remembers the CLI session and how far it was handed.
   assert.ok(records.s1.cliSessionId?.startsWith('acp-'))
   assert.equal(records.s1.handedId, 'm1')
   const second = await collect(adapter.stream(options('s1', [system('sys', 'You are Kai, a coder.'), user('m1', 'hello'), user('m2', 'again')])))
@@ -134,7 +130,6 @@ test('queued calls finish later streams', async (t) => {
   assert.equal(first.calls.length, 1)
   const seen = [user('m1', 'two-calls'), toolResult('m2', first.calls[0].id, 'one back')]
   const second = await collect(adapter.stream(options('s1', seen)))
-  // The second queued call is emitted (or the agent already got both answered).
   assert.ok(second.finish.kind === 'tool-calls' || /tool said/.test(second.text), JSON.stringify(second))
 })
 
@@ -144,12 +139,9 @@ test('a permission prompt bridges to approve_agent_action and fails closed', asy
   const ask = await collect(adapter.stream(options('s1', [user('m1', 'ask-permission')])))
   assert.equal(ask.finish.kind, 'tool-calls')
   assert.equal(ask.calls[0].name, 'approve_agent_action')
-  // The request named the call only by id; the card still says what it runs.
   const asked = JSON.parse(ask.calls[0].arguments ?? JSON.stringify(ask.calls[0].args))
   assert.equal(asked.action, 'Run `rm -rf /tmp/x`')
   assert.equal(asked.detail ?? '', '')
-  // An allowed answer picks the agent's allow option: the tool returns its
-  // structured decision, and only {"decision":"allow"} counts.
   const allowed = await collect(adapter.stream(options('s1', [user('m1', 'ask-permission'), toolResult('m2', ask.calls[0].id, JSON.stringify({ decision: 'allow' }))])))
   assert.match(allowed.text, /allowed via allow-once/)
 })
@@ -157,7 +149,6 @@ test('a call to the dsbot server is allowed once without asking; other servers s
   const adapter = makeAdapter()
   t.after(() => adapter.dispose())
   const team = await collect(adapter.stream(options('s1', [user('m1', 'team-permission')])))
-  // The MCP call itself reaches DS Bot's tools; no approval card in between.
   assert.equal(team.calls[0]?.name, 'message_bot', JSON.stringify(team))
   const done = await collect(adapter.stream(options('s1', [user('m1', 'team-permission'), toolResult('m2', team.calls[0].id, 'River: pong')])))
   assert.match(done.text, /allowed via allow-once; tool said: River: pong/)
@@ -168,7 +159,6 @@ test('a permission answer that is not the structured allow fails closed', async 
   const adapter = makeAdapter()
   t.after(() => adapter.dispose())
   const ask = await collect(adapter.stream(options('s1', [user('m1', 'ask-permission')])))
-  // Free text that reads like an approval is not an approval.
   const loose = await collect(adapter.stream(options('s1', [user('m1', 'ask-permission'), toolResult('m2', ask.calls[0].id, 'yes, allow it')])))
   assert.match(loose.text, /denied/)
 })
@@ -233,7 +223,6 @@ test('routes and modes', () => {
   assert.equal(isLocalAgentRoute('deepseek'), false)
   assert.equal(acpMode('read-only', [{ id: 'ask' }, { id: 'bypass' }]), 'ask')
   assert.equal(acpMode('danger-full-access', [{ id: 'ask' }, { id: 'bypass' }]), 'bypass')
-  // Config options name a mode by `value`; an agent without a match keeps its own.
   assert.equal(acpMode('read-only', [{ value: 'agent' }, { value: 'plan' }, { value: 'ask' }]), 'ask')
   assert.equal(acpMode('workspace-write', [{ value: 'agent' }, { value: 'plan' }, { value: 'ask' }]), undefined)
   assert.equal(cliMode('claude', 'workspace-write'), 'acceptEdits')
@@ -245,8 +234,6 @@ test('acp: a resumed session that lists no modes keeps the ones its CLI listed',
   const adapter = makeAdapter({ records, preset: 'workspace-write', acpArgs: ['--cursor-modes'] })
   t.after(() => adapter.dispose())
   await collect(adapter.stream(options('s1', [user('m1', 'show-mode')])))
-  // session/load lists nothing; without what session/new listed, the guess
-  // accept-edits would be sent and refused twice.
   const resumed = await collect(adapter.stream(options('s2', [user('m1', 'show-mode')])))
   assert.match(resumed.text, /mode: agent; refused: 0/)
 })
@@ -293,8 +280,6 @@ test('acp: the preset picks among the modes the session lists', async (t) => {
   assert.match((await collect(write.stream(options('s1', [user('m1', 'show-mode')])))).text, /mode: agent; refused: 0/)
 })
 
-// #1503: a live CLI keeps the permission mode it opened with. Changing the
-// Bot's preset must reopen the CLI for the next turn, not wait for a restart.
 test('a changed permission preset reopens the local agent for the next turn', async () => {
   let preset = 'workspace-write'
   const adapter = makeAdapter({ preset: () => preset })
@@ -347,9 +332,6 @@ test('codex app-server: thread per session, models from model/list', async (t) =
   assert.match(out.thinking, /▸/)
 })
 
-// #1144: Codex 0.166 reads ThreadStartParams at the top level and the MCP servers from
-// `config`; keys it does not know are dropped silently. With the old snake_case shape
-// the team tools never registered and the permission preset never applied.
 test('codex app-server: thread start and resume send the fields Codex reads', async () => {
   for (const [preset, sandbox, approvalPolicy] of [
     ['read-only', 'read-only', 'on-request'],
@@ -365,7 +347,6 @@ test('codex app-server: thread start and resume send the fields Codex reads', as
     } finally {
       await first.dispose()
     }
-    // A new host resumes the thread the first one saved.
     const second = makeAdapter({ preset, records, codexArgs: ['--record', record] })
     try {
       await collect(second.stream(options('s1', [...messages, user('m2', 'again')], { provider: 'local-codex-cli', model: 'gpt-5.1-codex' })))
@@ -377,7 +358,6 @@ test('codex app-server: thread start and resume send the fields Codex reads', as
     const resume = calls.find(call => call.method === 'thread/resume')?.params
     assert.ok(start !== undefined, `${preset}: a thread starts`)
     assert.ok(resume !== undefined, `${preset}: the saved thread resumes`)
-    // The team instructions travel on the new thread; a resumed one keeps its own.
     assert.equal(start.developerInstructions, 'You are Kai, a coder.')
     assert.equal(resume.developerInstructions, undefined, `${preset} resume: keeps the instructions it started with`)
     assert.equal(resume.threadId, records.s1.cliSessionId, `${preset} resume: resumes the saved thread`)
@@ -413,8 +393,6 @@ test('codex: a thread opens with the permission preset, instructions and tool se
   assert.match(server.http_headers.Authorization, /^Bearer /)
 })
 
-// The level goes on the request that starts the turn, so a Bot's choice travels
-// with every turn and a Bot without one keeps the CLI's own default.
 test('codex: the chosen thinking level reaches the turn', async (t) => {
   const adapter = makeAdapter()
   t.after(() => adapter.dispose())
@@ -424,11 +402,9 @@ test('codex: the chosen thinking level reaches the turn', async (t) => {
   assert.match(none.text, /effort=none/)
 })
 
-// What the model catalog shows for a codex ref is what model/list advertises.
 test('the catalog carries the thinking levels a codex model serves', async (t) => {
   const adapter = makeAdapter()
   t.after(() => adapter.dispose())
-  // The menu lists a CLI's models once it has been asked for them.
   await adapter.probeModels('local-codex-cli')
   const rt = {
     ctx: {
@@ -443,12 +419,9 @@ test('the catalog carries the thinking levels a codex model serves', async (t) =
   modelsInstall(rt)
   const entry = (await rt.catalog()).find(candidate => candidate.ref === 'local-codex-cli/gpt-5.1-codex')
   assert.deepEqual(entry.reasoning.efforts.map(effort => effort.id), ['low', 'medium', 'high'])
-  // The CLI's own default is not advertised: a Bot without a level keeps the
-  // one the user set in their Codex config.
   assert.equal(entry.reasoning.defaultEffort, undefined)
 })
 
-// An engine that advertises no level keeps today's behaviour: none, no error.
 test('an engine without levels reports none', async (t) => {
   const adapter = makeAdapter()
   t.after(() => adapter.dispose())
@@ -484,7 +457,6 @@ test('a write to a CLI that has exited does not throw out of DS Bot', async () =
     const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 5000)'], { stdio: ['pipe', 'pipe', 'inherit'] })
     const peer = new JsonRpcPeer(line => child.stdin.write(`${JSON.stringify(line)}\n`))
     wireProcess(child, peer)
-    // A cancel that goes out as the process is let go of, as closing a Session does.
     child.kill('SIGTERM')
     for (let i = 0; i < 20; i += 1) peer.notify('session/cancel', { sessionId: 'x'.repeat(65536) })
     await new Promise(resolve => child.on('exit', resolve))
@@ -513,7 +485,6 @@ test('a CLI that cannot start fails its probe as a typed error, not the host', a
     for (const Engine of [AcpEngine, CodexEngine]) {
       const engine = new Engine('local-broken', { name: 'Broken CLI', command: broken, args: [] }, { findExecutable: () => broken })
       await assert.rejects(() => engine.ensure(), error => error.code === 'LOCAL_AGENT_EXIT' && /could not start/.test(error.message))
-      // The failed process is let go of: the next ensure() tries a fresh one.
       assert.equal(engine.peer, undefined)
       assert.equal(engine.child, undefined)
     }
@@ -561,8 +532,6 @@ test('claude: a CLI that sends init only after the first prompt still starts', a
   assert.match(session.cliSessionId, /^claude-/)
 })
 
-// The id arrives with init, after the adapter has already saved its record: the
-// saved record is what a restarted host resumes from.
 test('claude: the session id from init is saved and the next host resumes it', async (t) => {
   const records = {}
   const lazy = FIXTURE('fake-claude-lazy-init.mjs')
@@ -571,7 +540,6 @@ test('claude: the session id from init is saved and the next host resumes it', a
   const out = await collect(first.stream(options('s1', [user('m1', 'hello')], { provider: 'local-claude-code' })))
   assert.match(out.text, /hello/)
   assert.match(records.s1.cliSessionId, /^claude-/)
-  // A new adapter is a host restart: the saved record is all it has.
   const second = makeAdapter({ records, claude: lazy })
   t.after(() => second.dispose())
   const resumed = await collect(second.stream(options('s1', [user('m2', 'again')], { provider: 'local-claude-code' })))
@@ -599,8 +567,6 @@ test('claude: a prompt written as the CLI dies becomes a typed error', async (t)
   assert.equal(failure.error.code, 'LOCAL_AGENT_EXIT')
 })
 
-// A resume that dies before init must not erase the id the record already has:
-// the next host would have nothing to resume and would send only the delta.
 test('claude: a failed resume keeps the saved session id', async (t) => {
   const runs = join(mkdtempSync(join(tmpdir(), 'dsb-claude-')), 'runs')
   const records = {}
@@ -614,10 +580,8 @@ test('claude: a failed resume keeps the saved session id', async (t) => {
   assert.match(first.text, /hello/)
   const saved = records.s1.cliSessionId
   assert.match(saved, /^claude-/)
-  // The second host resumes, and this CLI run dies before `system/init`.
   await assert.rejects(collect(host().stream(options('s1', [user('m2', 'again')], { provider: 'local-claude-code' }))), error => error.code === 'LOCAL_AGENT_EXIT')
   assert.equal(records.s1.cliSessionId, saved)
-  // The third host still resumes the conversation the first one started.
   const third = await collect(host().stream(options('s1', [user('m3', 'third')], { provider: 'local-claude-code' })))
   assert.match(third.text, new RegExp(`resume=${saved}`))
 })
@@ -642,8 +606,6 @@ test('claude: a saved conversation the CLI no longer has starts over with the hi
   assert.match(records.s1.cliSessionId, /^claude-(?!gone)/)
 })
 
-// A CLI that exits before init for another reason keeps its id (above); only a
-// conversation the CLI reports missing is dropped.
 test('claude: print mode asks DS Bot for permission and lets team tools through', async (t) => {
   const adapter = makeAdapter()
   t.after(() => adapter.dispose())
@@ -653,8 +615,6 @@ test('claude: print mode asks DS Bot for permission and lets team tools through'
   assert.equal(args[args.indexOf('--allowedTools') + 1], 'mcp__dsbot')
 })
 
-// A CLI that exits before init leaves a dead bridge: the retry must start a
-// new process instead of writing into the one that is gone.
 test('claude: a retry after a pre-init exit starts a new CLI', async (t) => {
   const runs = join(mkdtempSync(join(tmpdir(), 'dsb-claude-')), 'runs')
   const adapter = makeAdapter({ claude: FIXTURE('fake-claude-flaky.mjs'), claudeArgs: [runs, '1'] })
@@ -666,22 +626,17 @@ test('claude: a retry after a pre-init exit starts a new CLI', async (t) => {
   assert.equal(readFileSync(runs, 'utf8'), '2')
 })
 
-// The failed prompt was handed but never read: the retry must send it again,
-// not only what came after it.
 test('claude: the retry replays the input the dead CLI never read', async (t) => {
   const runs = join(mkdtempSync(join(tmpdir(), 'dsb-claude-')), 'runs')
   const adapter = makeAdapter({ claude: FIXTURE('fake-claude-flaky.mjs'), claudeArgs: [runs, '1'] })
   t.after(() => adapter.dispose())
   const history = [user('m1', 'fix the login')]
   await assert.rejects(collect(adapter.stream(options('s1', history, { provider: 'local-claude-code' }))), error => error.code === 'LOCAL_AGENT_EXIT')
-  // The same full history comes back, as DS Bot resends the conversation.
   const out = await collect(adapter.stream(options('s1', history, { provider: 'local-claude-code', signal: AbortSignal.timeout(15_000) })))
   assert.equal(out.finish.kind, 'stop')
   assert.match(readFileSync(`${runs}.prompts`, 'utf8'), /fix the login/)
 })
 
-// The repair card's Retry adds a `continue` message; the new CLI must still see
-// the user message that never got an answer.
 test('claude: the retry flow replays the unanswered message', async (t) => {
   const runs = join(mkdtempSync(join(tmpdir(), 'dsb-claude-')), 'runs')
   const adapter = makeAdapter({ claude: FIXTURE('fake-claude-flaky.mjs'), claudeArgs: [runs, '1'] })
@@ -701,8 +656,6 @@ test('claude: the retry flow replays the unanswered message', async (t) => {
   assert.match(prompts, /last unanswered message/)
 })
 
-// The rollback is saved, not only kept in memory: a host that restarts after a
-// failed start rebuilds its live state from the record.
 test('claude: a host restart after a failed start still replays the unread input', async (t) => {
   const runs = join(mkdtempSync(join(tmpdir(), 'dsb-claude-')), 'runs')
   const records = {}
@@ -714,7 +667,6 @@ test('claude: a host restart after a failed start still replays the unread input
   }
   const history = [user('m1', 'fix the login')]
   await assert.rejects(collect(host().stream(options('s1', history, { provider: 'local-claude-code' }))), error => error.code === 'LOCAL_AGENT_EXIT')
-  // The first host is gone: the saved record is all the new one has.
   const out = await collect(host().stream(options('s1', history, { provider: 'local-claude-code', signal: AbortSignal.timeout(15_000) })))
   assert.equal(out.finish.kind, 'stop')
   assert.match(readFileSync(`${runs}.prompts`, 'utf8'), /fix the login/)
@@ -733,8 +685,6 @@ test('acp: a reopen after the process exits sends only the new input', async (t)
   assert.doesNotMatch(second.text, /alpha-one/)
 })
 
-// A reopened Codex thread needs its own queue: a pump still waiting on the dead
-// one takes the first event of the new turn, and the reply arrives empty.
 test('codex: a resume after the process exits still delivers the reply text', async (t) => {
   const adapter = makeAdapter({ codexArgs: ['--exit-after-turn', '--text-only'] })
   t.after(() => adapter.dispose())
@@ -789,10 +739,6 @@ test('flattenSchema removes unions, refs and const', () => {
   assert.equal(flat.properties.r.type, 'number')
 })
 
-// The steward must never touch an abot's Session: the pre-step listener returns
-// early for a local-agent Bot, and checkContext leaves too.
-// A CLI condenses on its own inside a running turn: its part is checked when the turn
-// ends (test/local-agent-context.test.js), never before a step.
 test('a running turn of a local-agent part is not checked before its steps', async () => {
   const ctx = fakeContext()
   const bot = { id: 'b1', name: 'Kai', sessionId: 's1', model: 'local-acp-fake/default' }
@@ -830,8 +776,6 @@ test('a running turn of a local-agent part is not checked before its steps', asy
   assert.equal(result, 'next-called')
 })
 
-// A manual new part gives the deterministic handoff: verbatim tail + anchors +
-// the read_own_chat line, with no model call.
 test('a fresh part carries the deterministic handoff', async () => {
   const ctx = fakeContext()
   ctx.workspaceRegistry = { archiveSession: async () => {}, unarchiveSession: async () => {} }
@@ -904,7 +848,6 @@ test('a fresh part carries the deterministic handoff', async () => {
   partsInstall(rt)
   assert.equal(typeof rt.newPart, 'function')
   await rt.newPart('s1')
-  // The switch runs as a job; the Bot lands on s2 with s1 kept as an earlier part.
   for (let i = 0; i < 50 && bot.sessionId !== 's2'; i += 1) await new Promise(resolve => setTimeout(resolve, 20))
   assert.equal(bot.sessionId, 's2', rt.warnings.join(' | '))
   assert.equal(bot.segments.length, 1)
@@ -924,8 +867,6 @@ test('an open-ended request outlives the default deadline', async () => {
   assert.deepEqual(await open, { stopReason: 'end_turn' }, 'a 0 timeout never expires')
 })
 
-// #1513: a card that suspends the stream can outlive the CLI's turn. The answer must
-// start a turn of its own, and the finished turn's leftover events must not answer it.
 test('codex app-server: an answer whose turn already ended starts a new turn', async (t) => {
   const adapter = makeAdapter()
   t.after(() => adapter.dispose())
@@ -933,10 +874,8 @@ test('codex app-server: an answer whose turn already ended starts a new turn', a
   const first = await collect(adapter.stream(options('s1', messages, { provider: 'local-codex-cli' })))
   const call = first.calls.find(entry => entry.name === 'approve_agent_action')
   assert.ok(call, 'the approval came as a card')
-  // The CLI's turn completed while the card was open: its `done` is still queued.
   await new Promise(resolve => setTimeout(resolve, 100))
   const second = await collect(adapter.stream(options('s1', [...messages, toolResult('t1', call.id, '{"decision":"allow"}', false)], { provider: 'local-codex-cli' })))
-  // The answer opened a turn of its own, and the stream says what that turn said.
   assert.match(second.text, /ok: /, JSON.stringify(second))
   assert.equal(second.finish?.kind, 'stop')
 })
@@ -947,7 +886,6 @@ test('codex app-server: a steer refused while the turn ends still gets a turn of
   const messages = [user('m1', 'hold-ask')]
   const first = await collect(adapter.stream(options('s1', messages, { provider: 'local-codex-cli' })))
   assert.ok(first.calls.some(entry => entry.name === 'approve_agent_action'), 'the card came through')
-  // The CLI refuses the steer and completes the turn in the same breath.
   const second = await collect(adapter.stream(options('s1', [...messages, user('m2', 'race')], { provider: 'local-codex-cli' })))
   assert.match(second.text, /ok: race/, JSON.stringify(second))
 })
@@ -958,8 +896,6 @@ test('codex app-server: text answering a bridged call after the turn ended start
   const messages = [user('m1', 'late-ask')]
   const first = await collect(adapter.stream(options('s1', messages, { provider: 'local-codex-cli' })))
   assert.ok(first.calls.some(entry => entry.name === 'approve_agent_action'), 'the card came through')
-  // A loopback call is still open — browser_handoff and friends look like this — and
-  // the user answers it with plain text after the CLI's turn already ended.
   const live = adapter.live.get('s1')
   const answered = []
   live.pending.set('bridged-1', { name: 'browser_handoff', resolve: result => answered.push(result) })
@@ -976,7 +912,6 @@ test('codex app-server: a late notice for an earlier turn keeps the running turn
   const first = await engine.prompt(thread, [{ type: 'text', text: 'hold' }], {})
   const second = await engine.prompt(thread, [{ type: 'text', text: 'hold' }], {})
   assert.notEqual(first, second)
-  // The turn a steer replaced finishes late: its notice must not clear the live turn.
   await engine.steer(thread, `emit-stale ${first}`)
   assert.equal(engine.canSteer(thread), true, 'the running turn stays steerable')
   await engine.steer(thread, 'next input')
@@ -995,8 +930,6 @@ test('codex app-server: the approval answer rides along with runtime context in 
   const first = await collect(adapter.stream(options('s1', messages, { provider: 'local-codex-cli' })))
   const call = first.calls.find(entry => entry.name === 'approve_agent_action')
   assert.ok(call, 'the approval came as a card')
-  // The CLI's turn is over. The answer arrives in the same call as runtime context, which
-  // used to become the whole prompt and leave the decision behind.
   const context = { id: 'c1', role: 'user', content: [{ type: 'text', text: 'workspace note: the folder is /team' }], source: { kind: 'runtime-context' } }
   await collect(adapter.stream(options('s1', [...messages, toolResult('t1', call.id, '{"decision":"allow"}', false), context], { provider: 'local-codex-cli' })))
   const lines = readFileSync(recordPath, 'utf8').trim().split('\n').filter(line => line !== '').map(line => JSON.parse(line))
@@ -1020,9 +953,7 @@ test('codex app-server: a steer names the turn it steers, and a finished turn ca
   assert.ok(steer, 'a steer was sent')
   assert.equal(steer.params.expectedTurnId, turnId, 'the steer names the turn it steers')
   assert.equal(steer.params.input[0].text, 'steer me')
-  // A turn the CLI ends has nothing to steer: it says so instead of dropping the input.
   await engine.prompt(thread, [{ type: 'text', text: 'bye' }], {})
-  // The CLI's own turn/completed is the signal: read until it arrives, not for a clock.
   const deadline = Date.now() + 30_000
   for (;;) {
     const event = await Promise.race([
@@ -1032,8 +963,6 @@ test('codex app-server: a steer names the turn it steers, and a finished turn ca
     if (event.type === 'done') break
     if (Date.now() > deadline) throw new Error(`no turn/completed: ${JSON.stringify(event)}`)
   }
-  // The engine clears its turn off the same notice; poll that, never wait for a second
-  // event that will not come.
   for (let attempt = 0; attempt < 300 && engine.canSteer(thread); attempt += 1) {
     await new Promise(resolve => setTimeout(resolve, 10))
   }
@@ -1253,7 +1182,6 @@ test('cwdPerProcess isolates ACP child cwd per folder, shares within a folder, a
   })
   t.after(() => adapter.dispose())
 
-  // Probe creates a temporary worker and closes it once models are read.
   const models = await adapter.probeModels('local-antigravity')
   assert.ok(models.length >= 2)
   assert.equal(spawned[0].workers.size, 0)
@@ -1633,18 +1561,15 @@ test('acp without image capability degrades image to text and updates resolveMod
   })
   t.after(() => adapter.dispose())
 
-  // Before any CLI starts, resolveModel must stay fast/lazy and optimistic.
   const before = await adapter.resolveModel('local-acp-fake', 'default')
   assert.deepEqual(before.inputModalities, ['text', 'image'])
   assert.equal(adapter._spawned.length, 0)
 
-  // First turn sees promptCapabilities.image === false and must degrade instead of sending an invalid image block (-32602).
   const first = await collect(adapter.stream(options('s1', [imageMsg('m1', 'what is this?', ref)])))
   assert.equal(first.finish?.kind, 'stop')
   assert.doesNotMatch(first.text, /"mimeType"/)
   assert.match(first.text, /what is this\?/)
 
-  // Once known, resolveModel excludes 'image' so host OCR takes over on subsequent turns.
   const after = await adapter.resolveModel('local-acp-fake', 'default')
   assert.deepEqual(after.inputModalities, ['text'])
 })

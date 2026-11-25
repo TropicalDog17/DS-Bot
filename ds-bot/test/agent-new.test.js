@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { agentSessionToReuse, singleFlight } from '../src/client/agent-new.js'
+import { agentSessionToReuse, singleFlight } from '../src/client/agent-new.ts'
 
 test('reuse the just-created Session until the DSH list can decide whether it is blank', () => {
   const existing = { blank: false, displayTitle: 'Fix the build' }
@@ -27,7 +27,6 @@ test('a second new-session click while the first is in flight lands on the same 
   release()
   assert.deepEqual(await Promise.all([first, second, third]), ['s-1', 's-1', 's-1'])
   assert.equal(runs, 1, 'one create for three clicks')
-  // The entry cleared: the next click starts its own call.
   assert.equal(await singleFlight(map, 'agent-1', run), 's-2')
   assert.equal(runs, 2)
   assert.equal(map.size, 0)

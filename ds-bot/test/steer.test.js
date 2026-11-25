@@ -4,12 +4,10 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { test } from 'node:test'
 import { createRuntime } from '../index.js'
-import { turnOf } from '../src/host/resume.js'
+import { turnOf } from '../src/host/resume.ts'
 import { fakeContext } from './fake-ctx.js'
-import { SOURCE_KIND, STEER_CUT } from '../src/host/constants.js'
+import { SOURCE_KIND, STEER_CUT } from '../src/host/constants.ts'
 
-// A user steer in a private Bot chat detaches a running shell call into a
-// promoted job and cuts a running model call, so the steer is claimed at once.
 const TEAM = {
   version: 1,
   mainBotIds: ['a'],
@@ -165,7 +163,6 @@ test('shell shadow: steer pending at call start keeps the native value inside th
   const shadow = shadowOf()
   agent.inbox.nextStep.push(userMessage('waiting'))
   const pending = shadow.execute({ command: 'pwd' }, execOf(agent))
-  // The native settles at once, inside the grace, so its own value comes back.
   const NATIVE = { kind: 'foreground', exitCode: 9 }
   shadow.calls[0].res(NATIVE)
   assert.equal(await pending, NATIVE)
@@ -205,16 +202,13 @@ test('shell shadow: non-private session, run_in_background and no jobs are passt
   rt.shadowShells(agent)
   const shadow = calls.find(c => c[0] === 'register')?.[1]
   const NATIVE = { kind: 'foreground' }
-  // run_in_background on the private chat is untouched.
   const p1 = shadow.execute({ command: 'pwd', run_in_background: true }, execOf(agent))
   shadow.calls[0].res(NATIVE)
   assert.equal(await p1, NATIVE)
-  // A non-Bot session is untouched.
   const other = { ...agent, id: 'plain', session: { id: 'plain' } }
   const p2 = shadow.execute({ command: 'pwd' }, execOf(other))
   shadow.calls[1].res(NATIVE)
   assert.equal(await p2, NATIVE)
-  // No jobs service at all is untouched.
   rt2.shadowShells(noJobsAgent)
   const shadow2 = noJobsShadow()
   const p3 = shadow2.execute({ command: 'pwd' }, execOf(noJobsAgent))
@@ -313,7 +307,6 @@ test('shell shadow: bash is shadowed the same way', async () => {
   await stop()
 })
 
-// Carry tests: the cut turn's routing state rides into the turn that claims the steer.
 test('steer carry: a cut request turn hands its answer on the next turn', async () => {
   const { emit, stop, rt, deliveries } = await start()
   const dm = 'dm-a'
@@ -391,14 +384,12 @@ test('steer carry: a pending request survives a carry that reclaims the trigger'
   rt.markSteerCut(dm)
   await emit(dm, 'turn/end', { reason: { kind: 'aborted', reason: { kind: 'hook', reason: STEER_CUT } } })
   assert.deepEqual(deliveries, [])
-  // Another request lands between the cut and the next turn: it waits as pending.
   await emit(dm, 'user/message', {
     content: [{ type: 'text', text: '[Ops → Chief]\nme later' }],
     source: { kind: SOURCE_KIND, role: 'request', senderSessionId: 'bot-c', exchangeId: 'x2', senderName: 'Ops' },
   })
   await emit(dm, 'turn/start', { turn: 2 })
   const entry = rt.live.get(dm)
-  // The carry's own request reclaims the trigger; the pending one joins it deferred.
   assert.equal(entry.info?.exchangeId, 'x1')
   assert.equal(entry.joined.length, 1)
   assert.equal(entry.joined[0].info.exchangeId, 'x2')
@@ -418,7 +409,6 @@ test('steer carry: a pending request survives a carry that reclaims the trigger'
 test('steer cut: a running part switch blocks the cut', async () => {
   const { emit, stop, rt, agent, calls } = await start()
   const dm = 'dm-a'
-  // switchJobs() hands back a Map values iterator, never an array.
   const original = rt.switchJobs
   rt.switchJobs = () => new Map([['job', { botId: rt.chatOwners.get(dm) }]]).values()
   await emit(dm, 'turn/start', { turn: 1 })
@@ -427,7 +417,6 @@ test('steer cut: a running part switch blocks the cut', async () => {
   agent.inbox.nextStep.push(steer)
   await emit(dm, 'agent/inbox/spliced', { target: 'next-step', inserted: [steer] })
   assert.equal(calls.find(c => c[0] === 'cancel'), undefined)
-  // A group part switch of the same Bot carries a roomId and must not block this cut.
   rt.switchJobs = () => new Map([['job', { botId: rt.chatOwners.get(dm), roomId: 'r1' }]]).values()
   await emit(dm, 'agent/inbox/spliced', { target: 'next-step', inserted: [steer] })
   assert.deepEqual(calls.find(c => c[0] === 'cancel')?.[1], { kind: 'hook', reason: STEER_CUT })
@@ -435,7 +424,6 @@ test('steer cut: a running part switch blocks the cut', async () => {
   await stop()
 })
 
-// Model-cut tests.
 test('steer cut: user steer during model phase cancels with hook and moves steer to next-turn', async () => {
   const { emit, stop, agent, calls } = await start()
   const dm = 'dm-a'
@@ -490,8 +478,6 @@ test('steer resume: turnOf follows a steer cut to its continuation', async () =>
   const ended = reason => ({ type: 'turn/end', data: { reason } })
   const cut = { kind: 'aborted', reason: { kind: 'hook', reason: STEER_CUT } }
 
-  // A cut turn whose continuation answered: the continuation's reason and the texts
-  // merged, with the cut step's interrupted draft dropped.
   const follow = turnOf([
     ...turn(1, [took('x1'), said('a'), { type: 'step/start', data: { turn: 1, step: 2 } }, said('p'), ended(cut)]),
     ...turn(2, [said('b'), ended({ kind: 'completed' })]),
@@ -499,14 +485,12 @@ test('steer resume: turnOf follows a steer cut to its continuation', async () =>
   assert.deepEqual(follow?.reason, { kind: 'completed' })
   assert.deepEqual(follow?.texts, ['a', 'b'])
 
-  // A cut turn with no continuation yet: read as unfinished, not as stopped.
   const dangling = turnOf([
     ...turn(1, [took('x1'), said('a'), ended(cut)]),
   ], 'x1')
   assert.equal(dangling?.reason, undefined)
   assert.deepEqual(dangling?.texts, ['a'])
 
-  // A user stop stays a stop.
   const stopped = turnOf([
     ...turn(1, [took('x1'), ended({ kind: 'aborted', reason: { kind: 'user' } })]),
   ], 'x1')

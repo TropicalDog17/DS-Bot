@@ -4,8 +4,6 @@ import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
 
-// A small hook runtime: a component renders again whenever its state changes, so a test
-// can press a key, resolve a save, or hand it new props, and read the tree that results.
 let instance = null
 const slot = () => instance.slots[instance.cursor++] ??= {}
 const react = {
@@ -106,13 +104,10 @@ test('a save still under way keeps the slider on the newest pick', async () => {
 
   slider().props.onKeyDown(keydown('ArrowLeft'))
   assert.equal(shown(), 'Low')
-  // The Bot still holds High. Low is already on its way, so High has to follow it —
-  // once Low settles, not beside it — or the older write would land last and win.
   slider().props.onKeyDown(keydown('ArrowRight'))
   assert.equal(shown(), 'High')
   assert.deepEqual(picked, ['low'])
 
-  // The Bot reports the first save while High is still the pick: the knob stays.
   bar.rerender({ reasoning: thinking, current: 'low', onPick })
   assert.equal(shown(), 'High')
   saves[0](true)
@@ -160,8 +155,6 @@ test('rapid effort picks collapse onto the latest level and save in order', asyn
   const slider = () => nodes(bar.tree, node => node.props.role === 'slider')[0]
   const shown = () => slider().props['aria-valuetext']
 
-  // Low -> Medium -> High -> Medium -> High before the first save returns.
-  // Medium is the write in flight; the rest collapse into one pending High.
   slider().props.onKeyDown(keydown('ArrowRight'))
   slider().props.onKeyDown(keydown('ArrowRight'))
   slider().props.onKeyDown(keydown('ArrowLeft'))
@@ -170,7 +163,6 @@ test('rapid effort picks collapse onto the latest level and save in order', asyn
   assert.deepEqual(picked, ['medium'])
   assert.equal(active, 1)
 
-  // The in-flight save's own roster update is not the level the user landed on.
   bar.rerender({ reasoning, current: 'medium', onPick })
   assert.equal(shown(), 'High')
   saves[0](true)
@@ -179,7 +171,6 @@ test('rapid effort picks collapse onto the latest level and save in order', asyn
   assert.equal(maxActive, 1)
   assert.equal(shown(), 'High')
 
-  // An older roster value, arriving while the coalesced save is out, stays off the knob.
   bar.rerender({ reasoning, current: 'low', onPick })
   assert.equal(shown(), 'High')
   saves[1](true)
@@ -187,14 +178,12 @@ test('rapid effort picks collapse onto the latest level and save in order', asyn
   assert.equal(shown(), 'High')
   assert.equal(active, 0)
 
-  // Once the queue is idle, a late intermediate update still loses to the last pick.
   bar.rerender({ reasoning, current: 'medium', onPick })
   assert.equal(shown(), 'High')
   bar.rerender({ reasoning, current: 'high', onPick })
   assert.equal(shown(), 'High')
 })
 
-// The details panel's form: refs get stand-ins, since no DOM backs them.
 function inline({ model = 'official/flash', effort, actions = {}, withEfforts } = {}) {
   listeners.length = 0
   const calls = { updates: [], refreshed: 0, focused: 0 }
@@ -242,7 +231,6 @@ test('the slider sits under the model trigger and under the list once it opens',
   assert.equal(list.props.open, false)
   assert.equal(slider.props.open, true)
   assert.equal(nodes(slider, node => node.type === EffortBar).length, 1)
-  // Trigger first, list next, slider last: the order they stack in.
   assert.deepEqual(root.children.map(child => child.type === 'button' ? 'trigger' : child === list ? 'list' : 'slider'), ['trigger', 'list', 'slider'])
 
   trigger.props.onClick()
@@ -287,7 +275,6 @@ test('picking a model closes the list, saves it, and returns focus to the trigge
   assert.equal(view().trigger.props['aria-expanded'], false)
   assert.equal(calls.focused, 1)
   assert.equal(JSON.stringify(calls.updates), JSON.stringify([['writer', { model: 'official/pro' }]]))
-  // The slider stays where it was.
   assert.equal(view().slider.props.open, true)
 })
 
@@ -308,7 +295,6 @@ test('Escape and a click outside close the list; a click inside leaves it open',
   assert.equal(view().list.props.open, false)
   assert.equal(stopped, true)
   assert.equal(calls.focused, 1)
-  // Closing took its listeners with it.
   assert.equal(listener('mousedown'), undefined)
 })
 

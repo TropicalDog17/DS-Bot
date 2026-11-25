@@ -39,7 +39,6 @@ function nodes(tree, match) {
   return [...(match(tree) ? [tree] : []), ...(tree.children ?? []).flatMap(child => nodes(child, match))]
 }
 
-// `harness`: the window has Settings and DSH's onboarding editors to send the user to.
 function dock(models, { model, ready = true, harness = true } = {}) {
   const picked = []
   const bot = { id: 'chief', name: 'Chief', model }
@@ -115,8 +114,6 @@ test('the Thinking section always offers Default, so a picked level can be clear
   assert.deepEqual(Array.from(effortRows({ efforts, defaultEffort: 'high' }), row => row.effort), [undefined, 'low', 'high'])
   assert.deepEqual(Array.from(effortRows({ efforts }), row => row.effort), [undefined, 'low', 'high'])
   assert.equal(effortRows({ efforts: [] }).length, 0)
-  // Slider stops use the model's levels when defaultEffort is known (reset clears to Default),
-  // and include a leading Default stop when the provider did not name one.
   assert.deepEqual(Array.from(effortStops({ efforts, defaultEffort: 'high' }), row => row.effort), ['low', 'high'])
   assert.deepEqual(Array.from(effortStops({ efforts }), row => row.effort), [undefined, 'low', 'high'])
   const picked = []
@@ -172,7 +169,6 @@ const keyless = [
 test('models that need an API key are no choice', () => {
   const buttons = tree => nodes(tree, node => node.type === 'button').map(button => button.children[0])
   assert.deepEqual(buttons(dock([...keyless, models[1]], { harness: false }).tree), ['DeepSeek Flash'])
-  // Without the host's key endpoint, DSH's own settings take the key.
   assert.deepEqual(buttons(dock(keyless).tree), ['Enter a DeepSeek API key', 'Open settings to set up a custom model'])
 })
 
@@ -215,8 +211,6 @@ test('setting up a custom model opens the Models page of Settings', () => {
   assert.deepEqual(opened, ['models', 'settings:models'])
 })
 
-// The provider groups of the Bot model menu: a heading opens and closes its group, and
-// only the current model's provider is open when the menu opens.
 const menuModels = [
   { ref: 'official/flash', provider: 'official', providerName: 'DeepSeek', name: 'DeepSeek Flash' },
   { ref: 'official/pro', provider: 'official', providerName: 'DeepSeek', name: 'DeepSeek Pro' },
@@ -224,8 +218,6 @@ const menuModels = [
   { ref: 'relay/k3', provider: 'relay', providerName: 'Relay', name: 'Relay K3' },
 ]
 const menuRoster = (models = menuModels) => ({ models, defaultModel: models[0]?.ref })
-// Function components render here by running them: the fake createElement keeps the
-// element, and the menu rows are one.
 const rendered = element => (Array.isArray(element)
   ? element.flatMap(rendered)
   : element !== null && typeof element === 'object' && typeof element.type === 'function'
@@ -263,11 +255,9 @@ test('two providers with the same display name open independently, by provider i
 
 test('a group opens by the search, then the manual pick, then the current model, then the first', () => {
   const open = (options = {}) => groupOpen({ id: 'local', index: 1, currentId: 'relay', filtering: false, manual: {}, ...options })
-  // A search opens every group it matched, and the manual state only applies again without it.
   assert.equal(open({ filtering: true, manual: { local: false } }), true)
   assert.equal(open({ manual: { local: false } }), false)
   assert.equal(open({ manual: { local: true } }), true)
-  // Otherwise the current model's provider is open, and the first provider without one.
   assert.equal(open(), false)
   assert.equal(open({ currentId: 'local' }), true)
   assert.equal(open({ currentId: undefined, index: 0 }), true)
@@ -294,8 +284,6 @@ test('a heading opens and closes its group, the current one included', () => {
 
 test('a heading is a menu item button a keyboard can reach and press', () => {
   const heading = headingOf(menuRows('relay/k3'), 'DeepSeek')
-  // `stepMenuFocus` walks button[role^="menuitem"], and a native button takes Enter and
-  // Space as a click; a collapsed group renders no rows, so its models leave that walk.
   assert.equal(heading.type, 'button')
   assert.equal(heading.props.type, 'button')
   assert.equal(heading.props.role, 'menuitem')
@@ -310,13 +298,10 @@ test('a search opens every matched group and the manual state returns when it cl
   const list = (filtering, manual, currentId) => ModelGroupList({
     groups, current: 'relay/k3', currentId, defaultModel: undefined, onPick: () => {}, manual, filtering, onToggle: () => {},
   })
-  // While a search filters the list, a heading has nothing to collapse and every match shows.
   const searching = list(true, { relay: true }, undefined)
   assert.equal(inside(searching, node => node.props?.role === 'menuitem').length, 0)
   assert.equal(inside(searching, node => node.props?.className === 'bt-model-group').length, 3)
   assert.deepEqual(modelNames(searching), ['DeepSeek Flash', 'Ollama Flash', 'Relay K3'])
-  // Clearing it brings back the headings and the state the user left them in: the group
-  // they opened stays open, the first group is open because no model is current.
   const cleared = list(false, { relay: true }, undefined)
   assert.equal(headingOf(cleared, 'DeepSeek').props['aria-expanded'], true)
   assert.equal(headingOf(cleared, 'Ollama').props['aria-expanded'], false)
@@ -325,12 +310,9 @@ test('a search opens every matched group and the manual state returns when it cl
 })
 
 test('a reopened menu starts from the default, not the choices of the menu still leaving', () => {
-  // The leaving menu lives through its exit animation and the reopen can land on the same
-  // rows; the new opening number must read the default instead of the old choices.
   const previous = { opening: 1, manual: toggledGroup({}, 'local', true) }
   assert.equal(manualFor(previous, 1).local, false)
   assert.deepEqual({ ...manualFor(previous, 2) }, {})
-  // A click in the reopened menu builds on that empty state, not on the old one.
   assert.deepEqual({ ...toggledGroup(manualFor(previous, 2), 'relay', false) }, { relay: true })
 })
 

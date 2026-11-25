@@ -1,5 +1,3 @@
-// The Bot menu's way out of a wait: only a Bot that is waiting on a hand-off offers to
-// give one up, one item per open wait, and the item asks the host to give it up.
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { ownerOfSession } from '../src/host/session-identity.js'
+import { ownerOfSession } from '../src/host/session-identity.ts'
 
 const fixture = () => ({
   chatOwners: new Map([['current', 'a']]),

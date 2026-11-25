@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { chunkMarkdown, chunkTelegram, toPlain, toTelegramHtml } from '../src/host/im/format.js'
+import { chunkMarkdown, chunkTelegram, toPlain, toTelegramHtml } from '../src/host/im/format.ts'
 
 test('Markdown becomes Telegram HTML', () => {
   assert.equal(toTelegramHtml('**bold** and _ital_'), '<b>bold</b> and <i>ital</i>')
@@ -23,9 +23,7 @@ test('chunks stay under the limit and keep whole fences', () => {
   assert.ok(chunks.length > 1)
   const whole = chunks.find(chunk => chunk.html.includes('<pre><code>'))
   assert.ok(whole.html.length <= 100)
-  // The 200-char fence cannot fit, so it is split into several fenced blocks.
   for (const chunk of chunks) assert.ok(chunk.html.length <= 100, chunk.html.length)
-  // A fence that fits is not cut.
   const fits = chunkTelegram(`a\n\n${fence}`, 300)
   assert.equal(fits.length, 1)
   assert.ok(fits[0].html.includes('<pre><code>'))
@@ -41,13 +39,11 @@ test('chunkMarkdown drops blank lines at the start and end of a message', () => 
   assert.deepEqual(chunkMarkdown('\n\nbody\n\n', 4096), ['body'])
   assert.deepEqual(chunkMarkdown('\n\n \n\t\nbody\n\n  \n', 4096), ['body'])
   assert.deepEqual(chunkMarkdown('\r\n\r\nbody\r\n   \r\n', 4096), ['body'])
-  // Full-width spaces on edge lines are dropped too, while many internal blank lines stay linear.
   assert.deepEqual(chunkMarkdown('\u3000\n\u3000\nbody\n\u3000\n', 4096), ['body'])
   const manyNewlines = `a${'\n'.repeat(30_000)}b`
   const started = performance.now()
   assert.deepEqual(chunkMarkdown(manyNewlines, 40_000), [manyNewlines])
   assert.ok(performance.now() - started < 200)
-  // Blank lines inside the text and indentation of a content line stay as written.
   assert.deepEqual(chunkMarkdown('\n\none\n\ntwo\n\n', 4096), ['one\n\ntwo'])
   assert.deepEqual(chunkMarkdown('\n  indented\n\n', 4096), ['  indented'])
   assert.deepEqual(chunkMarkdown('\n\n```js\n\nlet x = 1\n\n```\n\n', 4096), ['```js\n\nlet x = 1\n\n```'])

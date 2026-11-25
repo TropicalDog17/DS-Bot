@@ -1,23 +1,4 @@
 #!/bin/sh
-# Desktop test bench: the scripted mock model, the cookie test page and the unpackaged dsh
-# Desktop (launch.mts) inside its own Xvfb display, on a profile that links the plugin to
-# this checkout. Same habits as dev/bench.sh: pid files, process groups, never by name.
-#
-#   dev/desktop-linux/desktop.sh <name> [start|stop|reset|status]
-#
-# Data lives in <checkout>/.dsh-test-desktop-<name>; `reset` wipes its Bot team and Sessions
-# (keeping the profile, its node_modules and the Electron user data) before starting.
-# `start` returns once the window shows the Bot team. Its files are named desktop*, so a
-# Web bench (dev/bench.sh desktop-<name> ...) can run on the same data next to it.
-#
-# Ports and display: SLOT=n (0-9, default 0) gives mock 88n2, cookie page 88n3, renderer /
-# main / host debugging ports 95n0 / 95n1 / 95n2 and display :1n. Each can be set on its
-# own: MOCK_PORT, COOKIE_PORT, RENDERER_PORT, MAIN_PORT, HOST_PORT, DISPLAY_NUM.
-# WINDOW=1400x860 sizes the window after start (WINDOW= keeps dsh's own size).
-# Other environment: MOCK_DELAY_MS, DSH_HARNESS (default: beside this checkout, else at the
-# same place in the main worktree), DSB_DESKTOP_CACHE (Electron and the Linux runtime; default
-# ~/.cache/dsb-desktop), ELECTRON_BIN (default: fetched into the cache).
-# One Desktop takes about 1 GB of memory.
 set -eu
 NAME=${1:?usage: desktop.sh <name> [start|stop|reset|status]}
 ACTION=${2:-start}
@@ -41,7 +22,6 @@ DSH_HARNESS="$(cd "$DSH_HARNESS" && pwd)"
 alive() { [ -f "$HOME_DIR/$1.pid" ] && kill -0 "-$(cat "$HOME_DIR/$1.pid")" 2>/dev/null; }
 any_alive() { alive desktop || alive desktop-mock || alive desktop-cookie; }
 
-# While anything runs, the ports it was started with win over SLOT and friends.
 if [ -f "$ENV_FILE" ] && any_alive; then
   . "$ENV_FILE"
 else
@@ -56,8 +36,6 @@ else
 fi
 CACHE=${DSB_DESKTOP_CACHE:-$HOME/.cache/dsb-desktop}
 
-# dash's kill takes no `--`. Each process runs in its own session (setsid), so its pid is
-# also its process group, which holds Xvfb, Electron and the dsh host as well.
 stop_one() {
   file="$HOME_DIR/$1.pid"
   [ -f "$file" ] || return 0

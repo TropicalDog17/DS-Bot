@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { createPayload, freshBotName, startModel } from '../src/client/bot-draft.js'
+import { createPayload, freshBotName, startModel } from '../src/client/bot-draft.ts'
 
 const models = [
   { ref: 'ollama/ds-flash', name: 'DS Flash', providerName: 'Ollama' },
@@ -12,7 +12,6 @@ test('the form starts on the team default model, then the DSH default, else the 
   assert.equal(startModel({ models, defaultModel: 'gone/model' }), 'ollama/ds-flash')
   assert.equal(startModel({ models, defaultModel: null }), 'ollama/ds-flash')
   assert.equal(startModel({ models: [], defaultModel: 'cloud/qwen-max' }), '')
-  // The team's pick from settings comes first; one that is not served falls through.
   assert.equal(startModel({ models, defaultModel: 'cloud/qwen-max', prefs: { defaultBotModel: 'ollama/ds-flash' } }), 'ollama/ds-flash')
   assert.equal(startModel({ models, defaultModel: 'cloud/qwen-max', prefs: { defaultBotModel: 'gone/model' } }), 'cloud/qwen-max')
 })
@@ -24,7 +23,6 @@ test('the form never starts on a model whose provider has no key, and starts on 
   const none = models.map(model => ({ ...model, needsKey: true }))
   assert.equal(startModel({ models: none, defaultModel: null }), '')
   assert.equal(startModel({ models: none, defaultModel: 'cloud/qwen-max' }), '')
-  // With no model the payload leaves it out, and the host lets the new Bot wait for a pick.
   assert.equal('model' in createPayload({ name: 'A', look: { shape: 'star', color: 'blue' }, model: startModel({ models: none, defaultModel: null }) }), false)
 })
 

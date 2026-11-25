@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { cleanEnv, findEngineExecutable, findExecutable, launchOf, refreshSearchDirs, spawnAgent } from '../src/host/local-agents/discover.js'
+import { cleanEnv, findEngineExecutable, findExecutable, launchOf, refreshSearchDirs, spawnAgent } from '../src/host/local-agents/discover.ts'
 
 // npm-*.cmd are what npm 11's cmd-shim writes for a Node script and for an .exe;
 // pnpm-node.cmd follows pnpm 11's shim template with a NODE_PATH.
@@ -64,18 +64,12 @@ test('an agent CLI installed by npm starts on Windows', { skip: process.platform
   assert.deepEqual(JSON.parse(out).argv, ['acp', SYSTEM])
 })
 
-// A held npm on PATH stands for the real one: it has not answered when the lookup
-// starts, so the host must not wait for it on the way to a Session, and its global
-// folder joins once the answer arrives. The test lets npm answer itself; a fixed
-// `sleep 2` raced the lookup's own 5 s child timeout whenever the suite was busy
-// enough to delay the child past it.
 test('finding a CLI never waits on npm, and npm\'s global folder joins in the background', { skip: process.platform === 'win32' }, async (t) => {
   const root = mkdtempSync(join(tmpdir(), 'dsb-discover-'))
   const fakeBin = join(root, 'bin')
   const prefix = join(root, 'npm-global')
   const release = join(root, 'npm-release')
   t.after(() => {
-    // Let a held npm exit even when an assertion above failed before releasing it.
     writeFileSync(release, '')
     rmSync(root, { recursive: true, force: true })
   })

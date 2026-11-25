@@ -1,5 +1,3 @@
-// Feasibility probe for the Desktop Bot browser: a plugin-side webview per Bot, read through
-// executeJavaScript. Runs inside the dsh Desktop renderer through the debugging port.
 export default async function (page) {
   const result = await page.evaluate(async () => {
     const bridge = globalThis.dshDesktop?.browser

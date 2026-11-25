@@ -6,14 +6,9 @@ import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
 
-// jsdom comes from the harness that test/harness-resolve.mjs found, like the dsh packages.
 const PLUGIN = dirname(dirname(fileURLToPath(import.meta.url)))
 const { JSDOM } = createRequire(join(process.env.DSH_HARNESS ?? join(PLUGIN, '..', 'deepseek-harness'), 'package.json'))('jsdom')
 
-// #1077: the custom-provider Add form says which required fields it still needs instead
-// of only greying out Add. Rendered with the minimal React stand-in of
-// connectors-page.test.js: hooks are numbered by expansion order, so state survives a
-// re-render and the inputs can be driven the way a user would.
 const { outputFiles } = await build({
   stdin: { contents: "export { CustomForm } from './src/client/providers-page.js'", resolveDir: PLUGIN },
   bundle: true, format: 'cjs', platform: 'browser', write: false, logLevel: 'silent',
@@ -96,7 +91,6 @@ test('each filled field leaves the hint one step shorter', () => {
   assert.equal(hintText(), 'Still needed: Endpoint, At least one model')
   type('Endpoint', 'http://127.0.0.1:9/v1')
   assert.equal(hintText(), 'Still needed: At least one model')
-  // A model typed by id counts, not only one picked from the fetched list.
   type('Model ids', 'm1')
   assert.equal(hintText(), null)
   assert.equal(addButton().props.disabled, false)

@@ -1,5 +1,3 @@
-// The four built-in themes, as the skin bridge's contrast test needs their surface and
-// text colors (kept here so the test does not reach into the client bundle's registry).
 export const THEMES = {
   deepseek: {
     light: { bg: '#fcfcfc', sidebar: '#f7f7f7', bubble: '#eeeeee', card: '#ffffff', text: '#141414', user: '#070707', userText: '#fcfcfc', accent: '#4d6bfe' },

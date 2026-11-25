@@ -5,11 +5,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { createRuntime } from '../index.js'
-import telegram from '../src/host/im/platforms/telegram.js'
+import telegram from '../src/host/im/platforms/telegram.ts'
 import { fakeContext } from './fake-ctx.js'
 
-// A fake Bot API: requests are recorded and answered from `replies`; updates the
-// adapter polls come from `updates`, newest first.
 function fakeApi({ getMe = { id: 7, username: 'fakebot', is_bot: true } } = {}) {
   const calls = []
   const updates = []
@@ -29,7 +27,7 @@ function fakeApi({ getMe = { id: 7, username: 'fakebot', is_bot: true } } = {}) 
     let body = ''
     req.on('data', chunk => { body += chunk })
     req.on('end', () => {
-      const [, , method] = url.pathname.split('/') // /bot<token>/<method>
+      const [, , method] = url.pathname.split('/')
       const params = JSON.parse(body || '{}')
       calls.push({ method, params })
       if (method === 'getUpdates' && out?.holdPoll === true && updates.length === 0) {
@@ -188,7 +186,6 @@ test('stop ends a long poll promptly, and a send in flight does not kill it', as
   api.holdPoll = true
   const handle = telegram.connect({ token: 'tok' }, env(api.api), { onMessage: () => {}, onAction: () => {}, onStatus: () => {} })
   await until(() => api.calls.some(call => call.method === 'getUpdates'))
-  // A send while the poll waits goes on its own controller; the poll stays.
   await handle.send({ key: '1', kind: 'direct' }, { text: 'hi' })
   assert.ok(api.calls.some(call => call.method === 'sendMessage'))
   assert.equal(api.heldPoll.length, 1)
@@ -454,7 +451,6 @@ test('IM runtime forwards captionless video and notifies Bot when >20MB Telegram
   assert.match(prompts[1].content[0].text, /20 MB/)
 })
 
-// A fake fetch for the upload: the long poll waits until stop() aborts it.
 const uploadFetch = (calls, answer) => async (url, init) => {
   const method = url.split('/').pop()
   if (method === 'getUpdates') await new Promise((resolve, reject) => init.signal.addEventListener('abort', () => reject(init.signal.reason)))

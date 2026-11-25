@@ -1,7 +1,3 @@
-// How the connector gateway reaches its upstream: through the proxy the launcher installed, event by
-// event, never cut for being quiet, and with a call that stops when the client gives up. The
-// upstream, the proxy and the client are the test; the gateway runs in a child process when the
-// process-wide proxy policy matters.
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
@@ -14,7 +10,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { createGateway } from '../src/host/connectors/gateway.js'
+import { createGateway } from '../src/host/connectors/gateway.ts'
 import { selfSigned } from './fixtures/self-signed.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -44,7 +40,6 @@ async function inProcessGateway(t, upstream, { readOnly = false } = {}) {
   return { logs, call: (init = {}) => fetch(gateway.urlFor('svc'), { ...init, headers: { ...gateway.headers(), ...init.headers } }) }
 }
 
-// An upstream that sends one event, then holds the next until the test lets go.
 function heldStream() {
   const release = deferred()
   const state = { secondSent: false, closed: deferred(), release: release.resolve }
@@ -175,8 +170,6 @@ test('an upstream on a port that fetch refuses is reached', async (t) => {
   assert.deepEqual(await (await call(mcpCall)).json(), { port: 'blocked-for-fetch' })
 })
 
-// The gateway in a child process, with the proxy policy installed from the environment as the
-// launcher does, and an https upstream reachable only through that proxy.
 const NOT_INHERITED = /^(https?_proxy|all_proxy|no_proxy|node_use_env_proxy|node_extra_ca_certs)$/i
 
 async function startChild(t, { upstream, proxy, ca, undiciTimeoutMs, headers, control }) {
@@ -192,8 +185,6 @@ async function startChild(t, { upstream, proxy, ca, undiciTimeoutMs, headers, co
     child.stdin.end()
     await within(exited, 3000, 'the gateway process exits').catch(() => child.kill())
   })
-  // The child prints one JSON line per fact: first where the gateway listens, later what a plain
-  // fetch made in the same process did (see `control`).
   const lines = []
   const waiting = []
   let text = ''
@@ -212,7 +203,6 @@ async function startChild(t, { upstream, proxy, ca, undiciTimeoutMs, headers, co
   return { stderr: () => stderr, controlResult: () => nextLine('the control fetch ends', 10_000), call: (init = {}) => fetch(url, { ...init, headers: { ...auth, ...init.headers } }) }
 }
 
-// An https upstream for upstream.example, and a proxy that tunnels every CONNECT to it.
 async function tunnel(t, handler, { http2 = false } = {}) {
   const { cert, key } = selfSigned('upstream.example')
   const dir = mkdtempSync(join(tmpdir(), 'dsb-gateway-'))

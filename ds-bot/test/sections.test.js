@@ -113,28 +113,23 @@ test('sections can be created, renamed, colored, collapsed, reordered, and ungro
   assert.equal(state.rooms.find(r => r.id === 'r1').sectionId, sec1.id)
   assert.equal(state.bots.find(b => b.id === 'editor').sectionId, sec2.id)
 
-  // Duplicate section name is refused
   const clash = await call('section-save', { id: sec2.id, name: '短视频矩阵' })
   assert.equal(clash.ok, false)
 
-  // Collapse, rename, and clear color
   const updated = await call('section-save', { id: sec1.id, name: '短视频组', collapsed: true, color: null })
   assert.equal(updated.ok, true)
   assert.equal(updated.value.name, '短视频组')
   assert.equal(updated.value.collapsed, true)
   assert.equal(updated.value.color, undefined)
 
-  // Reorder sections
   const reordered = await call('section-order', { ids: [sec2.id, sec1.id] })
   assert.equal(reordered.ok, true)
   assert.deepEqual(reordered.value.sections.map(s => s.id), [sec2.id, sec1.id])
 
-  // Move via set-flags
   await call('set-flags', { id: 'writer', sectionId: sec2.id })
   state = (await call('state', {})).value
   assert.equal(state.bots.find(b => b.id === 'writer').sectionId, sec2.id)
 
-  // Ungrouping a section keeps all Bots and rooms and clears their sectionId
   const del = await call('section-delete', { id: sec2.id })
   assert.equal(del.ok, true)
   assert.deepEqual(del.value.sections.map(s => s.id), [sec1.id])
@@ -168,11 +163,9 @@ test('first Main Bot never joins a section, and duplicating a Bot keeps its sect
   assert.equal(state.bots.find(b => b.id === 'chief').sectionId, undefined)
   assert.equal(state.bots.find(b => b.id === 'writer').sectionId, sec.id)
 
-  // Duplicating writer keeps sectionId on the copy
   const copy = (await call('duplicate-bot', { id: 'writer' })).value
   assert.equal(copy.sectionId, sec.id)
 
-  // Promoting writer to first Main Bot clears its sectionId
   await call('set-main', { id: 'writer', main: true, primary: true })
   state = (await call('state', {})).value
   assert.equal(state.mainBotId, 'writer')
@@ -185,7 +178,6 @@ test('Main Bot tools create_bot, update_bot, create_group, update_group, and lis
   const mainExec = { agent: { id: 'chief', session: { id: 'chief' } } }
   const workerExec = { agent: { id: 'writer', session: { id: 'writer' } } }
 
-  // create_bot with section creates the section automatically
   const createOut = await tool('create_bot').execute({
     name: 'Designer',
     role: 'UI',
@@ -199,21 +191,17 @@ test('Main Bot tools create_bot, update_bot, create_group, update_group, and lis
   assert.ok(sec)
   assert.equal(state.bots.find(b => b.name === 'Designer').sectionId, sec.id)
 
-  // Non-Main Bot cannot move itself between sidebar sections
   const denied = await tool('update_bot').execute({ section: '短视频线' }, workerExec)
   assert.match(denied, /Only the user or a Main Bot can move/)
 
-  // Main Bot moves Writer and Video Room into the section
   await tool('update_bot').execute({ bot: 'Writer', section: '短视频线' }, mainExec)
   const groupOut = await tool('update_group').execute({ group: 'Video Room', section: '短视频线' }, mainExec)
   assert.match(groupOut, /moved it to section "短视频线"/)
 
-  // list_bots shows section tags
   const listed = await tool('list_bots').execute({}, mainExec)
   assert.match(listed, /Writer \(Copy, section "短视频线"/)
   assert.match(listed, /"Video Room" — members: .*section: 短视频线/)
 
-  // Clearing section with empty string
   await tool('update_bot').execute({ bot: 'Writer', section: '' }, mainExec)
   await tool('update_group').execute({ group: 'Video Room', section: '' }, mainExec)
   state = (await call('state', {})).value
@@ -280,19 +268,15 @@ test('section-add menu offers both creating a new Bot/group in the section and a
     walk(node.props?.children)
   }
   walk(tree)
-  // 2 create buttons (Create new Bot, Create group chat) + 3 existing candidates (Writer, Editor, Video Room)
   assert.equal(buttons.length, 5)
   buttons[0].props.onClick()
   buttons[1].props.onClick()
   assert.deepEqual(opened, [['create', 'sec-1'], ['group', 'sec-1']])
 
-  // Writer is already in sec-1, so clicking toggles it out (null); Editor is not, so clicking moves it into sec-1
   buttons[2].props.onClick()
   buttons[3].props.onClick()
   assert.deepEqual(JSON.parse(JSON.stringify(flagged)), [['writer', { sectionId: null }], ['editor', { sectionId: 'sec-1' }]])
 
-  // Collapsed section in TeamSidebar keeps the active conversation peeking out
-  // once, and marks the folded body inert + aria-hidden.
   const sidebarTree = TeamSidebar({
     wide: true,
     actions: { ...actions, openSession: id => id, openAgent: id => id, openAgentSession: id => id, newAgentSession: id => id },

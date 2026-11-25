@@ -1,10 +1,10 @@
-import { changesPatch } from '../src/shared/changes-patch.js'
+import { changesPatch } from '../src/shared/changes-patch.ts'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
-import { stackReplies } from '../src/shared/group-replies.js'
+import { stackReplies } from '../src/shared/group-replies.ts'
 
 const react = {
   createContext: (initial) => { const ctx = { value: initial }; ctx.Provider = ({ value, children }) => { ctx.value = value; return children }; return ctx },
@@ -87,7 +87,6 @@ test('a group message draws the change line under its bubbles, and none without 
   const actions = { openChanges: () => {}, openSession: () => {} }
   const withChanges = GroupMessage({ bot: { id: 'b1', name: 'Flint' }, texts: ['done'], room: undefined, sessionId: 'r1', roster, actions, time: 1, changes: row })
   assert.equal(all(withChanges, 'bt-changes').length, 1)
-  // The card button is the row handed to the action, so a second Bot's row never opens the first's review.
   const plain = GroupMessage({ bot: { id: 'b1', name: 'Flint' }, texts: ['done'], room: undefined, sessionId: 'r1', roster, actions, time: 1 })
   assert.equal(all(plain, 'bt-changes').length, 0)
 })
@@ -99,7 +98,6 @@ test('a stacked block keeps the last change line of the turn it shows', () => {
   ])
   assert.equal(items.length, 1)
   assert.deepEqual(items[0].changes, row)
-  // A completed turn must keep its own review when the same Bot answers again.
   const second = stackReplies([
     { botId: 'b1', text: 'a', time: 1, changes: row },
     { botId: 'b1', text: 'b', time: 2, changes: { ...row, seq: 9, turn: 4 } },

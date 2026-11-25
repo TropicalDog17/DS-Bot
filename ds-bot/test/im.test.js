@@ -6,7 +6,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { test } from 'node:test'
 import { createRuntime } from '../index.js'
 import { fakeContext } from './fake-ctx.js'
-import { adapters } from '../src/host/im/platforms/index.js'
+import { adapters } from '../src/host/im/platforms/index.ts'
 
 import { fakeAdapter, startSwitchHarness, TEAM } from './im-fixture.js'
 
@@ -54,8 +54,6 @@ async function start({ platform = 'telegram', adapter, seed, services = {} } = {
     rmSync(home, { recursive: true, force: true, maxRetries: 5 })
   }
   const flush = async () => { await delay(10) }
-  // The host echoes an IM prompt as a user/message whose source carries the request it
-  // came in on; the plugin takes the chat that request belongs to as the turn's origin.
   const imTurn = (sessionId = 'a') => {
     const requestId = prompts.at(-1)?.requestId
     emitEvent(sessionId, 'turn/start', { turn: prompts.length })
@@ -160,7 +158,6 @@ test('unbound group mention replies unbound and records the chat; binding routes
   assert.match(s.fake.sent[0].text, /not bound/)
   assert.equal(s.prompts.length, 0)
   await s.rt.imEndpoint('im-chat', { id: conn.id, chatKey: 'g1', target: { roomId: 'r1' } })
-  // The adapter strips its own mention before the core sees the text.
   await gm(s, 'u1', 'hello group')
   assert.equal(s.prompts.length, 1)
   assert.equal(s.prompts[0].sessionId, 'r1')
@@ -186,7 +183,6 @@ test('outbound: assistant text and member lines go out; hidden turns, user and s
   assert.equal(s.fake.sent.length, 1)
   one.chats.g1 = { kind: 'group', title: 'G', target: { roomId: 'r1' }, at: 1 }
   await s.rt.save()
-  // The group's turn was asked for in its IM chat, so its lines go back there.
   await gm(s, 'u1', 'hello group')
   s.imTurn('r1')
   const room = s.rt.roomOf('r1')
@@ -238,7 +234,6 @@ test('question card: buttons answer it, a stranger press is ignored, settled els
   assert.equal(s.agents.get('a')?.followed, 1)
   await s.flush()
   assert.equal(s.fake.edited.length, 1)
-  // Answered on the computer: the question leaves the state, the card edits shut.
   s.rt.state.questions.a = { id: 'q2', question: 'Again?', options: [{ label: 'x' }] }
   await s.rt.save()
   await s.flush()
@@ -326,7 +321,6 @@ test('an out-of-range or stale-card number goes to the Bot as a normal message',
   await dm(s, 'u1', '9')
   assert.ok(s.rt.state.questions.a !== undefined, 'out of range answers nothing')
   assert.equal(s.prompts.length, 1, 'the number reaches the Bot as a message')
-  // Answered on the computer: the card is stale; a later number is a message too.
   delete s.rt.state.questions.a
   await s.rt.save()
   await s.flush()
@@ -361,7 +355,6 @@ test('own-chat approval races DSH: IM allow resolves and withdraws the card; lat
   assert.equal((await racing)[0], 'allowed-once')
   await s.flush()
   assert.equal(s.fake.edited.length, 1)
-  // A press after the card settled gets the stale text, not a second answer.
   await s.fake.handlers.onAction({ chat: { key: 'dm-u1', kind: 'direct', title: 'U1' }, sender: { id: 'u1', name: 'U1' }, data: `a:${approvalId}:allow`, messageId: 1 })
   assert.match(s.fake.sent.at(-1).text, /already answered/)
   void seenSignal
@@ -419,7 +412,6 @@ test('a button for a card this chat was never sent gets the stale text and answe
 })
 
 test('a question from an earlier part stays in the app, and the running turn\'s card answers itself', async (t) => {
-  // Bot a asks from the turn this chat started and from an earlier part of its chat.
   const seed = TEAM()
   seed.bots.a.segments = [{ sessionId: 'a-old' }]
   const s = await start({ seed })
@@ -436,7 +428,6 @@ test('a question from an earlier part stays in the app, and the running turn\'s 
   await s.flush()
   const cards = s.fake.sent
   assert.ok(cards.some(entry => entry.buttons?.[0]?.data.startsWith('q:q1:')), 'the running turn\'s card reached the chat')
-  // An earlier part has no turn of this chat behind it (#1450): its card stays in the app.
   assert.ok(!cards.some(entry => entry.buttons?.[0]?.data.startsWith('q:q2:')), 'a card of an earlier part is not sent')
   await s.fake.handlers.onAction({ chat: { key: 'dm-u1', kind: 'direct', title: 'U1' }, sender: { id: 'u1', name: 'U1' }, data: 'q:q1:0', messageId: 1 })
   assert.ok(s.rt.state.questions.a === undefined, 'the pressed question is answered')
@@ -616,9 +607,6 @@ test('a platform status error is redacted of the stored secret', async (t) => {
   assert.ok(!status.error.includes('tok-1234'), 'the token is redacted')
 })
 
-// #1450: only the turn a chat asked for answers back to it. The Web UI, a peer Bot's
-// message (message_bot) and a scheduled task all start turns of their own; their replies
-// stay in the app instead of landing in every paired chat.
 const pairedConn = async (s) => {
   const conn = await add(s)
   const one = s.rt.state.im.connections[conn.id]
@@ -631,7 +619,6 @@ test('reply origin: an IM turn answers its own chat, and only that chat', async 
   const s = await start()
   t.after(s.stop)
   const { one } = await pairedConn(s)
-  // A second paired chat of the same Bot, which this turn did not come from.
   one.paired.push({ id: 'u2', name: 'U2', at: 1 })
   one.chats['dm-u2'] = { kind: 'direct', title: 'U2', at: 1 }
   await s.rt.save()
@@ -709,7 +696,6 @@ test('a presented file that cannot go out sends a line naming it instead', async
     await s.flush()
     return s
   }
-  // Over the platform's limit, a symlink, a relative path, a file in DS Bot's own data.
   const limited = await turn(fakeAdapter({ fileLimit: 1024 }), [{ path: big }, { path: link }, { path: 'notes.md' }])
   writeFileSync(join(limited.home, 'state-copy.json'), '{}')
   limited.emitEvent('a', 'deliverables/presented', { turn: 1, callId: 'c2', files: [{ path: join(limited.home, 'state-copy.json') }] })
@@ -721,7 +707,6 @@ test('a presented file that cannot go out sends a line naming it instead', async
     'notes.md could not be sent here; open it on the computer.',
     'state-copy.json could not be sent here; open it on the computer.',
   ])
-  // A platform without file sending.
   const plain = await turn(fakeAdapter(), [{ path: small }])
   assert.deepEqual(plain.fake.sent.map(entry => entry.text), ['notes.md could not be sent here; open it on the computer.'])
 })
@@ -786,7 +771,6 @@ test('reply origin: an IM message this process never registered sends nothing', 
   const s = await start()
   t.after(s.stop)
   await pairedConn(s)
-  // As after a restart, or a redelivery: the id looks like IM's but no chat is known.
   s.emitEvent('a', 'user/message', { source: { kind: 'user', rpcId: 'im:telegram:from-another-run' }, content: [{ type: 'text', text: 'hi' }] })
   s.emitEvent('a', 'assistant/message', { message: { content: [{ type: 'text', text: 'reply' }] } })
   await s.flush()
@@ -800,12 +784,10 @@ test('reply origin: the group line follows the turn that started it', async (t) 
   one.chats.g1 = { kind: 'group', title: 'G', target: { roomId: 'r1' }, at: 1 }
   await s.rt.save()
   const room = s.rt.roomOf('r1')
-  // A group turn nobody asked for in IM: its member lines stay in the app.
   s.emitEvent('r1', 'user/message', { source: { kind: 'web' }, content: [{ type: 'text', text: 'from the browser' }] })
   s.rt.logRoom(room, { who: 'Writer', botId: 'b', text: 'member spoke' })
   await s.flush()
   assert.equal(s.fake.sent.length, 0)
-  // Asked for in the group's IM chat: the same line goes back there.
   await gm(s, 'u1', 'hello group')
   s.imTurn('r1')
   s.rt.logRoom(room, { who: 'Writer', botId: 'b', text: 'member spoke' })
@@ -817,13 +799,11 @@ test('reply origin: a question card follows its turn, and a Web turn gets none',
   const s = await start()
   t.after(s.stop)
   await pairedConn(s)
-  // A turn from the Web asks a question: the card stays in the app.
   s.emitEvent('a', 'user/message', { source: { kind: 'web' }, content: [{ type: 'text', text: 'from the browser' }] })
   s.rt.state.questions.a = { id: 'qw', question: 'From the Web?', options: [{ label: 'yes' }] }
   await s.rt.save()
   await s.flush()
   assert.equal(s.fake.sent.length, 0)
-  // The IM turn asks one: it goes to the chat that asked.
   delete s.rt.state.questions.a
   await s.rt.save()
   await dm(s, 'u1', 'hi')
@@ -843,7 +823,6 @@ test('reply origin: a turn that runs past any window still answers its chat', as
   await pairedConn(s)
   await dm(s, 'u1', 'hi')
   s.imTurn('a')
-  // A turn that runs for hours is still the turn this chat asked for.
   const later = Date.now() + 3 * 60 * 60 * 1000
   t.mock.timers.enable({ apis: ['Date'], now: later })
   s.emitEvent('a', 'assistant/message', { message: { content: [{ type: 'text', text: 'long answer' }] } })
@@ -857,7 +836,6 @@ test('reply origin: a message that waited in the queue past any window still nam
   await pairedConn(s)
   await dm(s, 'u1', 'hi')
   const requestId = s.prompts.at(-1).requestId
-  // The Bot was busy: this message waits hours before its turn starts.
   const later = Date.now() + 3 * 60 * 60 * 1000
   t.mock.timers.enable({ apis: ['Date'], now: later })
   s.emitEvent('a', 'user/message', { source: { kind: 'user', rpcId: requestId }, content: [{ type: 'text', text: 'from the chat' }] })
@@ -865,11 +843,6 @@ test('reply origin: a message that waited in the queue past any window still nam
   await s.flush()
   assert.deepEqual(s.fake.sent.map(entry => entry.text), ['answers the queue'])
 })
-
-// The four gaps found on the first head of #1450: a card must follow its own
-// connection, answering one keeps the chat for the turn the answer continues, a
-// group keeps its chat while its members still work after the relay turn, and
-// unpairing stops a running turn from replying.
 
 test('reply origin: cards and approvals leave only on the connection whose chat asked', async (t) => {
   const s = await start()
@@ -932,7 +905,6 @@ test('reply origin: an answer from IM keeps its chat for the turn the answer con
   await s.rt.save()
   await s.flush()
   s.fake.sent.length = 0
-  // The chat answers its own card; the host queues the answer as the next message.
   await s.fake.handlers.onAction({ chat: { key: 'dm-u1', kind: 'direct', title: 'U1' }, sender: { id: 'u1', name: 'U1' }, data: 'q:q1:0', messageId: 1 })
   s.emitEvent('a', 'turn/start', { turn: 2 })
   s.emitEvent('a', 'user/message', s.agentOf('a').lastFollowup)
@@ -951,7 +923,6 @@ test('reply origin: a group keeps its chat while members work after the relay tu
   await gm(s, 'u1', 'hello group')
   s.imTurn('r1')
   s.fake.sent.length = 0
-  // The group's relay turn ends at once; a member keeps working.
   s.emitEvent('r1', 'turn/end', {})
   s.emitEvent('r1', 'user/message', {
     source: { kind: 'bot', form: 'relay', role: 'post', exchangeId: 'e1', senderName: 'Writer', senderSessionId: 'b', roomId: 'r1' },
@@ -973,18 +944,14 @@ test('reply origin: unbinding or rebinding the chat stops a running group turn f
   s.imTurn('r1')
   s.fake.sent.length = 0
   s.emitEvent('r1', 'turn/end', {})
-  // While the chat still follows the group, its lines go out.
   s.rt.logRoom(room, { who: 'Writer', botId: 'b', text: 'first result' })
   await s.flush()
   assert.deepEqual(s.fake.sent.map(entry => entry.text), ['**Writer**: first result'])
   s.fake.sent.length = 0
-  // The app unbinds the chat while the group keeps working: late lines must not follow
-  // the old origin into a chat that no longer points at the group.
   await s.rt.imEndpoint('im-chat', { id: one.id, chatKey: 'g1', target: null })
   s.rt.logRoom(room, { who: 'Writer', botId: 'b', text: 'late result' })
   await s.flush()
   assert.equal(s.fake.sent.length, 0, 'an unbound chat gets no late lines')
-  // Pointing the same chat at another Bot stops the old group's lines too.
   await s.rt.imEndpoint('im-chat', { id: one.id, chatKey: 'g1', target: { botId: 'b' } })
   s.rt.logRoom(room, { who: 'Writer', botId: 'b', text: 'later result' })
   await s.flush()
@@ -1002,9 +969,6 @@ test('reply origin: a member result that wakes the group after its relay turn st
   s.imTurn('r1')
   s.emitEvent('r1', 'turn/end', {})
   s.fake.sent.length = 0
-  // The last member finishes after the relay turn ended: the host posts its result into
-  // the group's own Session and starts a turn for it. The turn starts (and looks idle)
-  // before its user/message arrives, which must not clear the chat that asked.
   s.emitEvent('r1', 'turn/start', { turn: 2 })
   s.emitEvent('r1', 'user/message', {
     source: { kind: 'bot', form: 'relay', role: 'post', exchangeId: 'e2', senderName: 'Writer', senderSessionId: 'b', roomId: 'r1' },
@@ -1039,7 +1003,6 @@ test('reply origin: a stale card answered in a race does not claim the chat for 
   await s.flush()
   s.fake.sent.length = 0
   s.emitEvent('a', 'turn/end', {})
-  // The card is still on the phone, but the app settled it first: answering races it.
   s.rt.answerQuestion = async () => { throw Object.assign(new Error('This question is no longer open'), { code: 'bot/stale' }) }
   await s.fake.handlers.onAction({ chat: { key: 'dm-u1', kind: 'direct', title: 'U1' }, sender: { id: 'u1', name: 'U1' }, data: 'q:q1:0', messageId: 1 })
   await s.flush()
@@ -1049,7 +1012,6 @@ test('reply origin: a stale card answered in a race does not claim the chat for 
   await s.flush()
   assert.equal(s.fake.sent.length, stale, 'the stale answer did not claim the chat')
 })
-
 
 test('mixed IM chats cannot reclaim the same turn, and the next turn starts clean', async t => {
   const s = await start()
@@ -1086,9 +1048,6 @@ test('a Web question answer cannot inherit a previous IM destination', async t =
   assert.equal(s.fake.sent.length, 0)
 })
 
-// #1417: a 5xx was retryable with no limit, so one message held its chat's queue
-// forever while the status still said ready. The retry budget is now bounded, the
-// status says what happened, and the messages behind the failed one still go out.
 test('a send that keeps answering 5xx keeps an exhausted send for manual retry while the queue moves on', async (t) => {
   const s = await start()
   t.after(s.stop)
@@ -1150,14 +1109,12 @@ test('send recovery restores the adapter state, isolates chats, and keeps adapte
   await dm(s, 'u2', 'hi')
   s.fake.sent.length = 0
 
-  // Transient failure while reconnecting restores 'reconnecting' instead of assuming 'ready'.
   s.fake.handlers.onStatus({ state: 'reconnecting' })
   s.fake.fails.push(Object.assign(new Error('502'), { status: 502, retryAfter: 0.005 }))
   s.emitEvent('a', 'assistant/message', { message: { content: [{ type: 'text', text: 'during-reconnect' }] } })
   await delay(60)
   assert.equal(s.rt.imStatusView()[conn.id].state, 'reconnecting')
 
-  // Chat A's dropped send error survives when Chat B succeeds, and an adapter error is never hidden by send retrying.
   s.fake.handlers.onStatus({ state: 'ready' })
   s.rt.state.im.connections[conn.id].chats['dm-u2'].target = { botId: 'b' }
   await s.rt.save()
@@ -1199,7 +1156,6 @@ test('an approval card whose send exhausts retries is retained and re-delivered 
   await delay(140)
   assert.equal(s.fake.sent.filter(job => /bash/.test(job.text)).length, 4)
 
-  // Try again resumes the original card and its pending delivery callback.
   await s.rt.imEndpoint('im-retry', { id: conn.id })
   await delay(60)
   const card = s.fake.sent.at(-1)
@@ -1219,14 +1175,12 @@ test('reply origin: a mid-turn part switch keeps delivering the resumed turn bac
   assert.ok(requestId)
   fake.sent.length = 0
 
-  // Step 1 on part 1 ('a'): user/message is admitted and runs a tool call.
   emitEvent('a', 'turn/start', { turn: 1 })
   const step1 = await preStep('a', [{ content: [{ type: 'text', text: 'run long task' }], source: { kind: 'user', rpcId: requestId } }], 1)
   assert.equal(step1.kind, 'enter')
   emitEvent('a', 'user/message', { source: { kind: 'user', rpcId: requestId }, content: [{ type: 'text', text: 'run long task' }] })
   emitEvent('a', 'assistant/message', { turn: 1, message: { content: [{ type: 'tool-call', id: 'tc1', name: 'bash', arguments: '{}' }] } })
 
-  // Step 2 hits the hard context limit mid-turn and triggers a resumed switch to part 2 ('s1').
   tokens.set('a', 195_000)
   const step2 = await preStep('a', [], 2)
   assert.equal(step2.kind, 'reject')
@@ -1237,7 +1191,6 @@ test('reply origin: a mid-turn part switch keeps delivering the resumed turn bac
   const handoffMsg = agentOf(part2).inbox.nextTurn.shift()
   assert.ok(handoffMsg)
 
-  // Part 2 runs the resumed turn, opens an approval card, and answers the user.
   emitEvent(part2, 'turn/start', { turn: 1 })
   const p2Step1 = await preStep(part2, [handoffMsg], 1)
   assert.equal(p2Step1.kind, 'enter')
@@ -1257,7 +1210,6 @@ test('reply origin: a mid-turn part switch keeps delivering the resumed turn bac
 
   assert.deepEqual(fake.sent.map(job => [job.chat.key, job.text]), [['dm-u1', 'finished in part 2']])
 
-  // Switch failure fallback (`PAUSE_NOTE` on the same part) also keeps delivering to the originating IM chat.
   await fake.handlers.onMessage({ chat: { key: 'dm-u1', kind: 'direct', title: 'U1' }, sender: { id: 'u1', name: 'U1' }, text: 'another long task' })
   const req2 = prompts.at(-1)?.requestId
   fake.sent.length = 0
@@ -1288,7 +1240,6 @@ test('reply origin: overflow switch keeps IM origin, mixed turns stay isolated, 
   const s = await startSwitchHarness(t, { cwd: id => (id === 'r1' ? '/tmp/stale-group-dir' : undefined) })
   const { rt, fake, prompts, agentOf, emitEvent, preStep, fireRequestError, waitHandoff, setIdleGate, setCreateGate, conn } = s
 
-  // 1. Overflow request-error mid-turn switches part and preserves the IM origin.
   await fake.handlers.onMessage({ chat: { key: 'dm-u1', kind: 'direct', title: 'U1' }, sender: { id: 'u1', name: 'U1' }, text: 'overflow task' })
   const req1 = prompts.at(-1)?.requestId
   fake.sent.length = 0
@@ -1309,7 +1260,6 @@ test('reply origin: overflow switch keeps IM origin, mixed turns stay isolated, 
   await delay(30)
   assert.deepEqual(fake.sent.map(job => [job.chat.key, job.text]), [['dm-u1', 'recovered after overflow']])
 
-  // 2. A turn already joined by Web UI input before switching does NOT carry the IM origin across parts.
   await fake.handlers.onMessage({ chat: { key: 'dm-u1', kind: 'direct', title: 'U1' }, sender: { id: 'u1', name: 'U1' }, text: 'mixed task' })
   const req2 = prompts.at(-1)?.requestId
   fake.sent.length = 0
@@ -1331,7 +1281,6 @@ test('reply origin: overflow switch keeps IM origin, mixed turns stay isolated, 
   await delay(30)
   assert.deepEqual(fake.sent, [])
 
-  // 3. A turn that turns mixed after startSwitch held the origin does not leak it to the fresh part either.
   await fake.handlers.onMessage({ chat: { key: 'dm-u1', kind: 'direct', title: 'U1' }, sender: { id: 'u1', name: 'U1' }, text: 'late mixed task' })
   const req3 = prompts.at(-1)?.requestId
   fake.sent.length = 0
@@ -1357,7 +1306,6 @@ test('reply origin: overflow switch keeps IM origin, mixed turns stay isolated, 
   await delay(30)
   assert.deepEqual(fake.sent, [])
 
-  // 4. A group's own Session moving to its folder keeps delivering member room lines to the IM group chat.
   rt.state.im.connections[conn.id].chats.g1 = { kind: 'group', title: 'Group One', target: { roomId: 'r1' }, at: 1 }
   await rt.save()
   await fake.handlers.onMessage({ chat: { key: 'g1', kind: 'group', title: 'Group One' }, sender: { id: 'u1', name: 'U1' }, text: 'start group work', mentioned: true })
@@ -1387,7 +1335,6 @@ test('reply origin: overflow switch keeps IM origin, mixed turns stay isolated, 
   await delay(30)
   assert.deepEqual(fake.sent.map(job => [job.chat.key, job.text]), [['g1', '**Writer**: member finished after switch']])
 
-  // 5. Group folder switch invalidated by a Web UI message while switching does not re-attach the old IM origin.
   fake.sent.length = 0
   agentOf(roomPart2).session.header.cwd = '/tmp/stale-group-dir-2'
   let onCreateEntered
@@ -1421,7 +1368,6 @@ test('reply origin: overflow switch keeps IM origin, mixed turns stay isolated, 
   await delay(30)
   assert.deepEqual(fake.sent, [])
 
-  // 6. Group folder switch invalidated by another IM chat while switching does not leak to the old IM chat.
   rt.state.im.connections[conn.id].chats.g2 = { kind: 'group', title: 'Group Two', target: { roomId: 'r1' }, at: 1 }
   await rt.save()
   await fake.handlers.onMessage({ chat: { key: 'g1', kind: 'group', title: 'Group One' }, sender: { id: 'u1', name: 'U1' }, text: 'start second group work', mentioned: true })
@@ -1465,7 +1411,6 @@ test('reply origin: overflow switch keeps IM origin, mixed turns stay isolated, 
   await delay(30)
   assert.deepEqual(fake.sent.filter(job => job.chat.key === 'g1'), [])
 
-  // 7. Group `!working` pendingReset window after moveOn (before handoff opens) invalidates the held token on Web UI takeover.
   await fake.handlers.onMessage({ chat: { key: 'g1', kind: 'group', title: 'Group One' }, sender: { id: 'u1', name: 'U1' }, text: 'start third group work', mentioned: true })
   const gReq3 = prompts.at(-1)?.requestId
   emitEvent(roomPart4, 'turn/start', { turn: 3 })
@@ -1491,7 +1436,6 @@ test('reply origin: overflow switch keeps IM origin, mixed turns stay isolated, 
   await delay(30)
   assert.deepEqual(fake.sent, [])
 
-  // 8. Group `!working` pendingReset window after moveOn (before handoff opens) invalidates the held token when another IM chat claims the part.
   await fake.handlers.onMessage({ chat: { key: 'g1', kind: 'group', title: 'Group One' }, sender: { id: 'u1', name: 'U1' }, text: 'start fourth group work', mentioned: true })
   const gReq4 = prompts.at(-1)?.requestId
   emitEvent(roomPart5, 'turn/start', { turn: 4 })
@@ -1531,7 +1475,6 @@ test('im-retry while reconnecting preserves retrying sends and reserved cards in
   s.imTurn('a')
   s.fake.sent.length = 0
 
-  // First attempt fails transiently with a long backoff while the adapter reconnects; a follow-up waits behind it.
   s.fake.fails.push(Object.assign(new Error('502'), { status: 502, retryAfter: 30 }))
   const original = new AbortController()
   const racing = s.fireApprovals(
@@ -1586,14 +1529,12 @@ test('im-retry keeps retained failed sends and card reservations when reconnect 
   await delay(30)
   assert.equal(s.rt.imStatusView()[conn.id].state, 'error')
 
-  // Adapter drops to error and the first manual retry cannot connect yet.
   s.fake.handlers.onStatus({ state: 'error', error: 'socket closed' })
   rejectConnect = true
   await s.rt.imEndpoint('im-retry', { id: conn.id })
   assert.equal(s.rt.imStatusView()[conn.id].state, 'error')
   assert.match(s.rt.imStatusView()[conn.id].error, /handshake refused/)
 
-  // Once the connection can open again, a second retry still finds and delivers the retained card.
   rejectConnect = false
   s.fake.sent.length = 0
   await s.rt.imEndpoint('im-retry', { id: conn.id })
@@ -1751,8 +1692,6 @@ test('im-retry clears retrying status when an interrupted single send drops afte
 })
 
 test('a group attachment uploads under the group current Session, not the id it started with', async (t) => {
-  // A group's own Session moves on to a fresh part when its folder changes:
-  // `room.id` stays the first Session's id and `room.sessionId` the current one.
   const seed = TEAM()
   seed.rooms.r1.sessionId = 'r1-part2'
   const uploads = []
@@ -1771,7 +1710,6 @@ test('a group attachment uploads under the group current Session, not the id it 
   const conn = await add(s)
   s.rt.state.im.connections[conn.id].paired.push({ id: 'u1', name: 'User u1', at: 1 })
   await s.rt.save()
-  // The chat is recorded by the first mention; binding then points it at the group.
   await gm(s, 'u1', '@fakebot hello group')
   await s.rt.imEndpoint('im-chat', { id: conn.id, chatKey: 'g1', target: { roomId: 'r1' } })
   await gm(s, 'u1', 'see the plan', { files: [{ name: 'plan.txt', data: Buffer.from('plan') }] })
@@ -1782,8 +1720,6 @@ test('a group attachment uploads under the group current Session, not the id it 
 })
 
 test('a failed add keeps the network reason under "fetch failed"', async (t) => {
-  // #1120: the outlet printed only error.message, so a DNS failure read as
-  // "im-add: fetch failed" and the user could not tell it from a bad token.
   const adapter = fakeAdapter()
   adapter.check = async () => {
     throw Object.assign(new TypeError('fetch failed'), {
@@ -1871,7 +1807,6 @@ test('a board push reaches the Main Bot\'s direct chats only, and a reply to it 
   assert.deepEqual(pushed.map(sent => [sent.chat.key, sent.text]), [['dm-u1', 'Writer · LIFE-7: asks "Fix CI": ship?']])
   const messageId = before + 1
 
-  // The board takes a reply to the push as a note on the card, with the reply's request id.
   const notes = []
   s.rt.cardNote = async (note) => { notes.push(note); return true }
   const prompts = s.prompts.length
@@ -1880,19 +1815,16 @@ test('a board push reaches the Main Bot\'s direct chats only, and a reply to it 
   assert.match(notes[0].requestId, /^im:telegram:/)
   assert.equal(s.prompts.length, prompts)
 
-  // Without the board, the reply goes straight into the card's thread.
   s.rt.cardNote = async () => false
   s.rt.cardSession = (botId, cardId) => (botId === 'b' && cardId === 'c_1' ? 'ct-1' : undefined)
   await dm(s, 'u1', 'and tag it', { replyTo: messageId })
   assert.deepEqual([s.prompts.at(-1).sessionId, s.prompts.at(-1).content[0].text], ['ct-1', 'and tag it'])
 
-  // The card is gone: the Main Bot gets the reply, told which card it was about.
   s.rt.cardSession = () => undefined
   await dm(s, 'u1', 'never mind', { replyTo: messageId })
   assert.equal(s.prompts.at(-1).sessionId, 'a')
   assert.equal(s.prompts.at(-1).content[0].text, '[A reply to your message about card c_1] never mind')
 
-  // A reply to any other message is an ordinary message.
   await dm(s, 'u1', 'plain', { replyTo: 999 })
   assert.deepEqual([s.prompts.at(-1).sessionId, s.prompts.at(-1).content[0].text], ['a', 'plain'])
 })

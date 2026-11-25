@@ -4,10 +4,8 @@ import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
 
-// The pane's message field shares the composer preference: while Enter sends, a plain
-// Enter submits; off, it is the field's own newline and only the send button submits.
 const { outputFiles } = await build({
-  entryPoints: [fileURLToPath(new URL('../src/client/new-chat.js', import.meta.url))],
+  entryPoints: [fileURLToPath(new URL('../src/client/new-chat.ts', import.meta.url))],
   bundle: true, format: 'cjs', platform: 'browser', write: false, logLevel: 'silent',
   external: ['react', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives'],
 })
@@ -81,9 +79,6 @@ const enter = (extra = {}) => ({
 })
 const tick = () => new Promise(resolve => setImmediate(resolve))
 
-// A group pane picks its admin, then the member the typed message goes to. Every
-// step awaits: each click runs through the pane's async busy guard before the next
-// render reads the new state.
 const pane = async ({ ready = true, prefs = {} } = {}) => {
   const calls = { send: [], rooms: [], sessions: [] }
   const bots = [
@@ -132,14 +127,12 @@ test('with Enter sending saved off, a plain Enter is the field\'s own newline', 
 })
 
 test('a roster still loading keeps a saved off and a first-time default', async () => {
-  // The pre-pull roster stays ready:false but already carries the window's saved prefs.
   const saved = await pane({ ready: false, prefs: { enterToSend: false } })
   const off = enter()
   textarea(saved.tree()).props.onKeyDown(off)
   await tick()
   assert.equal(off.prevented, false)
   assert.deepEqual(JSON.parse(JSON.stringify(saved.calls.send)), [])
-  // A window with nothing saved keeps the default: Enter sends, it is not stuck off.
   const fresh = await pane({ ready: false, prefs: {} })
   const on = enter()
   textarea(fresh.tree()).props.onKeyDown(on)
