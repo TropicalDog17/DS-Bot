@@ -54,7 +54,6 @@ test('the page binds window.dsBotStart through onState and act only', () => {
   assert.match(code['start.js'], /const bridge = window\.dsBotStart\b/u)
 })
 
-// The acts the main process must accept from the start window (its allowlist).
 test('the page sends only the acts of the start window', () => {
   const local = new Set(['toggleDetails', 'toggleMore', 'toggleModels'])
   const sent = new Set([
@@ -63,15 +62,9 @@ test('the page sends only the acts of the start window', () => {
     ...[...code['whale.js'].matchAll(/\bact\('(\w+)'\)/gu)].map(match => match[1]),
   ].filter(name => !local.has(name)))
   assert.deepEqual([...sent].sort(), ['answer', 'copyDetails', 'freshStart', 'handoffDone', 'handoffShow', 'importModel', 'importOption', 'installUpdate', 'manualDownload', 'painted', 'pick', 'reloadView', 'retry', 'saveLog', 'wait'])
-  // Every act the main process takes is one that the page sends, under the same name.
   for (const name of START_ACTS) assert.ok(sent.has(name), `the main process takes ${name}, which the page never sends`)
 })
 
-// The progress is a ring of arcs round the whale, one per stage: radius 106 round the centre of
-// a 220 box, from the top, clockwise, 10 degrees apart, with one circle that closes the ring at the
-// hand-off. Three arcs of 120 degrees; a first start that copies a team has a fourth stage, the
-// import, and four arcs of 90 degrees (whale.js arcPath draws them again). The rings that the
-// whale left at its stops and the elapsed clock are gone.
 test('the start page draws the progress as a ring of three or four arcs and a closing circle', () => {
   const arcs = [...html.matchAll(/<g class="arc" data-phase="(\w+)" data-state="pending">(.*?)<\/g>/gu)]
   assert.deepEqual(arcs.map(match => match[1]), ['data', 'engine', 'team', 'import'])
@@ -79,8 +72,6 @@ test('the start page draws the progress as a ring of three or four arcs and a cl
     const a = (deg * Math.PI) / 180
     return [110 + 106 * Math.cos(a), 110 + 106 * Math.sin(a)]
   }
-  // The import's arc is the second of four; it is drawn that way from the start, and shows only
-  // on a ring of four (start.css .ring[data-n]).
   const layout = [[0, 3], [1, 3], [2, 3], [1, 4]]
   arcs.forEach(([, , arc], k) => {
     const [at, n] = layout[k]
@@ -96,7 +87,6 @@ test('the start page draws the progress as a ring of three or four arcs and a cl
     assert.ok(near([x1, y1], point(-90 + (at + 1) * span - 5)), `arc ${String(k)} ends elsewhere`)
   })
   assert.match(read('start.css'), /\.ring:not\(\[data-n="4"\]\) \.arc\[data-phase=import\]\{display:none\}/u)
-  // The director draws the same arcs.
   const source = code['whale.js']
   const arcD = source.match(/^export function arcD\(from, to\) \{$[\s\S]*?^\}$/mu)[0].replace('export ', '')
   const arcPathOf = source.match(/^export const arcPath = .*$/mu)[0].replace('export ', '')
@@ -104,14 +94,10 @@ test('the start page draws the progress as a ring of three or four arcs and a cl
   assert.equal(arcPath(0, 3), arcs[0][2].match(/d="([^"]+)"/u)[1])
   assert.equal(arcPath(2, 3), arcs[2][2].match(/d="([^"]+)"/u)[1])
   assert.equal(arcPath(1, 4), arcs[3][2].match(/d="([^"]+)"/u)[1])
-  // The hidden stage list has the import's stage too, shown only on such a start.
   assert.match(html, /<li class="station" data-phase="data"[^>]*>.*\r?\n<li class="station" data-phase="import" data-state="pending" hidden>.*\r?\n<li class="station" data-phase="engine"/u)
   assert.equal(html.match(/<circle class="ring-full" cx="110" cy="110" r="106" pathLength="100" transform="rotate\(-90 110 110\)"\/>/gu)?.length, 1)
-  // The ring, the water, the whale and its hit box move as one block when a card comes.
   assert.match(html, /<div class="pond">\r?\n<svg class="ring"[\s\S]*?<div class="water"[\s\S]*?<div class="lane">[\s\S]*?<span class="spout"><svg class="plume"[^>]*\shidden>[\s\S]*?<div class="whale-hit"[\s\S]*?<div class="fx" aria-hidden="true"><span class="ripple"><\/span><\/div>\r?\n<\/div>/u)
   assert.doesNotMatch(html, /class="(?:trace|elapsed)"/u)
-  // The layer the whale flies in to the Main Bot's avatar at the hand-off (whale.js leap), and
-  // the whale's box at the top of its jump, which the team page takes over.
   assert.match(html, /<\/main>\r?\n<div class="flight" aria-hidden="true"><\/div>/u)
   assert.match(code['whale.js'], /act\('handoffShow', \{ whale: \{ x: box\.left, y: box\.top - LIFT, size: box\.width \} \}\)/u)
   assert.doesNotMatch(read('start.css'), /\.(?:trace|elapsed)\b/u)
@@ -121,14 +107,12 @@ test('the start page draws the progress as a ring of three or four arcs and a cl
 // must keep every dash off its path (pathLength 100), or it leaves a dot at one of its ends.
 test('an empty or hidden arc leaves no dot: no dash touches its path', () => {
   const css = uncommented(read('start.css'))
-  // The body of the rule whose selector is exactly `selector`.
   const rule = selector => css.split('}').map(part => part.trim().split('{')).find(([head]) => head === selector)?.[1] ?? ''
   const dashes = (body) => {
     const [dash, gap] = body.match(/stroke-dasharray:([\d.]+) ([\d.]+)/u).slice(1).map(Number)
     return { dash, gap }
   }
   const offsetOf = body => Number(body.match(/stroke-dashoffset:(-?[\d.]+)/u)[1])
-  // Dashes start at -offset + k * (dash + gap); one touches the path when it overlaps [0, 100].
   const touches = ({ dash, gap }, offset) => {
     for (let k = -3; k <= 3; k += 1) {
       const start = -offset + k * (dash + gap)
@@ -147,20 +131,13 @@ test('an empty or hidden arc leaves no dot: no dash touches its path', () => {
   for (const at of run) assert.equal(touches(dashes(glow), at), false, `the glow touches its arc at ${String(at)}`)
   const draw = Number(css.match(/@keyframes bt-ring-draw\{from\{stroke-dashoffset:(-?[\d.]+)\}\}/u)[1])
   assert.equal(touches(dashes(base), draw), false, 'the ring touches its arcs before it draws in')
-  // The import's arc fills with the copy (--f from 0 to 1): empty at 0, whole at 1.
   const share = css.match(/\.arc\[data-phase=import\]:is\(\[data-state=active\],\[data-state=failed\]\) \.arc-fill\{stroke-dashoffset:calc\(([\d.]+) - var\(--f,0\) \* ([\d.]+)\)/u).slice(1).map(Number)
   assert.equal(touches(dashes(fill), share[0]), false, 'an empty import arc touches its arc')
   assert.equal(share[0] - share[1], 0, 'a full import arc is not whole')
-  // Shown, they cover the arc.
   assert.equal(touches(dashes(fill), 0), true)
   assert.equal(touches(dashes(base), offsetOf(base)), true)
 })
 
-// A stage done while nobody could see it still gets its turn: the data folder, usually done before
-// the page has painted, and the engine, which warms up while the import card waits (or comes up
-// while the copy runs). Its arc turns active, its prop in view, and holds for HOLD before it
-// fills; a stage seen running fills at once. While the import card waits, the ring holds after
-// the first arc.
 test('every stage is seen active before it fills, even one done before the page painted or while a card waited', () => {
   const whale = code['whale.js']
   const legs = whale.slice(whale.indexOf('async function runLegs()'), whale.indexOf('function failStation()'))
@@ -168,18 +145,13 @@ test('every stage is seen active before it fills, even one done before the page 
   assert.doesNotMatch(legs, /if \(!ran\) \{/u, 'only the first stage gets its turn')
   assert.match(whale, /if \(holding\(\)\) station = Math\.min\(station, 1\)/u)
   assert.match(whale, /\(holding\(\) && i >= 1\)\) return/u)
-  // The team's arc, when the team view was ready before it turned active: at the hand-off of a
-  // first start, inside the main process's 2.5 s fallback.
   const handoff = whale.slice(whale.indexOf('async function handoff()'), whale.indexOf('root.dataset.ring = \'closed\''))
   assert.match(handoff, /if \(!resume && first && D\.checks === t && stationEl\(t\)\.dataset\.state === 'pending'\) \{\s*D\.handing = true\s*showActive\(t\)\s*await sleep\(HOLD\)/u)
   assert.match(legs, /await hold\(Math\.max\(D\.activeAt\[i\] \? D\.activeAt\[i\] \+ HOLD : 0/u)
   assert.match(whale, /const HOLD = 420\b/u)
-  // The reconcile waits for the entrance first, so the arc turns active on a whale that has surfaced.
   assert.match(whale, /async function step\(\) \{\s*await entered/u)
 })
 
-// The window turns opaque OPEN_MS after it shows (start-window.mjs); the entrance waits for the
-// snapshot's `shown`, so that it is seen from its first frame.
 test('the whale\'s entrance waits until the window is on screen', () => {
   const page = code['start.js']
   assert.match(page, /if \(bridge && !resume\) \{\s*root\.dataset\.held = ''/u)
@@ -200,14 +172,9 @@ test('the footer is the place line alone, centred with a grey button, on first a
   assert.doesNotMatch(css, /data-start=later[^{]*\.footrow/u)
   assert.doesNotMatch(css, /\.note\b/u)
   assert.match(code['start.js'], /const on = START !== 'moving' && place !== null/u)
-  // A later start's move asks on a card: [Move and restart], [Choose again…] and [Cancel].
   assert.match(html, /<section class="card" data-kind="move" hidden>.*?data-t="say\.move".*?data-t="card\.move\.lead".*?data-detail="move" data-t="btn\.move".*?data-act="pick" data-t="btn\.repick".*?data-detail="cancel" data-t="btn\.cancel".*?<\/section>/u)
 })
 
-// A move that does not go through says why on the moving page (start-window §5): a place that
-// cannot be used after all, another DSH on the data, a copy that failed. Each variant shows its own
-// parts only; [Start in the old folder] is on all three, [Try again] and the details only after a failed copy.
-// start-window §7: a recovery card says what happened and what to do, and folds out the log.
 const cardOf = kind => html.match(new RegExp(`<section class="card" data-kind="${kind}" hidden>.*?</section>`, 'u'))?.[0] ?? ''
 const recovers = (card, kind) => {
   for (const act of ['copyDetails', 'saveLog', 'toggleDetails']) assert.match(card, new RegExp(`data-act="${act}"`, 'u'), `${kind}: no ${act}`)
@@ -246,18 +213,14 @@ test('a move that does not go through has one card with three variants', () => {
   assert.match(code['start.js'], /if \(name === 'moveFailed'\) el\.querySelector\('\[data-old\]'\)\.dataset\.look = s\.card\?\.why === 'copy' \? 'soft' : 'primary'/u)
 })
 
-// docs/plans/2026-10-29-start-copy.md §2: the first part of a key says where the line is.
 const LAYERS = ['voice', 'say', 'hint', 'card', 'reason', 'btn', 'note', 'foot', 'status', 'dialog', 'picker']
 const layerOf = key => key.split('.')[0]
-// {name} and {name|one|many} (an English count) both name one placeholder.
 const PLACEHOLDER = /\{(\w+)(?:\|[^}]*)?\}/gu
 
 test('every text key starts with one of the eleven layers', () => {
   for (const key of Object.keys(TEXT)) assert.ok(LAYERS.includes(layerOf(key)), `${key}: unknown layer`)
 })
 
-// The whale speaks only when something went wrong (the 180 s question, a failure), and the hint
-// row only for a short drive: no greeting, stage lines, slow-start lines or clock.
 test('the whale and the hint row have only the lines for when the user is needed', () => {
   const layer = name => Object.keys(TEXT).filter(key => layerOf(key) === name).sort()
   assert.deepEqual(layer('voice'), ['voice.failed', 'voice.viewFailed', 'voice.watchdog'])
@@ -265,11 +228,8 @@ test('the whale and the hint row have only the lines for when the user is needed
   assert.ok(!('status.elapsed' in TEXT), 'the elapsed clock is back')
 })
 
-// §2 and §4: a line that stands alone takes no full stop; card, reason, note and dialog text is
-// whole sentences.
 test('each layer ends its lines as its rule says', () => {
   const BARE = new Set(['voice', 'say', 'hint', 'btn', 'foot', 'status', 'picker'])
-  // Not sentences: picker titles, progress lines and labels.
   const NOT_SENTENCES = new Set([
     'card.update.slow', 'card.update.downloading', 'dialog.pickRoot', 'dialog.pickMove', 'dialog.pickCookies', 'dialog.saveAs', 'dialog.saveLog',
     'card.import.line', 'card.import.model', 'card.import.optRegen', 'card.import.optSkipWork',
@@ -278,10 +238,8 @@ test('each layer ends its lines as its rule says', () => {
     if (BARE.has(layerOf(key))) {
       assert.doesNotMatch(text, /\.$/u, `${key}: ends with a full stop`)
     } else if (key.startsWith('reason.copy.')) {
-      // A fragment set into a sentence.
       assert.doesNotMatch(text, /[.?!,]$/u, `${key}: a fragment ends with punctuation`)
     } else if (!NOT_SENTENCES.has(key)) {
-      // A reason or a footnote states; only a card or a dialog may ask.
       const end = layerOf(key) === 'reason' || layerOf(key) === 'note' ? /\.$/u : /[.?]$/u
       assert.match(text, end, `${key}: not a whole sentence`)
     }
@@ -315,14 +273,12 @@ test('every text key that the page uses exists', () => {
     for (const key of used) assert.ok(key in TEXT, `${name}: unknown text key ${key}`)
     for (const [, prefix] of text.matchAll(/`([\w.]+\.)\$\{/gu)) assert.ok(keys.some(key => key.startsWith(prefix)), `${name}: no text key starts with ${prefix}`)
   }
-  // Keys the page builds from the snapshot's views, the stages and the failure reasons.
   for (const key of ['voice.failed', 'voice.viewFailed', 'voice.watchdog', 'status.phase.data', 'status.phase.import', 'status.phase.engine', 'status.phase.team', 'status.state.pending', 'status.state.active', 'status.state.done', 'status.state.failed']) assert.ok(key in TEXT, key)
   assert.deepEqual(matching('reason.start.{reason}').sort(), ['reason.start.engine', 'reason.start.files', 'reason.start.missing', 'reason.start.other', 'reason.start.permission', 'reason.start.space'])
   assert.deepEqual(matching('reason.place.{reason}').sort(), ['reason.place.drive', 'reason.place.dsh', 'reason.place.foreign', 'reason.place.nested', 'reason.place.onedrive', 'reason.place.permission', 'reason.place.program', 'reason.place.space', 'reason.place.workspace'])
   assert.deepEqual(matching('reason.copy.{reason}').sort(), ['reason.copy.full', 'reason.copy.inUse', 'reason.copy.other', 'reason.copy.permission'])
 })
 
-// §1: the main process takes its dialog copy from the same table.
 test('the main process uses only keys of the table and keeps no table of its own', () => {
   const src = new URL('../src/', import.meta.url)
   const files = Object.fromEntries(['main.mjs', 'first-run.mjs', 'updates.mjs'].map(name => [name, uncommented(readFileSync(new URL(name, src), 'utf8'))]))

@@ -1,8 +1,3 @@
-/* DS Bot's own questions and pickers: one card over the page in place of a message box
-   or a system picker (main.mjs askInWindow and askPicker, preload.cjs showCard and showPicker).
-   The main process inserts this sheet into the team window and the start window; the
-   colors and springs are the start window's, scoped to the card's layer so that the page's own
-   stay as they are. */
 /* tokens */
 /* Generated from the DeepSeek theme in ds-bot/src/client/themes.js, inks.js and styles.js by scripts/start-assets.mjs; do not edit. */
 .dsb-card-layer{color-scheme:light dark;--bt-main:#fcfcfc;--bt-card:#ffffff;--bt-ink:#141414;--bt-ink-2:rgba(20,20,20,0.6);--bt-line:rgba(20,20,20,0.08);--bt-line-2:rgba(20,20,20,0.15);--bt-hover:rgba(119,119,119,.09);--bt-accent:#4d6bfe;--bt-accent-ink:#ffffff;--bt-ink-deepseek:#4D6BFE;--bt-green:#00c972;--bt-danger:#e02135}
@@ -30,7 +25,6 @@
 .dsb-card-layer *{box-sizing:border-box}
 .dsb-card{width:min(440px,100%);max-height:calc(100vh - 32px);overflow:auto;padding:20px 24px;border:1px solid var(--bt-line-2);border-radius:12px;background:var(--bt-card);box-shadow:0 12px 40px rgba(0,0,0,.18);text-align:left;translate:0 8px;scale:.98;transition:translate .16s ease-in,scale .16s ease-in,filter .16s ease-in}
 .dsb-card-layer[data-open] .dsb-card{translate:0 0;scale:1;transition:translate var(--spring-shape-ms) var(--spring-shape),scale var(--spring-shape-ms) var(--spring-shape)}
-/* The way out is the start window's card exit: down 6 px, to .975, blurred 3 px. */
 .dsb-card-layer[data-leaving] .dsb-card{translate:0 6px;scale:.975;filter:blur(3px)}
 .dsb-card-title{margin:0;font-size:15px;line-height:22px;font-weight:600;color:var(--bt-ink);white-space:pre-line;overflow-wrap:anywhere}
 .dsb-card-detail{margin:6px 0 0;font-size:14px;line-height:22px;color:var(--bt-ink-2);white-space:pre-line;overflow-wrap:anywhere}
@@ -41,8 +35,6 @@
 .dsb-card-btn:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
 .dsb-card-btn[data-look=primary]{background:var(--bt-accent);color:var(--bt-accent-ink)}
 .dsb-card-btn[data-look=primary]:hover{background:color-mix(in srgb,var(--bt-accent),var(--bt-ink) 10%)}
-/* The app's own folder and file picker (preload.cjs showPicker): the card made wide and tall,
-   places and drives on the left, the folder's entries on the right. */
 .dsb-picker{display:flex;flex-direction:column;gap:10px;width:min(720px,100%);height:min(560px,calc(100vh - 32px));overflow:hidden;padding:18px 20px}
 .dsb-picker[hidden],.dsb-picker [hidden]{display:none!important}
 .dsb-picker-bar{display:flex;align-items:center;gap:6px;min-width:0}
@@ -88,15 +80,12 @@
 .dsb-picker-actions{margin-top:0}
 .dsb-picker-newbtn{margin-right:auto}
 .dsb-card-btn:disabled{opacity:.35;cursor:default;scale:none}
-/* A narrow window (the start window, a small team window) drops the side column under the
-   path field: the places stay one row that scrolls sideways. */
 @media (max-width:560px){
   .dsb-picker-main{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
   .dsb-picker-side{flex-direction:row;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;padding:0}
   .dsb-picker-head{display:none}
   .dsb-picker-root{flex:none}
 }
-/* start-window §9: fades only, .12 s in and .16 s out, without movement, scale or blur. */
 @media (prefers-reduced-motion:reduce){
   .dsb-card-layer[data-open]{transition:opacity .12s ease-out}
   .dsb-card,.dsb-card-layer[data-open] .dsb-card,.dsb-card-layer[data-leaving] .dsb-card{translate:none;scale:none;filter:none;transition:none}
@@ -106,9 +95,6 @@
 :is(html[data-effects=reduced],html[data-effects=off],body[data-bt-effects=reduced],body[data-bt-effects=off]) .dsb-card-layer[data-leaving] .dsb-card{filter:none}
 :is(html[data-effects=off],body[data-bt-effects=off]) .dsb-card-layer,:is(html[data-effects=off],body[data-bt-effects=off]) .dsb-card-layer *{animation:none!important;transition:none!important}
 :is(html[data-effects=off],body[data-bt-effects=off]) .dsb-card,:is(html[data-effects=off],body[data-bt-effects=off]) .dsb-card-btn:active,:is(html[data-effects=off],body[data-bt-effects=off]) .dsb-picker-up:active{scale:none}
-/* The corners DSH gives every element (dsh-client-ui-theme corner-shape.css), which all:unset
-   above takes off the card's controls, and which the start window does not have; last, so it
-   wins over all:unset. The up button stays a circle, as the plugin's icon buttons do. */
 @supports (corner-shape:superellipse(1.5)){
   .dsb-card-layer,.dsb-card-layer *,.dsb-card-layer ::before,.dsb-card-layer ::after{corner-shape:superellipse(1.5)}
   .dsb-card-layer .dsb-picker-up{corner-shape:round}

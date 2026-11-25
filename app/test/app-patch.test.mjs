@@ -8,7 +8,6 @@ import { parse } from 'yaml'
 import { APP_PATCH_NAME, APP_PATCH_ROWS, writeAppPatch } from '../src/app-patch.mjs'
 import { loadAppProfile } from '../src/profile.mjs'
 
-// Every row of an entry list, with the rows inside groups.
 function rows(entries) {
   return entries.flatMap((entry) => [
     entry,
@@ -27,7 +26,6 @@ describe('writeAppPatch', () => {
     mkdirSync(dir, { recursive: true })
     const [file, ...more] = writeAppPatch({ dir, patchPath: join(dir, 'cordis.patch.yml') })
     assert.deepEqual(more, [])
-    // Outside the profile directory itself, so DSH only reads it through patchFiles.
     assert.equal(file, join(home, 'profiles', APP_PATCH_NAME))
     assert.deepEqual(parse(readFileSync(file, 'utf8')), [
       { id: 'ui-settings-models', name: '@deepseek-ai/dsh-client-ui-settings-models', config: { credentialOnboarding: false } },
@@ -55,7 +53,6 @@ describe('the overlay on the pinned DSH', () => {
   })
   after(() => { rmSync(home, { recursive: true, force: true }) })
 
-  // A row DSH renamed would only log a warning, and a config key DSH added would be wiped.
   test('targets a row the app profile mounts, whose whole config it restates', () => {
     const entries = rows(composeEntries([...profile.layers.map(layer => layer.patches), profile.patches]))
     const [patched] = APP_PATCH_ROWS

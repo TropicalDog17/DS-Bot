@@ -1,29 +1,11 @@
-// The on-screen Bot cursor: one small click-through overlay per active Bot that
-// draws the Bot's arrow + avatar where its last computer action pointed, with a
-// ring ripple on clicks. It fades ~2.5 s after the last event and is destroyed.
-// It draws only when the point is genuinely visible: the target window has to
-// own the top-most layer-0 window at that point on the current Space — the
-// "window at point" check runs in a long-lived helper so reading it stays off
-// the main thread and a failure simply means "don't draw".
-
 import { spawn as realSpawn } from 'node:child_process'
 
 const SIZE = 64
-const TIP = { x: 7, y: 3 }           // where the arrow's tip sits inside the page
-const FADE_MS = 2500                 // gone this long after the last event
-const FADE_AT = FADE_MS - 450        // the CSS fade starts here
-const CHECK_MS = 300                 // a slow visibility answer means "don't draw"
+const TIP = { x: 7, y: 3 }
+const FADE_MS = 2500
+const FADE_AT = FADE_MS - 450
+const CHECK_MS = 300
 
-/**
- * @param {{
- *   BrowserWindow: new (options: object) => object,
- *   screen: object,
- *   platform: string,
- *   ownPid?: number,
- *   spawn?: typeof realSpawn,
- *   log?: Pick<Console, 'warn'>,
- * }} options
- */
 export function createComputerCursor({ BrowserWindow, screen, platform, ownPid = process.pid, spawn = realSpawn, log = console }) {
   const windows = new Map()
   const checker = createPointChecker({ platform, ownPid, spawn, log })
@@ -45,13 +27,9 @@ export function createComputerCursor({ BrowserWindow, screen, platform, ownPid =
       skipTaskbar: true, hasShadow: false, show: false,
       webPreferences: { sandbox: true },
     })
-    // Floats over full-screen apps too, not just the regular window level.
     try { win.setAlwaysOnTop(true, 'screen-saver') } catch {}
     try { win.setIgnoreMouseEvents(true, { forward: true }) } catch {}
     try { win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true }) } catch {}
-    // macOS cua captures a single window, so the Bot never screenshots its own
-    // cursor and the user's recordings may show it — no protection here. The
-    // driver may capture the whole screen on Windows, so it is hidden there.
     if (platform === 'win32') { try { win.setContentProtection(true) } catch {} }
     win.on('closed', () => { if (windows.get(botId)?.win === win) windows.delete(botId) })
     const held2 = { win, fadeAt: undefined, goneAt: undefined }
@@ -59,7 +37,6 @@ export function createComputerCursor({ BrowserWindow, screen, platform, ownPid =
     return held2
   }
   return {
-    /** Move the Bot's cursor to a fresh point; hides it when the point is covered. */
     async update(event) {
       if (event === null || typeof event !== 'object' || !Number.isFinite(event.x) || !Number.isFinite(event.y)) return
       const botId = String(event.botId ?? '')
@@ -83,8 +60,6 @@ export function createComputerCursor({ BrowserWindow, screen, platform, ownPid =
   }
 }
 
-// The arrow and avatar page. The arrow's tip lands on the reported point; the
-// ring ripple replays on every click-type event; .fade dims the whole page out.
 export function cursorHtml({ color = '#4d6bfe', avatar, ripple = false } = {}) {
   const safeColor = /^#[0-9a-fA-F]{3,8}$/.test(String(color)) ? color : '#4d6bfe'
   const safeAvatar = typeof avatar === 'string' && /^data:image\/(png|jpeg|webp|svg\+xml);base64,[a-zA-Z0-9+/=]+$/.test(avatar) && avatar.length <= 12000 ? avatar : undefined
@@ -108,18 +83,14 @@ ${ripple ? '<span class="ring"></span>' : ''}
 </body></html>`
 }
 
-// The "is this point really on the target window" check. A long-lived helper
-// reads `x y pid` lines and answers y/n; anything over CHECK_MS counts as no.
 export function createPointChecker({ platform, ownPid = process.pid, spawn = realSpawn, log = console }) {
-  if (platform !== 'darwin' && platform !== 'win32') return { check: async () => false, dispose() {} } // Linux: no on-screen cursor
+  if (platform !== 'darwin' && platform !== 'win32') return { check: async () => false, dispose() {} }
   let child = null
   let pending = null
   let queue = Promise.resolve()
   const ensure = () => {
     if (child !== null) return child
     const script = platform === 'darwin' ? JXA_CHECKER : PS_CHECKER
-    // The script travels on the command line so stdin stays free for the `x y pid`
-    // line protocol: osascript takes -e, PowerShell a base64 -EncodedCommand.
     const file = platform === 'darwin' ? 'osascript' : 'powershell'
     const args = platform === 'darwin'
       ? ['-l', 'JavaScript', '-e', script]
@@ -143,7 +114,6 @@ export function createPointChecker({ platform, ownPid = process.pid, spawn = rea
   }
   const check = (x, y, pid) => {
     const running = ensure()
-    // One check in flight at a time keeps the line protocol in order.
     queue = queue.then(() => new Promise((resolve) => {
       if (running === null || !Number.isInteger(pid)) { resolve(false); return }
       const timer = setTimeout(() => { pending = null; resolve(false) }, CHECK_MS)
@@ -155,9 +125,6 @@ export function createPointChecker({ platform, ownPid = process.pid, spawn = rea
   return { check, dispose() { try { child?.kill() } catch {} child = null } }
 }
 
-// macOS: walk the on-screen window list front-to-back; the point is visible
-// when the first layer-0 window containing it belongs to the target pid. Our
-// own overlay windows never block the answer — they are skipped by owner pid.
 const JXA_CHECKER = String.raw`
 ObjC.import('Foundation')
 ObjC.import('CoreGraphics')
@@ -199,8 +166,6 @@ while (true) {
 }
 `
 
-// Windows: the top-most root window at the point decides visibility; the
-// click-through overlays are skipped by their own process id.
 const PS_CHECKER = String.raw`
 Add-Type @"
 using System;

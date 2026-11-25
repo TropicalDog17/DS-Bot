@@ -1,8 +1,3 @@
-// The start window (docs/plans/2026-10-26-start-window.md §1, §8, §11; windows-onboarding §3): the
-// app's own small window that shows start/start.html while the engine boots. It holds the
-// start's state and sends the page the whole of it on every change; at the end it grows into the
-// team window's rect, and the hidden team window shows on the same rect. The rect maths, the
-// growth, the snapshot and the checks are plain functions, so the tests run without Electron.
 import { pathToFileURL } from 'node:url'
 import { writeFile } from 'node:fs/promises'
 import { within } from './copy-tree.mjs'
@@ -13,13 +8,9 @@ export const START_ACT = 'ds-bot:start-act'
 
 export const START_SIZE = { width: 720, height: 540 }
 export const SHORT_START_SIZE = { width: 720, height: 500 }
-// Work areas lower than this get the short start window.
 const SHORT_WORK_AREA = 588
 export const MAIN_SIZE = { width: 1320, height: 860 }
 export const PHASES = ['data', 'engine', 'team']
-// A start that copies a team from DSH gets a stage of its own for the copy once the copy runs
-// (§6): the ring has three arcs while the import card asks, and goes back to three when the copy
-// stops or the start goes on without it.
 export const IMPORT_PHASES = ['data', 'import', 'engine', 'team']
 const COPY_CARDS = ['copying', 'importFailed']
 export const phasesOf = state => (state.done.includes('import') || COPY_CARDS.includes(state.card?.kind) ? IMPORT_PHASES : PHASES)
@@ -27,61 +18,41 @@ export const START_KINDS = ['first', 'later', 'moving']
 export const WATCHDOG_MS = 180_000
 export const TEAM_VIEW_MS = 20_000
 export const DESTROY_AFTER_MS = 300
-// The hand-off (§8): the start window does not resize (stepped setBounds repaints only now and
-// then, and the whale in it stutters). The team window, already under it, fades in while the
-// start window fades out; window opacity is the compositor's. The team page gets the whale at the
-// top of its jump and holds it there through the fade, then glides it onto the avatar.
 export const CROSSFADE = { duration: 220, step: 16 }
 export const HOLD_MS = CROSSFADE.duration + 40
-// How long the team page may take to draw the whale it is handed before the fade starts anyway.
 export const TEAM_WAIT_MS = 150
 export const TEAM_HANDOFF = 'ds-bot:handoff'
 export const FAILURE_LINES = 200
-// [Save log…] saves this many of the latest log lines, after the same header as the copied details.
 export const SAVED_LINES = 5000
-// The DeepSeek theme's --bt-main and --bt-ink (ui-standard 2.1), as in start.css: the window's
-// own background and caption symbols, which show before the page paints and where no material is.
 const COLORS = { light: { main: '#fcfcfc', ink: '#141414' }, dark: { main: '#141414', ink: '#f2f2f2' } }
 export const PAINT_WAIT_MS = 3000
-// A window that Windows has just shown is drawn a few frames before its page is (and its own
-// opening transition runs over them): the start window shows see-through and turns opaque
-// this long after.
 export const OPEN_MS = 200
 const sinceLaunch = () => String(Math.round(process.uptime() * 1000))
 
-// What the page may ask, and in which views (null: in any). The cards of later pull requests
-// send other names, which are refused.
 const ACT_VIEWS = {
   handoffShow: ['handoff'],
   handoffDone: ['handoff'],
   retry: ['failed', 'watchdog'],
   wait: ['watchdog'],
   reloadView: ['viewFailed'],
-  // "Change the location…" on the page (also under the 180 s question), and the cards it leads to
-  // ("It will go in…", a place that cannot be used).
   pick: ['boot', 'card', 'watchdog'],
   answer: ['card'],
-  // The import card's model and options, and the copying card's stop (windows-onboarding §4).
   importModel: ['card'],
   importOption: ['card'],
-  // The failure page's update banner: [Download] or [Try again] on it, and "Download manually".
   installUpdate: ['failed'],
   manualDownload: ['failed'],
   copyDetails: null,
   saveLog: null,
-  // The page has drawn its first frame: the window shows.
   painted: null,
 }
 export const START_ACTS = Object.freeze(Object.keys(ACT_VIEWS))
 
-/** Whether the main process takes this act from the start page in this view. */
 export function acceptsAct(name, view) {
   if (typeof name !== 'string' || !Object.hasOwn(ACT_VIEWS, name)) return false
   const views = ACT_VIEWS[name]
   return views === null || views.includes(view)
 }
 
-/** Whether a frame shows exactly the start page that was loaded. */
 export function isStartPage(frameUrl, loadedUrl) {
   try {
     const frame = new URL(frameUrl)
@@ -93,7 +64,6 @@ export function isStartPage(frameUrl, loadedUrl) {
 
 export const startUrl = (page, kind) => `${pathToFileURL(page).href}?start=${kind}`
 
-/** The start window's content size on a display's work area. */
 export const startSize = workArea => ({ ...(workArea.height < SHORT_WORK_AREA ? SHORT_START_SIZE : START_SIZE) })
 
 export function centred(size, area) {
@@ -105,7 +75,6 @@ export function centred(size, area) {
   }
 }
 
-/** A rect moved, and shrunk if it must be, to lie inside an area. */
 export function clampInto(rect, area) {
   const width = Math.min(rect.width, area.width)
   const height = Math.min(rect.height, area.height)
@@ -117,14 +86,12 @@ export function clampInto(rect, area) {
   }
 }
 
-/** The team window's rect: centred on the start window, inside the work area. */
 export function mainRect(start, area, size = MAIN_SIZE) {
   const x = Math.round(start.x + start.width / 2 - size.width / 2)
   const y = Math.round(start.y + start.height / 2 - size.height / 2)
   return clampInto({ x, y, width: size.width, height: size.height }, area)
 }
 
-/** CSS's cubic-bezier() as a function of the time fraction. */
 export function cubicBezier(x1, y1, x2, y2) {
   const curve = (p1, p2) => {
     const c = 3 * p1
@@ -137,7 +104,6 @@ export function cubicBezier(x1, y1, x2, y2) {
   return (t) => {
     if (t <= 0) return 0
     if (t >= 1) return 1
-    // x is monotonic for control points inside [0, 1], so halving finds its parameter.
     let low = 0
     let high = 1
     for (let step = 0; step < 40; step += 1) {
@@ -148,16 +114,6 @@ export function cubicBezier(x1, y1, x2, y2) {
     return y((low + high) / 2)
   }
 }
-/**
- * Where the start page's whale lands at the hand-off (start-window §8): the Main Bot's avatar as
- * the team view reported it, in CSS px of that page, turned into DIP and then into the start
- * page's own coordinates once the start window has grown onto the team window's rect. The team
- * page may be zoomed, so its viewport's width gives the scale. Undefined unless the report is a
- * plausible box inside the team view.
- * @param {unknown} report { x, y, width, height, viewportWidth, viewportHeight }
- * @param {{ team: { x: number, y: number, width: number }, start: { x: number, y: number } }} content
- *   the team window's content rect, and the start window's content origin once it has grown
- */
 export function landingOf(report, { team, start }) {
   if (report === null || typeof report !== 'object') return undefined
   const [x, y, width, height, viewportWidth, viewportHeight] = ['x', 'y', 'width', 'height', 'viewportWidth', 'viewportHeight'].map(key => Number(report[key]))
@@ -168,13 +124,6 @@ export function landingOf(report, { team, start }) {
   return { x: round(team.x + x * scale - start.x), y: round(team.y + y * scale - start.y), size: round(((width + height) / 2) * scale) }
 }
 
-/**
- * The whale the start page hands over, in CSS px of the team page: the start page's own box
- * ({ x, y, size } in its CSS px, which are DIP) through both windows' content origins and the
- * team page's zoom. Undefined unless it is a plausible box.
- * @param {unknown} whale { x, y, size }
- * @param {{ start: { x: number, y: number }, team: { x: number, y: number, width: number }, viewportWidth: number }} windows
- */
 export function handoffBox(whale, { start, team, viewportWidth }) {
   if (whale === null || typeof whale !== 'object') return undefined
   const [x, y, size] = ['x', 'y', 'size'].map(key => Number(whale[key]))
@@ -184,13 +133,8 @@ export function handoffBox(whale, { start, team, viewportWidth }) {
   return { x: round((start.x + x - team.x) / zoom), y: round((start.y + y - team.y) / zoom), size: round(size / zoom) }
 }
 
-// When the page never sends handoffShow, the main process shows the team window itself. The page
-// sends it about 0.72 s after ready on a celebrating hand-off and 0.22 s otherwise (start-window §8).
 export const fallbackMs = ({ start, celebrate }) => (start === 'first' || celebrate ? 2500 : 800)
 
-// The reasons of the failure page (windows-onboarding §3), most specific first: a Host that
-// stopped says so and carries its own error output, which names the cause. A folder of the data's
-// that is not there (a drive that is gone) is 'missing', after the program's own files.
 const MISSING = /ENOENT: no such file or directory, (?:mkdir|open|access|stat|lstat|scandir|opendir|rename|copyfile) /u
 const REASONS = [
   ['permission', /\b(?:EACCES|EPERM)\b|permission denied|operation not permitted|access is denied/iu],
@@ -199,18 +143,12 @@ const REASONS = [
   ['engine', /DSH Host stopped|engine's web server/iu],
 ]
 
-// Only a missing file of the program's own says that the install is incomplete: a data folder
-// on a drive that is gone is missing too, and so is a workspace.
 function missingOwnFile(error, text, program) {
   if (!/\bENOENT\b/u.test(text)) return false
   const paths = [error?.path, ...[...text.matchAll(/ENOENT: [^,\n]*, \w+ '([^'\n]+)'/gu)].map(match => match[1])]
   return paths.some(path => typeof path === 'string' && program.some(folder => within(path, folder)))
 }
 
-/**
- * @param {{ program?: string[] }} where `program`: the folders of the app's own files
- * @returns {'permission' | 'space' | 'files' | 'engine' | 'missing' | 'other'}
- */
 export function failureReason(error, { program = [] } = {}) {
   const code = typeof error?.code === 'string' ? error.code : ''
   const message = error instanceof Error ? error.message : String(error ?? '')
@@ -221,18 +159,12 @@ export function failureReason(error, { program = [] } = {}) {
   return MISSING.test(text) ? 'missing' : 'other'
 }
 
-// The Main Bot that a kept team's sidebar shows first (ds-bot's channel.js: mainBotIds[0]; an
-// older state.json has mainBotId), whose name the greeting says on a reinstall.
 export function mainBotName(state) {
   const id = Array.isArray(state?.mainBotIds) ? state.mainBotIds[0] : state?.mainBotId
   const name = typeof id === 'string' ? state.bots?.[id]?.name : undefined
   return typeof name === 'string' && name.trim() !== '' ? name.trim() : undefined
 }
 
-// What the start knows about the team it opens. The ring page no longer shows it (no greeting or
-// hint lines since 2026-10-30); the snapshot keeps it for now. previewNotice: DSH shows its
-// preview notice when the Session is ready and the main view has no non-empty Session, which a
-// data folder without a team always has.
 export function explainOf({ offered = false, team } = {}) {
   if (offered) return { mode: 'import', nextStep: false, previewNotice: false }
   if (team !== undefined) {
@@ -244,14 +176,12 @@ export function explainOf({ offered = false, team } = {}) {
 
 export const clockMs = (clock, now) => clock.base + (clock.running ? Math.max(0, now - clock.from) : 0)
 
-/** The whole state the page gets: the page computes the elapsed time from clock.ms at clock.at. */
 export function startSnapshot(state, now) {
   const snapshot = {
     v: 1,
     start: state.start,
     motion: state.motion,
     effects: state.effects ?? 'full',
-    // Windows and macOS draw their window controls over the page's band; Linux a system title bar.
     frame: state.frame,
     view: state.view,
     phases: [...phasesOf(state)],
@@ -260,7 +190,6 @@ export function startSnapshot(state, now) {
     clock: { ms: Math.round(clockMs(state.clock, now)), at: now, running: state.clock.running, rate: 1 },
     explain: { ...state.explain },
     celebrate: state.celebrate,
-    // The window is on screen: the page's entrance starts (start.js).
     shown: state.shown === true,
   }
   if (state.hint !== undefined) snapshot.hint = { ...state.hint }
@@ -275,9 +204,7 @@ export function startSnapshot(state, now) {
 export const detailsText = ({ version, platform, arch, reason, lines }) => [`DS Bot ${version} (${platform} ${arch})`, `reason: ${reason}`, '', ...lines].join('\n')
 
 const note = message => { console.log(`DS Bot: start window: ${message}`) }
-// The page sends a button's detail as { value }; anything else counts as none.
 const valueOf = payload => (payload !== null && typeof payload === 'object' && typeof payload.value === 'string' ? payload.value.slice(0, 40) : undefined)
-// An option of the import card: its name and whether it is ticked.
 const optionOf = payload => (payload !== null && typeof payload === 'object' && typeof payload.option === 'string' ? { option: payload.option.slice(0, 40), value: payload.value === true } : undefined)
 
 export class StartWindow {
@@ -296,39 +223,14 @@ export class StartWindow {
   #handing = false
   #under = false
   #revealed = false
-  // Whether the engine of this attempt is up; the stages done say where the whale is, which a
-  // retry never moves back.
   #engineUp = false
-  // What a dialog of the window (the folder picker) or a card keeps waiting: the hand-off, which
-  // would take the window and the dialog's owner away, and the 20 s check's verdict.
   #readyHeld = false
-  // The Main Bot avatar's place that came with ready(), kept while the hand-off is held.
   #readyReport
   #heldAt = 0
   #viewLate = false
   #teamShown
   #showTeam
 
-  /**
-   * @param {{
-   *   electron: { BrowserWindow: any, ipcMain: any, screen: any, shell: any, clipboard: any, nativeTheme: any, systemPreferences: any },
-   *   page: string, preload: string, icon: string, material?: 'mica' | 'vibrancy', devTools: boolean, css?: string,
-   *   motion: string, version: string, program: string[],
-   *   log: { dir: string, tail: (count: number) => string[] },
-   *   mainWindow: () => any,
-   *   onRetry: () => void, onReload: () => void, onClose: () => void,
-   *   onPick?: (value?: string) => void, onAnswer?: (value?: string) => void,
-   *   saveAs?: (win: any, name: string) => Promise<string | undefined>,
-   *   onUpdate?: (name: 'installUpdate' | 'manualDownload') => void,
-   *   onImport?: (name: 'importModel' | 'importOption', value: unknown) => void,
-   * }} options `program` names the folders of the app's own files;
-   *   `onClose` runs when the user closes the start window before the hand-off; `onPick` when
-   *   the page asks for the folder picker ('changePlace' from its place line, nothing from a
-   *   card's [Choose again]; on a later start the line's button moves the data), `onAnswer` with a
-   *   card's answer ('use' for [Continue] on "It will go in…"), `onUpdate` with a button of the failure
-   *   page's update banner, `onImport` with the import card's model and options and the copying
-   *   card's stop.
-   */
   constructor(options) {
     this.#o = options
     this.#teamShown = new Promise((resolve) => { this.#showTeam = resolve })
@@ -337,16 +239,12 @@ export class StartWindow {
 
   get kind() { return this.#state?.start }
 
-  /** Settles once the current window has painted its first frame (or has had time to). */
   get painted() { return this.#painted }
 
-  /** Settles once the team window has shown at a hand-off. */
   get teamShown() { return this.#teamShown }
 
-  /** Whether the team window has shown at this start's hand-off. */
   get revealed() { return this.#revealed }
 
-  /** Opens the window, unless one is open, with a fresh state for this kind of start. */
   open(kind) {
     if (this.#open()) return
     const { BrowserWindow, screen, nativeTheme } = this.#o.electron
@@ -362,25 +260,18 @@ export class StartWindow {
       useContentSize: true, resizable: false, maximizable: false, fullscreenable: false, minimizable: true,
       show: false, title: 'DS Bot', icon: this.#o.icon,
       backgroundColor: material ? '#00000000' : colors.main,
-      // Frameless with the system window controls over the page's empty 40 px band.
       ...frameOptions(process.platform, material, { color: material ? '#00000000' : colors.main, symbolColor: colors.ink }),
       webPreferences: {
         preload: this.#o.preload, contextIsolation: true, sandbox: true, nodeIntegration: false, webviewTag: false, spellcheck: false,
-        // The page paces the whale and the hand-off on timers, which a covered or minimized
-        // window would otherwise run once a second.
         backgroundThrottling: false,
         additionalArguments: [`--ds-bot-start=${pathToFileURL(this.#o.page).href}`],
       },
     })
-    // At a fractional display scale, Electron 44 on Windows makes a frameless window a few pixels
-    // larger than asked; setting the size again once it exists gives the size asked for.
     win.setContentBounds(rect)
     if (material === 'vibrancy') keepVibrancy(win, () => this.#colors().main)
     this.#window = win
     this.#url = startUrl(this.#o.page, start)
     const contents = win.webContents
-    // The window shows once its page says it has drawn its first frame (the 'painted' act), so it
-    // never opens on an empty panel: the page's whale and ring come about 1 s after the window.
     win.once('ready-to-show', () => { note(`the start page painted ${sinceLaunch()} ms after launch`) })
     this.#later('show', PAINT_WAIT_MS, () => { this.#showStart('the page did not say it painted', { now: true }) })
     this.#painted = new Promise((resolve) => {
@@ -391,8 +282,6 @@ export class StartWindow {
     win.on('page-title-updated', (event) => { event.preventDefault() })
     contents.on('will-navigate', (event) => { event.preventDefault() })
     contents.setWindowOpenHandler(() => ({ action: 'deny' }))
-    // A reload loses what the preload kept, so the page gets the state again.
-    // The page loads only its own files; the app's picker brings its sheet (page-card.css).
     contents.on('dom-ready', () => {
       if (this.#o.css) void contents.insertCSS(this.#o.css)
       this.#send()
@@ -420,15 +309,12 @@ export class StartWindow {
     void win.loadURL(this.#url).catch((error) => { note(`the start page did not load: ${error instanceof Error ? error.message : String(error)}`) })
   }
 
-  /** The window that dialogs belong to, while it is the one showing; a dialog never opens over nothing. */
   owner() {
     if (!this.#open() || this.#revealed) return undefined
     this.#showStart('a dialog', { now: true })
     return this.#window
   }
 
-  // Shown see-through, then opaque after OPEN_MS; `now` (a dialog, a page that never painted)
-  // does not wait. The page starts the whale's entrance once the snapshot says `shown`.
   #showStart(why, { now = false } = {}) {
     this.#clear('show')
     const win = this.#window
@@ -449,7 +335,6 @@ export class StartWindow {
     this.#update({ shown: true })
   }
 
-  /** Brings the start window back while it is the one showing. */
   focus() {
     if (!this.#open() || this.#revealed) return false
     this.#showStart('focus', { now: true })
@@ -465,44 +350,23 @@ export class StartWindow {
     if (this.#open()) this.#update({ explain: this.#explain })
   }
 
-  /**
-   * The line that says where the data goes, with "Change the location…" (start-window §2; a first start, or a
-   * later one whose drive runs low, §5): the drive and its free space, or the folder. Undefined
-   * takes the line away.
-   * @param {{ drive?: string, path?: string, free?: string } | undefined} place
-   */
   place(place) {
     if (this.#open()) this.#update({ place: place === undefined ? undefined : { ...place } })
   }
 
-  /** A short drive's one-line note for the first 10 s (§4), or none. */
   hint(hint) {
     if (this.#open()) this.#update({ hint: hint === undefined ? undefined : { ...hint } })
   }
 
-  /**
-   * A card on the sheet while the start boots or the data moves (the clock stands still), or
-   * none: back to the boot or the move. The cards of a place ("It will go in…", a place that cannot be
-   * used, a later start's "Move the data here?"), of the first run's import and of a move that did
-   * not go through.
-   * @param {{ kind: string, [field: string]: unknown } | undefined} card
-   * @returns {boolean} whether the window shows it: not on the failure page or at the hand-off
-   */
   card(card) {
     if (!this.#open() || !['boot', 'card', 'watchdog', 'moving'].includes(this.#state.view)) return false
     if (card === undefined && this.#state.view !== 'card') return false
-    // Back in the boot, a 180 s question that the card replaced comes straight back.
     const back = this.#state.start === 'moving' ? 'moving' : 'boot'
     this.#update(card === undefined ? { view: back, card: undefined } : { view: 'card', card: { ...card } })
     if (card === undefined) this.#resume()
     return true
   }
 
-  /**
-   * The start begins again in another folder (§7): the stages go back to the start, the whale
-   * sinks and surfaces with its arcs emptied, and the clock starts from 0. The first success after
-   * it celebrates, as after a retry.
-   */
   restart() {
     if (!this.#open()) return
     note('starting over in another folder')
@@ -514,10 +378,6 @@ export class StartWindow {
     this.#update({ view: 'boot', done: [], card: undefined, failure: undefined, update: undefined, celebrate: true, clock: { base: 0, from: Date.now(), running: true } })
   }
 
-  /**
-   * The data moves in the middle of a later start ("Change the location…" on its place line, §5): the page
-   * loads again as the move's start, and a hand-off that waited goes with the start it was for.
-   */
   moving() {
     if (!this.#open()) return
     note('the data moves: the start window becomes the move\'s')
@@ -526,10 +386,6 @@ export class StartWindow {
     void this.#window.loadURL(this.#url).catch((error) => { note(`the start page did not load: ${error instanceof Error ? error.message : String(error)}`) })
   }
 
-  /**
-   * The clock stands still while the user answers a dialog: thinking time is not the engine's.
-   * The hand-off and the 20 s check wait for the answer too (see ready()).
-   */
   async asking(promise) {
     this.#asks += 1
     this.#refresh()
@@ -542,7 +398,6 @@ export class StartWindow {
     }
   }
 
-  // What waited for the dialogs to close and the card to go.
   #resume() {
     if (this.#asks > 0 || !this.#open() || this.#state.view !== 'boot') return
     if (this.#readyHeld) {
@@ -562,7 +417,6 @@ export class StartWindow {
     this.#viewLate = false
   }
 
-  /** The data folder, the import or the engine is ready; the engine also again after a retry. */
   done(phase) {
     if (!this.#open() || !['data', 'import', 'engine'].includes(phase)) return
     const again = this.#state.done.includes(phase)
@@ -570,21 +424,15 @@ export class StartWindow {
     if (phase === 'engine') this.#engineUp = true
     note(`${phase} took ${String(Date.now() - this.#phaseAt)} ms`)
     this.#phaseAt = Date.now()
-    // The engine came up while the 180 s question was open: the question goes.
     this.#update({ ...(again ? {} : { done: [...this.#state.done, phase] }), ...(this.#state.view === 'watchdog' ? { view: 'boot' } : {}) })
   }
 
-  /**
-   * The engine that warmed up while the import card waited has stopped for the copy: its stage
-   * is open again until the engine of the copied team is up.
-   */
   engineDown() {
     if (!this.#open() || !this.#state.done.includes('engine')) return
     this.#engineUp = false
     this.#update({ done: this.#state.done.filter(phase => phase !== 'engine') })
   }
 
-  /** The engine's page started loading in the hidden team window: it has 20 s to call ready(). */
   teamLoading() {
     if (!this.#open()) return
     this.#later('teamView', TEAM_VIEW_MS, () => { this.#teamViewLate() })
@@ -592,17 +440,11 @@ export class StartWindow {
 
   #teamViewLate() {
     if (!['boot', 'card'].includes(this.#state.view)) return
-    // A dialog or a card is up: the verdict waits for the answer (#resume).
     if (this.#asks > 0 || this.#state.view === 'card') { this.#viewLate = true; return }
     note(`the team view did not call ready() within ${String(TEAM_VIEW_MS / 1000)} s`)
     this.#update({ view: 'viewFailed', failure: { reason: 'other', log: this.#o.log.tail(FAILURE_LINES) } })
   }
 
-  /**
-   * dsBotApp.ready() from the team view: the hand-off starts. While a dialog of the window or
-   * a card is up (the folder picker, "It will go in…"), it waits: the hand-off would take the window,
-   * and with it the dialog's owner, away while the user is still choosing where the data goes.
-   */
   ready(report) {
     if (!this.#open() || !['boot', 'card', 'viewFailed'].includes(this.#state.view) || !this.#engineUp) return
     this.#clear('teamView')
@@ -619,7 +461,6 @@ export class StartWindow {
     const now = Date.now()
     note(`team took ${String(now - this.#phaseAt)} ms`)
     this.#readyAt = now
-    // A team view that loads after its 20 s goes in without a celebration (§7).
     const celebrate = this.#state.celebrate && this.#state.view !== 'viewFailed'
     this.#update({ view: 'handoff', done: [...phasesOf(this.#state)], celebrate, failure: undefined, landing: this.#landing(report) })
     const main = this.#o.mainWindow()
@@ -630,14 +471,8 @@ export class StartWindow {
     })
   }
 
-  /**
-   * The failure page: in this window, or in a new one when the team window was already showing.
-   * @param {string} kind the kind of start when no start window has opened yet
-   */
   fail(error, kind = 'later') {
     const showing = this.#revealed
-    // The page's hand-off empties it for the growth and cannot be undone there: a fresh page
-    // draws the failure.
     const emptied = !showing && this.#open() && this.#state.view === 'handoff'
     if (showing) {
       this.#destroy()
@@ -653,18 +488,11 @@ export class StartWindow {
     if (emptied) this.#window.webContents.reload()
   }
 
-  /**
-   * The failure page's update banner (start-window §7), or none: a new version that may fix what
-   * keeps this one from starting. A retry takes it away.
-   * @param {{ state: 'available' | 'downloading' | 'installing' | 'failed', version: string, page?: boolean, percent?: number, received?: number, total?: number } | undefined} update
-   *   `page`: the version installs from its release page, not by itself; `received` and `total` in MB
-   */
   update(update) {
     if (!this.#open() || this.#state.view !== 'failed') return
     this.#update({ update: update === undefined ? undefined : { ...update } })
   }
 
-  /** The team window's rect: centred on the start window, inside that display's work area. */
   mainBounds() {
     const { screen } = this.#o.electron
     if (!this.#open()) return centred(clampInto({ x: 0, y: 0, ...MAIN_SIZE }, screen.getPrimaryDisplay().workArea), screen.getPrimaryDisplay().workArea)
@@ -672,11 +500,6 @@ export class StartWindow {
     return mainRect(start, screen.getDisplayMatching(start).workArea)
   }
 
-  // The whale's landing for this hand-off: the team window goes on its rect now (handoffShow
-  // places it again, in case the start window is dragged meanwhile), and the start window's frame
-  // offset carries over to the rect it grows to. The team page measured itself at the size the
-  // window had before that. The landing is optional: anything odd, and the whale dives. A
-  // minimized start window does not grow, and its bounds would not say where it is.
   #landing(report) {
     const main = this.#o.mainWindow()
     if (main === undefined || main.isDestroyed() || this.#window.isMinimized()) return undefined
@@ -697,11 +520,6 @@ export class StartWindow {
     }
   }
 
-  /**
-   * Puts the hidden team window on its rect, also when made with it: the size it was made with
-   * can be off by a few pixels (see open()), the one set afterwards is exact.
-   * @returns the rect
-   */
   placeMain(main = this.#o.mainWindow()) {
     const rect = this.mainBounds()
     if (main !== undefined && !main.isDestroyed()) main.setBounds(rect)
@@ -732,8 +550,6 @@ export class StartWindow {
     this.#refresh()
   }
 
-  // Applies a change, keeps the clock running only while the start is booting and nobody is
-  // being asked, and sends the page the whole state.
   #update(change) {
     const now = Date.now()
     const next = { ...this.#state, ...change }
@@ -751,7 +567,6 @@ export class StartWindow {
     if (this.#open() && this.#state !== undefined) this.#window.webContents.send(START_STATE, startSnapshot(this.#state, Date.now()))
   }
 
-  // 180 s on the start's clock without the engine: the whale asks whether to try again.
   #armWatchdog() {
     this.#clear('watchdog')
     const { start, view, clock } = this.#state
@@ -786,9 +601,6 @@ export class StartWindow {
     return true
   }
 
-  // The failed stage, or the engine after the 180 s question, starts again; the stages already
-  // done stay done, and the first success after this celebrates (§7). The engine starts again
-  // in any case, so the 180 s question guards it again.
   #retry() {
     note(`retry from ${this.#state.view}`)
     this.#engineUp = false
@@ -799,7 +611,6 @@ export class StartWindow {
     this.#o.onRetry()
   }
 
-  // [Keep waiting]: the question comes back after another 180 s on the clock.
   #wait() {
     this.#watchAt = clockMs(this.#state.clock, Date.now()) + WATCHDOG_MS
     this.#update({ view: 'boot' })
@@ -819,7 +630,6 @@ export class StartWindow {
     void Promise.resolve(this.#o.electron.clipboard.writeText(text)).catch((error) => { note(`the details were not copied: ${error instanceof Error ? error.message : String(error)}`) })
   }
 
-  // The app's own picker on the page (saveAs), not a system box.
   async #saveLog() {
     const { version, saveAs } = this.#o
     if (saveAs === undefined) return
@@ -835,7 +645,6 @@ export class StartWindow {
     }
   }
 
-  // The page's content has faded; with a landing it is at the top of its jump and says where.
   #handoffShow(payload) {
     if (this.#handing || this.#state.view !== 'handoff') return
     const main = this.#o.mainWindow()
@@ -844,7 +653,6 @@ export class StartWindow {
     this.#clear('fallback')
     this.#showAt = Date.now()
     note(`handoffShow at ready + ${String(this.#showAt - this.#readyAt)} ms`)
-    // The start window may have been dragged since the team window was placed.
     this.placeMain(main)
     const box = this.#state.landing === undefined || this.#readyReport === undefined ? undefined : this.#teamBox(main, payload)
     if (box === undefined || !this.#under) { this.#reveal(); return }
@@ -852,7 +660,6 @@ export class StartWindow {
     this.#later('teamWait', TEAM_WAIT_MS, () => { note('the team page did not say it drew the whale'); this.#reveal() })
   }
 
-  /** The team page has drawn the whale it was handed: the windows cross-fade. */
   teamReady() {
     if (!this.#handing || this.#revealed || this.#timers.teamWait === undefined) return
     note(`the team page drew the whale at handoffShow + ${String(Date.now() - this.#showAt)} ms`)
@@ -871,9 +678,6 @@ export class StartWindow {
     }
   }
 
-  // At ready() the team window shows, see-through, out of the taskbar and under the start window,
-  // so that Windows' own opening transition has run by the reveal (shown at the reveal, it dims
-  // the page for a few frames) and the team page is drawn and can take the whale.
   #underlay(main) {
     try {
       main.setSkipTaskbar(true)
@@ -895,8 +699,6 @@ export class StartWindow {
     main.setSkipTaskbar(false)
   }
 
-  // The team window shows on its rect: with the focus when the start window had it; otherwise
-  // behind nothing new, flashing its taskbar button; minimized when the start window was.
   #reveal() {
     if (this.#revealed || !this.#open()) return
     const main = this.#o.mainWindow()
@@ -922,17 +724,12 @@ export class StartWindow {
       main.flashFrame(true)
       main.once('focus', () => { main.flashFrame(false) })
     }
-    // Leaves the taskbar only now, so the app's button never goes away.
     win.setSkipTaskbar(true)
     note(`team window shown (${how}) at ready + ${String(Date.now() - this.#readyAt)} ms`)
     this.#later('destroy', DESTROY_AFTER_MS, () => { this.#destroy() })
   }
 
-  // The team window, on its rect around and under the start window, fades in while the start
-  // window fades out over it. With a whale handed over, the team page holds it where the start
-  // page's whale is through this fade, so the two stay on each other.
   #crossfade(main, win, how) {
-    // A team window hidden while it waited (closed to the tray) comes back for the fade.
     if (!main.isVisible()) main.showInactive()
     main.setSkipTaskbar(false)
     win.setSkipTaskbar(true)

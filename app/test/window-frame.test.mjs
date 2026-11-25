@@ -23,7 +23,6 @@ test('Windows and macOS draw the page under their window controls; Linux keeps i
   assert.equal(mac.titleBarStyle, 'hidden')
   assert.equal(mac.vibrancy, 'sidebar')
   assert.equal(mac.titleBarOverlay, undefined)
-  // The 14 px traffic lights sit in the middle of the band.
   assert.equal(mac.trafficLightPosition.y * 2 + 14, CAPTION_HEIGHT)
   assert.deepEqual(frameOptions('linux', undefined, caption), {})
 })

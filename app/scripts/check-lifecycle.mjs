@@ -1,7 +1,3 @@
-// Check the window and the tray of the app in a real Electron, with a fake Host: no DSH, no
-// model, no data of the user. The app hides the window instead of closing it, the tray opens
-// it again, and a window that is gone for good is built anew and talks to the Host that runs.
-// Usage: node scripts/check-lifecycle.mjs
 import { spawn, spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { mkdirSync, rmSync } from 'node:fs'
@@ -12,12 +8,8 @@ import { setTimeout as sleep } from 'node:timers/promises'
 const require = createRequire(import.meta.url)
 const electron = require('electron')
 const here = import.meta.dirname
-// The data of the run is a folder of its own in the app's own directory: the check never
-// writes into the data of the user.
 const work = join(here, '..', '.dsh-test-tray-lifecycle')
 
-// The app answers over its standard output and over a plain socket. Both carry one answer
-// per line, so that the check needs no dependency.
 const answers = []
 const waiters = []
 let output = ''
@@ -35,7 +27,6 @@ const nextAnswer = (timeout = 30_000) => {
   })
 }
 
-// A stream that carries one answer per line: the rest of it is the output of the app.
 const reader = (keep = true) => {
   let buffer = ''
   return (chunk) => {
@@ -118,7 +109,6 @@ try {
   if (rebuilt.hosts !== 1) fail('a second Host was started')
   console.log('check-lifecycle: a window that is gone is built anew and talks to the same Host')
 
-  // The quit ends the app, so the answer never comes: the exit does.
   connection.write('quit\n')
   const outcome = await Promise.race([exited, sleep(20_000).then(() => undefined)])
   if (outcome === undefined) fail('the app did not end after the tray quit')

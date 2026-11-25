@@ -1,7 +1,3 @@
-// A file the main window downloads asks where it should go first, on the app's own picker.
-// Downloads from any other contents (the sign-in child, a Bot browser guest) keep their own
-// session's rules.
-//
 // Electron needs the save path before will-download returns, and the picker answers later: the
 // download starts into a staging folder of its own, and moves to the chosen file once both the
 // answer and the download are in. A cancelled picker cancels the download.
@@ -15,21 +11,8 @@ import { basename, dirname, extname, join } from 'node:path'
 // original-fs sees plain files; it exists only in Electron.
 const { constants, copyFileSync, existsSync, mkdirSync, renameSync, rmSync } = process.getBuiltinModule('original-fs') ?? nodeFs
 
-/**
- * @param {{
- *   window: any,
- *   ask: (name: string, folder: string | undefined) => Promise<string | null | undefined>,
- *   staging: () => string,
- *   getPath: (name: string) => string,
- *   homedir?: () => string,
- *   log?: Pick<Console, 'warn'>,
- * }} options `ask` shows the picker: the chosen file, null when cancelled, undefined when the
- *   page cannot show it (the file then goes into the start folder under a free name). `getPath`
- *   is Electron's app.getPath, asked again for every download.
- */
 export function downloadSaver({ window, ask, staging, getPath, homedir = osHomedir, log = console }) {
   return (event, item, source) => {
-    // The window is asked for at the moment of the download: the app may build a new one.
     const owner = typeof window === 'function' ? window() : window
     if (owner === undefined || owner === null || source !== owner.webContents) return
     const folder = startFolder(getPath, homedir)
@@ -59,9 +42,6 @@ export function downloadSaver({ window, ask, staging, getPath, homedir = osHomed
         rmSync(holding, { recursive: true, force: true })
         return
       }
-      // A picker that cannot run means the start folder under a free name. The name is
-      // picked only now, in the same breath as the move, so two downloads of one name
-      // cannot take the same path.
       if (target === undefined && folder !== undefined) target = freePath(folder, name)
       if (typeof target !== 'string') {
         log.warn(`DS Bot: a finished download has nowhere to go; it stays at ${staged}`)
@@ -90,15 +70,11 @@ export function downloadSaver({ window, ask, staging, getPath, homedir = osHomed
 
 const message = error => (error instanceof Error ? error.message : String(error))
 
-// The name comes from the server; it names one file in the staging folder and nothing else.
 function safeName(name) {
   const plain = basename(String(name ?? '').replace(/[\\/]+/gu, '_')).trim()
   return plain === '' || plain === '.' || plain === '..' ? 'download' : plain
 }
 
-// The picker asked before it replaced a file; a rename does not cross drives. The copy
-// lands next to the target first and then takes its name, so a failed copy leaves the
-// old file whole.
 export function move(from, to, fs = { renameSync, copyFileSync, rmSync }) {
   try {
     fs.renameSync(from, to)
@@ -115,7 +91,6 @@ export function move(from, to, fs = { renameSync, copyFileSync, rmSync }) {
   }
 }
 
-/** `name` in `folder`, or `name (2)`, `name (3)`… when it is taken. */
 export function freePath(folder, name) {
   const extension = extname(name)
   const stem = name.slice(0, name.length - extension.length)

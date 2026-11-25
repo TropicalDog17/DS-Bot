@@ -40,8 +40,6 @@ test('the Linux Host loads sharp only in its plain Node child', { skip: process.
   }
 })
 
-// The engine's own report of a failed start is on the Host's stderr; the
-// error box gets its tail with the message (#516).
 test('withLogTail attaches the stderr tail so the real cause reaches the box', () => {
   const stderr = 'dsh: warning: 7 entries did not activate\n'
     + '  workspace (@deepseek-ai/dsh-workspace): Error: corrupt session log "/data/sessions/_deleted/s1/session.v4.jsonl.zstd": header id "s1" and cwd identify "/data/sessions/ws/s1/session.v4.jsonl.zstd"\n'

@@ -76,7 +76,6 @@ test('only a leased webview attaches, with fixed preferences, and its new window
   guests.bind(electron.window)
   const { lease, partition } = guests.acquire(electron.owner, 'bot:a')
   assert.equal(partition, partitionOf('bot:a'))
-  // Every request of the partition goes through the policy.
   const decided = []
   electron.sessions.get(partition).beforeRequest({ url: 'http://localhost:43117/' }, value => decided.push(value.cancel))
   assert.deepEqual(decided, [true])
@@ -89,7 +88,6 @@ test('only a leased webview attaches, with fixed preferences, and its new window
   assert.equal(preferences.nodeIntegration, false)
   assert.equal(preferences.sandbox, true)
   assert.equal(preferences.partition, partition)
-  // A lease attaches once.
   assert.equal(attach(electron.owner, `about:blank#${lease}`, partition).event.prevented, true)
 
   const guest = fakeGuest(`about:blank#${lease}`)

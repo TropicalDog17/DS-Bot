@@ -1,7 +1,3 @@
-// Import cookies into a Bot's browser partition. A file or a harvested browser profile is
-// parsed first and held in memory under a pending id (cookie values never leave the main
-// process); the page sees a value-free preview, and applying writes the cookies into the
-// partition's session and verifies what the store actually kept.
 import { randomUUID } from 'node:crypto'
 import { describeCookie, summarizeBySite } from './cookie-parse.mjs'
 
@@ -10,7 +6,6 @@ const PENDING_MAX = 16
 
 const SAME_SITE = { Strict: 'strict', Lax: 'lax', None: 'no_restriction' }
 
-/** A normalized cookie → Electron's CookiesSetDetails. */
 export function toSetDetails(cookie) {
   const host = String(cookie.domain ?? '').replace(/^\.+/, '')
   const details = {
@@ -32,12 +27,6 @@ export function toSetDetails(cookie) {
 
 const keyOf = (c) => `${c.name}${String(c.domain ?? '').replace(/^\.+/, '')}${c.path ?? '/'}`
 
-/**
- * Write cookies into an Electron session: one `cookies.set` each so a rejected cookie cannot
- * take the batch down; then a read-back, because a settled promise does not mean the cookie
- * was stored; then flush, so a crash soon after cannot lose the import.
- * → { stored, dropped, failed, flushed } with value-free per-item detail.
- */
 export async function applyCookies(storage, cookies) {
   const failed = []
   for (const cookie of cookies) {
@@ -61,7 +50,6 @@ export async function applyCookies(storage, cookies) {
   return { stored: storedCount, dropped, failed, flushed }
 }
 
-/** What the page shows before and after an import — names, domains, paths and flags, never values. */
 export function previewOf(result, source) {
   return {
     source,
@@ -94,7 +82,6 @@ function groupBy(items) {
   return [...counts.values()]
 }
 
-/** Parsed imports waiting for the user's confirm: value-bearing, expiring, capped, one-shot. */
 export class CookieImports {
   #pending = new Map()
 
@@ -106,7 +93,6 @@ export class CookieImports {
     return { id, preview: previewOf(result, source) }
   }
 
-  /** The pending import, or null when it is gone or expired. Taking it leaves it for apply/drop. */
   peek(id) {
     const entry = this.#pending.get(id)
     if (!entry) return null
@@ -114,7 +100,6 @@ export class CookieImports {
     return entry
   }
 
-  /** Apply consumes the pending import. */
   take(id) {
     const entry = this.peek(id)
     if (entry) this.#pending.delete(id)

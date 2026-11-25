@@ -1,18 +1,12 @@
-// The Bot browsers' webviews in the app window, adapted from DeepSeek Harness
-// apps/desktop/src/browser-guests.ts (see NOTICE). ds-bot asks for a lease on a storage key
-// (`bot:<id>`) and creates a webview that carries the lease; only such a webview attaches, and it
-// gets fixed preferences. Unlike DSH Desktop's, a key's storage is kept on disk: a Bot stays signed
-// in after a restart until ds-bot forgets the key.
+// Adapted from DeepSeek Harness apps/desktop/src/browser-guests.ts (MIT); see NOTICE.
 import { createHash, randomUUID } from 'node:crypto'
 
 const KEY_MAX = 4096
 const BLANK = 'about:blank#'
 const LOOPBACK = new Set(['localhost', '0.0.0.0', '[::1]', '[::]', '[::ffff:7f00:1]'])
 
-/** The persistent partition of a storage key: the same key keeps the same storage across restarts. */
 export const partitionOf = key => `persist:ds-bot-browser-${createHash('sha256').update(key).digest('hex').slice(0, 32)}`
 
-/** Whether a URL reaches the app's own Host: its port answers under every loopback name. */
 export function isAppHost(url, origin) {
   if (origin === undefined) return false
   const host = new URL(origin)
@@ -23,14 +17,12 @@ export function isAppHost(url, origin) {
 
 const credentialFree = url => url.username === '' && url.password === ''
 
-/** Where a page may go, or open a new tab to: http(s) without credentials, never the app's Host. */
 export function allowedNavigation(value, origin) {
   if (!URL.canParse(value)) return false
   const url = new URL(value)
   return (url.protocol === 'http:' || url.protocol === 'https:') && credentialFree(url) && !isAppHost(url, origin)
 }
 
-/** Every request of a guest: network ones as navigations allow, else only inert local schemes. */
 export function requestAllowed(value, origin) {
   if (!URL.canParse(value)) return false
   const url = new URL(value)
@@ -44,22 +36,16 @@ const keyOf = (key) => {
 }
 
 export class BotBrowserGuests {
-  /** @type {Map<string, {owner: any, partition: string, attached: boolean, guest?: any}>} */
   #leases = new Map()
   #configured = new Set()
   #downloadHandlers = new Map()
 
-  /**
-   * @param {{ session: any, origin: () => string | undefined, devTools: boolean }} options - Electron's
-   * `session` module, the Host's loopback origin, which guests cannot reach, and whether guests open DevTools.
-   */
   constructor({ session, origin, devTools }) {
     this.session = session
     this.origin = origin
     this.devTools = devTools
   }
 
-  /** One guest in the key's partition: an opaque lease and the partition approved for it. */
   acquire(owner, key) {
     const { partition } = this.storageFor(key)
     const lease = randomUUID()
@@ -67,7 +53,6 @@ export class BotBrowserGuests {
     return { lease, partition }
   }
 
-  /** Return the configured storage used by both the legacy guest and main-owned views. */
   storageFor(key) {
     const partition = partitionOf(keyOf(key))
     if (!this.#configured.has(partition)) {
@@ -83,7 +68,6 @@ export class BotBrowserGuests {
     return storage
   }
 
-  /** Close a lease's guest; its partition's storage stays. */
   async release(owner, id) {
     if (typeof id !== 'string') throw new Error('DS Bot: invalid browser lease')
     const lease = this.#leases.get(id)
@@ -98,7 +82,6 @@ export class BotBrowserGuests {
     }
   }
 
-  /** Close the key's guests and clear its storage, as when its Bot is deleted. */
   async forget(owner, key) {
     const partition = partitionOf(keyOf(key))
     const own = [...this.#leases].filter(([, lease]) => lease.owner === owner && lease.partition === partition)
@@ -109,7 +92,6 @@ export class BotBrowserGuests {
     this.#downloadHandlers.delete(partition)
   }
 
-  /** Install the attachment checks before the window's page can create a webview. */
   bind(window) {
     const owner = window.webContents
     owner.on('will-attach-webview', (event, preferences, params) => {
@@ -134,8 +116,6 @@ export class BotBrowserGuests {
     })
     owner.on('did-attach-webview', (_event, guest) => {
       let attached
-      // The first document is the inert about:blank that carries the lease; the guest is bound on
-      // this main-process event, before the page can navigate it.
       guest.once('dom-ready', () => {
         const url = guest.getURL()
         const id = url.startsWith(BLANK) ? url.slice(BLANK.length) : ''
@@ -148,7 +128,6 @@ export class BotBrowserGuests {
         attached = id
         guest.once('destroyed', () => { this.#leases.delete(id) })
       })
-      // A page's new window becomes a new tab of the same Bot, which ds-bot opens on this request.
       guest.setWindowOpenHandler(({ url, postBody }) => {
         const lease = attached === undefined ? undefined : this.#leases.get(attached)
         if (lease?.guest === guest && !owner.isDestroyed() && postBody === undefined && allowedNavigation(url, this.origin())) {

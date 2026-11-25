@@ -1,10 +1,5 @@
-// Gives the page that the app's Host serves the app's own bridge, and the app's start page its
-// own, smaller one; each window's arguments name the one page that gets it. On Windows and
-// macOS it also marks the Host's page for the frameless window the way DSH Desktop's preload
-// does on Windows (apps/desktop/src/preload-windows.ts, preload-platform.ts and
-// preload-theme.ts; see NOTICE), but without data-platform: that puts DSH's shortcuts on
-// native menu input, which this window does not have. So macOS takes DSH's caption-band
-// layout too, with the traffic lights where Windows has its caption buttons' band.
+// Follows DeepSeek Harness apps/desktop/src/preload-windows.ts, preload-platform.ts and
+// preload-theme.ts (MIT); see NOTICE.
 const { contextBridge, ipcRenderer } = require('electron')
 
 const argument = name => process.argv.find(value => value.startsWith(`--${name}=`))?.slice(name.length + 3)
@@ -13,22 +8,16 @@ const host = argument('ds-bot-origin')
 if (startPage !== undefined) {
   if (location.href.split(/[?#]/u)[0] === startPage) {
     contextBridge.exposeInMainWorld('dsBotStart', startBridge())
-    // The start page's folder pickers (Change the location…, a data move) are the app's own too.
     ipcRenderer.on('ds-bot:app-picker', (_event, request) => { showPicker(request) })
   }
 } else if (host !== undefined && location.origin === host) {
   let ready = false
   contextBridge.exposeInMainWorld('dsBotApp', {
-    // The team view has mounted: the start window hands over to this one. With it, where the
-    // Main Bot's avatar is drawn, for the start window's whale to land on (start-window §8).
     ready: (place) => {
       if (ready) return
       ready = true
       ipcRenderer.send('ds-bot:ready', placeOf(place))
     },
-    // The start window hands its whale over at the top of its jump (start-window.mjs): `run`
-    // draws it where it is on this page, and once that is painted the main process cross-fades
-    // the two windows.
     onHandoff: (run) => {
       if (typeof run !== 'function') return
       ipcRenderer.removeAllListeners('ds-bot:handoff')
@@ -38,20 +27,12 @@ if (startPage !== undefined) {
         try { run(from) } finally { requestAnimationFrame(() => { requestAnimationFrame(() => { ipcRenderer.send('ds-bot:handoff-ready') }) }) }
       })
     },
-    // DS Bot's settings show and move the app's data location through this.
     dataLocation: () => ipcRenderer.invoke('ds-bot:data-location'),
     moveData: (workspace) => ipcRenderer.invoke('ds-bot:move-data', typeof workspace === 'string' ? workspace : undefined),
     teamWorkspaceChanged: (path) => { ipcRenderer.send('ds-bot:team-workspace', String(path)) },
-    // The Bot browsers, in the shape of DSH Desktop's browser bridge so that ds-bot drives both
-    // alike; `forget` clears a key's storage, which here outlives the app.
     browser: browserBridge(),
-    // The app's own updater, for the About row's state and buttons.
     updates: updatesBridge(),
-    // Computer use: the OS idle time behind the foreground gate, and the floating
-    // indicator's entries; the window answers its buttons.
     idleSeconds: () => ipcRenderer.invoke('ds-bot:idle-seconds'),
-    // Notifications: the window asks, the shell decides whether the operator is looking,
-    // and a click comes back as the Session to open (#1504).
     notify: (notice) => {
       if (notice === null || typeof notice !== 'object') return Promise.resolve(false)
       const clean = { title: String(notice.title ?? '').slice(0, 120), body: String(notice.body ?? '').slice(0, 200) }
@@ -76,7 +57,6 @@ if (startPage !== undefined) {
       })
     },
   })
-  // Only plain numbers cross; the main process checks that they make a box inside the page.
   const placeOf = (value) => {
     if (value === null || typeof value !== 'object') return undefined
     const place = {}
@@ -87,8 +67,6 @@ if (startPage !== undefined) {
     }
     return place
   }
-  // Cursor events carry the Bot's last point: finite numbers, an enum, booleans,
-  // bounded strings, a hex color and an optional bounded avatar data URL.
   const cursorEventOf = (value) => {
     if (value === null || typeof value !== 'object') return undefined
     const clean = {}
@@ -138,13 +116,11 @@ if (startPage !== undefined) {
     }
     return from
   }
-  // A preload runs before the document root exists.
   const loaded = (run) => {
     if (document.readyState === 'loading') window.addEventListener('DOMContentLoaded', run, { once: true })
     else run()
   }
   loaded(reportLook)
-  // The app's own questions (the tray notice, an update, a data move), on a card over the page.
   ipcRenderer.on('ds-bot:app-card', (_event, card) => { loaded(() => { showCard(card) }) })
   ipcRenderer.on('ds-bot:app-picker', (_event, request) => { loaded(() => { showPicker(request) }) })
   const caption = process.argv.find(value => value.startsWith('--ds-bot-caption='))
@@ -159,10 +135,6 @@ if (startPage !== undefined) {
   }
 }
 
-// The card that the team window shows in place of a message box (main.mjs askInWindow): a line,
-// an optional detail and the buttons, styled by page-card.css, which the main process inserts.
-// The answer is the index of the button; -1 when a newer card takes its place. Enter is the
-// focused button; Escape is `cancel`, when the card has one; Tab stays on the card's buttons.
 let openCard
 function showCard(card) {
   if (card === null || typeof card !== 'object' || !Number.isInteger(card.id) || !Array.isArray(card.buttons)) return
@@ -204,10 +176,8 @@ function showCard(card) {
       event.preventDefault()
       buttons[(at + (event.shiftKey ? -1 : 1) + buttons.length) % buttons.length].focus()
     }
-    // The page's own shortcuts wait while the card is up.
     event.stopPropagation()
   }
-  // Focus that leaves for the page comes back to the card.
   const keep = (event) => { if (!layer.contains(event.target)) (buttons.find(button => button.dataset.look === 'primary') ?? buttons[0])?.focus() }
   function close(index) {
     if (done) return
@@ -226,7 +196,6 @@ function showCard(card) {
   document.addEventListener('keydown', keys, true)
   document.addEventListener('focusin', keep, true)
   ;(document.body ?? document.documentElement).append(layer)
-  // The layer is laid out once before it opens, so that the opening transitions run.
   void layer.offsetWidth
   layer.dataset.open = ''
   ;(buttons.find(button => button.dataset.look === 'primary') ?? buttons[0])?.focus({ preventScroll: true })
@@ -234,11 +203,6 @@ function showCard(card) {
   ipcRenderer.send('ds-bot:app-card-shown', card.id)
 }
 
-// The app's own folder and file picker, in place of the system's (main.mjs askPicker,
-// picker-host.mjs): the same card layer with a side column of places and drives, a breadcrumb, a
-// path field, the folder's entries (folders first) and, to save, a file name. The page only
-// draws: the main process lists, makes folders and checks the answer. What goes wrong (a folder
-// without permission, a drive that is gone, a name that cannot be used) is said in place.
 let openPicker
 function showPicker(request) {
   if (request === null || typeof request !== 'object' || !Number.isInteger(request.id)) return
@@ -261,7 +225,6 @@ function showPicker(request) {
     input.autocomplete = 'off'
     return input
   }
-  // A folder, a file or a drive, drawn in the page's ink.
   const glyph = (kind) => {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
     svg.setAttribute('viewBox', '0 0 16 16')
@@ -409,8 +372,6 @@ function showPicker(request) {
     }
     refresh()
   }
-  // A listing that comes back after a newer one was asked for is dropped. A failed one keeps
-  // the folder that was shown and says why next to it.
   const open = async (path) => {
     const turn = (asked += 1)
     rows.setAttribute('aria-busy', 'true')
@@ -501,7 +462,6 @@ function showPicker(request) {
       event.preventDefault()
       list[(at + (event.shiftKey ? -1 : 1) + list.length) % list.length]?.focus()
     }
-    // The page's own shortcuts wait while the picker is up.
     event.stopPropagation()
   }
   const keep = (event) => { if (!layer.contains(event.target)) rows.focus() }
@@ -524,7 +484,6 @@ function showPicker(request) {
   document.addEventListener('keydown', keys, true)
   document.addEventListener('focusin', keep, true)
   ;(document.body ?? document.documentElement).append(layer)
-  // The layer is laid out once before it opens, so that the opening transitions run.
   void layer.offsetWidth
   layer.dataset.open = ''
   openPicker = { close: quit }
@@ -542,8 +501,6 @@ function showPicker(request) {
     const group = (heading, items, kind) => {
       if (items.length === 0) return []
       return [make('h3', 'dsb-picker-head', heading), ...items.map((item) => {
-        // The name has a box of its own: as bare text beside the glyph it would be an anonymous
-        // flex item, which no ellipsis reaches.
         const root = button('dsb-picker-root')
         root.append(make('span', 'dsb-picker-root-name', item.label))
         root.dataset.path = item.path
@@ -561,8 +518,6 @@ function showPicker(request) {
   }, () => {})
 }
 
-// The app's theme (DSH's) and the Bot animation tier (ds-bot's), which the start window takes
-// at the next start.
 function reportLook() {
   const root = document.documentElement
   const sent = {}
@@ -582,8 +537,6 @@ function reportLook() {
   report()
 }
 
-// The main process sends the whole state on every change; a page that subscribes late, or again,
-// gets the last one first.
 function startBridge() {
   const listeners = new Set()
   let last
@@ -635,7 +588,6 @@ function browserBridge() {
       hold: (botId, held) => ipcRenderer.invoke('ds-bot:browser-view-hold', String(botId), held === true),
       subscribe(listener) { viewListeners.add(listener); return () => viewListeners.delete(listener) },
     },
-    // Cookie imports, only in the app: sources and a two-step pick/harvest → preview → apply.
     importSources: () => ipcRenderer.invoke('ds-bot:browser-import-sources'),
     importPick: () => ipcRenderer.invoke('ds-bot:browser-import-pick'),
     importLive: (source, close) => ipcRenderer.invoke('ds-bot:browser-import-live', String(source), close === true),
@@ -677,17 +629,10 @@ function frameless(height, material) {
   const root = document.documentElement
   root.dataset.windowsTitlebar = ''
   root.style.setProperty('--dsh-windows-titlebar-height', `${height}px`)
-  // DSH keeps the dialog mask off the caption band, which then stays bright above a dimmed
-  // page; here the band is part of the page, so the mask covers it too.
   root.style.setProperty('--dsh-frame-chrome-top', '0px')
-  // The traffic lights take their colors from the system.
   if (process.platform === 'win32') captionColors(material === 'mica')
 }
 
-// The caption buttons stand on the rightmost open column with Mica (the right sidebar or the
-// conversation) and on the sidebar-colored band without it. Theme variables can resolve apart
-// from what is painted, so the color comes from the element itself: the first one up from it
-// that is not transparent.
 function captionColors(mica) {
   const canvas = document.createElement('canvas')
   canvas.width = canvas.height = 1
@@ -700,7 +645,6 @@ function captionColors(mica) {
     const [red, green, blue, alpha] = context.getImageData(0, 0, 1, 1).data
     return alpha === 0 ? undefined : `rgb(${red}, ${green}, ${blue})`
   }
-  // The surface's color with the layers above the caption buttons (a dialog's mask) painted over it.
   const covered = (base, frame) => {
     const layers = []
     for (const element of document.elementsFromPoint(innerWidth - 1, 1)) {
@@ -725,7 +669,6 @@ function captionColors(mica) {
   let frame
   const surface = () => {
     const start = column()
-    // Opening or closing the right sidebar changes the frame's columns.
     if (start !== null && frame === undefined) {
       frame = start.parentElement
       observer.observe(frame, { attributes: true, attributeFilter: ['style'] })
@@ -740,7 +683,6 @@ function captionColors(mica) {
   let tries = 0
   const send = () => {
     const colors = surface()
-    // The frame appears once DSH has booted; until then the main process's colors hold.
     if (colors === undefined || colors[1] === undefined) {
       if (tries++ < 120) setTimeout(send, 250)
       return
@@ -750,7 +692,6 @@ function captionColors(mica) {
     sent = current
     ipcRenderer.send('ds-bot:caption-colors', ...colors)
   }
-  // A dialog mounts anywhere in the page, which changes all the time; one look per frame.
   let queued = false
   const queue = () => {
     if (queued) return
@@ -761,7 +702,6 @@ function captionColors(mica) {
   observer.observe(document.body, { attributes: true, attributeFilter: ['data-ds-dark-theme', 'style'], childList: true, subtree: true })
   observer.observe(document.head, { childList: true, subtree: true, characterData: true })
   observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-ds-theme-source', 'style'] })
-  // A stylesheet link is added before it loads; its rules apply without another mutation.
   document.head.addEventListener('load', send, true)
   send()
 }

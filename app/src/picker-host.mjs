@@ -1,6 +1,3 @@
-// The main process's half of the app's own picker: one open picker per id, tied to the page that
-// shows it. The page asks for listings, new folders and the answer over IPC; a request from any
-// other page, or for a picker that is no longer open, gets nothing.
 import { chosen, list, makeFolder, roots, saveTarget, startIn, typed } from './folder-picker.mjs'
 
 export const PICKER_IPC = {
@@ -8,7 +5,6 @@ export const PICKER_IPC = {
   roots: 'ds-bot:app-picker-roots', list: 'ds-bot:app-picker-list', folder: 'ds-bot:app-picker-folder', choose: 'ds-bot:app-picker-choose',
 }
 
-// A page that has not drawn the picker by then cannot (not loaded, gone, or hung).
 export const PICKER_SHOWN_MS = 2000
 
 export class Pickers {
@@ -18,9 +14,6 @@ export class Pickers {
   #platform
   #shownMs
 
-  /**
-   * @param {{ ipcMain: any, getPath: (name: string) => string, platform?: string, shownMs?: number }} options
-   */
   constructor({ ipcMain, getPath, platform = process.platform, shownMs = PICKER_SHOWN_MS }) {
     this.#getPath = getPath
     this.#platform = platform
@@ -48,7 +41,6 @@ export class Pickers {
         ? await saveTarget(String(path), String(options?.name ?? ''), this.#platform)
         : await chosen(String(path), open.mode)
       if ('error' in answer) return answer
-      // A file of that name is there: the page asks first, and asks again with `replace`.
       if (answer.exists && options?.replace !== true) return answer
       open.settle(answer.path)
       return { path: answer.path }
@@ -59,13 +51,6 @@ export class Pickers {
     try { return this.#getPath('home') } catch { return undefined }
   }
 
-  /**
-   * Shows a picker on `contents`' page: the chosen path, null when the user cancels, undefined
-   * when the page cannot show it or goes away first.
-   * @param {any} contents the webContents whose page shows the picker
-   * @param {{ mode: 'folder' | 'file' | 'save', title: string, start?: string, name?: string, extensions?: string[], labels: object }} request
-   * @returns {Promise<string | null | undefined>}
-   */
   async ask(contents, request) {
     if (contents === undefined || contents === null || contents.isDestroyed() || contents.isLoading()) return undefined
     const id = (this.#count += 1)

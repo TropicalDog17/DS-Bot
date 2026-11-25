@@ -1,4 +1,3 @@
-// The first-run import: a copy of the Bot team in the user's own DSH home. It only reads there.
 import { homedir, hostname } from 'node:os'
 import { join, relative, resolve } from 'node:path'
 import { parseSessionFormatLogFilename } from '@deepseek-ai/dsh-session-format'
@@ -13,19 +12,12 @@ export { within }
 const { existsSync, readdirSync, readFileSync, statSync } = disk
 const { chmod, cp, lstat, mkdir, readdir, readFile, rename, rm, writeFile } = disk.promises
 
-// The rows of a profile patch that hold model settings: DeepSeek's API and account, other
-// providers, the default model and the agent presets. Rows of other plugins may name plugins
-// that the app does not have.
 export const MODEL_ROWS = ['llm-deepseek', 'llm-deepseek-account', 'llm-pi-ai', 'agent-default-model', 'agent-preset-registry']
-// The team's lock, its turns in flight and its workspace belong to the old home.
 const LEFT_BEHIND = new Set(['state.lock', 'inflight.json', 'workspace'])
 const LOCK_STALE_MS = 60_000
-// Folders that a project makes again from its own files (windows-onboarding §4): the import card
-// offers to leave them out of the work files, and does so by default from 200 MB on.
 export const REGENERABLE = new Set(['node_modules', '.venv', '__pycache__', '.pnpm-store', '.next'])
 export const REGENERABLE_DEFAULT_BYTES = 200e6
 
-/** The DSH home of the user's own DSH, read as DSH reads DSH_HOME. */
 export function userDshHome(env = process.env) {
   const value = env.DSH_HOME?.trim()
   if (!value) return join(homedir(), '.dsh')
@@ -34,21 +26,14 @@ export function userDshHome(env = process.env) {
 
 const readJson = path => JSON.parse(readFileSync(path, 'utf8'))
 
-/** Every Session the team names: each Bot's and group's parts, the group conversations and each group's own Session. */
 export function sessionIdsOf(team) {
   const ids = segments => segments.map(part => part?.sessionId)
   return [...new Set([
     ...Object.values(team.bots ?? {}).flatMap(bot => [bot.id, bot.sessionId, ...ids(bot.segments ?? [])]),
-    // A group keeps the earlier parts per member: { [botId]: segments }. The group's own
-    // Session, the one it relays in, has the group's id.
     ...Object.values(team.rooms ?? {}).flatMap(room => [room.id, ...Object.values(room.sessions ?? {}), ...ids(Object.values(room.segments ?? {}).flat())]),
   ].filter(id => typeof id === 'string' && id !== ''))]
 }
 
-/**
- * The team in a DSH home, with the profiles that hold model settings.
- * @returns {{ from: string, team: any, bots: number, rooms: number, profiles: { name: string, rows: any[] }[] } | undefined}
- */
 export function findTeam(from) {
   const statePath = join(from, 'bot', 'state.json')
   if (!existsSync(statePath)) return undefined
@@ -68,7 +53,6 @@ function modelProfiles(from) {
     try {
       patch = load(readFileSync(file, 'utf8'), { schema: entryListSchema })
     } catch (error) {
-      // An unreadable profile has no model settings to copy; the team is still there.
       console.warn(`DS Bot: skipped the model settings in ${file}: ${error instanceof Error ? error.message : String(error)}`)
       return []
     }
@@ -77,11 +61,6 @@ function modelProfiles(from) {
   })
 }
 
-/**
- * Whether a running DSH holds the team, by the rule of ds-bot's own lock (src/host/home-lock.js):
- * the holder bumps the lock's mtime, so a stale lock is a holder that is gone, even when its pid
- * now belongs to another process.
- */
 export function teamInUse(from, { host = hostname(), now = Date.now(), isAlive = pidAlive } = {}) {
   const path = join(from, 'bot', 'state.lock')
   const lock = statSync(path, { throwIfNoEntry: false })
@@ -90,7 +69,6 @@ export function teamInUse(from, { host = hostname(), now = Date.now(), isAlive =
   try {
     holder = JSON.parse(readFileSync(path, 'utf8'))
   } catch {
-    // Being written right now.
     return true
   }
   return holder?.host !== host || isAlive(holder.pid)
@@ -101,12 +79,10 @@ function pidAlive(pid) {
     process.kill(pid, 0)
     return true
   } catch (error) {
-    // EPERM: the process exists but belongs to someone else.
     return error?.code === 'EPERM'
   }
 }
 
-// sessions/<group>/<id>/: the group is the folder the Session works in.
 function sessionDirs(from, ids) {
   const root = join(from, 'sessions')
   const groups = existsSync(root) ? readdirSync(root, { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => entry.name) : []
@@ -120,7 +96,6 @@ function sessionDirs(from, ids) {
   return { found, missing }
 }
 
-// fs.cp that tells `seen` the size of each file it is about to copy.
 function cpSeen(source, target, { filter = () => true, seen, ...options }) {
   return cp(source, target, {
     ...options,
@@ -147,29 +122,19 @@ async function moveSessionDirs(stage, to, sessions, signal) {
   for (const { id, group } of sessions) {
     signal?.throwIfAborted()
     await mkdir(join(to, 'sessions', group), { recursive: true })
-    // A copy that stopped can have moved the Session in already.
     await rm(join(to, 'sessions', group, id), { recursive: true, force: true })
     await rename(join(stage, 'sessions', group, id), join(to, 'sessions', group, id))
   }
 }
 
-/**
- * Copy the team's Sessions into the DSH home `to`, as they lie in `from`; an abort stops it between Sessions.
- * @param {string} from @param {any} team @param {string} to @param {AbortSignal} [signal]
- * @param {(done: number, total: number) => void} [onProgress] after each Session
- * @returns {Promise<string[]>} their ids
- */
 export async function copySessions(from, team, to, signal, onProgress) {
   const { found } = sessionDirs(from, sessionIdsOf(team))
   await copySessionDirs(from, to, found, signal, undefined, onProgress)
   return found.map(({ id }) => id)
 }
 
-// Thrown when measuring runs out of time.
 const OVER = Symbol('over budget')
 
-// The bytes under `path` into `tally`, links counted as themselves and what cannot be read as
-// nothing; `tally.regen` takes the bytes inside the folders that REGENERABLE names.
 async function measure(path, clock, tally, regen = false) {
   if (clock.now() > clock.until) throw OVER
   const entry = await lstat(path).catch(() => undefined)
@@ -182,14 +147,6 @@ async function measure(path, clock, tally, regen = false) {
   for (const name of await readdir(path).catch(() => [])) await measure(join(path, name), clock, tally, regen || REGENERABLE.has(name))
 }
 
-/**
- * What the import card says about the team (windows-onboarding §4): how many of its Sessions are
- * there, the bytes of its chats (the team's own files but its workspace, its Sessions and the
- * attachments), of its work files (the team workspace) and of the regenerable folders among
- * them. The sizes are left out when measuring takes longer than `budget` ms: a team workspace can
- * hold many a node_modules.
- * @returns {Promise<{ sessions: number, chats?: number, work?: number, regen?: number }>}
- */
 export async function teamSizes(from, team, { budget = 2000, now = Date.now } = {}) {
   const { found } = sessionDirs(from, sessionIdsOf(team))
   const clock = { until: now() + budget, now }
@@ -214,20 +171,11 @@ const logVersion = name => parseSessionFormatLogFilename(name.replace(/\.(zstd|z
 const isNewer = (from, { id, group }) => readdirSync(join(from, 'sessions', group, id))
   .some(name => (logVersion(name) ?? 0) > sessionFormatCatalog.currentVersion)
 
-/** The Sessions whose log is in a newer format than the pinned DSH reads. */
 export function newerSessions(from, team) {
   const { found } = sessionDirs(from, sessionIdsOf(team))
   return found.filter(session => isNewer(from, session)).map(({ id }) => id)
 }
 
-/**
- * Copy into the data location `to` the Sessions its team names that are not there, from the DSH
- * home the team was imported from. Imports before 0.2.3 left out each group's own Session, and
- * such a group does not open (#551). Each Session is put together beside the data and moved in
- * whole; one this DSH cannot read stays where it is. Nothing in the old home changes.
- * @param {string} to @param {AbortSignal} [signal]
- * @returns {Promise<{ copied: string[], newer: string[] }>} the ids copied, and those left for their newer format
- */
 export async function restoreSessions(to, signal) {
   const record = join(to, 'bot', 'imported.json')
   const statePath = join(to, 'bot', 'state.json')
@@ -251,15 +199,11 @@ export async function restoreSessions(to, signal) {
   return { copied: sessions.map(({ id }) => id), newer: newer.map(({ id }) => id) }
 }
 
-// The Host's first start on the data location writes a .credentials.yaml of its own: the browser
-// session grant of the connection plugin, under client-connection/. A file with nothing else in
-// it holds no key of the user's.
 async function onlyHostRecords(file) {
   let document
   try {
     document = parse(await readFile(file, 'utf8')) ?? {}
   } catch {
-    // A file that does not read as DSH's is the user's to fix, not ours to replace.
     return false
   }
   if (typeof document !== 'object' || Array.isArray(document)) return false
@@ -269,9 +213,6 @@ async function onlyHostRecords(file) {
     && Object.keys(records ?? {}).every(key => key.startsWith('client-connection/'))
 }
 
-// A key file the data location has already is the user's own, saved there since, and stays;
-// a .credentials.yaml that only the Host wrote is not.
-// Returns 'copied', 'kept', or undefined when the old home has none.
 async function copyKey(from, to, name) {
   const source = join(from, name)
   if (!existsSync(source)) return undefined
@@ -296,19 +237,6 @@ async function writeModelRows(to, rows) {
   await writeFile(file, dump([...kept, ...rows], { schema: entryListSchema }))
 }
 
-/**
- * Copy the team of `from` into the data location `to`, which the Host has started on once,
- * so that DSH does not take the copied Sessions' folders for its own projects. The old team's
- * workspace files go into `workspace`, without replacing a file that is there, and the key
- * files only where the data location has none of the user's own. `leaveRegenerable` leaves the
- * REGENERABLE folders out of the workspace files, `skipWork` all of them; `onProgress` hears the
- * bytes copied so far as each file is about to be copied.
- * Everything but the keys, the model settings and the workspace files is put together in a
- * folder beside the data and moved in at the end. A copy that stops or fails removes that
- * folder; one that was killed leaves it behind, and the next copy removes it.
- * @param {{ from: string, to: string, workspace: string, profile?: string, dsh?: string, signal?: AbortSignal,
- *   leaveRegenerable?: boolean, skipWork?: boolean, onProgress?: (bytes: number) => void }} options
- */
 export async function importTeam({ from, to, workspace, profile, dsh, signal, leaveRegenerable = false, skipWork = false, onProgress }) {
   const found = findTeam(from)
   if (found === undefined) throw new Error(`There is no Bot team in ${from}`)
@@ -332,8 +260,6 @@ async function copyThroughStage({ found, from, to, workspace, profile, dsh, sign
   signal?.throwIfAborted()
   await cpSeen(oldBot, join(stage, 'bot'), { recursive: true, seen, filter: path => !LEFT_BEHIND.has(relative(oldBot, path).split(/[\\/]/u)[0]) })
   const team = readJson(join(stage, 'bot', 'state.json'))
-  // The new data location registers its own team workspace. A DSH Agent's Sessions do not move
-  // to a fresh part, so they would go on working in the old team folder in the user's DSH home.
   delete team.workspaceId
   team.agents = {}
   await writeFile(join(stage, 'bot', 'state.json'), JSON.stringify(team, null, 2))
@@ -347,7 +273,6 @@ async function copyThroughStage({ found, from, to, workspace, profile, dsh, sign
   await mkdir(workspace, { recursive: true })
   if (!skipWork && existsSync(join(oldBot, 'workspace'))) {
     const leave = leaveRegenerable ? path => path.split(/[\\/]/u).some(name => REGENERABLE.has(name)) : undefined
-    // Bots that ran npm or pnpm there leave links, some of them to nothing.
     const skipped = await copyTree(join(oldBot, 'workspace'), workspace, { force: false, skip: true, signal, leave, seen })
     if (skipped.length > 0) console.warn('DS Bot: the import skipped what it could not read in the old team workspace:', skipped)
   }
@@ -374,7 +299,6 @@ async function copyThroughStage({ found, from, to, workspace, profile, dsh, sign
   }
   signal?.throwIfAborted()
   await writeFile(join(stage, 'bot', 'imported.json'), `${JSON.stringify(summary, null, 2)}\n`)
-  // Until this rename the data has no Bot team, so a copy that stopped can run again.
   await rm(join(to, 'bot'), { recursive: true, force: true })
   await rename(join(stage, 'bot'), join(to, 'bot'))
   return summary

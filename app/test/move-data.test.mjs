@@ -11,8 +11,6 @@ const write = (path, text) => {
   writeFileSync(path, text)
 }
 
-// The app's data with a team, a chat and a key, plus what stays behind: the engine's lock and
-// the temporary folders of a first-run copy and check that were cut short.
 function setup(t) {
   const root = mkdtempSync(join(tmpdir(), 'ds-bot-move-'))
   t.after(() => { rmSync(root, { recursive: true, force: true, maxRetries: 5 }) })
@@ -83,7 +81,6 @@ test('a copy that is stopped or fails leaves no new folder and no staging folder
   const stopped = new AbortController()
   stopped.abort()
   await assert.rejects(copyData(from, to, stopped.signal), { name: 'AbortError' })
-  // Stopped part way through, after some files are copied.
   let seen = 0
   const midway = new AbortController()
   const signal = { throwIfAborted: () => { if (++seen === 4) midway.abort(); midway.signal.throwIfAborted() } }
@@ -127,7 +124,6 @@ test('links in the data lead inside the copy, not back into the old folder', asy
   symlinkSync(join(from, 'sessions'), join(from, 'bot', 'absolute'), folderLink)
   write(join(root, 'elsewhere', 'file.txt'), 'x')
   symlinkSync(join(root, 'elsewhere'), join(from, 'bot', 'outside'), folderLink)
-  // Into the data through another link.
   symlinkSync(from, join(root, 'data-alias'), folderLink)
   symlinkSync(join(root, 'data-alias', 'sessions'), join(from, 'bot', 'chained'), folderLink)
   if (process.platform !== 'win32') {
@@ -135,7 +131,6 @@ test('links in the data lead inside the copy, not back into the old folder', asy
     symlinkSync(join('..', '..', 'elsewhere'), join(from, 'bot', 'relative-outside'), 'dir')
     symlinkSync(join('..', '..', 'data-alias', 'sessions'), join(from, 'bot', 'relative-alias'), 'dir')
   }
-  // Deeper than the old folder, so that a relative link out of it would lead elsewhere.
   const to = join(root, 'deeper', 'new')
   await copyData(from, to)
   const target = name => readlinkSync(join(to, 'bot', name)).replace(/^\\\\\?\\/u, '').replace(/[\\/]+$/u, '')

@@ -22,11 +22,6 @@ const saved = (file) => {
   }
 }
 
-/**
- * The port saved in `file` while it is free, otherwise a new free one, which is saved.
- * @param {string} file
- * @returns {Promise<number>}
- */
 export async function hostPort(file) {
   const kept = saved(file)
   const port = (kept === undefined ? undefined : await free(kept)) ?? await free(0)

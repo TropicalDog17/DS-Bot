@@ -1,6 +1,3 @@
-// The main window's will-download handler: the download starts into a staging folder at once,
-// the app's own picker says where it goes, and the file moves there when both are in. A
-// cancelled picker cancels it; other contents' downloads pass through. Temp folders only.
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
 import nodeFs, { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
@@ -21,7 +18,6 @@ const place = () => {
   return { staging: join(at, 'staging'), downloads, home: join(at, 'home') }
 }
 
-// A download item: it writes its bytes to the save path when it is done.
 function item(name = 'chart.png') {
   const download = Object.assign(new EventEmitter(), {
     path: undefined, cancelled: false,
@@ -58,7 +54,6 @@ test('a download starts at once, asks where it goes, and lands there when both a
   assert.equal(ev.prevented, false)
   assert.ok(download.path.startsWith(at.staging), 'it saves into the staging folder first')
   assert.deepEqual(asked, [{ name: 'chart.png', folder: at.downloads }], 'the picker starts in the downloads folder')
-  // The download is done before the user has answered.
   download.finish('png')
   const target = join(at.downloads, 'picked.png')
   answer(target)

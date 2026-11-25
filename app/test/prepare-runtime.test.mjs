@@ -6,12 +6,10 @@ import { after, before, describe, test } from 'node:test'
 import { parsePrimaryRuntime, workspaceDependencyPaths } from '@deepseek-ai/dsh-tool-workspace-dependencies'
 import { downloadArchive, primaryRuntimeManifest, runtimeReusable, runtimeTarget } from '../scripts/prepare-runtime.mjs'
 
-/** An answer the download can read, standing in for fetch's Response. */
 function answer(status, body = '') {
   return { ok: status >= 200 && status < 300, status, arrayBuffer: async () => new Uint8Array(Buffer.from(body)).buffer }
 }
 
-/** Collect what the download logs, and stop the retry delays from being real. */
 function recorder() {
   const logged = []
   const delays = []
@@ -117,7 +115,6 @@ describe('primaryRuntimeManifest', () => {
     assert.equal('pnpm' in manifest, false)
     assert.match(manifest.python, /^\d+\.\d+\.\d+$/u)
     assert.equal(manifest.pythonPackages['python-docx'], '1.2.0')
-    // The tool validates the manifest the same way it reads one from a prepared payload.
     assert.deepEqual(parsePrimaryRuntime(manifest).payloadDigest, manifest.payloadDigest)
   })
 

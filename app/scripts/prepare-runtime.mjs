@@ -1,10 +1,5 @@
-// Prepare the app's Office payload: a pinned, relocatable CPython with the document
-// libraries, a standalone Node for the LibreOffice Kit CLI, and the Office skill
-// assets, all downloaded against the lock in primary-runtime.lock.json without
-// installing into the build host. electron-builder's beforePack calls it for the
-// platform being packed; `npm run runtime` builds the same tree for development.
 // Follows DeepSeek Harness scripts/primary-runtime/prepare.ts and
-// prune-python-tests.ts (MIT); see NOTICE. Unlike DSH's, this payload ships no pnpm.
+// prune-python-tests.ts (MIT); see NOTICE.
 import { execFileSync } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
@@ -20,28 +15,18 @@ import { x as extractTar } from 'tar'
 
 const lock = JSON.parse(readFileSync(new URL('./primary-runtime.lock.json', import.meta.url), 'utf8'))
 
-// The targets the lock pins, named by the platform and architecture electron-builder packs for.
 const RUNTIME_TARGET = {
   win32: { x64: 'win-x64' },
   darwin: { x64: 'mac-x64', arm64: 'mac-arm64' },
   linux: { x64: 'linux-x64', arm64: 'linux-arm64' },
 }
 
-/**
- * The lock's target for a platform and architecture, or undefined when the lock pins none.
- * @param {string} platform - process.platform of the payload's system.
- * @param {string} arch - process.arch of the payload's system.
- * @returns {keyof typeof lock.targets | undefined}
- */
 export function runtimeTarget(platform, arch) {
   return RUNTIME_TARGET[platform]?.[arch]
 }
 
-// A runner's route to the release CDN answers 5xx for minutes at a time while the archive itself
-// stays downloadable, so one dropped answer must not fail the whole package job.
 const DOWNLOAD_RETRY_DELAYS_MS = [5_000, 20_000, 60_000]
 
-/** The answer carried an HTTP status the download must report. */
 class DownloadStatusError extends Error {
   constructor(status, url) {
     super(`primary runtime download: ${String(status)} ${url}`)
@@ -49,29 +34,15 @@ class DownloadStatusError extends Error {
   }
 }
 
-/** Wait before the next attempt. @param {number} ms - Delay in milliseconds. @returns {Promise<void>} */
 function sleep(ms) {
   return new Promise((done) => { setTimeout(done, ms) })
 }
 
-/**
- * Whether a failed attempt may succeed if repeated. A refused answer stays refused; a gateway
- * error, a rate limit, a timeout or a dropped connection does not.
- * @param {unknown} error - The attempt's error.
- * @returns {boolean} whether to try again
- */
 function retryableDownloadError(error) {
   if (error instanceof DownloadStatusError) return error.status >= 500 || error.status === 429 || error.status === 408
   return true
 }
 
-/**
- * Download an archive, retrying with backoff before giving up.
- * @param {string} url - Archive URL.
- * @param {number} timeout - Per-attempt timeout in milliseconds.
- * @param {{ fetchImpl?: typeof fetch, sleepImpl?: (ms: number) => Promise<void>, retryDelaysMs?: number[] }} [options] - Test seams.
- * @returns {Promise<Buffer>} the archive's bytes
- */
 export async function downloadArchive(url, timeout, options = {}) {
   const fetchImpl = options.fetchImpl ?? fetch
   const sleepImpl = options.sleepImpl ?? sleep
@@ -95,13 +66,6 @@ export async function downloadArchive(url, timeout, options = {}) {
   }
 }
 
-/**
- * Download or reuse an archive only when its bytes match the release lock.
- * @param {string} url - Locked archive URL.
- * @param {string} sha256 - Expected hexadecimal sha256 digest.
- * @param {string} cache - Download cache directory.
- * @returns {Promise<string>} verified local archive path
- */
 async function downloadPrimaryRuntimeAsset(url, sha256, cache) {
   mkdirSync(cache, { recursive: true })
   const destination = join(cache, sha256)
@@ -129,12 +93,6 @@ async function downloadPrimaryRuntimeAsset(url, sha256, cache) {
   return destination
 }
 
-/**
- * Prepare the locked standalone Node for the target.
- * @param {keyof typeof lock.targets} target - Target interpreter platform.
- * @param {string} destination - Directory receiving bin/node and LICENSE.
- * @param {string} cache - Verified archive cache.
- */
 async function downloadNodeRuntime(target, destination, cache) {
   const artifact = lock.targets[target]
   const filename = `node-v${lock.nodeVersion}-${artifact.nodeArchive}`
@@ -159,11 +117,6 @@ async function pythonArchive(target, cache) {
   return downloadPrimaryRuntimeAsset(`https://github.com/astral-sh/python-build-standalone/releases/download/${lock.pythonRelease}/${encodeURIComponent(filename)}`, artifact.pythonSha256, cache)
 }
 
-/**
- * Identify the inputs that assemble one target's payload, excluding unrelated target locks.
- * @param {keyof typeof lock.targets} target - Runtime target whose archives are installed.
- * @returns {string} sha256 payload identity for installation reuse
- */
 function primaryRuntimePayloadDigest(target) {
   const { pythonVersion, pythonRelease, nodeVersion, wheels, pythonPackages } = lock
   return createHash('sha256').update(JSON.stringify({
@@ -172,12 +125,6 @@ function primaryRuntimePayloadDigest(target) {
   })).digest('hex')
 }
 
-/**
- * The runtime.json written into a target's payload.
- * @param {keyof typeof lock.targets} target - Runtime target the manifest describes.
- * @param {string} version - The app's version, recorded in the legacy desktopVersion field.
- * @returns {object} validated manifest
- */
 export function primaryRuntimeManifest(target, version) {
   return {
     desktopVersion: version,
@@ -190,12 +137,6 @@ export function primaryRuntimeManifest(target, version) {
   }
 }
 
-/**
- * Whether an output directory already holds a complete payload for the manifest.
- * @param {string} output - Directory receiving primary-runtime/.
- * @param {object} manifest - The manifest the payload must match.
- * @returns {boolean}
- */
 export function runtimeReusable(output, manifest) {
   const root = join(output, 'primary-runtime')
   let existing
@@ -205,11 +146,6 @@ export function runtimeReusable(output, manifest) {
   return [entries.python, entries.node].every(path => existsSync(path)) && existsSync(entries.pythonPackages)
 }
 
-/**
- * Unpack a locked library wheel, retaining auxiliary scripts in its distribution data directory.
- * @param {string} archive - Hash-verified wheel archive.
- * @param {string} destination - Absolute site-packages directory.
- */
 async function unpackPrimaryRuntimeWheel(archive, destination) {
   await extractZip(archive, {
     dir: destination,
@@ -237,11 +173,6 @@ function removeTestDirectories(root, directory) {
   return removed
 }
 
-/**
- * Prune NumPy/pandas tests and their RECORD rows, preserving testing helpers and native extensions.
- * @param {string} sitePackages - Staged site-packages directory containing the locked wheels.
- * @throws If a locked distribution's RECORD is missing or malformed.
- */
 export function prunePrimaryRuntimePythonTests(sitePackages) {
   for (const name of ['numpy', 'pandas']) {
     const record = join(sitePackages, `${name}-${lock.pythonPackages[name]}.dist-info`, 'RECORD')
@@ -257,22 +188,11 @@ export function prunePrimaryRuntimePythonTests(sitePackages) {
   }
 }
 
-/**
- * Copy the skill package's complete asset tree to ordinary filesystem resources.
- * @param {string} source - The package's assets directory.
- * @param {string} destination - External Office skill resource directory.
- */
 async function prepareOfficeSkillAssets(source, destination) {
   rmSync(destination, { recursive: true, force: true })
   await cp(source, destination, { recursive: true, dereference: true })
 }
 
-/**
- * Materialize locked interpreters, libraries and Office resources without executing target code.
- * @param {{ target: keyof typeof lock.targets, output: string, cache: string, version: string, skillSource?: string }} options
- *   target: payload platform. output: directory receiving primary-runtime/ and office-skills/.
- *   cache: sha256-addressed archive cache. version: the app's version for the manifest.
- */
 export async function preparePrimaryRuntime(options) {
   const { target } = options
   const artifact = lock.targets[target]
@@ -311,11 +231,6 @@ export async function preparePrimaryRuntime(options) {
   await prepareOfficeSkillAssets(assets, join(paths.runtime, 'office-skills'))
 }
 
-/**
- * Run the freshly prepared payload's interpreter and libraries; skipped when the
- * target is not the build host's own platform and architecture.
- * @param {string} root - Final payload directory.
- */
 function smokePrimaryRuntime(root) {
   const manifest = parsePrimaryRuntime(JSON.parse(readFileSync(join(root, 'runtime.json'), 'utf8')))
   if (manifest.platform !== process.platform || manifest.arch !== process.arch) return

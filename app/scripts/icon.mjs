@@ -1,8 +1,3 @@
-// Draws the app icon from the Main Bot's whale in ../ds-bot and writes assets/icon.svg,
-// assets/icon.png (1024 px), assets/icon.ico (Windows, 16 to 256 px) and the tray marks:
-// assets/tray.ico (Windows), assets/tray.png (Linux) and assets/trayTemplate.png with its
-// @2x (macOS).
-// Usage: npm run icon. It runs itself again inside Electron, which turns the SVG into PNGs.
 import { spawnSync } from 'node:child_process'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -13,7 +8,6 @@ import { characterMarkup, MASK_ID } from '../../ds-bot/src/client/characters.js'
 const here = fileURLToPath(import.meta.url)
 const assets = join(dirname(here), '..', 'assets')
 const ICO_SIZES = [16, 20, 24, 32, 36, 40, 48, 64, 72, 96, 128, 256]
-// The tray icon is small: the sizes a notification area shows, and one plain png for Linux.
 const TRAY_ICO_SIZES = [16, 20, 24, 32]
 const TRAY_PNG_SIZE = 24
 // macOS draws a template image itself, in the colour of the menu bar: a black mark with the
@@ -21,10 +15,8 @@ const TRAY_PNG_SIZE = 24
 const TRAY_TEMPLATE_SIZES = [16, 32]
 const WHALE_INK = '#4D6BFE'
 
-// The whale's body spans x 4..95.9 and y 20.9..79 of its 100 box.
 const WHALE = { cx: 49.95, cy: 49.95, width: 91.9 }
 
-// A superellipse close to the system's rounded-square app tile.
 function tile(size, inset) {
   const radius = (size - 2 * inset) / 2
   const center = size / 2
@@ -37,13 +29,10 @@ function tile(size, inset) {
   return `M${points.join('L')}Z`
 }
 
-// `plate`: the tile's share of the canvas. macOS wants a margin around the tile; Windows
-// draws its icons nearly edge to edge, so its sizes use a fuller tile.
 function iconSvg(plate, size = 1024) {
   const inset = (size * (1 - plate)) / 2
   const whaleWidth = (size - 2 * inset) * 0.85
   const scale = whaleWidth / WHALE.width
-  // The head carries the weight, so the whale sits a little left of and above center.
   const x = size / 2 - WHALE.cx * scale - whaleWidth * 0.015
   const y = size / 2 - WHALE.cy * scale - whaleWidth * 0.018
   const path = tile(size, inset)
@@ -60,9 +49,6 @@ function iconSvg(plate, size = 1024) {
 `
 }
 
-// The tray mark: the whale alone, so that it still reads at the size of a tray icon. The
-// macOS template is the same shape in black, because macOS paints it in the colour of the
-// menu bar itself.
 function traySvg(size, ink) {
   const whaleWidth = size * 0.94
   const scale = whaleWidth / WHALE.width
@@ -94,8 +80,6 @@ function icoFile(images) {
   return Buffer.concat([head, ...images.map(image => image.png)])
 }
 
-// Inside Electron: a page draws each SVG on a canvas of its exact size, so every size is
-// drawn from the vectors rather than scaled down from a large bitmap.
 async function renderInElectron(jobs) {
   const { BrowserWindow } = await import('electron')
   const page = new BrowserWindow({ show: false })

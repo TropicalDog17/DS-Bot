@@ -12,13 +12,11 @@ const folder = (t) => {
 }
 const at = () => new Date('2026-10-28T08:00:00.000Z')
 
-// The CI user of the onboarding acceptance has a space and Chinese in its name.
 const windows = redactor({ home: 'C:\\Users\\测试 用户', platform: 'win32' })
 
 test('the launch token, API keys and the sign-in callback do not reach the log', () => {
   assert.equal(windows('GET http://127.0.0.1:52817/?token=Zm9v.YmFy&x=1'), 'GET http://127.0.0.1:52817/?token=<hidden>&x=1')
   assert.equal(windows('access_token=abc refresh_Token=def'), 'access_token=<hidden> refresh_Token=<hidden>')
-  // The mock model's keys and the three DeepSeek-shaped ones of the acceptance.
   for (const key of ['sk-test-ok', 'sk-test-bad', 'sk-test-empty', `sk-${'0123456789abcdef'.repeat(2).slice(0, 28)}0001`, `sk-${'a'.repeat(28)}0401`, `sk-${'b'.repeat(28)}0000`]) {
     assert.equal(windows(`key "${key}" saved`), 'key "sk-<hidden>" saved')
   }
@@ -31,7 +29,6 @@ test('the home folder becomes %USERPROFILE% in every spelling', () => {
   assert.equal(windows('url file:///c:/users/测试 用户/DS Bot'), 'url file:///%USERPROFILE%/DS Bot')
   assert.equal(windows('{"dataDir":"C:\\\\Users\\\\测试 用户\\\\.ds-bot"}'), '{"dataDir":"%USERPROFILE%\\\\.ds-bot"}')
   assert.equal(windows('cwd C:\\Users\\测试 用户'), 'cwd %USERPROFILE%')
-  // Another user whose name starts the same way is not this one.
   assert.equal(windows('C:\\Users\\测试 用户2\\x'), 'C:\\Users\\测试 用户2\\x')
   const posix = redactor({ home: '/home/Alice', platform: 'linux' })
   assert.equal(posix('/home/Alice/.ds-bot and file:///home/Alice'), '~/.ds-bot and file://~')

@@ -464,7 +464,6 @@ test('the views stay hidden while the app’s card is up, and the shown ones com
   manager.place('A', rect, true)
   manager.cover(true)
   assert.deepEqual(views.map(view => view.visible), [false, false])
-  // The page places its view again while the card is up: it still waits.
   manager.place('B', rect, true)
   assert.equal(views[1].visible, false)
   manager.cover(false)
@@ -536,7 +535,6 @@ test('a tab whose window is gone joins the next window', async t => {
   t.after(() => manager.dispose())
   manager.create('a')
   assert.equal(added.length, 1, 'the view belongs to the window')
-  // The window is gone, but its view is still alive.
   manager.release()
   const next = { contentView: { addChildView(view) { added.push(view) } } }
   manager.attach(next)

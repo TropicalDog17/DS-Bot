@@ -1,6 +1,3 @@
-// A move whose copy fails says why on a card on the moving page instead of a message box:
-// [Try again] copies again, [Start in the old folder] starts again on the old folder (start-window §5). The
-// Electron parts are test doubles: no display, no DSH, no data of the user.
 import assert from 'node:assert/strict'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -13,8 +10,6 @@ import { installHooks } from './helpers/register.mjs'
 await installHooks()
 
 test('a failed copy asks on a card whether to copy again or start where the data was', async () => {
-  // The picked folder's parent turns into a file before the answer: the folder passes the
-  // checks again, but no copy can go there.
   const parent = join(mkdtempSync(join(tmpdir(), 'ds-bot-move-')), 'a-file')
   const to = join(parent, 'data')
   const { home } = await moveFromStart(to, {
@@ -30,7 +25,6 @@ test('a failed copy asks on a card whether to copy again or start where the data
   assert.deepEqual(card, { kind: 'moveFailed', dataDir: home, why: 'copy', reason: 'other' })
   assert.ok(log.length > 0 && log.every(line => typeof line === 'string'), 'the error goes into the details')
 
-  // [Try again]: the card goes, the copy fails again, and the card comes back.
   const before = shown()
   await startAct('answer', 'retry')
   await waitFor(() => shown() > before && startState().view === 'card', 'copy again')
@@ -38,7 +32,6 @@ test('a failed copy asks on a card whether to copy again or start where the data
   assert.ok(failures() >= 2)
   assert.equal(state.relaunches.length, 0)
 
-  // [Start in the old folder]: the app starts again on the old folder.
   await startAct('answer', 'old')
   await waitFor(() => state.relaunches.length === 1, 'start again where the data was')
   assert.equal(JSON.parse(readFileSync(join(paths.userData, 'locations.json'), 'utf8')).dataDir, home)

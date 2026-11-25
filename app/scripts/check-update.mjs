@@ -1,7 +1,3 @@
-// Check a packaged app's update on throwaway folders. Windows and a Linux AppImage download and
-// install a feed; macOS and a Linux deb read the latest release and open no browser.
-// Usage: node scripts/check-update.mjs <app executable> <feed folder with latest.yml or latest-linux.yml> [--kill]
-//        node scripts/check-update.mjs <app executable> <version> (macOS, a Linux deb)
 import { spawn, spawnSync } from 'node:child_process'
 import { createReadStream, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { createServer } from 'node:http'
@@ -11,12 +7,8 @@ import { setTimeout as sleep } from 'node:timers/promises'
 
 const [executable, source, mode] = process.argv.slice(2)
 const mac = process.platform === 'darwin'
-// An AppImage updates itself, as on Windows; any other Linux executable (a deb's) only hears
-// of the release, as on macOS.
 const releasePage = mac || (process.platform === 'linux' && !executable?.endsWith('.AppImage'))
 const manifest = process.platform === 'linux' ? 'latest-linux.yml' : 'latest.yml'
-// The asset the fake release lists: what this install's update check waits for. The deb's file
-// name uses the Debian architecture (x64 → amd64).
 const asset = mac
   ? version => `DS-Bot-${version}-mac-${process.arch}.zip`
   : version => `DS-Bot-${version}-linux-${{ x64: 'amd64' }[process.arch] ?? process.arch}.deb`
@@ -56,11 +48,7 @@ const server = createServer((request, response) => {
 await new Promise((done) => { server.listen(0, '127.0.0.1', done) })
 const feed = `http://127.0.0.1:${String(server.address().port)}/`
 
-// The tray's Quit ends the app. The check cannot click the tray icon, so it asks the browser
-// target of the debugging port to close. Tray menu dispatch is covered by the main-process tests.
 async function quitApp(port, waitForReady = false) {
-  // Until the Host is ready only the start window is there (a file: page); the team window
-  // loads the Host's address once the engine is up.
   const find = async () => {
     const targets = await (await fetch(`http://127.0.0.1:${String(port)}/json/list`)).json()
     const pages = targets.filter(target => target.type === 'page' && (/^http:\/\/127\.0\.0\.1:\d+\//u.test(target.url) || /\/src\/start\/start\.html\?start=/u.test(target.url)))

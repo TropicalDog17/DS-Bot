@@ -89,7 +89,6 @@ test('a receipt cannot point out of the helper folder', async (t) => {
   await assert.rejects(prepareComputerHelper({ runtimeDir, home, arch: 'arm64', copy, verify }), /Invalid computer-use helper receipt/)
 })
 
-// The real signed helper, with the real ditto and codesign.
 const packaged = fileURLToPath(new URL('../node_modules/@deepseek-ai/dsh-experimental-cua-macos/native/bin', import.meta.url))
 test('a real copy keeps DeepSeek\'s signature and drops quarantine', { skip: process.platform !== 'darwin' || !existsSync(join(packaged, `darwin-${process.arch}`, 'current.json')) }, async (t) => {
   const root = mkdtempSync(join(tmpdir(), 'ds-bot-computer-helper-'))
@@ -107,7 +106,6 @@ test('a real copy keeps DeepSeek\'s signature and drops quarantine', { skip: pro
   execFileSync('/usr/bin/codesign', ['--verify', '--strict', copied])
   assert.doesNotMatch(execFileSync('/usr/bin/xattr', [copied], { encoding: 'utf8' }), /com\.apple\.quarantine/)
 
-  // A cached copy whose executable still matches but whose bundle signature is broken is replaced.
   const plist = join(copied, 'Contents', 'Info.plist')
   writeFileSync(plist, `${readFileSync(plist, 'utf8')}\n<!-- tampered -->\n`)
   assert.throws(() => execFileSync('/usr/bin/codesign', ['--verify', '--strict', copied], { stdio: 'pipe' }))

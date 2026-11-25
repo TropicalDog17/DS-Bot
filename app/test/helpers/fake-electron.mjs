@@ -1,20 +1,14 @@
-// The Electron parts of the app, as a test double: enough of the API for the main process
-// of src/main.mjs to run without a display, without DSH and without the user's data.
-// The loader (test/helpers/loader.mjs) puts this module in place of "electron".
 import { EventEmitter } from 'node:events'
 import { mkdirSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-// The data of the app in this process: a folder of its own, so that a test never writes
-// into the data of the user.
 const root = mkdtempSync(join(tmpdir(), 'ds-bot-fake-user-data-'))
 export const paths = {
   root,
   userData: join(root, 'userData'),
   downloads: join(root, 'downloads'),
   exe: join(root, 'DS Bot.exe'),
-  // The folder of the app itself: the Host's pnpm lives in it.
   appPath: join(root, 'app'),
 }
 for (const folder of [paths.userData, paths.downloads]) mkdirSync(folder, { recursive: true })
@@ -29,14 +23,9 @@ export const state = {
   exits: [],
   ipc: new Map(),
   tray: undefined,
-  // The tray cannot always be built; a test says so before the app starts.
   trayFails: false,
-  // The app is a packaged one: it has an updater. It is set after the app starts, so that
-  // the paths of the packaged app do not come into the way of the start.
   packaged: false,
-  // No page of the browser comes through.
   rejectLoads: false,
-  // The cookies of the browser: the Host's address keeps one after the launch URL was used.
   cookies: [],
   paths: {},
   dock: { setIcon: () => {} },
@@ -77,8 +66,6 @@ export class FakeWindow extends EventEmitter {
   setMinimumSize() {}
   moveTop() {}
   getBounds() { return { x: 0, y: 0, width: 800, height: 600 } }
-  // What the start window asks of a window: its rect, its growth into the team window's rect
-  // and the hand-off, at which the team window shows behind it.
   getNormalBounds() { return this.getBounds() }
   setBounds() {}
   setContentBounds() {}
@@ -93,13 +80,11 @@ export class FakeWindow extends EventEmitter {
     this.url = url
     this.loaded.push(url)
     if (state.rejectLoads || this.rejectLoads) throw new Error(`the page ${url} did not load`)
-    // The Host trades the token of the launch URL for a cookie of the browser's session.
     try {
       const parsed = new URL(url)
       const token = parsed.searchParams.get('token')
       if (token !== null) state.cookies.push({ name: 'dsh-auth', value: token, domain: parsed.hostname, path: '/' })
     } catch { /* a page without an address of its own */ }
-    // The window is on the screen once its first page is there.
     if (!this.ready) {
       this.ready = true
       setImmediate(() => { if (!this.destroyed) this.emit('ready-to-show') })
@@ -107,8 +92,6 @@ export class FakeWindow extends EventEmitter {
   }
 }
 
-// The page's side of the app's picker (preload.cjs showPicker): it shows, then answers with
-// state.openAnswer, the shape of the system picker's answer that the tests set.
 function answerPicker(contents, request) {
   state.pickers.push(request)
   setImmediate(async () => {
@@ -119,12 +102,10 @@ function answerPicker(contents, request) {
       state.ipc.get('ds-bot:app-picker-cancel')(event, request.id)
       return
     }
-    // The user makes a folder that is not there yet with [New folder], then chooses it.
     if (request.mode === 'folder') {
       try { mkdirSync(answer.filePaths[0], { recursive: true }) } catch {}
     }
     const chosen = await state.ipc.get('ds-bot:app-picker-choose')(event, request.id, answer.filePaths[0])
-    // A path that the picker refuses leaves it open; the user then cancels.
     if (chosen?.error !== undefined) state.ipc.get('ds-bot:app-picker-cancel')(event, request.id)
   })
 }
@@ -163,7 +144,6 @@ class FakeApp extends EventEmitter {
     this.setPath = (name, value) => { state.paths[name] = value }
     this.setName = (name) => { this.name = name }
     this.setAppUserModelId = (id) => { state.appId = id }
-    // The app starts a tick later, so that a test has its say before the app begins.
     this.whenReady = () => new Promise((done) => { setImmediate(done) })
     this.requestSingleInstanceLock = () => true
     this.relaunch = (options) => { state.relaunches.push(options) }
@@ -175,7 +155,6 @@ class FakeApp extends EventEmitter {
       state.quitPrevented = prevented
       if (prevented) return
       this.emit('will-quit')
-      // The windows go with the app, and their timers with them.
       for (const win of state.windows) if (!win.destroyed) win.destroy()
     }
     this.show = () => { state.appShown = (state.appShown ?? 0) + 1 }
@@ -229,7 +208,6 @@ export const nativeImage = {
 
 export const nativeTheme = Object.assign(new EventEmitter(), { shouldUseDarkColors: false, themeSource: 'system' })
 
-// One display, where the start window opens and the team window grows to.
 const display = { workArea: { x: 0, y: 0, width: 1920, height: 1040 } }
 export const screen = {
   getCursorScreenPoint: () => ({ x: 0, y: 0 }),
@@ -240,11 +218,9 @@ export const screen = {
 
 export const systemPreferences = {
   getAnimationSettings: () => ({ prefersReducedMotion: true }),
-  // macOS reports the notification permission here; the shell reads it before showing.
   getNotificationSettings: () => ({ authorizationStatus: 'authorized' }),
 }
 
-// Notifications the shell puts up: recorded, never shown (#1504).
 export const notifications = []
 export const Notification = class extends EventEmitter {
   static isSupported() { return true }
@@ -257,7 +233,6 @@ export const clipboard = { writeText: () => {} }
 
 export const powerMonitor = new EventEmitter()
 
-// The cookies of the browser: the Host's address keeps one after the launch URL was used.
 const cookieJar = {
   get: async ({ url } = {}) => {
     if (url === undefined) return state.cookies.map(entry => ({ ...entry }))
@@ -278,7 +253,6 @@ export const ipcMain = {
 
 export const dialog = {
   showMessageBox: async (...args) => {
-    // Electron takes the window as the first argument and the box as the second.
     const options = args.length > 1 ? args[1] : args[0]
     state.dialogs.push(options)
     const answer = state.dialogAnswer ?? { response: 1 }

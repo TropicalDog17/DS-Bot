@@ -33,8 +33,6 @@ describe('unreadableSessions', () => {
   })
 })
 
-// The first-run check's own Host on two Sessions in its log format: one that it reads, and
-// one with a required record that it does not know.
 describe('the first-run check', () => {
   let home, unreadable
   before(async () => {
@@ -55,7 +53,7 @@ describe('the first-run check', () => {
     const check = new HostProcess({
       entry: join(app, 'src', 'host.mjs'), cwd, env: { ...process.env, DSH_HOME: home, DS_BOT_CHECK: list },
       pnpm: join(app, 'node_modules', 'pnpm', 'bin', 'pnpm.mjs'), onFailure: () => {},
-    }, 'darwin') // Exercise the Electron/Node-mode launch without a packaged runtime.
+    }, 'darwin')
     try {
       ({ unreadable } = await check.start())
     } finally {

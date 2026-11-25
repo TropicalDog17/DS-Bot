@@ -1,14 +1,8 @@
-// The app's own folder and file picker, in place of the system's: the file system side. The page
-// only draws what these return (preload.cjs showPicker), and every path that it sends back is
-// checked here again. Errors are answers, never throws: the page shows them in place.
 import { access, mkdir, readdir, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, dirname, extname, isAbsolute, join, parse, resolve } from 'node:path'
 
-// A folder with more entries than this lists the first ones and says so.
 export const LIST_MAX = 2000
-// A network drive that is gone can keep a check waiting for many seconds; it is listed instead,
-// and opening it says what is wrong.
 const DRIVE_WAIT_MS = 300
 const KNOWN = ['home', 'desktop', 'documents', 'downloads']
 const WINDOWS_BAD = /[<>:"/\\|?*]/u
@@ -17,11 +11,6 @@ const WINDOWS_RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/iu
 const within = (promise, ms, late) => Promise.race([promise, new Promise((done) => { setTimeout(() => { done(late) }, ms).unref?.() })])
 const reachable = path => access(path).then(() => true, () => false)
 
-/**
- * Where the picker's side column starts: the known folders that exist, and the drives (Windows)
- * or the root and the mounted volumes (macOS, Linux).
- * @param {{ getPath: (name: string) => string, platform?: string, home?: string }} options
- */
 export async function roots({ getPath, platform = process.platform, home = homedir() }) {
   const places = []
   for (const key of KNOWN) {
@@ -55,7 +44,6 @@ function user() {
   try { return basename(homedir()) } catch { return '' }
 }
 
-/** The steps from the path's root down to it, for the breadcrumb. */
 export function crumbs(path) {
   const { root } = parse(path)
   const steps = [{ name: root.replace(/[\\/]+$/u, '') || root, path: root }]
@@ -67,14 +55,12 @@ export function crumbs(path) {
   return steps
 }
 
-/** A path that the user typed: `~` is the home folder, a relative one starts at `from`. */
 export function typed(text, from, home = homedir()) {
   const value = String(text).trim().replace(/^["']|["']$/gu, '')
   if (value === '~' || value.startsWith('~/') || value.startsWith('~\\')) return join(home, value.slice(1))
   return isAbsolute(value) ? resolve(value) : resolve(from, value)
 }
 
-/** What went wrong with a path, as the page names it. */
 export async function problemOf(error, path) {
   switch (error?.code) {
     case 'ENOENT': return await reachable(parse(path).root) ? 'missing' : 'drive'
@@ -86,13 +72,6 @@ export async function problemOf(error, path) {
   }
 }
 
-/**
- * One folder's entries, folders first, each sorted the way people read them. Hidden entries
- * (a leading dot, Windows' `$` system folders) are left out.
- * @param {string} path
- * @param {{ files?: boolean, extensions?: string[] }} [options] `files` lists the files too;
- *   `extensions` (without the dot) keeps only those.
- */
 export async function list(path, { files = false, extensions } = {}) {
   const folder = resolve(path)
   let entries
@@ -107,7 +86,6 @@ export async function list(path, { files = false, extensions } = {}) {
     if (entry.name.startsWith('.') || entry.name.startsWith('$') || entry.name === 'System Volume Information') continue
     const full = join(folder, entry.name)
     let dir = entry.isDirectory()
-    // A link or a junction is what it points to; a broken one is left out.
     if (entry.isSymbolicLink()) {
       try { dir = (await stat(full)).isDirectory() } catch { continue }
     } else if (!dir && !entry.isFile()) continue
@@ -119,7 +97,6 @@ export async function list(path, { files = false, extensions } = {}) {
   return { path: folder, crumbs: crumbs(folder), parent: dirname(folder) === folder ? undefined : dirname(folder), entries: rows.slice(0, LIST_MAX), ...(rows.length > LIST_MAX ? { more: rows.length } : {}) }
 }
 
-/** Whether `name` can be one file or folder name here. */
 export function nameOk(name, platform = process.platform) {
   if (typeof name !== 'string' || name.trim() === '' || name === '.' || name === '..' || name.length > 255) return false
   if (name.includes('/') || name.includes('\0')) return false
@@ -127,10 +104,6 @@ export function nameOk(name, platform = process.platform) {
   return true
 }
 
-/**
- * A new folder in `parent`.
- * @returns {Promise<{ path: string } | { error: string }>}
- */
 export async function makeFolder(parent, name, platform = process.platform) {
   if (!nameOk(name, platform)) return { error: 'name' }
   const path = join(resolve(parent), name)
@@ -143,11 +116,6 @@ export async function makeFolder(parent, name, platform = process.platform) {
   }
 }
 
-/**
- * Where a save goes: a valid name in a folder that exists. `exists` says that a file of that name
- * is there already, which the page asks about before it replaces it.
- * @returns {Promise<{ path: string, exists?: true } | { error: string }>}
- */
 export async function saveTarget(folder, name, platform = process.platform) {
   if (!nameOk(name, platform)) return { error: 'name' }
   const into = resolve(folder)
@@ -165,7 +133,6 @@ export async function saveTarget(folder, name, platform = process.platform) {
   }
 }
 
-/** A path that the picker can choose: a folder (`folder` mode) or a file (`file` mode). */
 export async function chosen(path, mode) {
   const target = resolve(path)
   try {
@@ -178,7 +145,6 @@ export async function chosen(path, mode) {
   }
 }
 
-/** The folder a picker opens in: `from`, or the nearest folder above it that exists. */
 export async function startIn(from, home = homedir()) {
   let at = typeof from === 'string' && from !== '' ? resolve(from) : home
   for (;;) {

@@ -1,6 +1,3 @@
-// What the start window needs before the team view has loaded: the theme source and the motion
-// tier the team view reported last. Kept in the app's own userData, never in DSH_HOME or ~/.dsh
-// (docs/plans/2026-10-26-start-window.md §3, §10).
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 
@@ -9,7 +6,6 @@ const MOTIONS = new Set(['quiet', 'normal', 'lively'])
 const EFFECTS = new Set(['full', 'reduced', 'off'])
 const DEFAULTS = { themeSource: 'system', motion: 'normal', effects: 'full' }
 
-/** @returns {{ themeSource: 'light' | 'dark' | 'system', motion: 'quiet' | 'normal' | 'lively', effects: 'full' | 'reduced' | 'off' }} */
 export function readStartFrame(file) {
   let saved
   try {
@@ -24,7 +20,6 @@ export function readStartFrame(file) {
   }
 }
 
-/** Keeps the values of `change` that are valid; returns whether the file changed. */
 export function writeStartFrame(file, change) {
   const current = readStartFrame(file)
   const next = {

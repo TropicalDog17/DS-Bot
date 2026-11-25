@@ -1,5 +1,3 @@
-// Released macOS and deb clients require the legacy asset name before showing an update.
-// Publish an alias of the new payload as well; all normal downloads use DS-Bot-*.
 import { copyFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { LEGACY_ARTIFACT_PREFIX } from '../src/legacy.mjs'

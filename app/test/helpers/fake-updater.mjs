@@ -1,4 +1,3 @@
-// The updater of the app, as a test double: it records what the app asked of it.
 import { EventEmitter } from 'node:events'
 
 export const state = { checks: 0, quitAndInstall: [], autoDownload: false, autoInstallOnAppQuit: false }

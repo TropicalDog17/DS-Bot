@@ -1,10 +1,5 @@
-// Windows and a Linux AppImage download and install updates; macOS and a Linux deb ask before
-// opening the release page. main.mjs asks the questions, in the dialog.update.* copy of
-// start/text.mjs.
-
 const CHECK_EVERY_MS = 4 * 60 * 60_000
 export const RELEASES_URL = 'https://api.github.com/repos/Fei2411/DS-Bot/releases?per_page=20'
-// Where a user downloads the newest version by hand.
 export const RELEASE_PAGE = 'https://github.com/Fei2411/DS-Bot/releases/latest'
 const MB = 1024 * 1024
 
@@ -55,9 +50,6 @@ function isHttpsPage(page) {
   }
 }
 
-// The About row shows the checker's phase: checking → current | downloading → downloaded |
-// available | failed. While a check, a download or a ready install is on, a new check must
-// not start, so `check()` is a no-op in those phases.
 const UPDATE_BUSY = new Set(['checking', 'downloading', 'downloaded'])
 
 function stateHolder(log) {
@@ -78,8 +70,6 @@ function stateHolder(log) {
   }
 }
 
-// `asset` names the release asset of this install (default: the macOS zip); a release without
-// it does not count.
 export function watchReleases({ current, arch, fetch = globalThis.fetch, ask, open, feed = RELEASES_URL, log = console, asset }) {
   const assetName = asset ?? (version => `DS-Bot-${version}-mac-${arch}.zip`)
   let asked
@@ -138,7 +128,6 @@ export function watchReleases({ current, arch, fetch = globalThis.fetch, ask, op
       }
     })()
   }
-  // A check runs at once and then on the timer; a manual one only starts when none is on.
   const check = () => { if (!UPDATE_BUSY.has(holder.state().phase)) run() }
   run()
   const timer = setInterval(check, CHECK_EVERY_MS)
@@ -146,29 +135,6 @@ export function watchReleases({ current, arch, fetch = globalThis.fetch, ask, op
   return { stop: () => { clearInterval(timer) }, latest: () => latest, state: holder.state, subscribe: holder.subscribe, check }
 }
 
-/**
- * @param {{
- *   updater: import('electron-updater').AppUpdater,
- *   beforeInstall: () => Promise<void>,
- *   ask?: (version: string) => Promise<boolean>,
- *   feed?: string,
- *   log?: Pick<Console, 'info' | 'error'>,
- * }} options `ask` answers whether to restart now; without it the update waits for the next
- *   quit. `beforeInstall` stops the Host, which runs from the files the installer replaces.
- *   `feed` is a folder URL with a latest.yml, in place of the GitHub releases.
- * @returns {{
- *   stop: () => void,
- *   latest: () => Promise<{ version: string, downloaded: Promise<boolean> } | null>,
- *   install: () => Promise<void>,
- *   state: () => { phase: string, version?: string, page?: string, percent?: number, received?: number, total?: number },
- *   subscribe: (listener: (state: { phase: string }) => void) => () => void,
- *   check: () => void,
- * }} `latest` is what the newest check found: the version and whether its download finished.
- *   `install` stops the Host and runs the installer, which opens the app again. `state` is
- *   the phase the About row shows, with the download's per cent and MB while it downloads;
- *   `check` runs the same check the timer does and does nothing while a check, a download or a
- *   ready install is on.
- */
 export function watchUpdates({ updater, beforeInstall, ask, feed, log = console }) {
   updater.autoDownload = true
   updater.autoInstallOnAppQuit = true
@@ -182,7 +148,6 @@ export function watchUpdates({ updater, beforeInstall, ask, feed, log = console 
   updater.on('checking-for-update', () => { holder.set({ phase: 'checking' }) })
   updater.on('update-not-available', () => { holder.set({ phase: 'current' }) })
   updater.on('update-available', (info) => { holder.set({ phase: 'downloading', version: info?.version }) })
-  // The download's progress, for the failure page's update banner: once per whole per cent.
   updater.on('download-progress', (progress) => {
     const current = holder.state()
     const percent = Math.floor(Number(progress?.percent))
@@ -197,15 +162,11 @@ export function watchUpdates({ updater, beforeInstall, ask, feed, log = console 
     void ask(version).then(now => (now ? install() : undefined))
       .catch((error) => { log.error(`DS Bot: update ${version} not installed: ${error instanceof Error ? error.message : String(error)}`) })
   })
-  // A downloaded update stays ready: a later failed check does not hide it.
   updater.on('error', (error) => {
     log.error(`DS Bot: update failed: ${error instanceof Error ? error.message : String(error)}`)
     if (holder.state().phase !== 'downloaded') holder.set({ phase: 'failed' })
   })
   let latest = Promise.resolve(null)
-  // A failed check or download also comes as an 'error' event.
-  // The events normally move the phase; a check that settles without one must not leave it
-  // on `checking`, or the busy guard would also stop the timer's checks.
   const settled = (next) => { if (holder.state().phase === 'checking') holder.set(next) }
   const run = () => {
     latest = updater.checkForUpdates().then((result) => {

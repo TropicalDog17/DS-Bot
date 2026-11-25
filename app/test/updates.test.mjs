@@ -4,15 +4,12 @@ import { describe, test } from 'node:test'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { isNewer, RELEASES_URL, watchReleases, watchUpdates } from '../src/updates.mjs'
 
-// electron-updater's AppUpdater, as far as the app uses it. `found` makes the answer of a
-// check that finds a version, with the download that autoDownload starts.
 class FakeUpdater extends EventEmitter {
   checks = 0
   feeds = []
   installs = []
   failCheck = false
   found = null
-  // `wait` leaves the check pending, the way a slow answer from the feed would.
   wait = false
   checkForUpdates() {
     this.checks += 1
@@ -220,9 +217,7 @@ describe('watchReleases', () => {
 
   test('a given asset replaces the mac zip: the deb of a Linux install', async (t) => {
     const page = 'https://github.com/Fei2411/DS-Bot/releases/tag/v0.1.9'
-    // The deb's file name uses the Debian architecture (x64 → amd64).
     const deb = version => `DS-Bot-${version}-linux-amd64.deb`
-    // A release with only the mac zip does not count for a deb install.
     const misses = watchReleases({
       current: '0.1.7', arch: 'x64', asset: deb,
       fetch: async () => releaseResponse([release('0.1.9', { page })]), log: quietLog(),
@@ -504,7 +499,6 @@ describe('watchUpdates', () => {
     const updater = new FakeUpdater()
     const updates = watchUpdates({ updater, beforeInstall: async () => {}, log: quietLog() })
     t.after(updates.stop)
-    // The first check already answered: nothing newer.
     assert.deepEqual(updates.state(), { phase: 'current' })
     updater.emit('checking-for-update')
     assert.deepEqual(updates.state(), { phase: 'checking' })
@@ -520,7 +514,6 @@ describe('watchUpdates', () => {
     t.after(updates.stop)
     const seen = []
     updates.subscribe(state => seen.push(state))
-    // No download, no progress.
     updater.emit('download-progress', { percent: 5, transferred: 1, total: 2 })
     assert.deepEqual(seen, [])
     updater.emit('update-available', { version: '0.1.9' })
@@ -556,7 +549,6 @@ describe('watchUpdates', () => {
     updater.wait = true
     const updates = watchUpdates({ updater, beforeInstall: async () => {}, log: quietLog() })
     t.after(updates.stop)
-    // The first check is still on: the updater has not answered it yet.
     assert.deepEqual(updates.state(), { phase: 'checking' })
     updates.check()
     assert.equal(updater.checks, 1)

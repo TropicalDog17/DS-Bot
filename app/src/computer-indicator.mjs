@@ -1,32 +1,11 @@
-// The floating computer-use indicator: a small always-on-top bar at the top of the
-// screen that shows which Bots hold a computer lease and offers Stop, Stop all and
-// "Let it continue". It is `focusable: false` so it never steals the cursor, and
-// `setContentProtection(true)` keeps it out of the Bots' own screenshots.
-
-/**
- * @param {{
- *   BrowserWindow: new (options: object) => object,
- *   screen: { getPrimaryDisplay: () => { workAreaSize: { width: number, height: number }, workArea: { x: number, y: number } } },
- *   html: (entries: object[]) => string,
- *   ipcMain?: { on: (channel: string, listener: (event: { sender: object }, ...args: any[]) => void) => void },
- *   preload?: string,
- *   onAction?: (action: string, botId: string | null) => void,
- *   log?: Pick<Console, 'warn'>,
- * }} options injected Electron surface and a renderer for the bar
- * @returns {{ update: (entries: object[]) => void, dispose: () => void }}
- */
 export function createComputerIndicator({ BrowserWindow, screen, html, ipcMain, preload, onAction = () => {}, log = console }) {
   let win = null
-  // One listener for the indicator's whole life: a listener per open() would
-  // multiply each click on reopen. The check pins it to the current window.
   ipcMain?.on?.('ds-bot:computer-indicator:act', (event, action, botId) => {
     if (event?.sender !== win?.webContents) return
     onAction(String(action ?? ''), botId === '' || botId === undefined || botId === null ? null : String(botId))
   })
   let entries = []
   let labels = {}
-  // Fit the transparent window to the pill: only the pill is painted, so the
-  // window shrinks to its width and stays centered on the primary work area.
   const fit = async () => {
     try {
       const width = await win?.webContents?.executeJavaScript("document.querySelector('.bar')?.scrollWidth ?? 0")
@@ -56,7 +35,6 @@ export function createComputerIndicator({ BrowserWindow, screen, html, ipcMain, 
       show: false,
       webPreferences: { sandbox: true, preload },
     })
-    // The bar must never appear inside a screenshot the provider hands a Bot.
     try { win.setContentProtection(true) } catch (error) { log.warn(`DS Bot: the indicator could not hide from screenshots: ${error instanceof Error ? error.message : String(error)}`) }
     try { win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true }) } catch (error) { log.warn(`DS Bot: the indicator could not join every workspace: ${error instanceof Error ? error.message : String(error)}`) }
     win.once('ready-to-show', () => { win?.showInactive() })
@@ -73,7 +51,6 @@ export function createComputerIndicator({ BrowserWindow, screen, html, ipcMain, 
     try { closing.close() } catch (error) { log.warn(`DS Bot: the indicator did not close: ${error instanceof Error ? error.message : String(error)}`) }
   }
   return {
-    /** Re-render the bar; empty entries hide the window, entries show it. */
     update(next) {
       entries = (Array.isArray(next?.rows) ? next.rows : []).map(sanitizeEntry)
       labels = next?.labels ?? {}
@@ -88,8 +65,6 @@ export function createComputerIndicator({ BrowserWindow, screen, html, ipcMain, 
   }
 }
 
-// The bar's own page: the same glass pill the in-app indicator wears, themed by
-// the system appearance. Only the pill is painted; the window is transparent.
 export function indicatorHtml(entries, labels = {}) {
   const avatar = (entry) => entry.avatar !== undefined
     ? `<img class="ava" src="${escapeHtml(entry.avatar)}" alt="">`
@@ -125,8 +100,6 @@ body{margin:0;background:transparent;overflow:hidden;font:12.5px -apple-system,s
 </style></head><body onclick="const a=event.target.closest('[data-act]')?.dataset?.act;if(a&&window.computerIndicator){const i=a.indexOf(':');computerIndicator.act(a.slice(0,i),a.slice(i+1)||null)}"><div class="bar"><span class="live"></span>${rows}${stopAll}</div></body></html>`
 }
 
-// What the client may put on a row: ids and text, a hex color, an optional
-// bounded data-URL avatar. Anything else is dropped before it reaches the page.
 export function sanitizeEntry(entry) {
   if (entry === null || typeof entry !== 'object') return { label: '' }
   const clean = {}

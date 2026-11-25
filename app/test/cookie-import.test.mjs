@@ -1,6 +1,3 @@
-// Writing parsed cookies into a partition session: the details mapping, the per-cookie
-// apply with read-back verification and flush, the pending-import store, and the
-// value-free preview the page confirms.
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -29,7 +26,6 @@ test('toSetDetails maps a normalized cookie to the Electron set call', () => {
   assert.equal(toSetDetails({ name: 'n', value: 'v', domain: 'x.io', path: '/', sameSite: 'Lax' }).sameSite, 'lax')
 })
 
-/** A session.cookies stand-in: store what set accepts, refuse and drop what we are told to. */
 function fakeSession({ reject = [], drop = [] } = {}) {
   const stored = new Map()
   const key = (c) => `${c.name}${String(c.domain ?? '').replace(/^\.+/, '')}${c.path ?? '/'}`
@@ -74,7 +70,6 @@ test('applyCookies reports rejects and silent drops per cookie', async () => {
   assert.match(report.failed[0].reason, /Invalid cookie fields/)
   assert.equal(report.dropped.length, 1)
   assert.equal(report.dropped[0].name, 'p_strict')
-  // Reports never carry values.
   for (const item of [...report.failed, ...report.dropped]) assert.equal(item.value, undefined)
 })
 
@@ -84,7 +79,7 @@ test('a pending import is value-bearing, one-shot and capped', () => {
   const { id, preview } = imports.store(parsed, { kind: 'file', label: 'cookies.txt' })
   assert.equal(preview.cookies, 8)
   assert.equal(preview.source.kind, 'file')
-  assert.equal(preview.sites.length, 1) // all eight share 127.0.0.1
+  assert.equal(preview.sites.length, 1)
   assert.ok(preview.notes.includes('session-cookies'))
   assert.equal(imports.peek(id).cookies.length, 8)
   assert.equal(imports.take(id).cookies.length, 8)

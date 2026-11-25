@@ -11,7 +11,6 @@ import { GOAL_PATCH_NAME, goalPatch, reconcileGoal } from '../src/goal-patch.mjs
 const PRESETS = fileURLToPath(new URL('presets/', import.meta.resolve('@deepseek-ai/dsh-web-app/package.json')))
 const GOAL_NAMES = new Set(['@deepseek-ai/dsh-command-goal', '@deepseek-ai/dsh-tool-goal'])
 
-// The dsh-web-app bundle's preset patches, as the app's own launch reads them.
 const realLayers = readdirSync(PRESETS).filter(name => name.endsWith('.patch.yml'))
   .map(name => ({ packageName: '@deepseek-ai/dsh-web-app', packageDir: PRESETS, patchPaths: [], patches: load(readFileSync(join(PRESETS, name), 'utf8'), { schema: entryListSchema }) }))
 
@@ -37,7 +36,6 @@ describe('goalPatch', () => {
     const rows = goalPatch(track())
     assert.ok(rows !== undefined)
     const restated = new Map(rows.map(row => [row.id, row]))
-    // At least the standard, ptc and cordis presets carry goal rows.
     assert.equal(restated.size >= 3, true)
     for (const layer of realLayers) {
       for (const patch of layer.patches) {
@@ -49,7 +47,6 @@ describe('goalPatch', () => {
           }
           const row = restated.get(preset.id)
           assert.equal(row.name, '@deepseek-ai/dsh-agent-preset')
-          // The restated plugins list is the source list minus the goal rows.
           const stripped = source
             .map(r => (r?.group === true && Array.isArray(r.config) ? { ...r, config: r.config.filter(c => !GOAL_NAMES.has(c?.name)) } : r))
             .filter(r => !GOAL_NAMES.has(r?.name))
@@ -93,11 +90,9 @@ describe('reconcileGoal', () => {
     const p = profile()
     try {
       const [file] = reconcileGoal(p)
-      // Outside the profile directory itself, so DSH only reads it through patchFiles.
       assert.equal(file, join(dirname(p.dir), GOAL_PATCH_NAME))
       assert.notEqual(file, p.patchPath)
       assert.equal(readFileSync(file, 'utf8').includes('command-goal') === false, true)
-      // A later launch with nothing to change drops the stale overlay.
       assert.deepEqual(reconcileGoal({ ...p, layers: [], patches: [] }), [])
       assert.equal(existsSync(file), false)
     } finally { rmSync(p.home, { recursive: true, force: true }) }

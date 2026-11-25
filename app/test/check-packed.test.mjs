@@ -6,13 +6,6 @@ import { createContext, runInContext, runInNewContext } from 'node:vm'
 const source = readFileSync(new URL('../scripts/check-packed.mjs', import.meta.url), 'utf8')
 const chatSource = source.slice(source.indexOf('async function chat(cdp)'), source.indexOf('async function checkComputerHelper('))
 
-// delivery says what the page does with the Enter press:
-//   sent      the press sends the message
-//   second    the first press is dropped, the second sends
-//   unfocused the window starts without focus until the mouse click lands on the composer
-//   dropped   the press never reaches the page
-//   composing an IME owns the key, so the press sends nothing
-//   busy      the first press disables the send button while sending
 async function runChat(delivery) {
   let now = 0
   let reply = ''

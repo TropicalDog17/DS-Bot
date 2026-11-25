@@ -33,7 +33,6 @@ test('no manifest, missing package and foreign dependencies are not shadows', (t
   const dir = folder(t)
   assert.deepEqual(shadowedBundles(dir, OWN), [])
   profile(dir, { 'ds-bot': '0.2.7', 'other-plugin': '1.0.0' })
-  // Declared but not on disk: nothing resolves from it.
   assert.deepEqual(shadowedBundles(dir, OWN), [])
   plant(dir, 'other-plugin', '1.0.0')
   assert.deepEqual(shadowedBundles(dir, OWN), [])
@@ -52,7 +51,6 @@ test('removal drops the dependency row and the profile link, and leaves the pnpm
   const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
   assert.deepEqual(manifest.dependencies, { 'other-plugin': '1.0.0' })
   assert.equal(existsSync(join(dir, 'node_modules', 'ds-bot')), false)
-  // Another package may still link into the store entry.
   assert.equal(existsSync(join(store, 'package.json')), true)
   assert.equal(existsSync(join(dir, 'node_modules', 'other-plugin')), true)
   assert.deepEqual(shadowedBundles(dir, OWN), [])
@@ -73,7 +71,6 @@ test('a failed removal throws and keeps the dependency row, so the copy is found
   profile(dir, { 'ds-bot': '0.2.7' })
   plant(dir, 'ds-bot', '0.2.7')
   if (process.platform === 'win32' || process.getuid?.() === 0) { t.skip('read-only folders do not block removal here'); return }
-  // A file inside a read-only folder cannot be unlinked.
   const pkg = join(dir, 'node_modules', 'ds-bot')
   chmodSync(pkg, 0o555)
   try { await assert.rejects(removeShadowed(dir, ['ds-bot'])) } finally { chmodSync(pkg, 0o755) }
