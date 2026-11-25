@@ -3,7 +3,10 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
+import { setTimeout as delay } from 'node:timers/promises'
 import { createRuntime } from '../index.js'
+import { AWAIT_MAX_MS } from '../src/board/cards.js'
+import { install as installBoard } from '../src/board/plugin.js'
 import { fakeContext } from './fake-ctx.js'
 
 const team = () => ({
@@ -86,8 +89,73 @@ test('startCard opens a card thread beside the chat and sends the brief there; n
   assert.equal((await notes.startCard({ botId: 'writer', cardId: 'c_1', text: 'again' })).sessionId, 'card1')
   assert.deepEqual((await notes.deliver({ botId: 'writer', cardId: 'c_1', text: 'shorter please', requestId: 'im:telegram:9' })), { sessionId: 'card1', where: 'card', requestId: 'im:telegram:9' })
   assert.equal(prompts.at(-1).requestId, 'im:telegram:9')
-  // A card with no thread falls back to the Bot's chat.
-  assert.equal((await notes.deliver({ botId: 'writer', cardId: 'c_2', text: 'hi' })).where, 'chat')
+})
+
+test('the card thread decides which session a note lands in', async (t) => {
+  const state = team()
+  state.rooms.ops = { id: 'ops', name: 'Ops', members: ['writer'], sessions: { writer: 'ops-writer' } }
+  const { rt, prompts, stop } = await setup({ state })
+  t.after(stop)
+  const { notes } = rt.companions
+  const sent = await notes.deliver({ botId: 'writer', cardId: 'c_1', roomId: 'ops', title: 'Release', brief: 'Write the newsletter.', text: 'Keep it short.' })
+  assert.equal(sent.where, 'card')
+  assert.equal(sent.sessionId, 'card1')
+  assert.deepEqual(prompts.map(prompt => [prompt.sessionId, prompt.requestId, prompt.content[0].text]), [
+    ['card1', sent.requestId, 'Write the newsletter.\n\nKeep it short.'],
+  ])
+  assert.deepEqual(rt.cardThreads.ofSession('card1'), { botId: 'writer', cardId: 'c_1' })
+  assert.equal(rt.cardThreads.sessionOf('writer', 'c_1'), 'card1')
+  assert.deepEqual(rt.ownerOfSession('card1'), { botId: 'writer', roomId: 'ops', cardId: 'c_1' })
+})
+
+test('a host with no card threads still gets the note', async (t) => {
+  const { rt, prompts, stop } = await setup()
+  t.after(stop)
+  const { notes } = rt.companions
+  rt.openCardThread = undefined
+  const message = { botId: 'writer', cardId: 'c_1', requestId: 'note-1', text: 'Keep it short.' }
+  assert.deepEqual(await notes.deliver(message), { sessionId: 'writer', where: 'chat', requestId: 'note-1' })
+  rt.openCardThread = async () => { throw new Error('Thread creation failed') }
+  assert.deepEqual(await notes.deliver({ ...message, requestId: 'note-2' }), { sessionId: 'writer', where: 'chat', requestId: 'note-2' })
+  assert.deepEqual(prompts.map(prompt => [prompt.sessionId, prompt.requestId, prompt.content[0].text]), [
+    ['writer', 'note-1', 'Keep it short.'],
+    ['writer', 'note-2', 'Keep it short.'],
+  ])
+})
+
+test('the card thread decides which answer lands after the note window', async (t) => {
+  const { ctx, rt, home, prompts, stop } = await setup()
+  t.after(stop)
+  const board = installBoard(ctx, { file: join(home, 'board.json'), adoptMs: -1, waitPollMs: -1, watchMs: -1 }, {
+    ...rt.companions, identity: { ownerOfSession: rt.ownerOfSession }, tools: ctx.tools, connection: ctx.connection, now: () => 1000,
+  })
+  t.after(() => board.dispose())
+  const added = await board.handle('add', { title: 'Newsletter', assignee: 'writer', brief: 'Write it.' })
+  const [id] = Object.keys(added.value.cards)
+  const card = () => board.store.read().cards[id]
+  const reply = async (answer) => {
+    rt.botReplied({ botId: 'writer', since: 1001, ...answer })
+    await board.store.change(() => ({ error: 'settled' }))
+  }
+  await board.store.change(data => {
+    data.cards[id].awaiting = { botId: 'writer', since: 1000 }
+    return {}
+  })
+  await reply({ sessionId: 'writer', text: 'Unrelated chat reply during the note window.' })
+  assert.deepEqual(card().notes ?? [], [])
+  assert.deepEqual(card().awaiting, { botId: 'writer', since: 1000 })
+
+  assert.equal((await board.handle('note', { id, text: 'Keep it short.' })).ok, true)
+  const { requestId, sessionId } = prompts.at(-1)
+  assert.deepEqual(card().awaiting.requests, [requestId])
+  await reply({ sessionId: 'writer', heard: [requestId], text: 'Wrong session.' })
+  assert.deepEqual(card().notes.map(note => note.text), ['Keep it short.'])
+  await reply({ sessionId, heard: ['another-note'], text: 'Progress on earlier work.' })
+  assert.deepEqual(card().notes.map(note => note.text), ['Keep it short.', 'Progress on earlier work.'])
+  assert.deepEqual(card().awaiting.requests, [requestId])
+  await reply({ cardId: id, sessionId, since: 1001 + AWAIT_MAX_MS, heard: [requestId], text: 'Done.' })
+  assert.deepEqual(card().notes.map(note => note.text), ['Keep it short.', 'Progress on earlier work.', 'Done.'])
+  assert.equal(card().awaiting, undefined)
 })
 
 test('a finished card closes its thread, after the turn running in it ends; the thread stays readable', async (t) => {
@@ -106,10 +174,13 @@ test('a finished card closes its thread, after the turn running in it ends; the 
   assert.equal(rt.botOf('writer').openParts.length, 2)
   rt.live.delete('card1')
   rt.cardTurnEnded()
-  await new Promise(resolve => setTimeout(resolve, 20))
+  const deadline = performance.now() + 2000
+  while (archived.length === 0 && performance.now() < deadline) await delay(5)
   assert.deepEqual(rt.botOf('writer').openParts.map(part => part.card), ['c_2'])
   assert.deepEqual(archived, ['card1'])
   assert.equal(rt.chatOwners.has('card1'), false)
+  assert.equal(rt.cardThreads.ofSession('card1'), undefined)
+  assert.deepEqual(rt.ownerOfSession('card1'), { botId: 'writer' })
   assert.deepEqual(rt.pastOwners.get('card1'), { botId: 'writer' })
   assert.deepEqual(saved().bots.writer.closedCards.map(closed => [closed.card, closed.sessionId]), [['c_1', 'card1']])
 
@@ -117,6 +188,22 @@ test('a finished card closes its thread, after the turn running in it ends; the 
   assert.deepEqual(await notes.closeCard({ botId: 'writer', cardId: 'c_2' }), { closed: true })
   assert.deepEqual(rt.botOf('writer').openParts, [])
   assert.deepEqual(archived, ['card1', 'card2'])
+})
+
+test('a focused card thread finishes its pending close without archiving the foreground chat', async (t) => {
+  const { rt, archived, stop } = await setup()
+  t.after(stop)
+  const sessionId = await rt.cardThreads.open('writer', 'c_1', 'Release', 'ops')
+  assert.equal(await rt.switchPart('writer', sessionId), true)
+  assert.deepEqual(rt.ownerOfSession(sessionId), { botId: 'writer', roomId: 'ops', cardId: 'c_1' })
+  rt.live.set(sessionId, { turn: {} })
+  assert.equal(await rt.cardThreads.close('writer', 'c_1'), 'later')
+  rt.live.delete(sessionId)
+  rt.cardThreads.turnEnded()
+  await rt.save()
+  assert.deepEqual(rt.ownerOfSession(sessionId), { botId: 'writer' })
+  assert.equal(rt.chatOf('writer'), sessionId)
+  assert.deepEqual(archived, [])
 })
 
 test('after a restart, open card threads are the Bot\'s again and closed ones stay readable', async (t) => {
@@ -131,6 +218,7 @@ test('after a restart, open card threads are the Bot\'s again and closed ones st
   assert.deepEqual(rt.botOf('writer').openParts.map(part => part.card), ['c_2'])
   assert.equal(rt.chatOwners.get('card2'), 'writer')
   assert.equal(rt.cardOfSession('card2'), 'c_2')
+  assert.deepEqual(rt.ownerOfSession('card2'), { botId: 'writer', cardId: 'c_2' })
   assert.deepEqual(rt.pastOwners.get('card1'), { botId: 'writer' })
 })
 

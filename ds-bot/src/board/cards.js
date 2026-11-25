@@ -3,11 +3,12 @@
 // caller loads and saves it (store.js). Who is who comes from DS Bot's dsBotRoster.
 import { randomBytes } from 'node:crypto'
 import { prName, prsOf } from './prs.js'
+import { pushFor } from './watch.js'
+import { OPEN_STATUSES, USER, isOpen, oneLine } from './card-fields.js'
 
-// `active` is the In progress column; the name stays from the group task board.
+export { OPEN_STATUSES, USER, isOpen, oneLine } from './card-fields.js'
+
 export const CARD_STATUSES = ['todo', 'active', 'review', 'blocked', 'done', 'cancelled']
-export const OPEN_STATUSES = ['todo', 'active', 'review', 'blocked']
-export const USER = 'user'
 export const TITLE_MAX = 200
 export const PROGRESS_MAX = 300
 export const RESULT_MAX = 2000
@@ -41,11 +42,9 @@ export const PANES_MAX = 4
 const ADOPT_NOTES = 3
 const ADOPT_NOTE_MAX = 300
 
-export const oneLine = (text, max) => String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, max)
 // A Bot's reply keeps its lines; runs of blank lines become one.
 export const replyText = (text, max) => String(text ?? '').replace(/\r\n?/g, '\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, max)
 export const newCardId = () => `c_${randomBytes(4).toString('hex')}`
-export const isOpen = card => OPEN_STATUSES.includes(card?.status)
 
 // A ticket key as Jira writes it (LIFE-782), upper-cased; undefined for anything else.
 export function ticketKey(text) {
@@ -202,6 +201,7 @@ export function createBoard({ roster, now = Date.now }) {
     botId: card.assignee,
     cardId: card.id,
     title: card.title,
+    ...(card.roomId === undefined ? {} : { roomId: card.roomId }),
     text: [
       `[Card ${label(card)} · "${card.title}"] ${from === card.assignee ? 'opened by you' : `from ${from === USER ? 'the user' : nameOf(from)}`}.`,
       '',
@@ -221,6 +221,7 @@ export function createBoard({ roster, now = Date.now }) {
       botId: card.assignee,
       cardId: card.id,
       title: card.title,
+      ...(card.roomId === undefined ? {} : { roomId: card.roomId }),
       text: [
         `[Card ${label(card)} · "${card.title}"] moved to a conversation of its own.`,
         '',
@@ -235,20 +236,39 @@ export function createBoard({ roster, now = Date.now }) {
       ].join('\n'),
     }
   }
-  const closeOf = card => (card.assignee !== USER && roster.bot(card.assignee) !== undefined ? { close: { botId: card.assignee, cardId: card.id } } : {})
+  const outcome = (card, said, effects = []) => ({ card, said, effects })
+  const withPush = (action, result, before, progressBefore) => {
+    const { card, effects } = result
+    const at = now()
+    const text = pushFor(action, before, card, nameOf, { now: at, lastPush: card.pushedAt, progressBefore })
+    if (text !== undefined) {
+      effects.push({ kind: 'push', text })
+      if (isOpen(card)) card.pushedAt = at
+    }
+    return result
+  }
+  const closeOf = card => {
+    delete card.pushedAt
+    return card.assignee !== USER && roster.bot(card.assignee) !== undefined
+      ? [{ kind: 'close', payload: { botId: card.assignee, cardId: card.id } }]
+      : []
+  }
   // The Bot that opened a card hears how it ended where it opened it (its own chat or the
   // group), since the user asked there and the work ran in the card's own thread.
-  const reportOf = (card, what) => {
-    if (card.openedBy === USER || roster.bot(card.openedBy) === undefined) return {}
+  const reportOf = (card, what, self, sessionId) => {
+    if (card.openedBy === USER || roster.bot(card.openedBy) === undefined) return []
     const link = card.links?.at(-1)?.url
-    return {
-      report: {
+    return [{
+      kind: 'report',
+      // The opener already reports in its current conversation unless it worked in the card's thread.
+      ...(self === card.openedBy ? { onlyFrom: { botId: self, sessionId } } : {}),
+      payload: {
         botId: card.openedBy,
         cardId: card.id,
         ...(card.roomId === undefined ? {} : { roomId: card.roomId }),
         text: [`Card ${label(card)} "${card.title}" ${what}${link === undefined ? '' : ` (${link})`}`, `Tell the user here in a line or two how it ended, with the card id; the whole work stays on the card.`].join('\n'),
       },
-    }
+    }]
   }
 
   const botActions = {
@@ -288,11 +308,9 @@ export function createBoard({ roster, now = Date.now }) {
       apply(card, ticket.fields)
       logStep(card, self)
       cards[card.id] = card
-      return {
-        card,
-        said: `Opened ${label(card)}: ${card.title} (${COLUMN[status]}, ${nameOf(assignee)}).${handed ? ` The card reaches ${nameOf(assignee)} by itself; do not also message it.` : forBot ? ' Its work runs in a conversation of its own that starts now: do not do it here. Tell the user in one line that you took it, with the card id.' : ''}`,
-        ...(forBot ? { start: startOf(card, self) } : {}),
-      }
+      return outcome(card,
+        `Opened ${label(card)}: ${card.title} (${COLUMN[status]}, ${nameOf(assignee)}).${handed ? ` The card reaches ${nameOf(assignee)} by itself; do not also message it.` : forBot ? ' Its work runs in a conversation of its own that starts now: do not do it here. Tell the user in one line that you took it, with the card id.' : ''}`,
+        forBot ? [{ kind: 'start', payload: startOf(card, self), fallback: handed }] : [])
     },
     update(cards, self, _roomId, args) {
       const card = pick(cards, args.id, self)
@@ -339,7 +357,7 @@ export function createBoard({ roster, now = Date.now }) {
       if (card.status !== before || card.progress !== progressBefore) logStep(card, self)
       touch(card)
       const ask = WAITING_STATUSES.includes(card.status) && !card.need ? ' Say with need what the user must do, with the link to it.' : ''
-      return { card, before, progressBefore, said: `Updated ${label(card)} (${COLUMN[card.status]}).${ask}` }
+      return withPush('update', outcome(card, `Updated ${label(card)} (${COLUMN[card.status]}).${ask}`), before, progressBefore)
     },
     // A question for the user with the choices to pick from. It joins the card's
     // conversation, the card moves to Review, and the user's pick comes back as a note.
@@ -359,7 +377,7 @@ export function createBoard({ roster, now = Date.now }) {
       }
       say(card, self, question, { options })
       card.unread = true
-      return { card, said: `Asked on ${label(card)}: ${options.join(' / ')}. The user's pick reaches you as a note on the card.` }
+      return withPush('ask', outcome(card, `Asked on ${label(card)}: ${options.join(' / ')}. The user's pick reaches you as a note on the card.`))
     },
     // Something for the card's assignee, from another Bot (the Main Bot passing on what
     // the user said about the card): it joins the card's conversation and reaches the
@@ -374,15 +392,12 @@ export function createBoard({ roster, now = Date.now }) {
       if (said === '') return { error: 'note needs the text to pass on.' }
       say(card, self, said)
       const bot = card.assignee === USER ? undefined : roster.bot(card.assignee)
-      return {
-        card,
-        said: bot === undefined ? `Noted on ${label(card)}; the user holds it.` : `Passed on to ${bot.name} on ${label(card)}.`,
-        ...(bot === undefined ? {} : { deliver: { botId: bot.id, cardId: card.id, ...(card.roomId === undefined ? {} : { roomId: card.roomId }), text: `Note on card ${label(card)} "${card.title}" from ${nameOf(self)}: ${said}` } }),
-      }
+      const effects = bot === undefined ? [] : [{ kind: 'deliver', payload: { botId: bot.id, cardId: card.id, ...(card.roomId === undefined ? {} : { roomId: card.roomId }), text: `Note on card ${label(card)} "${card.title}" from ${nameOf(self)}: ${said}` } }]
+      return outcome(card, bot === undefined ? `Noted on ${label(card)}; the user holds it.` : `Passed on to ${bot.name} on ${label(card)}.`, effects)
     },
     // `unmerged`: the card's PRs that gh did not report merged (plugin.js asks before the
     // change). With any, the work is done but the card waits in Review for the merge.
-    complete(cards, self, _roomId, args, { unmerged = [] } = {}) {
+    complete(cards, self, _roomId, args, { sessionId, unmerged = [] } = {}) {
       const card = pick(cards, args.id, self)
       if (card === undefined) return { error: 'No open card of yours. Name one with its id or ticket key.' }
       if (!isOpen(card)) return { error: `${label(card)} is already finished.` }
@@ -395,14 +410,13 @@ export function createBoard({ roster, now = Date.now }) {
         addLink(card, link)
       }
       if (unmerged.length > 0) {
-        const before = card.status
         card.status = 'review'
         card.result = result
         card.waitsMerge = true
         card.need = mergeNeed(unmerged)
         logStep(card, self)
         touch(card)
-        return { card, before, said: `${label(card)} waits in Review until ${unmerged.map(prName).join(', ')} ${unmerged.length === 1 ? 'is' : 'are'} merged, then moves to Done by itself. Your work on it is done: stop here.` }
+        return withPush('complete', outcome(card, `${label(card)} waits in Review until ${unmerged.map(prName).join(', ')} ${unmerged.length === 1 ? 'is' : 'are'} merged, then moves to Done by itself. Your work on it is done: stop here.`))
       }
       card.status = 'done'
       card.result = result
@@ -411,9 +425,9 @@ export function createBoard({ roster, now = Date.now }) {
       dropNeed(card)
       logStep(card, self)
       touch(card)
-      return { card, said: `Finished ${label(card)}: "${result}"`, ...closeOf(card), ...reportOf(card, `is done (${nameOf(self)}): ${result}`) }
+      return withPush('complete', outcome(card, `Finished ${label(card)}: "${result}"`, [...closeOf(card), ...reportOf(card, `is done (${nameOf(self)}): ${result}`, self, sessionId)]))
     },
-    cancel(cards, self, _roomId, args) {
+    cancel(cards, self, _roomId, args, { sessionId } = {}) {
       const card = pick(cards, args.id, self)
       if (card === undefined) return { error: 'No open card to cancel. Name one with its id or ticket key.' }
       if (!isOpen(card)) return { error: `${label(card)} is already finished.` }
@@ -425,7 +439,7 @@ export function createBoard({ roster, now = Date.now }) {
       dropMerge(card)
       logStep(card, self)
       touch(card)
-      return { card, said: `Cancelled ${label(card)}.`, ...closeOf(card), ...reportOf(card, `was cancelled (${nameOf(self)})${why === '' ? '' : `: ${why}`}`) }
+      return withPush('cancel', outcome(card, `Cancelled ${label(card)}.`, [...closeOf(card), ...reportOf(card, `was cancelled (${nameOf(self)})${why === '' ? '' : `: ${why}`}`, self, sessionId)]))
     },
   }
 
@@ -457,14 +471,14 @@ export function createBoard({ roster, now = Date.now }) {
       apply(card, ticket.fields)
       logStep(card, USER)
       cards[card.id] = card
-      return { card, ...(assignee === USER ? {} : { start: startOf(card, USER) }) }
+      return outcome(card, undefined, assignee === USER ? [] : [{ kind: 'start', payload: startOf(card, USER), fallback: true }])
     },
     move(cards, id, status) {
       const { card, error } = found(cards, id)
       if (error !== undefined) return { error }
       if (!USER_STATUSES.includes(status)) return { error: 'Unknown column.' }
       if (card.status === 'cancelled') return { error: 'That card is cancelled.' }
-      if (card.status === status) return { card }
+      if (card.status === status) return outcome(card)
       card.status = status
       if (status === 'done') card.doneAt = now()
       else delete card.doneAt
@@ -472,7 +486,7 @@ export function createBoard({ roster, now = Date.now }) {
       dropMerge(card)
       logStep(card, USER)
       touch(card)
-      return { card, ...(status === 'done' ? closeOf(card) : {}) }
+      return outcome(card, undefined, status === 'done' ? closeOf(card) : [])
     },
     // A note joins the card's conversation; `deliver` says where it goes as the user's message
     // (dsBotNotes): the card's group when it came from one, else the Bot's own chat.
@@ -480,36 +494,32 @@ export function createBoard({ roster, now = Date.now }) {
     note(cards, id, text) {
       const { card, error } = found(cards, id)
       if (error !== undefined) return { error }
-      if (!isOpen(card)) return { error: 'That card is already finished.' }
+      const bot = card.assignee === USER ? undefined : roster.bot(card.assignee)
+      if (!isOpen(card) && bot === undefined) return { error: 'That card is already finished.' }
       const said = oneLine(text, NOTE_MAX)
       if (said === '') return { error: 'Write a note first.' }
       say(card, USER, said)
-      const bot = card.assignee === USER ? undefined : roster.bot(card.assignee)
-      return {
-        card,
-        ...(bot === undefined ? {} : { deliver: { botId: bot.id, cardId: card.id, ...(card.roomId === undefined ? {} : { roomId: card.roomId }), text: `Note on card ${label(card)} "${card.title}": ${said}` } }),
-      }
+      const effects = bot === undefined ? [] : [{ kind: 'deliver', payload: { botId: bot.id, cardId: card.id, ...(card.roomId === undefined ? {} : { roomId: card.roomId }), text: `Note on card ${label(card)} "${card.title}": ${said}` } }]
+      return outcome(card, undefined, effects)
     },
     // The note reached the Bot (`where` from dsBotNotes): the card waits for its answer
-    // there. A wait already running keeps its start, so the first answer still lands.
-    // A note to the Bot's own chat also keeps its request id: the answer that read it
-    // names it, so it lands here even when the Bot answers other cards in between.
-    // A note that reached the card's own thread (cardId) waits there: every answer in
-    // that thread is the card's.
+    // there. The answer that read the note names its request id. A wait already
+    // running in the same conversation keeps its start.
     sent(cards, id, { botId, roomId, cardId, since, requestId }) {
       const { card, error } = found(cards, id)
       if (error !== undefined) return { error }
+      if (!isOpen(card)) return outcome(card)
       const same = card.awaiting?.botId === botId && card.awaiting?.roomId === roomId && card.awaiting?.cardId === cardId
       if (!same) card.awaiting = { botId, ...(roomId === undefined ? {} : { roomId }), ...(cardId === undefined ? {} : { cardId }), since }
       if (typeof requestId === 'string') card.awaiting.requests = [...(card.awaiting.requests ?? []), requestId].slice(-REQUESTS_MAX)
-      return { card }
+      return outcome(card)
     },
     // The user opened the card: its answer is read.
     seen(cards, id) {
       const { card, error } = found(cards, id)
       if (error !== undefined) return { error }
       delete card.unread
-      return { card }
+      return outcome(card)
     },
     cancel(cards, id, reason) {
       const { card, error } = found(cards, id)
@@ -521,7 +531,7 @@ export function createBoard({ roster, now = Date.now }) {
       dropNeed(card)
       dropMerge(card)
       touch(card)
-      return { card, ...closeOf(card) }
+      return outcome(card, undefined, closeOf(card))
     },
   }
 
@@ -531,24 +541,26 @@ export function createBoard({ roster, now = Date.now }) {
   // from a turn that began after the note. A card waiting on request ids is never matched by order: an answer
   // to another card would land on it. `trace` is how the Bot got there (live.js keep):
   // its reasoning and tool calls.
-  const mirror = (cards, { botId, roomId, cardId, text, since, heard, trace } = {}) => {
+  const mirror = (cards, { botId, roomId, cardId, text, since, heard, trace, hasThread = () => false } = {}) => {
     const said = replyText(text, REPLY_MAX)
     if (said === '') return { error: 'Nothing to copy.' }
-    // An answer in a card thread is that card's, whether or not a note waits for it.
+    const read = new Set(Array.isArray(heard) ? heard : [])
+    const heardNote = card => card.awaiting?.requests?.some(requestId => read.has(requestId))
+    // The Session identifies the card. A pending note also needs its own request id.
     if (typeof cardId === 'string') {
       const card = own(cards, cardId)
       if (card === undefined || card.assignee !== botId) return { error: 'No card waits for this answer.' }
-      delete card.awaiting
+      if (card.awaiting?.cardId === cardId && heardNote(card)) delete card.awaiting
       say(card, botId, said, trace === undefined ? {} : { trace })
       card.unread = true
-      return { card }
+      return outcome(card)
     }
     const there = list(cards).filter(card => card.awaiting?.botId === botId && card.awaiting.roomId === roomId && card.awaiting.cardId === undefined)
-    const read = new Set(Array.isArray(heard) ? heard : [])
-    let answered = there.filter(card => (card.awaiting.requests ?? []).some(requestId => read.has(requestId)))
+    let answered = there.filter(heardNote)
     if (answered.length === 0) {
       answered = there.filter(card => card.awaiting.requests === undefined
-        && card.awaiting.since <= since && since - card.awaiting.since <= AWAIT_MAX_MS)
+        && card.awaiting.since <= since && since - card.awaiting.since <= AWAIT_MAX_MS
+        && !hasThread(card.id))
         .sort((a, b) => a.awaiting.since - b.awaiting.since)
         .slice(0, 1)
     }
@@ -559,7 +571,7 @@ export function createBoard({ roster, now = Date.now }) {
       // New to the user until they open the card.
       card.unread = true
     }
-    return { card: answered[0] }
+    return outcome(answered[0])
   }
 
   // Panes the card's Bot drove from the card's thread (plugin.js reads them off its
@@ -571,7 +583,7 @@ export function createBoard({ roster, now = Date.now }) {
     const known = (card.panes ?? []).map(entry => entry.id)
     if (fresh.length === 0 || fresh.join('\n') === known.slice(-fresh.length).join('\n')) return { error: 'No new pane.' }
     for (const pane of fresh) addPane(card, pane)
-    return { card }
+    return outcome(card)
   }
 
   // The PRs a complete would wait on: the card's links and the link it brings.
@@ -591,8 +603,9 @@ export function createBoard({ roster, now = Date.now }) {
     dropNeed(card)
     logStep(card, card.assignee)
     touch(card)
-    return { card, ...closeOf(card), ...reportOf(card, `is done: ${card.result} (merged)`) }
+    return withPush('merged', outcome(card, undefined, [...closeOf(card), ...reportOf(card, `is done: ${card.result} (merged)`)]))
   }
 
-  return { show, line, label, adoptOf, panes, prsFor, merged, bot: (cards, action, self, roomId, args, extra) => botActions[action](cards, self, roomId, args, extra), user, mirror }
+  const briefOf = card => startOf(card, card.openedBy).text
+  return { show, line, label, adoptOf, briefOf, panes, prsFor, merged, bot: (cards, action, self, roomId, args, extra) => botActions[action](cards, self, roomId, args, extra), user, mirror }
 }

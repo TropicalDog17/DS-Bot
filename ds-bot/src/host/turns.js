@@ -1274,7 +1274,7 @@ export function install(rt) {
           const text = (wroteCall ? said.map(stripWrittenCalls) : said).join('\n\n').trim()
           if (toUser && text !== '') {
             const heard = takeHeard(id)
-            rt.botReplied?.({ botId: rt.selfOf(id), ...(roomId === undefined ? {} : { roomId }), ...(cardId === undefined ? {} : { cardId }), text, since: began ?? Date.now(), ...(heard.length > 0 ? { heard } : {}) })
+            rt.botReplied?.({ botId: rt.selfOf(id), ...(roomId === undefined ? {} : { roomId }), ...(cardId === undefined ? {} : { cardId, sessionId: id }), text, since: began ?? Date.now(), ...(heard.length > 0 ? { heard } : {}) })
           }
         }
         rt.cardTurnEnded?.()

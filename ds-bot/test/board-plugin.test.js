@@ -6,7 +6,7 @@ import { test } from 'node:test'
 import { apply, inject, name } from '../src/board/entry.js'
 import { ROUTE, boardFileOf, install } from '../src/board/plugin.js'
 import { READ_ONLY, openBoardStore } from '../src/board/store.js'
-import { ACTIONS, ticketKey, titleKey } from '../src/board/cards.js'
+import { ACTIONS, createBoard, ticketKey, titleKey } from '../src/board/cards.js'
 import { PROGRESS_AFTER_MS, PROGRESS_PUSH_MS } from '../src/board/watch.js'
 import { herdrSkillProvider } from '../src/board/skill.js'
 import { KEPT_THINK_MAX, callAbout, keep, visibleThought } from '../src/board/live.js'
@@ -16,11 +16,11 @@ import { commandOf } from '../src/board/plugin.js'
 import { ARM_MS, WAITS_PER_BOT, WAIT_MAX_MS, addWait, check, wakeText } from '../src/board/waits.js'
 import { bridgeService, notesService, rosterService } from '../src/host/companions.js'
 import { homeLock } from '../src/host/home-lock.js'
-import { addCardThread, addCardThread as addCardThreadFor, cardThreadSession, closeCardThread } from '../src/host/threads.js'
+import { addCardThread, addCardThread as addCardThreadFor, cardOfThread, cardThreadSession, closeCardThread } from '../src/host/threads.js'
 
 // The board plugin knows the team only through DS Bot's public services, so the tests
 // build those services over a small fake team, exactly as the host provides them.
-function fakeTeam() {
+function fakeTeam({ threads = true, load = async () => {} } = {}) {
   const state = {
     bots: { a: { id: 'a', name: 'Chief' }, b: { id: 'b', name: 'Writer' }, c: { id: 'c', name: 'Coder' } },
     rooms: { r1: { id: 'r1', name: 'Ops', members: ['a', 'b'], admin: 'a' } },
@@ -32,7 +32,7 @@ function fakeTeam() {
   const rt = {
     ctx: {},
     state,
-    load: async () => {},
+    load,
     botOf: id => (hasOwn(state.bots, id) ? state.bots[id] : undefined),
     roomOf: id => (hasOwn(state.rooms, id) ? state.rooms[id] : undefined),
     isMain: id => id === 'a',
@@ -40,14 +40,14 @@ function fakeTeam() {
     onSaved: () => () => {},
     sendUser: async input => { sent.push([input.sessionId, input.content[0].text]); requests.push(input.requestId) },
     deliver: async input => { delivered.push(input) },
-    // Card threads as parts.js keeps them, named ct-<card id>.
-    openCardThread: async (botId, cardId) => {
+    // Card threads as the host keeps them, named ct-<card id>.
+    openCardThread: threads ? async (botId, cardId) => {
       const bot = state.bots[botId]
       const known = cardThreadSession(bot, cardId)
       if (known !== undefined) return known
       addCardThread(bot, `ct-${cardId}`, cardId)
       return `ct-${cardId}`
-    },
+    } : undefined,
     closeCardThread: async (botId, cardId) => closeCardThread(state.bots[botId], cardId) !== undefined,
     imPush: async (push) => { pushes.push(push); return 1 },
     routingParts: (part) => { parts.add(part); return () => { parts.delete(part) } },
@@ -60,7 +60,16 @@ function fakeTeam() {
   const parts = new Set()
   // Own chats a, b, c; group Sessions ga, gb; a talk between Writer and Coder, xb.
   const owners = { a: { botId: 'a' }, b: { botId: 'b' }, c: { botId: 'c' }, ga: { botId: 'a', roomId: 'r1' }, gb: { botId: 'b', roomId: 'r1' }, xb: { botId: 'b' } }
-  const identity = { ownerOfSession: id => (hasOwn(owners, id) ? owners[id] : undefined), subscribe: () => () => {} }
+  const identity = {
+    ownerOfSession: id => {
+      for (const bot of Object.values(state.bots)) {
+        const cardId = cardOfThread(bot, id)
+        if (cardId !== undefined) return { botId: bot.id, cardId }
+      }
+      return hasOwn(owners, id) ? owners[id] : undefined
+    },
+    subscribe: () => () => {},
+  }
   const notes = notesService(rt)
   const bridge = bridgeService(rt)
   // What turns.js does when a Bot's turn ends with an answer the user reads.
@@ -71,11 +80,12 @@ function fakeTeam() {
 // threads: false is a host without card threads, where a card's notes reach the Bot in
 // its own chat or its group and the card waits for the answer there.
 // prs: what gh reports for each PR address; a PR not named is merged.
-function host(t, { file, notes, now = Date.now, config = {}, threads = true, herdr, prs = {} } = {}) {
+function host(t, { file, notes, now = Date.now, config = {}, threads = true, herdr, load, prs = {} } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'ds-bot-board-plugin-'))
   t.after(() => rmSync(dir, { recursive: true, force: true }))
-  const team = fakeTeam()
-  if (!threads) notes = { ...team.notes, startCard: async () => ({ error: 'Card threads are not available.' }) }
+  // threads: false leaves out openCardThread, so notes cannot open a thread and says so,
+  // which is the host without card threads.
+  const team = fakeTeam({ threads, load })
   const registered = { tools: [], routes: [] }
   const tools = { register: (tool) => { registered.tools.push(tool); return () => { registered.tools.splice(registered.tools.indexOf(tool), 1) } } }
   const connection = { fetch: { register: (route) => { registered.routes.push(route); return () => { registered.routes.splice(registered.routes.indexOf(route), 1) } } } }
@@ -250,7 +260,7 @@ test('the Board page adds, moves, notes and cancels; notes reach the Bot through
   const mine = (await h.post('add', { title: 'Mine' })).value
   const mineId = Object.values(mine.cards).find(entry => entry.title === 'Mine').id
   await h.post('note', { id: mineId, text: 'remember' })
-  // The card started Writer's card thread; done closed it, so the later note goes to its chat.
+  // Without card threads, the notes reach the Bot's own chat and group.
   assert.match(h.team.sent[0][1], /^\[Card c_\w+ · "Đặt lịch khám răng"\] from the user\./)
   assert.deepEqual(h.team.sent.slice(1), [
     ['b', `Note on card ${card.id} "Đặt lịch khám răng": gọi trước 5h`],
@@ -393,7 +403,7 @@ test('a group card waits for the answer in its group; two notes wait from the fi
 })
 
 test('a chat card that waited before request ids still gets the next answer there', async (t) => {
-  const h = host(t)
+  const h = host(t, { threads: false })
   const id = Object.keys((await h.post('add', { title: 'Old wait', assignee: 'b' })).value.cards)[0]
   await h.handle.store.change(data => { data.cards[id].awaiting = { botId: 'b', since: 1000 } })
   h.team.reply({ botId: 'b', text: 'answer', since: 2000, heard: ['unknown'] })
@@ -613,15 +623,15 @@ test('a card handed to another Bot needs a brief, starts that Bot\'s card thread
   assert.equal(h.team.sent[0][0], thread)
   assert.match(h.team.sent[0][1], /^\[Card c_\w+ · "Draft the newsletter"\] from Chief\.\n\nTopic: the November release\.\nKeep it under 300 words\.\n\nThis conversation is for this card only\./)
 
-  // Every answer in the card thread is the card's; a note on the card goes to the thread.
-  h.team.reply({ botId: 'b', cardId: card.id, text: 'On it.', since: Date.now() })
+  // The thread's progress lands on the card, and a reply to a note names its request.
+  h.team.reply({ botId: 'b', cardId: card.id, sessionId: thread, text: 'On it.', since: Date.now() })
   await h.settle()
   await h.post('note', { id: card.id, text: 'mention the new board' })
   assert.deepEqual(h.team.sent.at(-1), [thread, `Note on card ${card.id} "Draft the newsletter": mention the new board`])
   assert.deepEqual(h.cards()[0].awaiting.cardId, card.id)
-  h.team.reply({ botId: 'b', cardId: card.id, text: 'Added it.', since: Date.now() })
+  h.team.reply({ botId: 'b', cardId: card.id, sessionId: thread, heard: [h.team.requests.at(-1)], text: 'Added it.', since: Date.now() })
   // Another Bot cannot answer for the card.
-  h.team.reply({ botId: 'c', cardId: card.id, text: 'not mine', since: Date.now() })
+  h.team.reply({ botId: 'c', cardId: card.id, sessionId: thread, text: 'not mine', since: Date.now() })
   await h.settle()
   assert.deepEqual(h.cards()[0].notes.map(note => [note.by, note.text]), [['b', 'On it.'], ['user', 'mention the new board'], ['b', 'Added it.']])
 
@@ -773,6 +783,81 @@ test('a long card pushes a blocked card, and its progress at most every half hou
   ])
 })
 
+test('board outcomes carry their effects and clear the push stamp on close', () => {
+  const { roster } = fakeTeam()
+  const board = createBoard({ roster, now: () => 123 })
+  const cards = {}
+  const { card, effects: open } = board.bot(cards, 'open', 'a', undefined, { title: 'Fix CI', assignee: 'Writer', brief: 'Fix lint.' })
+  assert.deepEqual(open.map(effect => effect.kind), ['start'])
+  assert.equal(open[0].payload.cardId, card.id)
+  const { effects: update } = board.bot(cards, 'update', 'b', undefined, { id: card.id, status: 'review', progress: 'Tests passed' })
+  assert.deepEqual(update, [{ kind: 'push', text: `Writer · ${card.id}: "Fix CI" is ready for review: Tests passed` }])
+  assert.equal(card.pushedAt, 123)
+  const { effects: complete } = board.bot(cards, 'complete', 'b', undefined, { id: card.id, result: 'Merged' })
+  assert.deepEqual(complete.map(effect => effect.kind), ['close', 'report', 'push'])
+  assert.equal(complete[1].payload.botId, 'a')
+  assert.equal(card.pushedAt, undefined)
+
+  const { card: another, effects: add } = board.user.add(cards, { title: 'Book a room', assignee: 'b' })
+  assert.deepEqual(add.map(effect => effect.kind), ['start'])
+  assert.deepEqual(board.user.note(cards, another.id, 'For Friday').effects.map(effect => effect.kind), ['deliver'])
+  board.bot(cards, 'update', 'b', undefined, { id: another.id, status: 'blocked' })
+  assert.equal(another.pushedAt, 123)
+  assert.deepEqual(board.user.move(cards, another.id, 'done').effects.map(effect => effect.kind), ['close'])
+  assert.equal(another.pushedAt, undefined)
+})
+
+test('the progress push throttle survives a restart and is saved before sending', async (t) => {
+  let clock = 2 * PROGRESS_PUSH_MS
+  const dir = mkdtempSync(join(tmpdir(), 'ds-bot-board-throttle-'))
+  const file = join(dir, 'board.json')
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  const id = 'c_load'
+  const pushedAt = clock - 1_000
+  writeFileSync(file, JSON.stringify({ version: 1, cards: { [id]: {
+    id, title: 'Load test', assignee: 'b', openedBy: 'b', status: 'active',
+    createdAt: 0, updatedAt: pushedAt, progress: 'Started', pushedAt,
+  } } }))
+  const pushes = []
+  const h = host(t, { file, now: () => clock, notes: { push: push => {
+    pushes.push({ ...push, savedAt: JSON.parse(readFileSync(file, 'utf8')).cards[id].pushedAt })
+  } } })
+  assert.match(await h.tool({ action: 'update', id, progress: 'Half done' }), /^Updated c_load/)
+  assert.deepEqual(pushes, [])
+  assert.equal(h.cards()[0].pushedAt, pushedAt)
+  clock = pushedAt + PROGRESS_PUSH_MS
+  assert.match(await h.tool({ action: 'update', id, progress: 'Tested all runs' }), /^Updated c_load/)
+  assert.deepEqual(pushes, [{ cardId: id, botId: 'b', text: 'Writer · c_load: "Load test": Tested all runs', savedAt: clock }])
+})
+
+test('two progress changes within one throttle window send one push', async (t) => {
+  let clock = 0
+  const h = host(t, { now: () => clock })
+  await h.tool({ action: 'open', title: 'Load test', brief: 'Measure p99.' })
+  const [{ id }] = h.cards()
+  clock = PROGRESS_AFTER_MS
+  await h.tool({ action: 'update', id, progress: 'Half done' })
+  clock += PROGRESS_PUSH_MS - 1
+  await h.tool({ action: 'update', id, progress: 'Writing results' })
+  assert.equal(h.cards()[0].progress, 'Writing results')
+  assert.deepEqual(h.team.pushes.map(push => push.text), [`Writer · ${id}: "Load test": Half done`])
+})
+
+test('updates and repeated completion on a closed card send no push', async (t) => {
+  let clock = 0
+  const h = host(t, { now: () => clock })
+  await h.tool({ action: 'open', title: 'Load test', brief: 'Measure p99.' })
+  const [{ id }] = h.cards()
+  clock = PROGRESS_AFTER_MS
+  await h.tool({ action: 'complete', id, result: 'Measured p99' })
+  assert.deepEqual(h.team.pushes.map(push => push.text), [`Writer · ${id}: done "Load test": Measured p99`])
+  clock += PROGRESS_PUSH_MS
+  assert.equal(await h.tool({ action: 'update', id, progress: 'More runs', status: 'review' }), `${id} is already finished.`)
+  assert.equal(await h.tool({ action: 'complete', id, result: 'Again' }), `${id} is already finished.`)
+  assert.equal(h.cards()[0].status, 'done')
+  assert.equal(h.team.pushes.length, 1)
+})
+
 test('a card for a ticket takes its key from the title, and a second open card for it is refused', async (t) => {
   assert.equal(titleKey('LIFE-782: fix the redirect'), 'LIFE-782')
   assert.equal(titleKey('life-782 · step 2'), 'LIFE-782')
@@ -853,6 +938,39 @@ test('the watchdog tells the user once about a stuck card, a card left in Review
   // The progress on the long card pushes too: the user hears it moved again.
   assert.equal(h.team.pushes.map(push => push.text).at(-2), `Writer · ${stuck.id}: "Stuck work": half way`)
   assert.equal(h.team.pushes.length, 5)
+})
+
+test('disposing the board stops an in-flight watchdog before it saves or pushes', async (t) => {
+  let clock = 0
+  let pause = false
+  const started = Promise.withResolvers()
+  const resume = Promise.withResolvers()
+  const h = host(t, {
+    now: () => clock,
+    config: { watchMs: 0, stuckMs: 100 },
+    async load() {
+      if (!pause) return
+      started.resolve()
+      await resume.promise
+    },
+  })
+  await h.tool({ action: 'open', title: 'Stuck work', assignee: 'Writer', brief: 'Run the tests.' }, 'a')
+  assert.equal(h.cards()[0].status, 'active')
+  const before = readFileSync(h.boardFile, 'utf8')
+  const change = t.mock.method(h.handle.store, 'change')
+  clock = 100
+  pause = true
+  const pass = h.handle.watchOnce()
+  await started.promise
+  h.handle.dispose()
+  resume.resolve()
+  const alerts = await pass
+  assert.deepEqual({
+    board: readFileSync(h.boardFile, 'utf8'),
+    changes: change.mock.callCount(),
+    pushes: h.team.pushes,
+    alerts,
+  }, { board: before, changes: 0, pushes: [], alerts: [] })
 })
 
 test('the herdr panes a shell command drives, and a pane read through the herdr CLI', async () => {
@@ -1016,9 +1134,9 @@ test('wait_pane keeps the wait on the board and wakes the Bot where it asked, al
   assert.deepEqual(saved.cards[card.id].panes.map(entry => entry.id), ['w1:p1T'])
 
   // Still idle right after the prompt, and still working: nobody is woken.
-  assert.deepEqual(await h.handle.pollWaits(), [])
+  assert.deepEqual(await h.handle.waits.poll(), [])
   statuses['w1:p1T'] = 'working'
-  assert.deepEqual(await h.handle.pollWaits(), [])
+  assert.deepEqual(await h.handle.waits.poll(), [])
   assert.equal(h.team.delivered.length, 0)
 
   // A restart: a new host on the same board keeps both waits.
@@ -1029,7 +1147,7 @@ test('wait_pane keeps the wait on the board and wakes the Bot where it asked, al
   statuses['w1:p1T'] = 'done'
   statuses['w1:p2'] = 'blocked'
   clock += 5000
-  assert.equal((await again.handle.pollWaits()).length, 2)
+  assert.equal((await again.handle.waits.poll()).length, 2)
   assert.deepEqual(again.team.delivered.map(entry => [entry.toId, entry.sessionId, entry.role, entry.note]), [
     ['b', thread, 'wake', 'herdr pane w1:p1T · the wait you started is over'],
     ['b', undefined, 'wake', 'herdr pane w1:p2 · the wait you started is over'],
@@ -1037,7 +1155,7 @@ test('wait_pane keeps the wait on the board and wakes the Bot where it asked, al
   assert.match(again.team.delivered[0].text, new RegExp(`^herdr pane w1:p1T is done\\.\\nIt is the work of card ${card.id}\\.\\nYour note when you started waiting: open the PR\\nWhat it shows last:\\n\`\`\`\\ntests passed in w1:p1T\\n`))
   assert.match(again.team.delivered[1].text, /^herdr pane w1:p2 is blocked\./)
   assert.equal(JSON.parse(readFileSync(file, 'utf8')).waits, undefined)
-  assert.deepEqual(await again.handle.pollWaits(), [])
+  assert.deepEqual(await again.handle.waits.poll(), [])
 })
 
 test('wait_pane stop ends a wait, and a pane that is gone wakes its Bot once', async (t) => {
@@ -1051,10 +1169,10 @@ test('wait_pane stop ends a wait, and a pane that is gone wakes its Bot once', a
   await wait({ pane: 'w1:p1' }, 'gb')
   delete statuses['w1:p1']
   h.team.state.rooms.r1.sessions = { a: 'ga', b: 'gb' }
-  await h.handle.pollWaits()
+  await h.handle.waits.poll()
   assert.deepEqual(h.team.delivered.map(entry => [entry.sessionId, entry.role, entry.roomId]), [['gb', 'room', 'r1']])
   assert.match(h.team.delivered[0].text, /^herdr pane w1:p1 is gone \(closed, or its agent left\)\.\nCheck the result/)
-  await h.handle.pollWaits()
+  await h.handle.waits.poll()
   assert.equal(h.team.delivered.length, 1)
 })
 

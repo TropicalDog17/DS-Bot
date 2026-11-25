@@ -66,25 +66,38 @@ export function pushThreadPart(bot, sessionId, freshId, segment) {
 // no earlier parts and no handoff note: the user asked for a new conversation.
 export function startOpenPart(bot, freshId, startedAt = Date.now()) {
   bot.openParts ??= []
-  bot.openParts.push({ sessionId: currentSession(bot), segments: bot.segments ?? [], startedAt, ...cardField(bot.currentCard) })
+  bot.openParts.push({ sessionId: currentSession(bot), segments: bot.segments ?? [], startedAt, ...currentCardFields(bot) })
   bot.sessionId = freshId
   bot.segments = []
-  delete bot.currentCard
+  setCurrentCard(bot, {})
 }
 
-const cardField = card => (typeof card === 'string' ? { card } : {})
+const cardFields = (card, cardRoomId, closing) => (typeof card === 'string' ? {
+  card,
+  ...(typeof cardRoomId === 'string' ? { cardRoomId } : {}),
+  ...(closing === true ? { closing } : {}),
+} : {})
+const currentCardFields = bot => cardFields(bot.currentCard, bot.currentCardRoomId, bot.currentCardClosing)
+
+function setCurrentCard(bot, { card, cardRoomId, closing }) {
+  if (typeof card === 'string') bot.currentCard = card
+  else delete bot.currentCard
+  if (typeof cardRoomId === 'string') bot.currentCardRoomId = cardRoomId
+  else delete bot.currentCardRoomId
+  if (closing === true) bot.currentCardClosing = true
+  else delete bot.currentCardClosing
+}
 
 // Makes a live background part current. Each chain travels with its parts.
 export function focusOpenPart(bot, sessionId) {
   const at = (bot.openParts ?? []).findIndex(part => part?.sessionId === sessionId)
   if (at === -1) return false
   const [target] = bot.openParts.splice(at, 1)
-  bot.openParts.push({ sessionId: currentSession(bot), segments: bot.segments ?? [], ...cardField(bot.currentCard) })
+  bot.openParts.push({ sessionId: currentSession(bot), segments: bot.segments ?? [], ...currentCardFields(bot) })
   bot.sessionId = target.sessionId
   bot.segments = target.segments ?? []
   // A card thread stays the card's when the user opens it: the card goes with it.
-  if (typeof target.card === 'string') bot.currentCard = target.card
-  else delete bot.currentCard
+  setCurrentCard(bot, target)
   return true
 }
 
@@ -97,6 +110,12 @@ export function cardOfThread(bot, sessionId) {
   return thread.thread === 'current' ? bot.currentCard : bot.openParts[thread.index].card
 }
 
+export function cardRoomOfThread(bot, sessionId) {
+  const thread = threadOf(bot, sessionId)
+  if (thread === undefined) return undefined
+  return thread.thread === 'current' ? bot.currentCardRoomId : bot.openParts[thread.index].cardRoomId
+}
+
 export function cardThreadSession(bot, cardId) {
   if (bot === undefined || typeof cardId !== 'string') return undefined
   if (bot.currentCard === cardId) return currentSession(bot)
@@ -104,8 +123,8 @@ export function cardThreadSession(bot, cardId) {
 }
 
 // A new card thread runs beside the Bot's chat: the current thread does not change.
-export function addCardThread(bot, freshId, cardId, startedAt = Date.now()) {
-  ;(bot.openParts ??= []).push({ sessionId: freshId, segments: [], startedAt, card: cardId })
+export function addCardThread(bot, freshId, cardId, startedAt = Date.now(), roomId) {
+  ;(bot.openParts ??= []).push({ sessionId: freshId, segments: [], startedAt, ...cardFields(cardId, roomId) })
 }
 
 // A closed card thread leaves the live threads and joins the Bot's closed card threads,
@@ -115,7 +134,7 @@ export const CLOSED_CARDS_MAX = 50
 export function closeCardThread(bot, cardId, closedAt = Date.now()) {
   if (bot === undefined || typeof cardId !== 'string') return undefined
   if (bot.currentCard === cardId) {
-    delete bot.currentCard
+    setCurrentCard(bot, {})
     return undefined
   }
   const at = (bot.openParts ?? []).findIndex(part => part?.card === cardId)
@@ -127,9 +146,25 @@ export function closeCardThread(bot, cardId, closedAt = Date.now()) {
   return closed
 }
 
-// Every session this Bot keeps outside its current thread, for cleanup, memory and the
-// session list.
-export const openSessions = bot => (bot?.openParts ?? []).flatMap(part => [part.sessionId, ...(part.segments ?? []).map(segment => segment.sessionId)])
+// The group record owns its members' sessions. User messages enter the shared chat
+// with an @mention, even before the addressed member has a session there.
+export function reach(bot, { cardId, roomId, room, user = false } = {}) {
+  const card = cardThreadSession(bot, cardId)
+  if (card !== undefined) return { sessionId: card, where: 'card' }
+  if (bot && typeof roomId === 'string' && room?.id === roomId && room.members?.includes(bot.id)) {
+    const group = user ? room.id : room.sessions?.[bot.id]
+    if (group !== undefined) return { sessionId: group, where: 'group' }
+  }
+  return { sessionId: currentSession(bot), where: 'own' }
+}
+
+const distinct = ids => [...new Set(ids.filter(id => id !== undefined))]
+const partSessions = ({ sessionId, segments }) => [sessionId, ...(segments ?? []).map(segment => segment.sessionId)]
+
+// Every session this Bot keeps outside its current thread.
+export const openSessions = bot => distinct((bot?.openParts ?? []).flatMap(partSessions))
+
+export const sessionsOf = bot => distinct([...partSessions({ sessionId: currentSession(bot), segments: bot?.segments }), ...openSessions(bot)])
 
 // A part that just moved on records a successor only when it belongs to an open thread:
 // the foreground chat keeps its current part in `bot.sessionId`. The thread is read
@@ -139,4 +174,4 @@ export const successorOfMovedPart = (bot, freshId) => (threadOf(bot, freshId)?.t
 
 // Every live thread's current session. A change that must reach all of a Bot's own
 // chats (its run mode) walks these, so no thread can be left on the other side.
-export const ownChatSessions = bot => [currentSession(bot), ...(bot?.openParts ?? []).map(part => part.sessionId)].filter((id, index, list) => id !== undefined && list.indexOf(id) === index)
+export const ownChatSessions = bot => distinct([currentSession(bot), ...(bot?.openParts ?? []).map(part => part.sessionId)])

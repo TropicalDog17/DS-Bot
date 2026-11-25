@@ -1,7 +1,7 @@
 // What the board tells the user's phone (dsBotNotes push, through the Main Bot's own
 // Telegram chat) and the watchdog that finds cards needing the user. Pure functions over
 // the cards object; plugin.js sends and saves.
-import { USER, isOpen, oneLine } from './cards.js'
+import { USER, isOpen, oneLine } from './card-fields.js'
 import { prName, prsOf } from './prs.js'
 
 // About a hundred words: the detail stays on the card.
