@@ -134,13 +134,16 @@ source.
 - Card threads: `src/host/threads.js` and `parts.js`. A card thread is an open part with the
   card id. It closes on complete, cancel, the user's cancel or a move to Done; a close during
   a running turn waits for that turn to end. Closed threads stay readable and searchable.
-  Seams: `dsBotNotes.startCard`, `closeCard`, and `deliver` with `cardId`.
+  Seams: `dsBotNotes.startCard`, `closeCard` (with `stop`: the reason, steered into a
+  turn that still runs there), `deliver` with `cardId` (steers the thread), `cardBusy`
+  and `tellCard`.
 - Telegram: `dsBotNotes.push` sends to the Main Bot's own IM chats only. A reply to a pushed
   message goes to the card (a note, then the card thread). A reply to a push about something
   else goes to the Main Bot, marked as a reply.
 - Board: a card for another Bot needs a brief, and opening it starts the assignee's card
   thread. `board note` passes the user's words on to a card. Pushes and the watchdog
-  (stuck 3h, Review 24h, no assignee) are in `src/board/watch.js`.
+  (stuck 3h, Review 24h, no assignee, and In progress with nothing running for 20 min:
+  the Bot is nudged first, then the user is told) are in `src/board/watch.js`.
 - Groups: in admin mode (the default) a plain message goes to the Main Bot when it is a
   member, otherwise to the admin as before. "Everyone" mode stays the user's explicit choice:
   every member answers. `@name` goes to that Bot. A group without the Main Bot keeps its

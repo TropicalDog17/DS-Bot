@@ -3,7 +3,7 @@
 // caller loads and saves it (store.js). Who is who comes from DS Bot's dsBotRoster.
 import { randomBytes } from 'node:crypto'
 import { prName, prsOf } from './prs.js'
-import { pushFor } from './watch.js'
+import { pushFor, pushText } from './watch.js'
 import { OPEN_STATUSES, USER, isOpen, oneLine } from './card-fields.js'
 
 export { OPEN_STATUSES, USER, isOpen, oneLine } from './card-fields.js'
@@ -40,6 +40,8 @@ export const LOG_MAX = 40
 export const PANES_MAX = 4
 // A card moved to its own conversation brings this much of its latest conversation along.
 const ADOPT_NOTES = 3
+// gh failing this many merge polls in a row is not a blip any more.
+export const MERGE_MISSES = 3
 const ADOPT_NOTE_MAX = 300
 
 // A Bot's reply keeps its lines; runs of blank lines become one.
@@ -177,7 +179,13 @@ export function createBoard({ roster, now = Date.now }) {
   const dropNeed = (card) => { if (!WAITING_STATUSES.includes(card.status)) delete card.need }
   // A card in Review whose PRs are not all merged yet (`waitsMerge`) moves to Done by
   // itself once they are (plugin.js asks gh). It stops waiting when it leaves Review.
-  const dropMerge = (card) => { if (card.status !== 'review') delete card.waitsMerge }
+  const dropMerge = (card) => {
+    if (card.status === 'review') return
+    delete card.waitsMerge
+    delete card.mergeIssue
+    delete card.mergeMisses
+    delete card.toldOpener
+  }
   const mergeNeed = urls => `Merge ${urls.map(url => `[${prName(url)}](${url})`).join(', ')}.`
   const addLink = (card, link) => {
     if (!(card.links ??= []).some(entry => entry.url === link)) card.links.push({ url: link, at: now() })
@@ -236,6 +244,30 @@ export function createBoard({ roster, now = Date.now }) {
       ].join('\n'),
     }
   }
+  // A finished card the user moved back to In progress: its thread closed with it, so a
+  // new one starts from what the card kept.
+  const reopenOf = (card) => {
+    const latest = (card.notes ?? []).slice(-ADOPT_NOTES).map(note => `- ${nameOf(note.by)}: ${oneLine(note.text, ADOPT_NOTE_MAX)}`)
+    const links = (card.links ?? []).map(link => link.url)
+    return {
+      botId: card.assignee,
+      cardId: card.id,
+      title: card.title,
+      ...(card.roomId === undefined ? {} : { roomId: card.roomId }),
+      text: [
+        `[Card ${label(card)} · "${card.title}"] was Done; the user moved it back to In progress.`,
+        '',
+        card.brief ?? card.title,
+        '',
+        [card.result ? `Result so far: ${card.result}.` : '', links.length > 0 ? `Links: ${links.join(' ')}` : ''].filter(Boolean).join(' '),
+        ...(latest.length > 0 ? ['', 'Latest on the card:', ...latest] : []),
+        '',
+        'The user wants more done on it. If the card does not say what, ask with board ask before you change anything; do not redo what is done.',
+        '',
+        cardRules(card),
+      ].filter((line, index, lines) => !(line === '' && lines[index - 1] === '')).join('\n'),
+    }
+  }
   const outcome = (card, said, effects = []) => ({ card, said, effects })
   const withPush = (action, result, before, progressBefore) => {
     const { card, effects } = result
@@ -247,15 +279,19 @@ export function createBoard({ roster, now = Date.now }) {
     }
     return result
   }
-  const closeOf = card => {
+  // `stop`: why the card ended, when someone other than its assignee ended it. A turn
+  // that still runs in its thread hears it, so it does not work on.
+  const closeOf = (card, stop) => {
     delete card.pushedAt
+    delete card.idle
     return card.assignee !== USER && roster.bot(card.assignee) !== undefined
-      ? [{ kind: 'close', payload: { botId: card.assignee, cardId: card.id } }]
+      ? [{ kind: 'close', payload: { botId: card.assignee, cardId: card.id, ...(stop === undefined ? {} : { stop: `${stop} Stop the work on it now and end your turn.` }) } }]
       : []
   }
   // The Bot that opened a card hears how it ended where it opened it (its own chat or the
   // group), since the user asked there and the work ran in the card's own thread.
-  const reportOf = (card, what, self, sessionId) => {
+  // `quiet`: the user ended it on the board themself, so the opener only needs to know.
+  const reportOf = (card, what, self, sessionId, { quiet = false } = {}) => {
     if (card.openedBy === USER || roster.bot(card.openedBy) === undefined) return []
     const link = card.links?.at(-1)?.url
     return [{
@@ -266,7 +302,13 @@ export function createBoard({ roster, now = Date.now }) {
         botId: card.openedBy,
         cardId: card.id,
         ...(card.roomId === undefined ? {} : { roomId: card.roomId }),
-        text: [`Card ${label(card)} "${card.title}" ${what}${link === undefined ? '' : ` (${link})`}`, `Tell the user here in a line or two how it ended, with the card id; the whole work stays on the card.`].join('\n'),
+        ...(quiet ? { quiet: true } : {}),
+        text: [
+          `Card ${label(card)} "${card.title}" ${what}${link === undefined ? '' : ` (${link})`}`,
+          quiet
+            ? 'The user did this on the board, so there is nothing to tell them. Do not go on with the card, and do not open it again.'
+            : 'Tell the user here in a line or two how it ended, with the card id; the whole work stays on the card.',
+        ].join('\n'),
       },
     }]
   }
@@ -416,7 +458,12 @@ export function createBoard({ roster, now = Date.now }) {
         card.need = mergeNeed(unmerged)
         logStep(card, self)
         touch(card)
-        return withPush('complete', outcome(card, `${label(card)} waits in Review until ${unmerged.map(prName).join(', ')} ${unmerged.length === 1 ? 'is' : 'are'} merged, then moves to Done by itself. Your work on it is done: stop here.`))
+        // The opener hears now, while the user still has to merge; the merge itself then
+        // moves the card without a second report.
+        card.toldOpener = true
+        const waitsFor = `${unmerged.map(prName).join(', ')} ${unmerged.length === 1 ? 'is' : 'are'} merged`
+        return withPush('complete', outcome(card, `${label(card)} waits in Review until ${waitsFor}, then moves to Done by itself. Your work on it is done: stop here.`,
+          reportOf(card, `is finished (${nameOf(self)}) and waits in Review until ${waitsFor}: ${result}`, self, sessionId)))
       }
       card.status = 'done'
       card.result = result
@@ -439,7 +486,8 @@ export function createBoard({ roster, now = Date.now }) {
       dropMerge(card)
       logStep(card, self)
       touch(card)
-      return withPush('cancel', outcome(card, `Cancelled ${label(card)}.`, [...closeOf(card), ...reportOf(card, `was cancelled (${nameOf(self)})${why === '' ? '' : `: ${why}`}`, self, sessionId)]))
+      const stop = self === card.assignee ? undefined : `${nameOf(self)} cancelled card ${label(card)}${why === '' ? '' : `: ${why}`}.`
+      return withPush('cancel', outcome(card, `Cancelled ${label(card)}.`, [...closeOf(card, stop), ...reportOf(card, `was cancelled (${nameOf(self)})${why === '' ? '' : `: ${why}`}`, self, sessionId)]))
     },
   }
 
@@ -479,6 +527,7 @@ export function createBoard({ roster, now = Date.now }) {
       if (!USER_STATUSES.includes(status)) return { error: 'Unknown column.' }
       if (card.status === 'cancelled') return { error: 'That card is cancelled.' }
       if (card.status === status) return outcome(card)
+      const reopened = card.status === 'done' && status === 'active' && card.assignee !== USER && roster.bot(card.assignee) !== undefined
       card.status = status
       if (status === 'done') card.doneAt = now()
       else delete card.doneAt
@@ -486,7 +535,14 @@ export function createBoard({ roster, now = Date.now }) {
       dropMerge(card)
       logStep(card, USER)
       touch(card)
-      return outcome(card, undefined, status === 'done' ? closeOf(card) : [])
+      if (status === 'done') {
+        return outcome(card, undefined, [
+          ...closeOf(card, `The user moved card ${label(card)} to Done on the board.`),
+          ...reportOf(card, 'was moved to Done by the user', undefined, undefined, { quiet: true }),
+        ])
+      }
+      // Its thread closed when it was finished; back in progress, its Bot starts again.
+      return outcome(card, undefined, reopened ? [{ kind: 'start', payload: reopenOf(card), fallback: true }] : [])
     },
     // A note joins the card's conversation; `deliver` says where it goes as the user's message
     // (dsBotNotes): the card's group when it came from one, else the Bot's own chat.
@@ -499,6 +555,7 @@ export function createBoard({ roster, now = Date.now }) {
       const said = oneLine(text, NOTE_MAX)
       if (said === '') return { error: 'Write a note first.' }
       say(card, USER, said)
+      delete card.idle
       const effects = bot === undefined ? [] : [{ kind: 'deliver', payload: { botId: bot.id, cardId: card.id, ...(card.roomId === undefined ? {} : { roomId: card.roomId }), text: `Note on card ${label(card)} "${card.title}": ${said}` } }]
       return outcome(card, undefined, effects)
     },
@@ -530,8 +587,12 @@ export function createBoard({ roster, now = Date.now }) {
       if (why !== '') card.reason = why
       dropNeed(card)
       dropMerge(card)
+      logStep(card, USER)
       touch(card)
-      return outcome(card, undefined, closeOf(card))
+      return outcome(card, undefined, [
+        ...closeOf(card, `The user cancelled card ${label(card)} on the board${why === '' ? '' : `: ${why}`}.`),
+        ...reportOf(card, `was cancelled by the user${why === '' ? '' : `: ${why}`}`, undefined, undefined, { quiet: true }),
+      ])
     },
   }
 
@@ -603,9 +664,43 @@ export function createBoard({ roster, now = Date.now }) {
     dropNeed(card)
     logStep(card, card.assignee)
     touch(card)
-    return withPush('merged', outcome(card, undefined, [...closeOf(card), ...reportOf(card, `is done: ${card.result} (merged)`)]))
+    const told = card.toldOpener === true
+    delete card.toldOpener
+    delete card.mergeIssue
+    delete card.mergeMisses
+    return withPush('merged', outcome(card, undefined, [...closeOf(card), ...(told ? [] : reportOf(card, `is done: ${card.result} (merged)`))]))
+  }
+  // gh's word on a card that waits for its merge and cannot move yet. A PR closed without
+  // merging, or PRs gh could not read MERGE_MISSES polls in a row, would leave the card
+  // in Review with a "merge it" nobody can follow: the card says what happened instead
+  // and the user hears once. `open`, `closed`, `unread`: the card's PRs by what gh said.
+  const mergeWait = (cards, id, { open = [], closed = [], unread = [] } = {}) => {
+    const card = own(cards, id)
+    if (card === undefined || card.status !== 'review' || card.waitsMerge !== true) return { error: 'No card waits for a merge.' }
+    const misses = unread.length > 0 ? Math.min((card.mergeMisses ?? 0) + 1, MERGE_MISSES) : 0
+    const issue = closed.length > 0 ? 'closed' : misses >= MERGE_MISSES ? 'unread' : undefined
+    if (issue === card.mergeIssue && misses === (card.mergeMisses ?? 0)) return { error: 'Nothing new.' }
+    if (misses === 0) delete card.mergeMisses
+    else card.mergeMisses = misses
+    if (issue === card.mergeIssue) return outcome(card)
+    const names = urls => urls.map(url => `[${prName(url)}](${url})`).join(', ')
+    if (issue === undefined) {
+      delete card.mergeIssue
+      card.need = mergeNeed([...open, ...unread])
+      touch(card)
+      return outcome(card)
+    }
+    card.mergeIssue = issue
+    card.need = issue === 'closed'
+      ? `${names(closed)} ${closed.length === 1 ? 'was' : 'were'} closed without merging. Reopen and merge ${closed.length === 1 ? 'it' : 'them'}, send a note with what to do instead, or move the card to Done.`
+      : `gh could not read ${names(unread)} (not signed in, or no access), so the card cannot move to Done by itself. Merge ${unread.length === 1 ? 'it' : 'them'}, then move the card to Done.`
+    touch(card)
+    const what = issue === 'closed'
+      ? `"${card.title}": ${closed.map(prName).join(', ')} closed without merging, the card stays in Review`
+      : `"${card.title}": cannot read ${unread.map(prName).join(', ')}, the card will not move to Done by itself`
+    return outcome(card, undefined, [{ kind: 'push', text: pushText(card, nameOf(card.assignee), what) }])
   }
 
   const briefOf = card => startOf(card, card.openedBy).text
-  return { show, line, label, adoptOf, briefOf, panes, prsFor, merged, bot: (cards, action, self, roomId, args, extra) => botActions[action](cards, self, roomId, args, extra), user, mirror }
+  return { show, line, label, adoptOf, briefOf, panes, prsFor, merged, mergeWait, bot: (cards, action, self, roomId, args, extra) => botActions[action](cards, self, roomId, args, extra), user, mirror }
 }

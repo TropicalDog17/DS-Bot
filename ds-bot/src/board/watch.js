@@ -15,6 +15,8 @@ export const REVIEW_MS = 24 * 60 * 60 * 1000
 // run this long: a card that is done in minutes says so with its done push.
 export const PROGRESS_PUSH_MS = 30 * 60 * 1000
 export const PROGRESS_AFTER_MS = 10 * 60 * 1000
+// In progress with nothing running for it this long: its Bot stopped without saying so.
+export const IDLE_MS = 20 * 60 * 1000
 
 const tagOf = card => card.key ?? card.id
 const hours = ms => `${Math.max(1, Math.round(ms / 3_600_000))}h`
@@ -78,3 +80,24 @@ export function sweep(cards, { now, hasBot, nameOf, stuckMs = STUCK_MS, reviewMs
   }
   return alerts
 }
+
+// A card in progress whose Bot stopped: its thread is in no turn and it keeps no wait on
+// a pane, so nothing will move it. `quiet` says so (plugin.js asks the host); `waited`:
+// a wait is kept for it. First the Bot is nudged in the card's thread ('nudge'), and if
+// the card is still quiet a while later the user hears ('tell'); then it stays silent
+// until the card waits on a pane, leaves In progress or gets a note from the user
+// ('clear' drops the mark). `card.idle` is that mark: { count, at }.
+export function idleStep(card, { now, quiet, waited, idleMs = IDLE_MS }) {
+  if (card.status !== 'active' || waited) return card.idle === undefined ? undefined : 'clear'
+  if (!quiet) return undefined
+  const since = Math.max(card.updatedAt ?? card.createdAt ?? now, card.idle?.at ?? 0)
+  if (now - since < idleMs) return undefined
+  return ['nudge', 'tell'][card.idle?.count ?? 0]
+}
+
+export const idleNudge = card => [
+  `Card ${tagOf(card)} "${card.title}" is In progress, but nothing runs for it: your turn here ended and you keep no wait on a herdr pane.`,
+  'Go on with it now. If an agent in a pane still works on it, wait_pane on that pane. If it waits for the user, board update it to review or blocked and say with need what they must do. If it is finished, board complete it.',
+].join('\n')
+
+export const idleText = (card, who, ms) => pushText(card, who, `"${card.title}" is In progress but nothing has run for it for ${Math.max(1, Math.round(ms / 60_000))} min; send it a note or move it`)

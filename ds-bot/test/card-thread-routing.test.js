@@ -208,7 +208,10 @@ test('the board filters by card id when showing live activity', async (t) => {
   }
   const { value } = await h.board.handle('state')
   assert.deepEqual(value.live[first].steps.map(step => step.tool), ['first_card_tool'])
-  assert.equal(value.live[second], undefined)
+  // No note waits on the second card, but its thread is in a turn, so that shows too.
+  assert.deepEqual(value.live[second].steps.map(step => step.tool), ['second_card_tool'])
+  h.trace({ id: h.rt.cardSession('writer', second) }, { type: 'turn/end', time: 1400 })
+  assert.equal((await h.board.handle('state')).value.live[second], undefined)
 })
 
 test('busy counts card and group turns with an idle own chat', async (t) => {
@@ -370,4 +373,25 @@ test('a recovered answer picks the group before an earlier own-chat part', { tim
   assert.deepEqual(closed, [[workId, 'Writer', 'The result.']])
   assert.deepEqual(held, [])
   assert.deepEqual(h.deliveries, [])
+})
+
+test('a note to a card steers its thread; a note to the Bot\'s own chat still queues', async (t) => {
+  const h = await boardFixture(t)
+  const id = await h.add()
+  assert.equal(h.prompts.at(-1).mode, 'queue')
+  const sent = await h.note(id)
+  assert.deepEqual([sent.sessionId, sent.mode], [h.rt.cardSession('writer', id), 'steer'])
+  await h.rt.companions.notes.deliver({ botId: 'writer', text: 'A word.' })
+  assert.deepEqual([h.prompts.at(-1).sessionId, h.prompts.at(-1).mode], ['writer', 'queue'])
+})
+
+test('cardBusy tells a thread in a turn from a quiet one and from no thread', async (t) => {
+  const h = await boardFixture(t)
+  const id = await h.add()
+  const { notes } = h.rt.companions
+  assert.equal(notes.cardBusy({ botId: 'writer', cardId: id }), false)
+  h.rt.live.set(h.rt.cardSession('writer', id), { turn: {} })
+  assert.equal(notes.cardBusy({ botId: 'writer', cardId: id }), true)
+  assert.equal(notes.cardBusy({ botId: 'writer', cardId: 'c_none' }), undefined)
+  assert.deepEqual(await notes.tellCard({ botId: 'writer', cardId: 'c_none', text: 'x' }), { error: 'The card has no conversation.' })
 })

@@ -73,10 +73,15 @@ Cards are kept in `<DSH_HOME>/bot-board/board.json`. To keep them elsewhere:
   is ready for review. A Bot that moves a card into Review with a PR, or adds a PR to it
   there, marks it the same way. Every 5 minutes (`config.mergePollMs`), the board asks
   gh about the PRs of each card that waits, and moves the card to Done once all of them
-  are merged. Then it closes the card's thread, tells the Bot that opened the card, and
-  pushes "all merged". A card that leaves Review (the user drags it back, the Bot moves
-  it on) stops waiting. A PR closed without merging leaves the card in Review for the
-  user. gh is found at `config.gh`, else `/usr/bin/gh`, else on the PATH, and runs as
+  are merged. Then it closes the card's thread and pushes "all merged". The Bot that
+  opened the card hears when the work is finished and waits for the merge, not a second
+  time at the merge; a card that got into Review another way is reported at the merge.
+  A card that leaves Review (the user drags it back, the Bot moves it on) stops waiting.
+  A PR closed without merging leaves the card in Review for the user, and the card says
+  so: its `need` names the closed PR and the choices (reopen and merge, a note with what
+  to do instead, or Done), and one push tells the user. The same happens when gh cannot
+  read a PR three polls in a row. Both clear by themselves when the PR is open or
+  readable again. gh is found at `config.gh`, else `/usr/bin/gh`, else on the PATH, and runs as
   the user who runs dsh.
 - The sheet shows the card's brief under its links, folded to a few lines when long.
 - Work a Bot hands to a [herdr](https://herdr.dev) pane runs outside its turns, so the
@@ -95,16 +100,36 @@ Cards are kept in `<DSH_HOME>/bot-board/board.json`. To keep them elsewhere:
 - The page: the redesigned board from #5 (columns, drag between columns, segmented
   columns and Add card by the thumb on a phone, card sheet with move, note and cancel).
   It reads the plugin's own route, `POST api/ds-bot-board`, and polls it every 4 s
-  while open, every 1 s while a card waits for a Bot's answer.
+  while open, every 1 s while a card waits for a Bot's answer or shows a running turn.
 - A note on a Bot's card reads `Note on board card <key or id> "<title>": <text>`, so
   the Bot knows which card it is about. `dsBotNotes` sends it `@Bot` in the card's group,
   else in the Bot's own chat. A note on the user's own card is kept on the card only.
-- While a card waits for its Bot, the sheet shows what the Bot is doing about it under
-  its mark: its reasoning as it streams and each tool call, named as the chat's activity
+  A note to a card's own thread steers it (`sessionController.prompt` with `mode:
+  'steer'`): a turn that runs there reads the note at its next step instead of after
+  the turn, so a long wait in a turn no longer holds the user's words back.
+- In a card's thread a `board` call without an `id` is about that card. Anywhere else it
+  is the Bot's newest open card, as before. A Bot with several cards side by side can no
+  longer update the wrong one by leaving the id out.
+- The user's own moves are reported like a Bot's. Moving a card to Done or cancelling it
+  on the board writes a step in the card's log, tells the Bot that opened the card (a
+  quiet note: the user did it, so there is nothing to tell them), and, when the card's
+  thread is in a turn, steers the reason into it so the Bot stops instead of working on
+  a closed card. Moving a finished card back to In progress opens a new thread for its
+  Bot with the brief and the result so far.
+- A card In progress that nothing runs for is noticed (`watch.js` `idleStep`, checked
+  with the watchdog): its thread is in no turn, no note waits for an answer, and it
+  keeps no `wait_pane`. After 20 minutes (`config.idleMs`) the Bot is nudged in the
+  card's thread to go on, wait on its pane, hand the card to the user or finish it. If
+  the card is still quiet 20 minutes later the user gets one push. Then the board stays
+  silent about it until the card waits on a pane, leaves In progress or gets a note.
+- While a card waits for its Bot, or its thread is in a turn for any other reason (the
+  brief, a wake from a pane, a nudge), the sheet shows what the Bot is doing about it
+  under its mark: its reasoning as it streams and each tool call, named as the chat's activity
   row names it (a local agent CLI's own `▸` lines count as tool calls). The plugin reads
   DSH's own `agent/assistant-stream` and `session/event` events for the Bot's Sessions
   (`botSessionIdentity`) and keeps the current turn of each in memory only (`live.js`);
-  only a turn that began after the note shows. When the answer lands (`dsBotNotes`
+  for a waiting note only a turn that began after the note shows, and without one only
+  a turn that has not ended. When the answer lands (`dsBotNotes`
   `onReply`, matched to the turn by its start time), the card keeps a short copy with
   it: the last 24 steps and at most 2000 characters of reasoning, folded under
   "Thought it through" above the answer.

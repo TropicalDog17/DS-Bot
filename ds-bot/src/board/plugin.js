@@ -19,10 +19,11 @@ import { join } from 'node:path'
 import { defineTool } from '../host/tool-schema.js'
 import { dshHomeOf } from '../host/folders.js'
 import { ACTIONS, BOT_STATUSES, createBoard, isOpen } from './cards.js'
+import { USER } from './card-fields.js'
 import { LEVELS, createLive, levelOf } from './live.js'
 import { openBoardStore } from './store.js'
 import { createHerdr, herdrBinary, panesIn } from './herdr.js'
-import { WATCH_MS, sweep } from './watch.js'
+import { WATCH_MS, idleNudge, idleStep, idleText, sweep } from './watch.js'
 import { createPaneWaits } from './waits.js'
 import { every } from './poller.js'
 import { createPrs, ghBinary, prsOf } from './prs.js'
@@ -119,8 +120,12 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
       // that is not text.
       if (args.action === 'show') return board.show(store.read().cards, owner.botId)
       const sessionId = exec?.agent?.id
-      const unmerged = args.action === 'complete' ? await unmergedOf(board.prsFor(store.read().cards, args, owner.botId)) : []
-      const result = await store.change(data => board.bot(data.cards, args.action, owner.botId, owner.roomId, args, { sessionId, unmerged }))
+      // In a card's thread "the card" is that card, not the Bot's newest one: several of
+      // its cards run side by side, and an update without an id must not land on another.
+      const named = typeof args.id === 'string' && args.id.trim() !== ''
+      const call = owner.cardId !== undefined && !named && args.action !== 'open' ? { ...args, id: owner.cardId } : args
+      const unmerged = call.action === 'complete' ? await unmergedOf(board.prsFor(store.read().cards, call, owner.botId)) : []
+      const result = await store.change(data => board.bot(data.cards, call.action, owner.botId, owner.roomId, call, { sessionId, unmerged }))
       if (result.error !== undefined) return result.error
       const after = await run(result.card, result.effects)
       return [result.said, after?.said, board.line(result.card, owner.botId)].filter(Boolean).join('\n')
@@ -197,15 +202,23 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
 
   // How much of a Bot's work the page shows and an answer keeps (live.js LEVELS).
   const level = () => levelOf(store.read().settings?.trace)
-  // What the Board page reads: every card, who is on the team, what each Bot a card
-  // waits for is doing about it (`live`, by card id), and the level (`trace`).
+  // What the Board page reads: every card, who is on the team, what each Bot is doing
+  // about a card that waits for it or whose thread is in a turn (`live`, by card id),
+  // and the level (`trace`).
+  // The turn that runs in the card's own thread now, whoever started it: a wake from a
+  // pane, a note that cut into it, the brief. A turn that ended is on the card already.
+  const running = (card, trace) => {
+    if (card.assignee === USER) return undefined
+    const turn = live.current({ botId: card.assignee, cardId: card.id, since: 0 }, trace)
+    return turn === undefined || turn.endedAt !== undefined ? undefined : turn
+  }
   const view = () => {
     const { cards } = store.read()
     const trace = level()
     const working = {}
     for (const card of Object.values(cards)) {
-      if (card.awaiting === undefined || !isOpen(card)) continue
-      const now = live.current(card.awaiting, trace)
+      if (!isOpen(card)) continue
+      const now = (card.awaiting === undefined ? undefined : live.current(card.awaiting, trace)) ?? running(card, trace)
       if (now !== undefined) working[card.id] = now
     }
     return { cards, bots: roster.bots(), readOnly: store.readOnly(), live: working, trace }
@@ -352,7 +365,8 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
   function watchdog() {
     const interval = config.watchMs ?? WATCH_MS
     if (!(interval > 0)) return undefined
-    return every(interval, watchOnce, { readOnly: () => store.readOnly(), onError: error => warn('ds-bot-board: watchdog failed: %s', error) })
+    const job = async () => { await watchOnce(); await idleOnce() }
+    return every(interval, job, { readOnly: () => store.readOnly(), onError: error => warn('ds-bot-board: watchdog failed: %s', error) })
   }
   // Cards without a thread move to one when their Bot is idle.
   function adoptLater() {
@@ -391,8 +405,15 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
       for (const card of Object.values(store.read().cards)) {
         if (card.status !== 'review' || card.waitsMerge !== true) continue
         const urls = prsOf(card.links)
-        if (urls.length === 0 || (await unmergedOf(urls)).length > 0) continue
+        if (urls.length === 0) continue
+        const states = await Promise.all(urls.map(url => prs.state(url).catch(() => undefined)))
         if (disposed) break
+        if (states.some(state => state !== 'MERGED')) {
+          const of = wanted => urls.filter((_url, index) => states[index] === wanted)
+          const waiting = await store.change(data => (disposed ? { error: 'The board is disposed.' } : board.mergeWait(data.cards, card.id, { open: of('OPEN'), closed: of('CLOSED'), unread: of(undefined) })))
+          if (waiting.error === undefined) await run(waiting.card, waiting.effects, { waitForPush: true })
+          continue
+        }
         const result = await store.change(data => {
           if (disposed) return { error: 'The board is disposed.' }
           const currentUrls = prsOf(data.cards[card.id]?.links)
@@ -431,8 +452,48 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
     return alerts
   }
 
+  // Cards in progress that nothing runs for (watch.js idleStep): the Bot is nudged in the
+  // card's thread, then the user hears. A host that cannot tell whether a thread is in a
+  // turn (no cardBusy) skips this.
+  async function idleOnce() {
+    if (disposed || store.readOnly() || typeof notes.cardBusy !== 'function') return []
+    await roster.ready()
+    if (disposed) return []
+    const data = store.read()
+    const waited = new Set(Object.values(data.waits ?? {}).map(wait => wait.cardId))
+    const at = now()
+    const steps = []
+    for (const card of Object.values(data.cards)) {
+      if (!isOpen(card) || roster.bot(card.assignee) === undefined) continue
+      const quiet = card.awaiting === undefined && notes.cardBusy({ botId: card.assignee, cardId: card.id }) === false
+      const step = idleStep(card, { now: at, quiet, waited: waited.has(card.id), idleMs: config.idleMs })
+      if (step !== undefined) steps.push({ card, step })
+    }
+    const done = []
+    for (const { card, step } of steps) {
+      const saved = await store.change((draft) => {
+        const current = draft.cards[card.id]
+        if (disposed || current === undefined || current.updatedAt !== card.updatedAt) return { error: 'The card moved.' }
+        if (step === 'clear') delete current.idle
+        else current.idle = { count: (current.idle?.count ?? 0) + 1, at }
+        return {}
+      })
+      if (disposed) break
+      if (saved.error !== undefined || step === 'clear') continue
+      if (step === 'nudge') {
+        const sent = await Promise.resolve().then(() => notes.tellCard?.({ botId: card.assignee, cardId: card.id, note: `card ${card.id} · nothing runs for it`, text: idleNudge(card) })).catch(failure)
+        if (sent?.error !== undefined) warn('ds-bot-board: nudging %s failed: %s', card.id, sent.error)
+      } else {
+        await run(card, [{ kind: 'push', text: idleText(card, nameOf(card.assignee), at - (card.updatedAt ?? at)) }], { waitForPush: true })
+      }
+      done.push({ id: card.id, step })
+    }
+    return done
+  }
+
   return {
     watchOnce,
+    idleOnce,
     adoptOnce,
     waits,
     mergeOnce,

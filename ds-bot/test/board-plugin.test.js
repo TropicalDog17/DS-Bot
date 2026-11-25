@@ -1204,6 +1204,9 @@ test('a card finished while its PR is open waits in Review and moves to Done onc
   // The card thread stays open: the work may come back from review.
   assert.deepEqual(h.team.state.bots.b.openParts.map(part => part.card), [id])
   assert.match(h.team.pushes.at(-1).text, /is ready for review, merge o\/r#7, o\/r#8: Draft in docs\/news\.md/)
+  // Chief opened it, so Chief hears now that the work is finished and what it waits for.
+  assert.deepEqual([h.team.delivered.at(-1).toId, h.team.delivered.at(-1).text.split('\n')[0]], ['a', `Card ${id} "Draft the newsletter" is finished (Writer) and waits in Review until o/r#7, o/r#8 are merged: Draft in docs/news.md (https://github.com/o/r/pull/8)`])
+  const reports = h.team.delivered.length
 
   // One merged is not enough; gh failing to tell is not merged either.
   prs['https://github.com/o/r/pull/7'] = 'MERGED'
@@ -1217,8 +1220,8 @@ test('a card finished while its PR is open waits in Review and moves to Done onc
   assert.deepEqual([card.status, card.result, card.waitsMerge, card.need, typeof card.doneAt], ['done', 'Draft in docs/news.md', undefined, undefined, 'number'])
   assert.deepEqual(h.team.state.bots.b.openParts, [])
   assert.match(h.team.pushes.at(-1).text, /done "Draft the newsletter", all merged: Draft in docs\/news\.md/)
-  // Chief opened it, so Chief hears how it ended.
-  assert.deepEqual([h.team.delivered.at(-1).toId, h.team.delivered.at(-1).text.split('\n')[0]], ['a', `Card ${id} "Draft the newsletter" is done: Draft in docs/news.md (merged) (https://github.com/o/r/pull/8)`])
+  // Chief heard when the work was finished; the merge does not report a second time.
+  assert.equal(h.team.delivered.length, reports)
   assert.deepEqual(await h.handle.mergeOnce(), [])
 })
 
@@ -1266,4 +1269,157 @@ test('PR addresses and gh states', async () => {
   assert.equal(await gh.state('https://github.com/o/r/pull/3'), undefined)
   assert.equal(await gh.state('https://example.com'), undefined)
   assert.equal(calls.length, 3)
+})
+
+test('a card in progress that nothing runs for nudges its Bot, then tells the user, once each', async (t) => {
+  let clock = 0
+  const h = host(t, { now: () => clock, config: { watchMs: 0 } })
+  const min = 60_000
+  await h.tool({ action: 'open', title: 'Ship the fix', assignee: 'Writer', brief: 'Ship it.' }, 'a')
+  const [{ id }] = h.cards()
+  const before = h.team.delivered.length
+  // Its thread is in a turn: the Bot works.
+  h.team.live.set(`ct-${id}`, { turn: {} })
+  clock = 30 * min
+  assert.deepEqual(await h.handle.idleOnce(), [])
+  h.team.live.delete(`ct-${id}`)
+  assert.deepEqual(await h.handle.idleOnce(), [{ id, step: 'nudge' }])
+  const nudge = h.team.delivered.at(-1)
+  assert.deepEqual([nudge.toId, nudge.sessionId, nudge.role, nudge.note], ['b', `ct-${id}`, 'wake', `card ${id} · nothing runs for it`])
+  assert.match(nudge.text, /is In progress, but nothing runs for it/)
+  assert.deepEqual(await h.handle.idleOnce(), [])
+  clock = 49 * min
+  assert.deepEqual(await h.handle.idleOnce(), [])
+  clock = 50 * min
+  assert.deepEqual(await h.handle.idleOnce(), [{ id, step: 'tell' }])
+  assert.equal(h.team.pushes.at(-1).text, `Writer · ${id}: "Ship the fix" is In progress but nothing has run for it for 50 min; send it a note or move it`)
+  clock = 500 * min
+  assert.deepEqual(await h.handle.idleOnce(), [])
+  assert.equal(h.team.delivered.length, before + 1)
+  // The user's note starts the count again.
+  await h.post('note', { id, text: 'Go on.' })
+  assert.equal(h.cards()[0].idle, undefined)
+})
+
+test('a card that waits on a pane, waits for an answer or left In progress is not idle', async (t) => {
+  let clock = 0
+  const herdr = { status: async () => ({ status: 'working' }), read: async () => ({ text: '' }) }
+  const h = host(t, { now: () => clock, herdr, config: { watchMs: 0 } })
+  await h.tool({ action: 'open', title: 'Run the suite', brief: 'Run it.' })
+  const [{ id }] = h.cards()
+  const waitPane = h.registered.tools.find(entry => entry.name === 'wait_pane')
+  await waitPane.execute({ pane: 'w1:p1' }, { agent: { id: `ct-${id}` } })
+  clock = 3_600_000
+  assert.deepEqual(await h.handle.idleOnce(), [])
+  await waitPane.execute({ pane: 'w1:p1', stop: true }, { agent: { id: `ct-${id}` } })
+  await h.tool({ action: 'update', id, status: 'review', need: 'Look.' })
+  clock = 2 * 3_600_000
+  assert.deepEqual(await h.handle.idleOnce(), [])
+  await h.tool({ action: 'update', id, status: 'active' })
+  clock = 3 * 3_600_000
+  assert.deepEqual(await h.handle.idleOnce(), [{ id, step: 'nudge' }])
+  // A wait kept for it afterwards drops the mark, so a later stop is nudged again.
+  await waitPane.execute({ pane: 'w1:p1' }, { agent: { id: `ct-${id}` } })
+  assert.deepEqual(await h.handle.idleOnce(), [])
+  assert.equal(h.cards()[0].idle, undefined)
+})
+
+test('in a card thread a board call without an id is about that card, not the newest one', async (t) => {
+  const h = host(t)
+  await h.tool({ action: 'open', title: 'First', brief: 'One.' })
+  await h.tool({ action: 'open', title: 'Second', brief: 'Two.' })
+  const [first, second] = h.cards()
+  assert.match(await h.tool({ action: 'update', progress: 'half way' }, `ct-${first.id}`), new RegExp(`^Updated ${first.id}`))
+  assert.deepEqual(h.cards().map(card => card.progress), ['half way', ''])
+  assert.match(await h.tool({ action: 'complete', result: 'Done one' }, `ct-${first.id}`), new RegExp(`^Finished ${first.id}`))
+  assert.deepEqual(h.cards().map(card => card.status), ['done', 'active'])
+  // Its own chat still means the newest open card, and a named id wins anywhere.
+  assert.match(await h.tool({ action: 'update', progress: 'from chat' }), new RegExp(`^Updated ${second.id}`))
+  await h.tool({ action: 'open', title: 'Third', brief: 'Three.' })
+  assert.match(await h.tool({ action: 'update', id: second.id, progress: 'named' }, `ct-${h.cards()[2].id}`), new RegExp(`^Updated ${second.id}`))
+})
+
+test('the user finishing or cancelling a card tells its opener quietly and stops a turn that still runs', async (t) => {
+  const h = host(t)
+  for (const [endpoint, payload, what, stop] of [
+    ['move', { status: 'done' }, 'was moved to Done by the user', 'The user moved card ID to Done on the board. Stop the work on it now and end your turn.'],
+    ['cancel', { reason: 'Not needed' }, 'was cancelled by the user: Not needed', 'The user cancelled card ID on the board: Not needed. Stop the work on it now and end your turn.'],
+  ]) {
+    await h.tool({ action: 'open', title: 'Draft', assignee: 'Writer', brief: 'Draft it.' }, 'a')
+    const { id } = h.cards().at(-1)
+    h.team.live.set(`ct-${id}`, { turn: {} })
+    await h.post(endpoint, { id, ...payload })
+    const [told, report] = h.team.delivered.slice(-2)
+    assert.deepEqual([told.toId, told.sessionId, told.steer, told.text], ['b', `ct-${id}`, true, stop.replace('ID', id)])
+    assert.deepEqual([report.toId, report.role], ['a', 'wake'])
+    assert.equal(report.text, `Card ${id} "Draft" ${what}\nThe user did this on the board, so there is nothing to tell them. Do not go on with the card, and do not open it again.`)
+    assert.deepEqual(h.cards().at(-1).log.at(-1).by, 'user')
+    h.team.live.delete(`ct-${id}`)
+  }
+  // A card the user opened has nobody to tell, and a quiet thread gets no stop.
+  const { value } = await h.post('add', { title: 'Mine', assignee: 'b', brief: 'x' })
+  const mine = Object.values(value.cards).find(card => card.title === 'Mine')
+  const count = h.team.delivered.length
+  await h.post('cancel', { id: mine.id })
+  assert.equal(h.team.delivered.length, count)
+})
+
+test('a finished card moved back to In progress starts its Bot again in a new thread', async (t) => {
+  const h = host(t)
+  await h.tool({ action: 'open', title: 'Fix CI', brief: 'Fix the flaky job.' })
+  const [{ id }] = h.cards()
+  await h.tool({ action: 'complete', id, result: 'Pinned the runner' })
+  assert.deepEqual(h.team.state.bots.b.openParts, [])
+  const sent = h.team.sent.length
+  await h.post('move', { id, status: 'active' })
+  assert.deepEqual(h.team.state.bots.b.openParts.map(part => part.card), [id])
+  const [sessionId, text] = h.team.sent.at(-1)
+  assert.equal(h.team.sent.length, sent + 1)
+  assert.equal(sessionId, `ct-${id}`)
+  assert.match(text, new RegExp(`^\\[Card ${id} · "Fix CI"\\] was Done; the user moved it back to In progress\\.\\n\\nFix the flaky job\\.\\n\\nResult so far: Pinned the runner\\.`))
+  // Back to To do, or a card the user holds, starts nothing.
+  await h.post('move', { id, status: 'done' })
+  await h.post('move', { id, status: 'todo' })
+  assert.equal(h.team.sent.length, sent + 1)
+})
+
+test('a PR closed without merging, or one gh cannot read, is said on the card and told once', async (t) => {
+  const url = 'https://github.com/o/r/pull/7'
+  const prs = { [url]: 'OPEN' }
+  const h = host(t, { prs })
+  await h.tool({ action: 'open', title: 'Ship it', brief: 'Ship.' })
+  await h.tool({ action: 'complete', result: 'Shipped', link: url })
+  const pushes = () => h.team.pushes.length
+  let count = pushes()
+  prs[url] = 'CLOSED'
+  assert.deepEqual(await h.handle.mergeOnce(), [])
+  let [card] = h.cards()
+  assert.deepEqual([card.status, card.mergeIssue], ['review', 'closed'])
+  assert.equal(card.need, `[o/r#7](${url}) was closed without merging. Reopen and merge it, send a note with what to do instead, or move the card to Done.`)
+  assert.equal(h.team.pushes.at(-1).text, `Writer · ${card.id}: "Ship it": o/r#7 closed without merging, the card stays in Review`)
+  assert.equal(pushes(), count + 1)
+  await h.handle.mergeOnce()
+  assert.equal(pushes(), count + 1)
+  // Reopened: it waits for the merge again.
+  prs[url] = 'OPEN'
+  await h.handle.mergeOnce();
+  [card] = h.cards()
+  assert.deepEqual([card.mergeIssue, card.need], [undefined, `Merge [o/r#7](${url}).`])
+  // gh failing is a blip twice and a fact the third time.
+  prs[url] = undefined
+  count = pushes()
+  await h.handle.mergeOnce()
+  await h.handle.mergeOnce()
+  assert.deepEqual([h.cards()[0].mergeIssue, pushes()], [undefined, count])
+  await h.handle.mergeOnce();
+  [card] = h.cards()
+  assert.equal(card.mergeIssue, 'unread')
+  assert.match(card.need, /^gh could not read \[o\/r#7\]/)
+  assert.equal(pushes(), count + 1)
+  await h.handle.mergeOnce()
+  assert.equal(pushes(), count + 1)
+  prs[url] = 'MERGED'
+  assert.deepEqual(await h.handle.mergeOnce(), [card.id]);
+  [card] = h.cards()
+  assert.deepEqual([card.status, card.mergeIssue, card.mergeMisses, card.need], ['done', undefined, undefined, undefined])
 })
