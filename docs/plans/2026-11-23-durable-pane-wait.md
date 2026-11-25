@@ -35,6 +35,12 @@ has to notice and start over. The wait itself has to outlive the process.
   the part that is open at that moment.
 - A pane that is gone wakes the Bot with that news. A wait that is not over after 24 hours
   wakes it once and ends.
+- A pane that runs no agent (herdr reports `unknown`: the agent ended or crashed and left
+  a shell, or it never started) can never get to a waited state. After 2 minutes in a row
+  without an agent the Bot is woken with that news and the pane's last lines. An agent
+  that shows up again in between resets the count.
+- A wait that belongs to a card ends without a wake once the card is finished or
+  cancelled: nobody is left to do anything with the result.
 - A wait started from a card thread also adds the pane to the card, so the user can watch
   it on the card.
 - The board rules tell Bots to use `wait_pane` and never to wait with `herdr agent wait`,

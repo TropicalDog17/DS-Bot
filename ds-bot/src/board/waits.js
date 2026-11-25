@@ -6,10 +6,12 @@
 import { randomUUID } from 'node:crypto'
 import { defineTool } from '../host/tool-schema.js'
 import { createBoard, paneTarget } from './cards.js'
-import { oneLine } from './card-fields.js'
+import { isOpen, oneLine } from './card-fields.js'
 import { every as schedule } from './poller.js'
 
 export const WAIT_STATES = ['idle', 'done', 'blocked']
+// What herdr reports for a pane that runs no agent (a bare shell).
+const NO_AGENT = 'unknown'
 const WAIT_POLL_MS = 15_000
 // A pane still idle right after the prompt has not started: it counts only once it was
 // seen in another state, or after this long.
@@ -43,17 +45,31 @@ export function addWait(waits, { pane, until, botId, roomId, cardId, note, id, a
   return { wait, replaced: earlier !== undefined }
 }
 
-// What a poll of the pane means for the wait: { kind: 'match' | 'gone' | 'expired' } wakes
-// the Bot, { armed: true } notes that the pane was seen working, undefined waits on.
+// What a poll of the pane means for the wait: { kind: 'match' | 'gone' | 'left' | 'expired' }
+// wakes the Bot, { armed?, noAgentSince? } are marks to keep on the wait, undefined waits on.
 // `seen` is herdr.status(): { status } | { error, gone? }.
+// A pane without an agent never gets to done, idle or blocked: the agent ended (or never
+// started) and left a shell, so after ARM_MS in that state the Bot is woken as well.
 export function check(wait, seen, at) {
   if (seen?.gone === true) return { kind: 'gone' }
   if (at - wait.since >= WAIT_MAX_MS) return { kind: 'expired', ...(seen?.status ? { status: seen.status } : {}) }
   const status = seen?.status
   if (typeof status !== 'string') return undefined
-  if (!wait.until.includes(status)) return wait.armed === true ? undefined : { armed: true }
-  if (wait.armed === true || at - wait.since >= ARM_MS) return { kind: 'match', status }
-  return undefined
+  if (wait.until.includes(status)) return wait.armed === true || at - wait.since >= ARM_MS ? { kind: 'match', status } : undefined
+  const bare = status === NO_AGENT
+  if (bare && wait.noAgentSince !== undefined && at - wait.noAgentSince >= ARM_MS) return { kind: 'left' }
+  const marks = {
+    ...(wait.armed === true ? {} : { armed: true }),
+    ...(bare && wait.noAgentSince === undefined ? { noAgentSince: at } : {}),
+    ...(!bare && wait.noAgentSince !== undefined ? { noAgentSince: null } : {}),
+  }
+  return Object.keys(marks).length > 0 ? marks : undefined
+}
+
+function mark(wait, marks) {
+  if (marks.armed === true) wait.armed = true
+  if (marks.noAgentSince === null) delete wait.noAgentSince
+  else if (marks.noAgentSince !== undefined) wait.noAgentSince = marks.noAgentSince
 }
 
 // The message that wakes the Bot: what happened, the pane's last lines, its own note.
@@ -62,7 +78,9 @@ export function wakeText(wait, outcome, shown) {
     ? `herdr pane ${wait.pane} is ${outcome.status}.`
     : outcome.kind === 'gone'
       ? `herdr pane ${wait.pane} is gone (closed, or its agent left).`
-      : `herdr pane ${wait.pane} did not get to ${states(wait.until)} within ${WAIT_MAX_MS / 3_600_000} hours${outcome.status ? `; it is ${outcome.status}` : ''}. The wait ended.`
+      : outcome.kind === 'left'
+        ? `herdr pane ${wait.pane} runs no agent any more: it ended without getting to ${states(wait.until)}, or it never started.`
+        : `herdr pane ${wait.pane} did not get to ${states(wait.until)} within ${WAIT_MAX_MS / 3_600_000} hours${outcome.status ? `; it is ${outcome.status}` : ''}. The wait ended.`
   const lines = typeof shown === 'string' && shown.trim() !== '' ? shown.replace(/\s+$/, '').split('\n').slice(-SHOWN_LINES).join('\n') : ''
   return [
     head,
@@ -132,6 +150,10 @@ export function createPaneWaits({ store, herdr, notes, now = Date.now, identity,
     return {}
   })
   const removeWait = id => changeWait(id, (_wait, data) => dropWait(data, id))
+  // Nobody is left to wake: the Bot is off the team, or the card the wait works for is
+  // finished or cancelled.
+  const orphan = wait => roster.bot(wait.botId) === undefined
+    || (wait.cardId !== undefined && !isOpen(store.read().cards?.[wait.cardId]))
   async function poll() {
     if (disposed || polling || store.readOnly()) return []
     polling = true
@@ -140,14 +162,14 @@ export function createPaneWaits({ store, herdr, notes, now = Date.now, identity,
       await roster.ready()
       for (const wait of Object.values(store.read().waits ?? {})) {
         if (disposed) break
-        const outcome = roster.bot(wait.botId) === undefined ? { kind: 'gone-bot' } : check(wait, await herdr.status(wait.pane), now())
+        const outcome = orphan(wait) ? { kind: 'dropped' } : check(wait, await herdr.status(wait.pane), now())
         if (disposed) break
         if (outcome === undefined) continue
-        if (outcome.armed === true) {
-          await changeWait(wait.id, entry => { entry.armed = true })
+        if (outcome.kind === undefined) {
+          await changeWait(wait.id, entry => mark(entry, outcome))
           continue
         }
-        if (outcome.kind !== 'gone-bot') {
+        if (outcome.kind !== 'dropped') {
           const shown = outcome.kind === 'gone' ? undefined : await herdr.read(wait.pane)
           if (disposed) break
           if (store.read().waits?.[wait.id] === undefined) continue

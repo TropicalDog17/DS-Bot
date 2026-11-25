@@ -212,16 +212,16 @@ function TraceFold({ trace, open }) {
 }
 
 // The card's conversation: the user's notes on the right, the Bots' replies on the left
-// under their mark, oldest first. While the Bot owes an answer to the last note, its
-// mark waits with three dots under what it is doing (`live`); the answer it writes in
-// its chat lands here.
-function Thread({ notes, roster, awaiting, live, pick, busy }) {
+// under their mark, oldest first. While the Bot owes an answer to the last note, or its
+// turn for the card runs for another reason (`worker`), its mark waits with three dots
+// under what it is doing (`live`); the answer it writes in its chat lands here.
+function Thread({ notes, roster, awaiting, worker, live, pick, busy }) {
   const cards = roster.board?.cards ?? {}
   // The latest question asked with options, and the user's answer after it, if any.
   const asked = notes.findLastIndex(note => Array.isArray(note.options) && note.options.length > 0)
   const answer = asked < 0 ? undefined : notes.slice(asked + 1).find(note => note.by === undefined || note.by === USER)
-  const waiter = awaiting?.botId === undefined ? undefined : roster.byId?.[awaiting.botId]
   const working = Array.isArray(live?.steps) && live.steps.length > 0 ? live.steps : undefined
+  const waiter = roster.byId?.[awaiting?.botId ?? (working ? worker : undefined)]
   const open = roster.board?.trace === 'all'
   return h('ol', { className: 'bt-board-thread' },
     notes.map((note, index) => {
@@ -332,8 +332,8 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
   const [error, setError] = useState('')
   const scroller = useRef(null)
   const said = (card.notes ?? []).length
-  const waiting = card.awaiting !== undefined
-  const steps = waiting ? live?.steps?.length ?? 0 : 0
+  const steps = live?.steps?.length ?? 0
+  const waiting = card.awaiting !== undefined || steps > 0
   // A new message, the user's or a Bot's reply, scrolls into view.
   useEffect(() => {
     const node = scroller.current
@@ -409,8 +409,8 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
         type: 'button', className: 'bt-board-cancel', 'data-confirm': confirming || undefined, disabled: busy,
         'aria-label': confirming ? t('Click again to cancel') : t('Cancel card'), onClick: cancel,
       }, t('Cancel card')) : null,
-      notes.length > 0 ? h(Thread, {
-        notes, roster, awaiting: open ? card.awaiting : undefined, live: open ? live : undefined, busy,
+      notes.length > 0 || (open && steps > 0) ? h(Thread, {
+        notes, roster, awaiting: open ? card.awaiting : undefined, worker: card.assignee, live: open ? live : undefined, busy,
         pick: open ? option => run(actions.boardNote(card.id, option)) : undefined,
       }) : null,
       error ? h('div', { className: 'bt-error', role: 'alert' }, error) : null),
