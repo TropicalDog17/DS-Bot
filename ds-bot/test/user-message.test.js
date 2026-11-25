@@ -15,7 +15,6 @@ const bundle = await build({
   external: ['react', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives'],
 })
 
-// Hooks keep their state between renders, so a click and the render after it can be followed.
 let hooks = []
 let at = 0
 const react = {
@@ -54,7 +53,6 @@ const find = (node, match) => {
   if (node === null || typeof node !== 'object') return []
   return [...(match(node) ? [node] : []), ...find(node.children, match)]
 }
-// Renders the named components of an element tree, leaving the rest as elements.
 const expand = (node, names) => {
   if (Array.isArray(node)) return node.flatMap(child => expand(child, names))
   if (node === null || typeof node !== 'object') return node
@@ -66,7 +64,6 @@ const words = node => (Array.isArray(node) ? node.map(words).join('')
 const lines = count => Array.from({ length: count }, (_, index) => `第 ${index + 1} 行`).join('\n')
 
 const roster = { bots: [], byId: { b: { id: 'b', name: 'Writer' } }, roomsById: { room: { members: ['b'] } } }
-// What the host hands a chat node: its own render seats beside the node.
 const hostProps = (content, { sessionId = 'room', data = {} } = {}) => {
   const drawn = []
   return {
@@ -87,7 +84,6 @@ const fresh = () => { hooks = [] }
 test('the bubble mounts on a DSH with the old text projection or with a user-text registry', () => {
   assert.equal(current.canDrawUserMessages(true), true)
   assert.equal(older.canDrawUserMessages(false), true)
-  // Neither: DSH keeps its own bubble.
   assert.equal(current.canDrawUserMessages(false), false)
 })
 
@@ -127,7 +123,6 @@ test('attachments, references and skills go to the host as it draws them itself'
   ], { data: { referenceLabels: ['Docs'], skillNames: ['pdf'] } })
   const tree = render(current, props)
   const { input } = drawn.find(item => item.name === 'conversation.chat.user.content')
-  // The reference line is DS Bot's, under the host's stack, so a fold's fade lands on the text.
   assert.deepEqual(JSON.parse(JSON.stringify(input.content)), {
     text: '看 @Docs',
     attachments: [{ type: 'image', image: { attachment: image } }, { type: 'file', file }],
@@ -166,7 +161,6 @@ test('on a current DSH the host bubble is the one text source, so a quote is not
   assert.equal(find(tree, node => node.props?.['data-text-interaction-source'] !== undefined).length, 0)
 })
 
-// A slot registry with the two calls installUserBubble makes.
 const registry = () => {
   const entries = new Map()
   const listeners = new Map()
@@ -189,8 +183,6 @@ test('DS Bot draws the user rows only while no plugin marks where a message came
   const draw = () => { drawn += 1; return () => { drawn -= 1 } }
   const off = current.installUserBubble(slots, draw)
   assert.equal(drawn, 1, 'no source marks: DS Bot draws the rows')
-  // A source mark that registers later (Liveshare) takes the rows back to DSH's own,
-  // which renders the mark; only that row declares the slot it lives in.
   const mark = { component: () => null }
   slots.add(current.USER_SOURCE_SLOT, mark)
   assert.equal(drawn, 0)

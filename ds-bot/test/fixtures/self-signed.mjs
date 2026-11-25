@@ -1,6 +1,3 @@
-// A throwaway self-signed certificate for one DNS name, built with node:crypto alone so tests need
-// no openssl binary and no key file in the tree. The certificate is its own trust anchor
-// (NODE_EXTRA_CA_CERTS) and lives for two days.
 import { generateKeyPairSync, sign } from 'node:crypto'
 
 const der = (tag, ...parts) => {

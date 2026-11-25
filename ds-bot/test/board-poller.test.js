@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { every } from '../src/board/poller.js'
+import { every } from '../src/board/poller.ts'
 
 test('every skips overlapping passes and resumes when the slow job finishes', async (t) => {
   t.mock.timers.enable({ apis: ['setInterval'] })
@@ -109,7 +109,6 @@ test('disposing every lets the job in flight finish and schedules no more jobs',
   dispose()
   pending.resolve()
   await finished.promise
-  // The poller still has to leave its running guard after the job signals completion.
   await new Promise(resolve => setImmediate(resolve))
   t.mock.timers.tick(10)
   assert.equal(calls, 1)

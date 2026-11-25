@@ -2,12 +2,10 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
   dockCards, tailCards, withBtwRows,
-} from '../src/client/btw-model.js'
-import { matchSideEnter } from '../src/client/side-model.js'
-import { createSource } from '../src/client/sources.js'
+} from '../src/client/btw-model.ts'
+import { matchSideEnter } from '../src/client/side-model.ts'
+import { createSource } from '../src/client/sources.ts'
 
-// DSH sends the line on when matchEnter returns undefined. A claim or a throw
-// must leave session.prompt alone.
 function sessionFor(id) {
   return { id, sent: [], prompt(line) { this.sent.push(line) } }
 }
@@ -118,7 +116,6 @@ test('a card moves from the dock to exactly one turn tail', () => {
   const asked = { id: 'asked', atSeq: 15 }
   assert.deepEqual(placed([asked], live), { dock: [], tails: ['1:asked'] })
 
-  // atSeq 21 would belong to the closed turn. anchorSeq is the open turn's start.
   const named = { id: 'named', atSeq: 21, anchorSeq: 30 }
   assert.deepEqual(placed([named], live), { dock: ['named'], tails: [] })
   const done = { turn: 2, start: { seq: 30 }, end: { seq: 40 }, status: 'closed' }
@@ -131,15 +128,12 @@ test('a card moves from the dock to exactly one turn tail', () => {
 })
 
 test('anchorSeq uses the closed turn range and does not fall through to atSeq', () => {
-  // Host shape: turn/start 1, messages, turn/end 4, model/selection 5.
   const closedTurn = new Map([[1, { turn: 1, start: { seq: 1 }, end: { seq: 4 }, status: 'closed' }]])
   assert.deepEqual(placed([{ id: 'logged', atSeq: 5, anchorSeq: 1 }], closedTurn), { dock: [], tails: ['1:logged'] })
 
-  // The same anchor while that turn is still open stays on the dock.
   const running = new Map([[1, { turn: 1, start: { seq: 1 }, status: 'open' }]])
   assert.deepEqual(placed([{ id: 'midhost', atSeq: 4, anchorSeq: 1 }], running), { dock: ['midhost'], tails: [] })
 
-  // 50 matches neither closed range. atSeq 15 would have, and must not.
   const finished = new Map([
     [1, closed],
     [2, { turn: 2, start: { seq: 30 }, end: { seq: 40 }, status: 'closed' }],
@@ -198,10 +192,6 @@ test('an earlier page shows a card once, and an empty part keeps a trailing bloc
 })
 
 test('one turn projected across two pages places its card once after the last row', () => {
-  // displayItems omits turn/start and stamps seq/turn. A later page seeds its
-  // turn from the latest turn/start at or before its first event, so turn 1
-  // continues. EarlierParts prepends that older page before withBtwRows.
-  // anchorSeq 5 is the turn/start. atSeq 23 is a later log-only event.
   const older = [
     { kind: 'user', text: 'progress', seq: 6, turn: 1, time: 1 },
     { kind: 'bot', text: 'working', seq: 8, turn: 1, time: 2 },
@@ -222,8 +212,6 @@ test('one turn projected across two pages places its card once after the last ro
 })
 
 test('a card whose turn is not loaded stays in the trailing block', () => {
-  // anchorSeq 0 is turn 1's turn/start. atSeq 6 is a later log-only event.
-  // Turn 1's rows are on the older page. The loaded page starts at turn 2.
   const card = { id: 'aside', turn: 1, anchorSeq: 0, atSeq: 6 }
   const turn2 = [
     { kind: 'user', text: 'next', seq: 8, turn: 2, time: 8 },
@@ -232,7 +220,6 @@ test('a card whose turn is not loaded stays in the trailing block', () => {
   assert.deepEqual(shape(withBtwRows(turn2, [card])), [
     'user:next', 'bot:ok', 'btw:aside',
   ])
-  // A later visible turn makes "after turn 2" a different slot from the trailing block.
   const loaded = [
     ...turn2,
     { kind: 'user', text: 'later', seq: 12, turn: 3, time: 12 },
@@ -266,15 +253,12 @@ test('a card whose turn is not loaded stays in the trailing block', () => {
   ])
 })
 
-// BtwDock, bundled and rendered with a minimal React stand-in: the dock is the
-// composer slot for cards whose turn is still open or matches nothing closed.
-// Old cards have no Cancel, but their delete action removes the saved aside.
 import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
 
 const btwBundle = await build({
-  entryPoints: [fileURLToPath(new URL('../src/client/btw.js', import.meta.url))],
+  entryPoints: [fileURLToPath(new URL('../src/client/btw.ts', import.meta.url))],
   bundle: true, format: 'cjs', platform: 'node', write: false,
   external: ['react', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives'],
 })
@@ -322,7 +306,6 @@ test('an open-turn card renders a delete action in the dock', async () => {
   }
   const tree = BtwDock({ sessionId: 's', useRoster: select => select(roster), actions })
   assert.equal(findIn(tree, node => node.props?.className === 'bt-btw-dock').length, 1)
-  // The card component sits in the tree as a vnode; render it to see the card.
   const [cardNode] = findIn(tree, node => typeof node.type === 'function' && node.props?.card?.id === 'c1')
   const view = cardNode.type({ ...cardNode.props, onDeleted: id => removed.push(id) })
   assert.equal(view.props.className, 'bt-btw bt-btw-compact')

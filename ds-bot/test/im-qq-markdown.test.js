@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { toQqMarkdown } from '../src/host/im/qq-markdown.js'
+import { toQqMarkdown } from '../src/host/im/qq-markdown.ts'
 
 test('a GFM table becomes named list rows', () => {
   assert.equal(

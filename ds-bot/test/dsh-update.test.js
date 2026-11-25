@@ -2,15 +2,13 @@ import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
 import { readFileSync } from 'node:fs'
 import { afterEach, test } from 'node:test'
-import { install } from '../src/host/dsh-update.js'
+import { install } from '../src/host/dsh-update.ts'
 
 const PKG = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
 const flush = async () => { for (let index = 0; index < 8; index += 1) await Promise.resolve() }
 const realFetch = globalThis.fetch
 afterEach(() => { globalThis.fetch = realFetch })
 
-// The dsh-update module alone: a stub loader says the running DSH version, a
-// stub plugin manager says how the bot was installed, and fetch is scripted.
 function start({ current = '0.1.0', source, answers = {}, app = false, spawn, config = {}, profileDir }) {
   const fetched = []
   const spawns = []

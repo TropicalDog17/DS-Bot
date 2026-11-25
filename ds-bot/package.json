@@ -27,8 +27,8 @@
     ".": "./plugin.js",
     "./client": "./client.js",
     "./web-search": "./web-search.js",
-    "./board": "./src/board/entry.js",
-    "./optchat": "./src/optchat/entry.js",
+    "./board": "./src/board/entry.ts",
+    "./optchat": "./src/optchat/entry.ts",
     "./package.json": "./package.json"
   },
   "files": [

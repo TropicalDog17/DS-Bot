@@ -6,7 +6,6 @@ import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
 
 const PLUGIN = dirname(dirname(fileURLToPath(import.meta.url)))
-// The cover bundled once, with the minimal React stand-in the other client tests use.
 const { outputFiles } = await build({
   stdin: { contents: "export * from './src/client/opening.js'", resolveDir: PLUGIN },
   bundle: true, format: 'cjs', platform: 'browser', write: false, logLevel: 'silent',
@@ -30,7 +29,6 @@ const roster = {
   roomsById: { 'room-1': { id: 'room-1', name: 'Ops' } },
 }
 
-// A clock the wait can be driven with, and the same store shape the client uses.
 const waitRig = (onSlow) => {
   let queued = null
   const ui = {

@@ -1,5 +1,3 @@
-// Download the Electron build that dsh Desktop pins, for running the unpackaged shell on Linux.
-// Usage: node fetch-electron.mjs <dsh-repo> <cache-dir>
 import { createRequire } from 'node:module'
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'

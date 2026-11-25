@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { DEFAULT_COLORS, DEFAULT_SHAPES, MAIN_LOOK, defaultColor, defaultShape, lookOf } from '../src/client/characters.js'
-import { indexRoster } from '../src/client/sources.js'
+import { DEFAULT_COLORS, DEFAULT_SHAPES, MAIN_LOOK, defaultColor, defaultShape, lookOf } from '../src/client/characters.ts'
+import { indexRoster } from '../src/client/sources.ts'
 
 const ids = Array.from({ length: 3000 }, (_, index) => `session-${index.toString(16).padStart(8, '0')}-look`)
 
@@ -20,7 +20,6 @@ test('the whale is only a stored look: the browser gives no Bot a look by its pl
   const chief = { id: 'chief', name: 'Chief', createdAt: 1, color: 'deepseek', avatar: { shape: 'whale' } }
   const writer = { id: 'writer', name: 'Writer', createdAt: 2 }
   assert.deepEqual(lookOf(roster([writer, chief], ['chief']).byId.chief), { ...MAIN_LOOK, image: undefined })
-  // The first Main Bot left, with no stored look, keeps the look its id gives it.
   const left = roster([writer], ['writer']).byId.writer
   assert.deepEqual(lookOf(left), { shape: defaultShape('writer'), color: defaultColor('writer'), image: undefined })
   const photo = lookOf({ id: 'chief', avatar: { image: 'data:image/png;base64,AA==' } })

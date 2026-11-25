@@ -1,14 +1,3 @@
-// Web and Desktop on one DSH_HOME: does either dsh lose the other's team changes?
-// Start both on the same data first (desktop.sh's files are named desktop*, so they sit
-// next to a Web bench), Web first, as a user would:
-//
-//   dev/bench.sh desktop-share 3160 8860 reset
-//   SLOT=6 dev/desktop-linux/desktop.sh share reset
-//   node dev/shared-home-check.mjs share 3160 <dsh-repo> 9560
-//
-// Both ends load the team, then each creates a Bot and messages it, in turns. The check
-// passes when every Bot an end reported as created is still in state.json, the team has
-// one Main Bot, and each end either saved its change or refused it with a message.
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -51,7 +40,6 @@ const viewOf = async (end) => {
   return `${result.value.bots.map(bot => bot.name).sort().join(', ')}${result.value.readOnly ? ` (read-only: ${result.value.readOnly})` : ''}`
 }
 
-// Each end loads (and, on a new team, bootstraps) its team.
 for (const end of ['desktop', 'web']) console.log(`${end} sees: ${await viewOf(end)}`)
 await sleep(2000)
 report('after both loaded')

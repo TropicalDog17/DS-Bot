@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { runIsolatedScript } from '../src/host/browser/script-runner.js'
+import { runIsolatedScript } from '../src/host/browser/script-runner.ts'
 
 const helpers = () => {
   const calls = []
@@ -67,7 +67,6 @@ test('a script that never yields is killed at the timeout and the host keeps run
   const started = Date.now()
   await assert.rejects(runIsolatedScript('while (true) {}', {}, { timeout: 500 }), /longer than 0.5 seconds/)
   assert.ok(Date.now() - started < 5_000)
-  // The host event loop was never blocked: a later script still runs.
   assert.equal(await runIsolatedScript('done("alive")', {}), 'alive')
 })
 

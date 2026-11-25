@@ -1,15 +1,11 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
-import { ACCENT_INKS, INKS, luminance } from '../src/client/inks.js'
-import { allThemes, shellTokens, themeCss } from '../src/client/themes.js'
+import { ACCENT_INKS, INKS, luminance } from '../src/client/inks.ts'
+import { allThemes, shellTokens, themeCss } from '../src/client/themes.ts'
 
-// The browser bundle holds every style sheet ds-bot installs; the bundle test
-// keeps it in step with src/client.
 const bundle = readFileSync(new URL('../client.js', import.meta.url), 'utf8')
 
-// CSS declaration blocks hold no braces, so a declaration's rule runs from the
-// nearest `{` before it to the nearest `}` after it.
 function rulesWith(pattern) {
   const rules = []
   for (const match of bundle.matchAll(pattern)) {
@@ -88,9 +84,6 @@ test('the user ink reads on the user surface in every built-in theme and mode', 
   }
 })
 
-// Text on the accent (send key, new-message pill, primary buttons) takes whichever
-// of the two inks reads better: white on Tangerine was 2.89:1, near-black is 6.38:1.
-// The variables themeCss sets for one mode.
 const varsOf = (theme, accent, dark) => {
   const block = themeCss(theme, accent).split('\n').find(line => line.startsWith(dark ? 'html body[data-ds-dark-theme]{' : 'html body{'))
   return Object.fromEntries(block.slice(block.indexOf('{') + 1, -1).split(';').map(item => item.split(':')))
@@ -112,8 +105,6 @@ test('the accent ink is the more readable of the two inks for every accent', () 
   }
 })
 
-// A preset accent is saved as its light value. Dark mode used it too, so Charcoal
-// (#141416) was 1.00:1 on the dark background, Graphite 1.34:1 and Cobalt 2.48:1.
 test('a preset accent takes its dark value in dark mode; a custom accent stays the same', () => {
   for (const [id, theme] of Object.entries(allThemes())) {
     for (const ink of ACCENT_INKS) {
@@ -123,7 +114,6 @@ test('a preset accent takes its dark value in dark mode; a custom accent stays t
       const ratio = contrast(dark, theme.dark.bg)
       assert.ok(ratio >= 3, `${id} ${ink}: ${dark} on ${theme.dark.bg} is ${ratio.toFixed(2)}:1`)
     }
-    // A color picked by hand is not a preset, even when it spells one in lower case.
     for (const custom of ['#123456', INKS.deepseek[0].toLowerCase()]) {
       assert.equal(varsOf(theme, custom, true)['--bt-accent'], custom)
     }
@@ -131,22 +121,18 @@ test('a preset accent takes its dark value in dark mode; a custom accent stays t
   }
 })
 
-// UI standard §14 #1: the danger red was written out as #e02135 and #c21d2e in 22
-// places. Every danger color reads --bt-danger, which the base sheet sets once.
 test('every danger color reads --bt-danger, which the base sheet sets once', () => {
   assert.equal([...bundle.matchAll(/--bt-danger:#e02135/g)].length, 1)
-  const allowed = before => before.endsWith('--bt-danger:') // the one value
-    || before.endsWith('var(--bt-danger,') // feedback.js: its toast shows without the base sheet too
-    || before.endsWith('.bt-voice-end:hover{background:') // recording reds: not decided yet
-    || /FF3E51['"],\s*['"]$/i.test(before) // the red Bot color, not a danger color
+  const allowed = before => before.endsWith('--bt-danger:')
+    || before.endsWith('var(--bt-danger,')
+    || before.endsWith('.bt-voice-end:hover{background:')
+    || /FF3E51['"],\s*['"]$/i.test(before)
   const loose = [...bundle.matchAll(/#e02135|#c21d2e/gi)]
     .map(match => bundle.slice(Math.max(0, match.index - 40), match.index))
     .filter(before => !allowed(before))
   assert.deepEqual(loose, [])
 })
 
-// A dark skin repaints the host bubble surface (dsh-dream-skin's underwater theme
-// sets this value) and leaves ds-bot's colors alone.
 const DARK_SKIN = { '--dsw-specific-bubble': 'rgba(31,33,38,.92)', '--dsw-alias-label-primary': '#ffffff' }
 const resolve = (value, vars) => {
   const plain = value.replace(/!important$/, '')

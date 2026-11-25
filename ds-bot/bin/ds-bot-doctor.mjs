@@ -25,7 +25,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import semver from 'semver'
-import { findExecutable, launchOf } from '../src/host/local-agents/discover.js'
+import { findExecutable, launchOf } from '../src/host/local-agents/discover.ts'
 
 const run = (file, args, options) => {
   const launch = launchOf(findExecutable(file) ?? file, args)

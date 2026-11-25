@@ -4,11 +4,8 @@ import { runInNewContext } from 'node:vm'
 import { test } from 'node:test'
 import { build } from 'esbuild'
 
-// #1502: Settings → Bot models lists every Bot with its model; a Bot on a local agent
-// is shown but cannot be selected, and the results of a batch are visible per Bot.
-
 const { outputFiles } = await build({
-  entryPoints: [fileURLToPath(new URL('../src/client/bot-models-page.js', import.meta.url))],
+  entryPoints: [fileURLToPath(new URL('../src/client/bot-models-page.ts', import.meta.url))],
   bundle: true, format: 'cjs', platform: 'browser', write: false, logLevel: 'silent',
   external: ['react', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives'],
 })

@@ -1,20 +1,3 @@
-// Screenshot the main Bot team screens, the same on both ends: the team as it stands, a
-// fresh Main Bot's model card and its greeting, the sidebar with Writer and Coder, a
-// private chat with the model picker in its details panel, the Bot's memory (saved from
-// the chat, its row in the details panel, and the memory dialog), a group chat and its settings
-// in the details panel, Bot settings, the Bots and Group chats pages with one group's
-// settings, and the Usage page by Bot, by model, over picked days, and for one Bot.
-// Writer is pinned, so the sidebar shows its pin. Missing Bots and the group are created
-// through POST api/bot, and each chat gets one message for the mock model to answer.
-//
-//   node dev/ui-shots.mjs desktop <dsh-repo> <out-dir> <renderer-port>
-//   node dev/ui-shots.mjs web <dsh-repo> <out-dir> <bench-name> <web-port>
-//
-// Desktop attaches to a running window (desktop.sh); set SHOT_DISPLAY and XAUTHORITY to
-// grab the screen instead of a CDP screenshot. Web starts a headless Chrome or Chromium
-// through dsh's playwright-core: CHROME_BIN, else google-chrome, chromium or
-// chromium-browser on PATH, else playwright's own download, and logs in with the token
-// URL in the bench's web.log (dev/bench.sh), which it never prints.
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -87,7 +70,6 @@ const openRow = selector => page.locator(selector).first().click().then(() => pa
 await shot('team')
 
 let state = await api('state', {})
-// A fresh team's Main Bot opens on the model card and greets once a model is picked.
 const main = state.bots.find(bot => bot.id === state.mainBotId)
 if (main && !main.model) {
   await openRow(`.bt-tile[data-bot-id="${main.id}"]`)
@@ -140,9 +122,6 @@ await shot('details-settings')
 await page.getByRole('button', { name: 'Close details' }).first().click()
 await page.waitForTimeout(600)
 
-// Memory: Writer saves one entry and may not write the team memory, which the Main Bot
-// does. Then the details panel's Memory row and the memory dialog with its summary, every
-// entry, and one change made through "Ask or update".
 const waits = (locator, timeout = 30_000) => locator.waitFor({ timeout }).then(() => true, () => false)
 await send('记住 我喜欢简短的回答，先给结论')
 check(await waits(page.locator('.bt-event button', { hasText: 'Memory updated' }).last()), 'remember shows a "Memory updated" line')
@@ -185,8 +164,6 @@ check(await waits(memoryRow.filter({ hasText: '3 entries' }), 5_000), 'the Memor
 await page.getByRole('button', { name: 'Close details' }).first().click()
 await page.waitForTimeout(600)
 
-// A lasting preference said in passing is kept by the memory review in the
-// background, and the header pill stretches to say so; clicking it opens the memory.
 await send('以后给我的文档都用 Markdown 表格总结要点')
 check(await waits(page.getByText('收到：以后', { exact: false }).last()), 'Writer answers again')
 const pill = page.locator('.bt-pill[data-memory=updated]')
@@ -254,7 +231,6 @@ await shot('usage-models')
 await page.locator('.bt-settings-scroll').evaluate(node => { node.scrollTop = 0 })
 await page.locator('.bt-us-top').getByRole('button', { name: 'Custom' }).click()
 check(await page.locator('.bt-us-pick').waitFor({ timeout: 5_000 }).then(() => true, () => false), 'Custom opens a calendar')
-// The last three days of this month up to today, or as many as it has so far.
 const days = page.locator('.bt-us-month').nth(1).locator('.bt-us-day:not([disabled])')
 const open = await days.count()
 const picked = Math.min(3, open)
@@ -282,11 +258,9 @@ await shot('usage-bot')
 await page.locator('.bt-us-col').last().hover()
 await page.waitForTimeout(400)
 check(await page.locator('.bt-us-tip').count() === 1, 'hovering a bar shows its tokens')
-// `shot` moves the mouse away first, which would close the tip.
 await page.locator('.bt-us-chart').screenshot({ path: join(outDir, `${mode}-${String(++index).padStart(2, '0')}-usage-bot-tip.png`) })
 await page.locator('.bt-settings-head .bt-icon-btn').click()
 check(await page.locator('.bt-us-profile').waitFor({ state: 'detached', timeout: 5_000 }).then(() => true, () => false), 'the back button returns to all usage')
-// On the Desktop its account menu holds the shell's settings seat; the link goes through it.
 await page.locator('.bt-settings-nav .bt-settings-shell').click()
 const harness = page.locator('[data-shortcut-modal="settings"]')
 check(await harness.waitFor({ timeout: 10_000 }).then(() => true, () => false), 'Harness settings opens DeepSeek Harness settings')

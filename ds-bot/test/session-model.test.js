@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { sessionComplete } from '../src/host/browser/session-model.js'
+import { sessionComplete } from '../src/host/browser/session-model.ts'
 
 const header = {
   config: { provider: 'mock-provider', model: 'session-model', temperature: 0.25 },

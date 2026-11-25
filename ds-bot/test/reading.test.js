@@ -6,7 +6,6 @@ import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
 
-// jsdom comes from the harness that test/harness-resolve.mjs found.
 const PLUGIN = dirname(dirname(fileURLToPath(import.meta.url)))
 const { JSDOM } = createRequire(join(process.env.DSH_HARNESS ?? join(PLUGIN, '..', 'deepseek-harness'), 'package.json'))('jsdom')
 const dom = new JSDOM('<!doctype html><body></body>')
@@ -69,16 +68,11 @@ test('the section being read is the last heading at or above the reading line', 
 test('the pill shows only inside a reply taller than the band whose start has scrolled away', () => {
   const band = { top: 66, bottom: 700, left: 200, right: 1160 }
   const rect = (top, height, left = 240) => ({ top, bottom: top + height, height, left })
-  // Fits the band: nothing to come back to.
   assert.equal(pillPlace(rect(-100, 600), band), null)
-  // Its start is still in view.
   assert.equal(pillPlace(rect(60, 2000), band), null)
-  // Too little of it is left under the pill.
   assert.equal(pillPlace(rect(-1900, 2000), band), null)
   assert.deepEqual(pillPlace(rect(-500, 2000), band), { top: 66, left: 240 })
-  // A reply wider than the scroller keeps the pill inside it.
   assert.deepEqual(pillPlace(rect(-500, 2000, 150), band), { top: 66, left: 208 })
-  // The "N new messages ↑" pill keeps its place; this one goes under it, or stays beside it.
   assert.deepEqual(pillPlace(rect(-500, 2000), band, { left: 400, right: 560, top: 66, bottom: 94 }), { top: 102, left: 240 })
   assert.deepEqual(pillPlace(rect(-500, 2000), band, { left: 640, right: 800, top: 66, bottom: 94 }), { top: 66, left: 240 })
 })
@@ -92,9 +86,7 @@ test('the band starts under DS Bot\'s header over the scroller and ends above DS
   scroller.getBoundingClientRect = () => ({ top: 0, bottom: 800, left: 300, right: 1200, height: 800 })
   head.getBoundingClientRect = () => ({ top: 10, bottom: 50, left: 300, right: 1200, height: 40 })
   assert.deepEqual(readingBand(scroller), { top: 58, bottom: 660, left: 300, right: 1200 })
-  // The desktop app's composer sits below its scroller, so nothing is taken off.
   scroller.style.removeProperty('--dsh-composer-height')
-  // A header beside the scroller (another pane's) is not this chat's.
   head.getBoundingClientRect = () => ({ top: 10, bottom: 50, left: 0, right: 280, height: 40 })
   assert.deepEqual(readingBand(scroller), { top: 8, bottom: 800, left: 300, right: 1200 })
   scroller.remove()
@@ -102,11 +94,8 @@ test('the band starts under DS Bot\'s header over the scroller and ends above DS
 })
 
 test('a reply follows the scroll by the band it is read in, not by the whole scroller', () => {
-  // An 800px scroller under a 60px header, with a 180px composer inside it, shows 552px.
   const band = { top: 68, bottom: 620, left: 0, right: 900 }
-  // Taller than the band, though under three quarters of the scroller.
   assert.equal(fillsBand(580, band), true)
-  // Under the band, yet followed: the composer can grow past it.
   assert.equal(fillsBand(420, band), true)
   assert.equal(fillsBand(414, band), false)
 })

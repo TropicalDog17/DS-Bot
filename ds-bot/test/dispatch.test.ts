@@ -165,7 +165,6 @@ test('sendBotRequest enforces idempotency: replay, conflict, concurrent calls, e
   assert.equal(first.receipt, 'Delivered once')
   assert.equal(f.agentOf('b').calls.length, 1)
 
-  // Replay returns the stored receipt without sending again.
   const replay = await f.dispatch.sendBotRequest({
     fromId: 'a', toId: 'b', rawMessage: 'do the thing', text: 'do the thing',
     requestName: 'r-1', formatReceipt: () => 'Should not run',
@@ -173,14 +172,12 @@ test('sendBotRequest enforces idempotency: replay, conflict, concurrent calls, e
   assert.deepEqual(replay, { status: 'replay', receipt: 'Delivered once' })
   assert.equal(f.agentOf('b').calls.length, 1)
 
-  // Same requestName with different content or target conflicts.
   const conflict = await f.dispatch.sendBotRequest({
     fromId: 'a', toId: 'b', rawMessage: 'other thing', text: 'other thing',
     requestName: 'r-1', formatReceipt: () => 'no',
   })
   assert.deepEqual(conflict, { status: 'conflict' })
 
-  // Old receipts survive volume and age; an expired receipt still blocks resending.
   const key = Object.keys(f.state.requests!)[0]
   f.state.requests![key].at = 0
   f.state.requests![key].receipt = undefined
@@ -190,7 +187,6 @@ test('sendBotRequest enforces idempotency: replay, conflict, concurrent calls, e
   })
   assert.deepEqual(expired, { status: 'expired' })
 
-  // Concurrent calls with the same requestName admit only once.
   const [c1, c2] = await Promise.all([
     f.dispatch.sendBotRequest({ fromId: 'a', toId: 'b', rawMessage: 'race', text: 'race', requestName: 'r-race', formatReceipt: () => 'one' }),
     f.dispatch.sendBotRequest({ fromId: 'a', toId: 'b', rawMessage: 'race', text: 'race', requestName: 'r-race', formatReceipt: () => 'two' }),
@@ -198,7 +194,6 @@ test('sendBotRequest enforces idempotency: replay, conflict, concurrent calls, e
   assert.equal(c1.status, 'sent')
   assert.deepEqual(c2, { status: 'replay', receipt: 'one' })
 
-  // Readonly host refuses named requests without sending.
   f.setReadOnly('another window owns the team')
   const ro = await f.dispatch.sendBotRequest({
     fromId: 'a', toId: 'b', rawMessage: 'ro', text: 'ro', requestName: 'r-ro', formatReceipt: () => 'no',
@@ -206,7 +201,6 @@ test('sendBotRequest enforces idempotency: replay, conflict, concurrent calls, e
   assert.deepEqual(ro, { status: 'readonly' })
   f.setReadOnly(undefined)
 
-  // Failed delivery leaves outcome uncertain so retries do not duplicate side effects.
   f.setFlush(async () => { throw new Error('dsh down') })
   await assert.rejects(f.dispatch.sendBotRequest({
     fromId: 'a', toId: 'b', rawMessage: 'fail', text: 'fail', requestName: 'r-fail', formatReceipt: () => 'no',
@@ -230,7 +224,6 @@ test('sendBotRequest coalesces unread inbox requests, forgets prior outbox entry
   if (first.status !== 'sent') return
   assert.equal(first.joined, false)
 
-  // A second request while the first is unread in inbox joins under the same exchangeId.
   const second = await f.dispatch.sendBotRequest({
     fromId: 'a', toId: 'b', rawMessage: 'Add budget', text: 'Add budget',
     formatReceipt: ({ joined }) => (joined ? 'merged' : 'second'),
@@ -242,7 +235,6 @@ test('sendBotRequest coalesces unread inbox requests, forgets prior outbox entry
   assert.deepEqual(f.forgotten, [first.exchangeId])
   assert.equal(f.agentOf('b').inbox.nextStep.length, 1)
 
-  // If a subsequent merged send fails before flush, the pair ledger keeps the previously delivered text.
   f.setFlush(async () => { throw new Error('Session is gone') })
   await assert.rejects(f.dispatch.sendBotRequest({
     fromId: 'a', toId: 'b', rawMessage: 'Lost edit', text: 'Lost edit',
@@ -294,7 +286,6 @@ test('sendReply, sendGroupTurn, sendNotice, and resend route through the outbox 
   assert.deepEqual(f.queued[1].args.requests, ['req-9'])
   assert.equal(f.queued[2].args.recordExchange, false)
 
-  // Resending a persisted outbox entry delivers with resent: true and never re-queues it.
   const saved = f.queued[0].args
   await f.dispatch.resend(saved)
   assert.equal(f.queued.length, 3)

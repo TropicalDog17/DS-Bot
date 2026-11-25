@@ -139,7 +139,6 @@ test('selecting text in a Bot chat first offers Quote and Annotate without openi
 test('adding from a Bot selection sends quote and annotation to the current composer after choosing Annotate', async () => {
   const app = bench()
   const editor = app.openEditor()
-  // Focusing the annotation textarea may collapse the browser selection later.
   app.setSelectedText(null)
   const field = findAll(editor, 'textarea')[0]
   field.props.onChange({ target: { value: 'Explain this' } })

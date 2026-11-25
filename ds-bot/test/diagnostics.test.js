@@ -5,10 +5,10 @@ import { syncBuiltinESMExports } from 'node:module'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { cleanText, install as installDiagnostics, reportMarkdown } from '../src/host/diagnostics.js'
-import { BLOCKING_CODES, failureLine, install as installTurns, turnFailure } from '../src/host/turns.js'
-import { errorCode } from '../src/host/channel.js'
-import { SOURCE_KIND } from '../src/host/constants.js'
+import { cleanText, install as installDiagnostics, reportMarkdown } from '../src/host/diagnostics.ts'
+import { BLOCKING_CODES, failureLine, install as installTurns, turnFailure } from '../src/host/turns.ts'
+import { errorCode } from '../src/host/channel.ts'
+import { SOURCE_KIND } from '../src/host/constants.ts'
 
 test('cleanText hides keys, tokens and the home folder', () => {
   const home = '/home/user'
@@ -20,7 +20,6 @@ test('cleanText hides keys, tokens and the home folder', () => {
 })
 
 test('cleanText hides standalone credentials it was never given', () => {
-  // Synthetic shapes only, built from parts so no string looks like a real key.
   const made = (...parts) => parts.join('')
   const out = cleanText([
     made('ghp_', 'A1'.repeat(12)),
@@ -33,7 +32,6 @@ test('cleanText hides standalone credentials it was never given', () => {
   assert.equal(out, '[hidden] [hidden] [hidden] [hidden] [hidden] [hidden]')
 })
 
-// `stop()` runs the cleanups, as the plugin's stop does.
 function host(home, extra = {}) {
   const warnings = []
   const cleanups = []
@@ -79,7 +77,6 @@ test('warnings are kept, cleaned, written to the log, and read back after a rest
   assert.doesNotMatch(report.markdown, /sk-abc|\/home\//)
   assert.equal(report.entries[0].code, 'RATE_LIMIT', 'newest first')
 
-  // Written as JSON lines; a new host reads them back.
   await rt.stop()
   assert.equal(readFileSync(join(home, 'logs', 'diagnostics.jsonl'), 'utf8').trim().split('\n').length, 2)
   const again = host(home)
@@ -140,8 +137,6 @@ test('diagnostics append fallback redacts an error message', async (t) => {
   assert.match(stderr.join('\n'), /api_key=\[hidden\]/)
 })
 
-// #226: a test removed `home` right after the stop while a warning was still being
-// written there, and the removal failed with ENOTEMPTY.
 test('a stop waits for the log writes queued before it, and nothing is written after it', async (t) => {
   const home = mkdtempSync(join(tmpdir(), 'ds-bot-diag-'))
   t.after(() => rmSync(home, { recursive: true, force: true, maxRetries: 5 }))
@@ -175,7 +170,6 @@ test('a stop waits for the log writes queued before it, and nothing is written a
 
   rt.warn('ds-bot: after the stop')
   await rt.diagnostics.clear()
-  // A write queued after the stop would be part of what a second stop waits for.
   await rt.stop()
   const lines = readFileSync(log, 'utf8').trim().split('\n')
   assert.equal(lines.length, 1, 'neither the warning nor the clear reached the file')
@@ -204,7 +198,6 @@ test('turnFailure reads a usage limit a gateway wraps in another status as a quo
   assert.equal(turnFailure({ code: 'INVALID_REQUEST', status: 400, message: 'Budget has been exceeded! Current cost: 50.03, Max budget: 50' }).code, 'QUOTA')
   assert.equal(turnFailure({ code: 'RATE_LIMIT', status: 429, message: 'gpt returned 429: The usage limit has been reached' }).code, 'QUOTA')
   assert.equal(BLOCKING_CODES.has('QUOTA'), true)
-  // A plain server fault, a rate limit that passes, and a key failure keep their codes.
   assert.equal(turnFailure({ code: 'SERVER', status: 502, message: 'bad gateway' }).code, 'SERVER')
   assert.equal(turnFailure({ code: 'RATE_LIMIT', status: 429, message: 'slow down' }).code, 'RATE_LIMIT')
   assert.deepEqual(turnFailure({ code: 'AUTH', status: 401, message: 'usage limit' }), { code: 'AUTH', message: '', status: 401 })
@@ -225,11 +218,8 @@ test('a 403 content audit is not an AUTH failure, and keeps its body and request
     status: 403,
     requestId: '00000000-0000-4000-8000-000000000000',
   })
-  // A real auth failure keeps AUTH and still loses the provider text.
   assert.deepEqual(turnFailure({ code: 'AUTH', status: 401, message: 'invalid api key' }), { code: 'AUTH', message: '', status: 401 })
-  // A 403 without an audit body stays as DSH classified it.
   assert.deepEqual(turnFailure({ code: 'AUTH', status: 403, message: 'forbidden' }), { code: 'AUTH', message: '', status: 403 })
-  // A structured request id wins over one found in the text.
   assert.equal(turnFailure({ code: 'AUTH', status: 403, message: body, requestId: 'r1' }).requestId, 'r1')
 })
 
@@ -295,7 +285,6 @@ test('a failed group turn fails its waiter; a stopped one counts as no answer', 
   assert.equal(value, null)
 })
 
-// The failures the repair card is for, as the client reads them from `bot.blocked`.
 test('the failures that block a Bot are the ones only the user can fix', () => {
   assert.deepEqual([...BLOCKING_CODES], ['MISSING_CREDENTIAL', 'INVALID_CREDENTIAL', 'AUTH', 'QUOTA', 'ACCOUNT_QUOTA', 'ACCOUNT_SIGN_IN_REQUIRED', 'ACCOUNT_SIGNED_OUT', 'ACCOUNT_TOKEN_INVALID', 'LOCAL_AGENT_MISSING', 'LOCAL_AGENT_SIGNIN', 'LOCAL_AGENT_QUOTA', 'LOCAL_AGENT_EXIT'])
 })
@@ -311,12 +300,10 @@ test('a failure only the user can fix blocks its Bot with the facts, never the m
   const { at, ...facts } = rt.bots.b.blocked
   assert.deepEqual(facts, { code: 'AUTH', status: 401, requestId: 'r1', provider: 'deepseek-official' })
   assert.equal(typeof at, 'number')
-  // The route of the request that failed names the provider.
   const account = { id: 'b', requestHeader: () => ({ config: { provider: 'deepseek-account', model: 'deepseek-v4-flash' } }) }
   fail(2, { code: 'ACCOUNT_TOKEN_INVALID', message: '' }, account)
   assert.deepEqual(Object.keys(rt.bots.b.blocked), ['code', 'provider', 'at'])
   assert.equal(rt.bots.b.blocked.provider, 'deepseek-account')
-  // A failure a retry can fix, or a stopped turn, leaves the block as it is.
   fail(3, { code: 'SERVER', message: 'busy', status: 503 })
   emit('b', 'turn/start', { turn: 4 })
   emit('b', 'turn/end', { turn: 4, reason: { kind: 'aborted', reason: { kind: 'user' } } })
@@ -388,14 +375,12 @@ test('a key lifts the key failures of the providers that read it, a sign-in the 
   rt.unblockBots({ signedIn: true })
   assert.deepEqual(released, ['account', 'lapsed'])
 
-  // With no provider map to read, any key may be the fix.
   released.length = 0
   reset()
   rt.keyRefs = () => { throw new Error('no settings') }
   rt.unblockBots({ ref: 'DEEPSEEK_API_KEY' })
   assert.deepEqual(released, ['official', 'stepfun', 'unknown', 'keyless'])
 
-  // A provider listed with its key again lifts only what its missing key blocked.
   released.length = 0
   reset()
   rt.unblockBots({ keyed: new Set(['stepfun', 'deepseek-official', 'ollama']) })
@@ -424,8 +409,6 @@ test('Retry adds no turn while a greeting is on its way or a turn runs in the Bo
   assert.deepEqual(delivered.map(args => args.role), ['continue'])
 })
 
-// #637: the route a refused turn ran on is read from the Session's request header,
-// not from the Bot's record — a group Session may carry another Bot's route.
 test('a turn refused for not being a model endpoint refuses that route', () => {
   const { rt, emit } = turnsHost()
   const calls = []
@@ -434,14 +417,13 @@ test('a turn refused for not being a model endpoint refuses that route', () => {
   emit('b', 'turn/start', { turn: 1 }, session)
   emit('b', 'turn/end', { turn: 1, reason: { kind: 'error', error: { code: 'HOSTED_ENGINE_ROUTE', message: 'provider "external" is a hosted loop engine route, not a model endpoint' } } }, session)
   assert.deepEqual(calls, [['external/default', 'b']])
-  // An ordinary failure takes no such path.
   emit('b', 'turn/start', { turn: 2 }, session)
   emit('b', 'turn/end', { turn: 2, reason: failed }, session)
   assert.equal(calls.length, 1)
 })
 
 test('issueUrl fills the issue form, keeps the versions when the errors are too long, and falls back to the clipboard', async () => {
-  const { issueUrl } = await import('../src/client/diagnostics.js')
+  const { issueUrl } = await import('../src/client/diagnostics.ts')
   const base = 'https://github.com/Fei2411/DS-Bot/issues/new'
   const short = issueUrl(base, { what: 'Writer failed\nin the group', diagnostics: '| DS Bot | 0.1.0 |' })
   assert.equal(short.inline, true)
@@ -466,7 +448,7 @@ test('issueUrl fills the issue form, keeps the versions when the errors are too 
 })
 
 test('a browser error is noted once, repeats are counted, and clear empties the list', async () => {
-  const { noteClientError, markNoted, clientErrors, clearClientErrors } = await import('../src/client/diagnostics.js')
+  const { noteClientError, markNoted, clientErrors, clearClientErrors } = await import('../src/client/diagnostics.ts')
   clearClientErrors()
   const shown = markNoted(new Error('Could not reach DSH.'))
   noteClientError('menu', shown)

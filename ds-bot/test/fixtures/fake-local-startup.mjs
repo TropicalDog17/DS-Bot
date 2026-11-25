@@ -1,5 +1,3 @@
-// A delayed JSON-RPC handshake shared by the ACP and Codex startup tests.
-// Requests sent before initialize succeeds are refused, as an unready CLI does.
 import { createInterface } from 'node:readline'
 
 let initialized = false

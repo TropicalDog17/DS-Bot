@@ -6,7 +6,6 @@ import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
 
-// jsdom comes from the harness that test/harness-resolve.mjs found, like the dsh packages.
 const PLUGIN = dirname(dirname(fileURLToPath(import.meta.url)))
 const { JSDOM } = createRequire(join(process.env.DSH_HARNESS ?? join(PLUGIN, '..', 'deepseek-harness'), 'package.json'))('jsdom')
 
@@ -43,8 +42,6 @@ const dock = (nextTurn, { running = false, pendingSubmissions = [] } = {}) => Qu
   actions: { reportError: () => {} },
 })
 
-// The stub tree holds element objects, function components unevaluated; walk it
-// for one class or text leaf.
 function collect(node, found = { rows: [], texts: [] }) {
   if (node === null || node === undefined || typeof node === 'boolean') return found
   if (typeof node === 'string' || typeof node === 'number') { found.texts.push(String(node)); return found }

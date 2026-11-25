@@ -1,8 +1,3 @@
-// Tests import web-search.js outside a dsh profile, so its @deepseek-ai peers resolve from a
-// DeepSeek Harness, as a profile would supply them: DSH_HARNESS, else the packages that
-// `npm run harness` installs in dev/harness, else the nearest deepseek-harness/ checkout in a
-// folder above ds-bot, else the same search from ds-bot's place in the main worktree (a git
-// worktree has no checkout of its own).
 import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
@@ -31,7 +26,6 @@ const findHarness = () => {
   }
 }
 const harness = findHarness()
-// Tests that load other harness packages (jsdom) read the same checkout.
 process.env.DSH_HARNESS = harness
 // An npm install links the packages at its root; a pnpm checkout keeps each workspace
 // package in its own folder, where Node's self-reference rule resolves its exports.

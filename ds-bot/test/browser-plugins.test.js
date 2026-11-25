@@ -6,11 +6,11 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import { pathToFileURL } from 'node:url'
 import { apply, createRuntime } from '../index.js'
-import { defaultBrowserHeadless } from '../src/host/browser-plugins.js'
-import { gateScope } from '../src/host/browser/gate.js'
-import { appBrowserEndpoint } from '../src/host/browser-plugins.js'
-import { mountBrowserPlugin } from '../src/host/browser/mount.js'
-import { systemPrompt as refsPrompt, toolDefs as refsTools } from '../src/host/browser/refs.js'
+import { defaultBrowserHeadless } from '../src/host/browser-plugins.ts'
+import { gateScope } from '../src/host/browser/gate.ts'
+import { appBrowserEndpoint } from '../src/host/browser-plugins.ts'
+import { mountBrowserPlugin } from '../src/host/browser/mount.ts'
+import { systemPrompt as refsPrompt, toolDefs as refsTools } from '../src/host/browser/refs.ts'
 import { fakeApproval, fakeContext } from './fake-ctx.js'
 
 const TEAM = {
@@ -96,8 +96,6 @@ function browserExec(botId = 'b2', sessionId = botId) {
   }
 }
 
-// A Playwright page/context pair with just enough surface for one click, so the
-// plugin's real session code runs against it instead of a live browser.
 function fakeBrowserPage({ onClick } = {}) {
   const page = new EventEmitter()
   let closed = false
@@ -187,8 +185,6 @@ test('app browser endpoint carries download roots for the Bot resolved from the 
   }
 })
 
-// The download grace travels mount → openSession → createSession. A fake opener
-// pins the first link; the config test below pins the whole chain.
 test('the mount passes its download grace to the injected session opener', async () => {
   let opened
   const tools = new Map()
@@ -217,12 +213,6 @@ test('the mount passes its download grace to the injected session opener', async
   }
 })
 
-// The whole config path, not just createSession's own argument: config → install
-// → mount → openBotBrowser → createSession. The configured 20 ms grace is far below
-// the 300 ms default, so a download that starts 200 ms after the click must find the
-// batch closed: it is canceled and named in the next snapshot. Were the setting
-// dropped, the default 300 ms window is still open at 200 ms and the download is
-// captured (and its approval path entered) instead.
 test('browserDownloadGraceMs from the config reaches the browser session', async (t) => {
   let saved = false
   let canceled = 0
@@ -271,8 +261,6 @@ test('browserDownloadGraceMs from the config reaches the browser session', async
     browserDownloadGraceMs: 20,
     playwrightUrl: pathToFileURL(join(stub, 'fake-playwright.mjs')).href,
   })
-  // The team folder is read lazily when the browser opens; the fake context only
-  // exposes services through get(), so give it the registry teamFolder() reads.
   ctx.workspaceRegistry = { get: () => ({ path: join(stub, 'workspace') }) }
   t.after(async () => {
     if (clock) {

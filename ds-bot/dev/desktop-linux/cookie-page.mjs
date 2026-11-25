@@ -1,7 +1,3 @@
-// A local page for the Bot browser check: it shows the cookies its partition holds and
-// sets `bot=<name>` when opened with #<name>. Opened in two Bots' browsers, each sees
-// only its own cookie.
-//   node cookie-page.mjs [port=8791]
 import { createServer } from 'node:http'
 
 const port = Number(process.argv[2] ?? 8791)

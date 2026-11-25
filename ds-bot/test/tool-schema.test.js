@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { defineTool, lenientArgs, plainToolSchema } from '../src/host/tool-schema.js'
+import { defineTool, lenientArgs, plainToolSchema } from '../src/host/tool-schema.ts'
 
 // The schema public#1508 reported from an MCP connector: a union with no type of its
 // own, and an enum that lists null. Moonshot/KIMI refused the whole request for it.
@@ -27,7 +27,6 @@ test('the reported union property is collapsed to its first non-null branch, wit
   })
   assert.equal(plain.type, 'object')
   assert.deepEqual(plain.required, ['sort_order'])
-  // The schema given in is never changed: another provider may still be using it.
   assert.ok(Array.isArray(REPORTED.properties.sort_order.oneOf))
   assert.deepEqual(REPORTED.properties.sort_order.enum, ['ASC', 'DESC', null])
 })
@@ -51,7 +50,6 @@ test('a schema without a type gets the one its shape or enum names', () => {
   assert.equal(plain.properties.mode.type, 'string')
   assert.equal(plain.properties.flags.type, 'boolean')
   assert.equal(plain.properties.count.type, 'integer')
-  // Nothing names a type for an empty schema, and nothing is invented for it.
   assert.deepEqual(plain.properties.bare, {})
 })
 
@@ -118,7 +116,6 @@ const ARGS = {
 test('a boolean or a number written as a string reads as the value it spells', () => {
   const args = { always: 'true', limit: '20', ratio: ' 0.5 ', text: 'true', flags: ['false', true], nested: { on: 'FALSE' } }
   assert.deepEqual(lenientArgs(ARGS, args), { always: true, limit: 20, ratio: 0.5, text: 'true', flags: [false, true], nested: { on: false } })
-  // The model's arguments are left as they were.
   assert.equal(args.always, 'true')
 })
 
@@ -126,7 +123,6 @@ test('a string that spells no value of the type is left for the check to refuse'
   const args = { always: 'yes', limit: '2.5', ratio: '1e400', nested: 'x' }
   assert.deepEqual(lenientArgs(ARGS, args), args)
   assert.deepEqual(lenientArgs(ARGS, { limit: '' }), { limit: '' })
-  // Arguments that need nothing come back as they are.
   const plain = { always: true, text: 'hi' }
   assert.equal(lenientArgs(ARGS, plain), plain)
 })

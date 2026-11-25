@@ -1,18 +1,6 @@
-// Source of DS Bot's characters. Each one is a small 3D model made of
-// signed-distance primitives (spheres, ellipsoids, round cones, a torus, extrusions, and
-// the first mascots' design outlines inflated into soft slabs), seen from one fixed
-// three-quarter view and traced into flat layers in a 100-unit box: the body, decals,
-// a shade on the side away from the light, and a highlight facing it. The eyes are
-// capsules laid on the model's front surface and projected the same way, so the near
-// eye is wider than the far one and both lean with the surface.
-//
-//   node dev/characters.mjs                   prints the CHARACTERS block for src/client/characters.js
-//   node dev/characters.mjs --preview a.html  also writes a preview gallery
 import { writeFileSync } from 'node:fs'
 import { BLOSSOM_PETALS, MOON_BODY, SQUIRCLE_BODY, STAR_BODY, WAVE_BODY } from './mascot-outlines.mjs'
 
-// ---------------------------------------------------------------------------
-// Vectors and the view.
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 const len = a => Math.hypot(a[0], a[1], a[2])
@@ -26,13 +14,10 @@ const rx = (d) => { const c = Math.cos(rad(d)), s = Math.sin(rad(d)); return [[1
 const ry = (d) => { const c = Math.cos(rad(d)), s = Math.sin(rad(d)); return [[c, 0, s], [0, 1, 0], [-s, 0, c]] }
 const rz = (d) => { const c = Math.cos(rad(d)), s = Math.sin(rad(d)); return [[c, -s, 0], [s, c, 0], [0, 0, 1]] }
 
-// Object space: x right, y up, z toward the viewer. The model turns its face to the
-// viewer's right, tips its top toward the viewer, and leans back a little.
 const VIEW = { yaw: 34, pitch: 16, roll: 10 }
 const toWorld = mm(rz(VIEW.roll), mm(rx(VIEW.pitch), ry(VIEW.yaw)))
 const toObject = tr(toWorld)
 
-// ---------------------------------------------------------------------------
 // Signed-distance primitives (Inigo Quilez's formulas).
 const sphere = (c, r) => p => len(sub(p, c)) - r
 function ellipsoid(c, radii, turn) {
@@ -79,9 +64,7 @@ function roundCone(a, b, r1, r2) {
     return (Math.sqrt(x2 * a2 * il2) + y * rr) * il2 - r1
   }
 }
-// A ring standing in the xy plane, facing the viewer.
 const torus = (c, R, r) => (p) => { const q = sub(p, c); return Math.hypot(Math.hypot(q[0], q[1]) - R, q[2]) - r }
-// A 2D profile in the xy plane, pushed `depth` back and forth, its edges rounded by `round`.
 const extrude = (profile, depth, round) => (p) => {
   const d = profile(p[0], p[1])
   const w = Math.abs(p[2]) - depth
@@ -98,9 +81,6 @@ const smin = (k, ...parts) => p => parts.map(f => f(p)).reduce((a, b) => {
 })
 const clipBelow = (f, y) => p => Math.max(f(p), y - p[1])
 
-// ---------------------------------------------------------------------------
-// 2D outlines from SVG paths. A path is flattened to polygons, and its signed distance
-// (negative inside, even-odd per path, union across paths) is baked on a grid once.
 function flatten(d) {
   const tokens = d.match(/[a-zA-Z]|-?(?:\d*\.\d+|\d+\.?)(?:e[-+]?\d+)?/g)
   const loops = []
@@ -187,9 +167,6 @@ function polygonDistance(loops, x, y) {
   return inside ? -best : best
 }
 
-// An outline as a 2D distance in object units. `map` takes object (x, y) to the path's
-// own coordinates and `unit` is how many path units make one object unit; `grow`
-// fattens the outline (in path units), which also rounds its corners.
 function outline(paths, { map, unit, grow = 0 }) {
   const shapes = paths.map(flatten)
   const R = 1.6
@@ -208,17 +185,12 @@ function outline(paths, { map, unit, grow = 0 }) {
     const [ti, tj] = [fi - i, fj - j]
     const at = (a, b) => grid[a * (G + 1) + b]
     const inner = (at(i, j) * (1 - tj) + at(i, j + 1) * tj) * (1 - ti) + (at(i + 1, j) * (1 - tj) + at(i + 1, j + 1) * tj) * ti
-    // Outside the baked square the distance only grows.
     return inner + Math.max(0, Math.abs(x) - R, Math.abs(y) - R)
   }
 }
-// A 512-unit design box seen as object space: its center at the origin, `per` design
-// units to one object unit, y up.
 const box512 = (cx, cy, per = 190) => ({ map: (x, y) => [cx + x * per, cy - y * per], unit: per })
 
-// A soft slab: the outline pushed back and forth `depth`, its rim rounded by `round`.
 const puffy = (profile, depth, round) => extrude((x, y) => profile(x, y) + round, depth, round)
-// A 2D distance seen on the front of a model as a decal.
 const segment2 = (ax, ay, bx, by) => (x, y) => {
   const dx = bx - ax
   const dy = by - ay
@@ -228,16 +200,9 @@ const segment2 = (ax, ay, bx, by) => (x, y) => {
 const polyline2 = (points, width) => (x, y) => Math.min(...points.slice(1).map((p, k) => segment2(...points[k], ...p)(x, y))) - width
 const circle2 = (cx, cy, r) => (x, y) => Math.hypot(x - cx, y - cy) - r
 
-// ---------------------------------------------------------------------------
-// The models. `eyes` are [x, y] spots on the front, found by a ray along -z; `eye`
-// scales the capsule (1 = 10 by 23 units at a face-on spot).
-// `paints` are decals on the model's front: a region (negative inside) of the hit
-// point, drawn in a fixed color over the body color.
 const decal = (region2, fill, opacity = 1) => ({ region: p => region2(p[0], p[1]), fill, opacity })
-// The wave's heart, drawn freehand in a 100-unit box (y down), a little lopsided on purpose.
 const WAVE_HEART = 'M50 78C38 70 22 59 20 45C18.5 35 25 27 34 27C41 27 46.5 31.5 50 37.5C53.5 31 59.5 26.5 66.5 27C75.5 27.5 81.5 35.5 80 45.5C78 59.5 62 70.5 50 78Z'
 
-// The first mascots: their original outlines, inflated into soft 3D bodies.
 const MASCOTS = {
   whale: {
     label: 'Whale',
@@ -272,7 +237,6 @@ const MASCOTS = {
     label: 'Wave',
     sdf: puffy(outline([WAVE_BODY], box512(256, 262)), 0.1, 0.24),
     eyes: [[-0.2, 0.34], [0.2, 0.34]],
-    // A hand-drawn heart, low on the body.
     paints: [decal(outline([WAVE_HEART], { map: (x, y) => [50 + x * 120, 50 - (y + 0.22) * 120], unit: 120 }), '#fff', 0.4)],
   },
   star: {
@@ -294,7 +258,6 @@ const MASCOTS = {
   },
 }
 
-// The geometric characters.
 const GEOMETRIC = {
   gumdrop: {
     sdf: roundCone([0, -0.55, 0], [0, 0.55, 0], 0.82, 0.42),
@@ -358,7 +321,6 @@ const GEOMETRIC = {
   },
 }
 
-// Picker order: the mascots lead, the star second.
 const ORDER = ['whale', 'star', 'moon', 'wave', 'squircle', 'zed', 'hex']
 const MODELS = { ...Object.fromEntries(ORDER.map(id => [id, MASCOTS[id]])), ...GEOMETRIC }
 
@@ -434,15 +396,10 @@ function simplify(points, tolerance) {
   return [...simplify(points.slice(0, index + 1), tolerance).slice(0, -1), ...simplify(points.slice(index), tolerance)]
 }
 
-// ---------------------------------------------------------------------------
-// Tracing. Each grid ray keeps the smallest distance it meets: negative inside the
-// silhouette, about the distance to it outside, so marching squares finds a smooth edge.
 const N = 300
 const EXTENT = 1.7
 const STEP = (2 * EXTENT) / N
 
-// Light from the upper left, a little in front. The side turned away from it is the
-// shade; the patch facing it is the highlight, which is what shapes a black body.
 const LIGHT = norm([-0.62, 0.68, 0.4])
 const SHADE_AT = 0.06
 const LIGHT_AT = 0.86
@@ -458,7 +415,6 @@ function gradient(sdf, p) {
   }))
 }
 
-// The ray's smallest distance and, when it hits, the hit point and normal (object space).
 function rayMin(sdf, X, Y) {
   let t = 2.4
   let best = Infinity
@@ -490,8 +446,6 @@ function build(model) {
   const size = (N + 1) * (N + 1)
   const field = new Float64Array(size)
   const paints = model.paints ?? []
-  // Every layer lies inside the body: its field is the body's field where the layer
-  // applies and outside everywhere else, so no layer spills past the silhouette.
   const layers = { shade: new Float64Array(size), light: new Float64Array(size), paints: paints.map(() => new Float64Array(size)) }
   for (let i = 0; i <= N; i += 1) {
     for (let j = 0; j <= N; j += 1) {
@@ -523,13 +477,9 @@ function build(model) {
   const cy = (y0 + y1) / 2
   const place = ([X, Y]) => [50 + (X - cx) * scale, 50 - (Y - cy) * scale]
   const toPath = loopList => loopList.map((loop) => {
-    // A closed loop starts and ends on the same point, so split it at its far side
-    // before simplifying; otherwise every point is "on" the zero-length chord.
     const ring = loop.map(place)
     const far = ring.reduce((best, p, i) => (Math.hypot(p[0] - ring[0][0], p[1] - ring[0][1]) > Math.hypot(ring[best][0] - ring[0][0], ring[best][1] - ring[0][1]) ? i : best), 0)
     const points = [...simplify(ring.slice(0, far + 1), 0.25).slice(0, -1), ...simplify(ring.slice(far), 0.25)].slice(0, -1)
-    // Relative steps on a 0.1 grid keep the strings short; rounding the running point
-    // rather than each step stops the error from adding up around the loop.
     const grid = points.map(([x, y]) => [Math.round(x * 10), Math.round(y * 10)])
     const steps = grid.slice(1).map(([x, y], k) => [x - grid[k][0], y - grid[k][1]]).filter(([dx, dy]) => dx || dy)
     const num = v => (v < 0 ? '-' : ' ') + String(Math.abs(v) / 10).replace(/^0\./, '.')

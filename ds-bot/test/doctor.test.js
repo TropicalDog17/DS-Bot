@@ -7,12 +7,6 @@ import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { planRepair, repair, stalePins } from '../bin/ds-bot-doctor.mjs'
 
-// #1449: after a DSH upgrade a profile whose manifest pins official DSH runtime
-// packages at a version the running DSH does not satisfy keeps its own old copies; DSH
-// disables the rows they provide and the Bot team's sessionController/workspaceRegistry
-// never appear. The doctor names those pins, removes only the incompatible ones, and
-// reconciles the profile so a restart needs no separate manual install.
-
 const DOCTOR = join(dirname(fileURLToPath(import.meta.url)), '..', 'bin', 'ds-bot-doctor.mjs')
 const RUNNING = '0.2.2-rc.2'
 const FAKE_PNPM = 'true'
@@ -48,12 +42,9 @@ test('a pin the running DSH satisfies is kept, an incompatible one is named', ()
 })
 
 test('only DSH runtime and mounted bundles are touched', () => {
-  // A client library a plugin pins on purpose is not a service provider.
   assert.deepEqual(stalePins(manifest({ '@deepseek-ai/dsh-client-ui-primitives': '0.2.1-rc.5' }), RUNNING), [])
-  // A core service package matters even when it is not itself a bundle.
   assert.deepEqual(names(stalePins(manifest({ '@deepseek-ai/dsh-api-session-controller': '0.2.1-rc.5' }), RUNNING)),
     ['@deepseek-ai/dsh-api-session-controller@0.2.1-rc.5'])
-  // A tag or a file/workspace spec is not a version to judge.
   assert.deepEqual(stalePins(manifest({ '@deepseek-ai/dsh-web-app': 'latest' }), RUNNING), [])
   assert.deepEqual(stalePins(manifest({ '@deepseek-ai/dsh-web-app': 'workspace:*' }), RUNNING), [])
 })
@@ -94,7 +85,6 @@ test('the command reports a stale pin, --fix reconciles it, and a failed install
   assert.match(fixed.stdout, /reconciled with pnpm/)
   const saved = JSON.parse(readFileSync(join(home, 'profiles', 'web', 'package.json'), 'utf8'))
   assert.deepEqual(Object.keys(saved.dependencies), ['ds-bot'])
-  // A pnpm that is not there leaves the edit in place but tells the user the command.
   const again = homeWith({ web: manifest({ 'ds-bot': '0.3.2', '@deepseek-ai/dsh-web-app': '0.2.1-rc.5' }) })
   const failed = spawnSync(process.execPath, [DOCTOR, 'doctor', '--home', again, '--dsh-version', RUNNING, '--fix'], { encoding: 'utf8', env: { ...process.env, DSH_PNPM: '/nonexistent/pnpm' } })
   assert.equal(failed.status, 1)
@@ -104,9 +94,6 @@ test('the command reports a stale pin, --fix reconciles it, and a failed install
 })
 
 test('a clean report says how to find an older copy another plugin hoisted in', () => {
-  // The manifest is clean but node_modules can still hold a stale copy as a transitive
-  // dependency; the doctor does not read those, so a clean report must not read as "all
-  // clear" - it names pnpm why and never claims the copy was removed.
   const home = homeWith({ web: manifest({ 'ds-bot': '0.3.2', '@deepseek-ai/dsh-web-app': RUNNING }) })
   const check = spawnSync(process.execPath, [DOCTOR, 'doctor', '--home', home, '--dsh-version', RUNNING], { encoding: 'utf8' })
   assert.equal(check.status, 0)
@@ -115,7 +102,6 @@ test('a clean report says how to find an older copy another plugin hoisted in', 
   assert.doesNotMatch(check.stdout, /removed /)
   rmSync(home, { recursive: true, force: true })
 })
-
 
 test('an invalid explicit DSH version cannot remove pins during repair', () => {
   const home = homeWith({ web: manifest({ '@deepseek-ai/dsh-web-app': RUNNING }) })
@@ -140,7 +126,6 @@ test('the command runs when npm links the bin with a symlink', { skip: process.p
     const check = spawnSync(process.execPath, [link, 'doctor', '--home', home, '--dsh-version', RUNNING], { encoding: 'utf8' })
     assert.equal(check.status, 0, check.stderr)
     assert.match(check.stdout, /no profile pins an official DSH package/)
-    // A linked call with no argument prints the usage instead of exiting 0 in silence.
     const usage = spawnSync(process.execPath, [link], { encoding: 'utf8' })
     assert.equal(usage.status, 2)
     assert.match(usage.stderr, /usage: npx ds-bot doctor/)

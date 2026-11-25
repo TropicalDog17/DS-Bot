@@ -3,8 +3,8 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { install, bookFile, parseBook } from '../src/host/ledger.js'
-import { relayRange } from '../src/shared/group-replies.js'
+import { install, bookFile, parseBook } from '../src/host/ledger.ts'
+import { relayRange } from '../src/shared/group-replies.ts'
 
 const host = (t, { home = mkdtempSync(join(tmpdir(), 'ds-bot-ledger-')), readOnly } = {}) => {
   const warnings = []
@@ -68,7 +68,6 @@ test('a window that only reads follows the book another host writes', async (t) 
   writer.rt.ledger.append('group-r1', { seq: 2, text: 'two' })
   await writer.rt.ledger.flush()
   assert.equal(reader.rt.ledger.lastSeq('group-r1'), 2)
-  // It writes nothing of its own.
   reader.rt.ledger.append('group-r1', { seq: 3, text: 'not kept' })
   await reader.rt.ledger.flush()
   assert.equal(parseBook(readFileSync(writer.file('group-r1'), 'utf8')).length, 2)
@@ -95,8 +94,6 @@ test("a round's result names its rows; a result from before the ledger does not"
   assert.equal(relayRange('{"replies":[{"botId":"a","text":"cu'), undefined)
 })
 
-// A window that only read a book takes over writing when the other host goes: what that
-// host wrote meanwhile is read again before anything new is added.
 test('a reader that takes over writing reads the book again first', async (t) => {
   const writer = host(t)
   writer.rt.ledger.append('group-r1', { seq: 1, text: 'one' })
@@ -120,13 +117,11 @@ test('a write that does not reach the disk is reported to whoever waits for it',
   try {
     rt.ledger.append('pair-a-b', { id: 'x', text: 'hello' })
     await assert.rejects(rt.ledger.written('pair-a-b'))
-    // The queue goes on for the next record, and memory holds only what landed.
     await rt.ledger.flush('pair-a-b')
     assert.deepEqual(rt.ledger.records('pair-a-b'), [])
   } finally {
     chmodSync(join(home, 'ledger'), 0o700)
   }
-  // Sent again, it is written again.
   rt.ledger.append('pair-a-b', { id: 'x', text: 'hello' })
   await rt.ledger.written('pair-a-b')
   assert.deepEqual(parseBook(readFileSync(join(home, 'ledger', 'pair-a-b.jsonl'), 'utf8')).map(record => record.id), ['x'])

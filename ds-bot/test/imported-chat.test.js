@@ -3,8 +3,8 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { install } from '../src/host/chat-index.js'
-import { fromOptChat, importedChatFile, parseImportedChat } from '../src/host/imported-chat.js'
+import { install } from '../src/host/chat-index.ts'
+import { fromOptChat, importedChatFile, parseImportedChat } from '../src/host/imported-chat.ts'
 
 const temp = () => mkdtempSync(join(tmpdir(), 'dsb-imported-chat-'))
 const jsonl = rows => rows.map(row => JSON.stringify(row)).join('\n') + '\n'
@@ -21,7 +21,6 @@ const OLD = [
   { seq: 2, time: Date.parse('2026-11-02T00:30:00Z'), who: 'user', text: 'drop the Vietnamese stocks' },
 ]
 
-// One current part with a single message, read through a fake Session history.
 function runtime(home) {
   const events = [{ seq: 0, type: 'user/message', time: Date.parse('2026-11-20T02:44:00Z'), text: 'what about the DCA plan' }]
   const rt = {
@@ -78,7 +77,6 @@ test('read_own_chat searches the imported chat as part 0, next to the current pa
   assert.equal(around.exact, true)
   assert.equal(around.lines.length, 3)
   assert.match(around.lines[2], /^\[part 0 #2 · 11-02\] User: drop the Vietnamese stocks/)
-  // An anchor without a part still means the current part.
   assert.match((await rt.aroundOwnChat('b1', '#0')).lines[0], /^\[part 1 #0/)
   assert.equal(rt.partIndex([rt.importedPart('b1'), ...rt.partsOf()]), 'part 0 (an earlier chat imported from before you existed, 10-31 – 11-02), part 1 (11-20 – now)')
 })
@@ -101,7 +99,6 @@ test('a Bot without an imported chat has no part 0', async () => {
 
 test('without the index, the log scan reads the imported chat too', async () => {
   const home = temp()
-  // A folder where the index file goes: opening the index fails, the scan is used.
   mkdirSync(join(home, 'chat-index.sqlite'), { recursive: true })
   writeImported(home, 'b1', OLD)
   const rt = runtime(home)

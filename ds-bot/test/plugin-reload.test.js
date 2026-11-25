@@ -10,12 +10,6 @@ import { mountAgentLoopTestDependencies, mountAgentLoopTestHarness } from '@deep
 import { createRuntime } from '../index.js'
 import { fakeContext } from './fake-ctx.js'
 
-// #976: a plugin update replaces the files under a running dsh and loads the plugin
-// again in place. The process keeps its turns and child agents; the plugin's maps do
-// not survive the reload. These tests load a second runtime over the same dsh side
-// and expect it to adopt what dsh still runs.
-
-// A team where Writer answers in group "Ops" from Session 'gb'; its own chat is 'b'.
 const team = () => ({
   version: 1,
   mainBotIds: ['a'],
@@ -37,16 +31,12 @@ const settle = async (check, ms = 2000) => {
   while (!check() && Date.now() < until) await new Promise(resolve => setImmediate(resolve))
   assert.ok(check(), 'condition not reached')
 }
-// A group post resolves its Agent in another turn of the loop, so waiting with
-// setImmediate alone can read the calls before they exist.
 const waitFor = async (check, ms = 2000) => {
   const until = Date.now() + ms
   while (!check() && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 20))
   assert.ok(check(), 'condition not reached')
 }
 
-// The dsh side of the process: it outlives one plugin runtime and is shared by the
-// runtime that is loaded again, child agents and Sessions included.
 function dshSide() {
   const agentMap = new Map()
   const interrupted = []
@@ -109,8 +99,6 @@ const freshHome = () => {
   writeFileSync(join(home, 'state.json'), JSON.stringify(team()))
   return home
 }
-// The plugin stops before its data goes, so nothing it still writes lands in a folder
-// that is being removed.
 const cleanup = (t, home, ctx) => t.after(async () => {
   await ctx?.dispose()
   rmSync(home, { recursive: true, force: true, maxRetries: 5 })
@@ -127,7 +115,6 @@ const emit = (ctx, id, type, data) => {
 test('a plugin loaded again adopts a running turn and its child, so the group view and Stop still see it', async (t) => {
   const home = freshHome()
   const dsh = dshSide()
-  // Writer is answering in the group, and the child it started there still runs.
   dsh.agentOf('gb')
   dsh.agentOf('child1', { parent: 'gb' })
 
@@ -135,15 +122,12 @@ test('a plugin loaded again adopts a running turn and its child, so the group vi
   await settle(() => first.rt.hasSubagents('gb') === true)
   await first.ctx.dispose()
 
-  // Loaded again: the new runtime starts empty and adopts what dsh still runs.
   const second = await loadPlugin(dsh, home)
   cleanup(t, home, second.ctx)
   await settle(() => second.rt.hasSubagents('gb') === true)
   assert.equal(second.rt.live.get('gb')?.turn !== undefined, true, 'the running turn is known again')
-  // The group view shows the member at work there, not idle.
   const work = second.rt.roomWorkView().r1 ?? []
   assert.equal(work.some(item => item.botId === 'b'), true)
-  // Stop sees the turn and the child, stops both, and the child is gone.
   assert.equal(await second.rt.stopMemberWork('r1', 'b'), true)
   assert.deepEqual(dsh.interrupted.map(([id]) => id), ['child1'])
   assert.deepEqual(dsh.cancelled.map(([id]) => id), ['child1', 'gb'])
@@ -153,7 +137,6 @@ test('a plugin loaded again adopts a running turn and its child, so the group vi
 test('a child still running after the reload shows in its group, and settling clears it', async (t) => {
   const home = freshHome()
   const dsh = dshSide()
-  // The member's own turn is over, the child it started is not.
   dsh.agentOf('gb', { status: 'idle' })
   const child = dsh.agentOf('child1', { parent: 'gb' })
 
@@ -167,7 +150,6 @@ test('a child still running after the reload shows in its group, and settling cl
   const shown = (second.rt.roomWorkView().r1 ?? []).find(item => item.botId === 'b')
   assert.equal(shown?.tool, 'subagent')
 
-  // dsh settles the child after the reload: the notice reaches the parent Session.
   child.status = 'idle'
   emit(second.ctx, 'gb', 'user/message', {
     source: { kind: 'subagent-settled', form: 'notice', summary: 'Background subagent child1 finished.', senderSessionId: 'child1' },
@@ -190,8 +172,6 @@ test('a failure the reload left only a settlement notice for shows in its group 
   const second = await loadPlugin(dsh, home)
   cleanup(t, home, second.ctx)
   await settle(() => second.rt.hasSubagents('gb') === true)
-  // The child's catalog carries the label the group knows it by; the lifecycle ending
-  // was lost with the old plugin, so the notice is the only ending the new one sees.
   emit(second.ctx, 'gb', 'subagent/catalog', { childId: 'child1', label: 'Export the deck' })
   const notice = {
     source: { kind: 'subagent-settled', form: 'notice', summary: 'Background subagent child1 failed before it finished.', senderSessionId: 'child1' },
@@ -211,7 +191,6 @@ test('a failure the reload left only a settlement notice for shows in its group 
   assert.equal(shown[0].helper, 'Export the deck')
   assert.equal(shown[0].text, 'Export the deck — subagent ended (error)')
   assert.equal(dsh.agentOf('r1').calls.length, 0)
-  // The same notice again, and a late lifecycle ending, add no second row or post.
   emit(second.ctx, 'gb', 'user/message', notice)
   emit(second.ctx, 'gb', 'subagent/end', { id: 'child1', stopReason: 'error', runId: 'run-1', provider: 'spawn', local: true })
   assert.equal(dsh.agentOf('r1').calls.length, 0)
@@ -248,15 +227,12 @@ test('a plugin loaded again gives a live Bot Session its tools before its next r
   const first = await loadPlugin(dsh, home, { served })
   await settle(() => registered.includes('message_bot'))
   await first.ctx.dispose()
-  // The reload lifts the old scope with the old runtime; loading again puts the same
-  // scope back, before any request of the running turn assembles.
   registered.length = 0
   denied.length = 0
   const second = await loadPlugin(dsh, home, { served })
   cleanup(t, home, second.ctx)
   await settle(() => registered.includes('message_bot'))
   for (const name of ['remember', 'recall', 'request_secret']) assert.equal(registered.includes(name), true, name)
-  // The delegation tools a Bot Session must not use stay masked.
   assert.equal(denied.includes('subagent'), true)
   assert.equal(denied.includes('workflow'), true)
 })
@@ -274,7 +250,6 @@ test('a tool whose registration failed is tried again, and another Agent is not 
       tools: {
         register: (def) => {
           attempts[id].push(def.name)
-          // The first attempt happens while the Agent cannot take it yet.
           if (id === 'gb' && def.name === 'remember' && rememberFailures < 1) {
             rememberFailures += 1
             throw new Error('the Agent is not ready for scoped tools yet')
@@ -289,17 +264,14 @@ test('a tool whose registration failed is tried again, and another Agent is not 
   }
   const { ctx, rt } = await loadPlugin(dsh, home)
   cleanup(t, home, ctx)
-  // The scope was built once and 'remember' was refused; it must not count as added.
   await settle(() => attempts.gb.includes('remember'))
   assert.equal(registered.gb.includes('remember'), false)
-  // The next sync tries it again, and this time it lands.
   rt.syncScopedTools()
   assert.equal(registered.gb.includes('remember'), true)
   const settled = attempts.gb.filter(name => name === 'remember').length
   assert.equal(settled, 2)
   rt.syncScopedTools()
   assert.equal(attempts.gb.filter(name => name === 'remember').length, settled)
-  // The other Agent got the tool once, and was not touched by the retry.
   assert.equal(registered.b.includes('remember'), true)
   assert.equal(attempts.b.filter(name => name === 'remember').length, 1)
 })
@@ -307,7 +279,6 @@ test('a tool whose registration failed is tried again, and another Agent is not 
 test('a running group turn that ends after the reload still posts its reply to the group', async (t) => {
   const home = freshHome()
   const dsh = dshSide()
-  // Writer is mid-turn in the group, with the group's own Session live beside it.
   dsh.agentOf('gb')
   dsh.agentOf('r1', { status: 'idle' })
   const first = await loadPlugin(dsh, home)
@@ -321,8 +292,6 @@ test('a running group turn that ends after the reload still posts its reply to t
 
   emit(second.ctx, 'gb', 'assistant/message', { turn: 1, message: { content: [{ type: 'text', text: 'The answer is ready.' }] } })
   emit(second.ctx, 'gb', 'turn/end', { turn: 1, reason: { kind: 'completed' } })
-  // The round's waiter went with the old plugin; the reply reaches the group's own
-  // Session as a late group post.
   await settle(() => dsh.agentOf('r1').calls.some(([kind, message]) => kind === 'followup' && text(message).includes('[Group post from Writer]')))
   const post = dsh.agentOf('r1').calls.find(([kind, message]) => kind === 'followup' && text(message).includes('[Group post from Writer]'))
   assert.match(text(post[1]), /The answer is ready\./)
@@ -349,7 +318,6 @@ test('a new request joins a recovered turn and is answered in its own turn', asy
   assert.equal(delivered[0].deferred, true)
   assert.equal(delivered[0].exchangeId, request.exchangeId)
   assert.equal(delivered[0].text, 'A separate new request')
-  // A fresh turn still lets its first input claim it, rather than deferring forever.
   emit(ctx, 'b', 'turn/start', { turn: 2 })
   emit(ctx, 'b', 'user/message', message)
   emit(ctx, 'b', 'assistant/message', { turn: 2, message: { content: [{ type: 'text', text: 'The new request result' }] } })

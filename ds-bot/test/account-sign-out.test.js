@@ -4,9 +4,6 @@ import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
 
-// The account menu bundled once and rendered with a stateful stand-in React:
-// useState/useRef slots persist across renders, so clicking a menu item and
-// re-rendering drives the same state the real React would keep.
 const { outputFiles } = await build({
   stdin: {
     contents: "export { AccountLauncher } from './src/client/sidebar.js'",
@@ -55,8 +52,6 @@ const textOf = (node) => {
   return textOf(node.props?.children)
 }
 
-// `status` is what the account plugin's snapshot reports; `running` is what its
-// hasRunningAccountTasks answers (or throws); `fail` makes signOut reject.
 function launcher({ status = 'credential-stored', running = false, runningError = false, fail = '', withEntry = true, actions = {} } = {}) {
   const calls = []
   slots.length = 0
@@ -105,8 +100,6 @@ test('a shell account entry that arrives after mount still lends its sign-out', 
   const side = launcher({ withEntry: () => arrived })
   side.render()
   arrived = true
-  // The first open is after the entry arrived; it must inject now, not reuse the
-  // empty operations from mount.
   assert.ok(side.item(side.open(), 'acc:signOut') !== undefined)
 })
 
@@ -123,7 +116,6 @@ test('signing out asks about running tasks, confirms, then signs out', async () 
   await tick()
   await tick()
   assert.deepEqual(side.calls, ['hasRunningAccountTasks', 'signOut'])
-  // The confirm and the menu are gone after a successful sign-out.
   assert.equal(walk(side.render(), node => node.props?.className === 'bt-menu').length, 0)
 })
 
@@ -181,15 +173,12 @@ test('Sign in to DeepSeek shows only while the account plugin says signed out', 
   assert.deepEqual(signIns, ['signIn'])
   const inside = launcher({ actions })
   assert.equal(inside.item(inside.open(), 'Sign in to DeepSeek'), undefined)
-  // An account snapshot that has not answered yet is no sign-out.
   const loading = launcher({ status: undefined, actions })
   assert.equal(loading.item(loading.open(), 'Sign in to DeepSeek'), undefined)
   const entryless = launcher({ status: 'signed-out', withEntry: false, actions })
   assert.equal(entryless.item(entryless.open(), 'Sign in to DeepSeek'), undefined)
 })
 
-// #452: the Connect plugins button left the Bot footer; the account menu that
-// stays keeps the way into the connectors and the automation panel.
 test('the account menu opens the connectors and the automation panel', () => {
   const calls = []
   const side = launcher({ actions: { openConnectors: () => calls.push('connectors'), selectPanel: id => calls.push(id) } })

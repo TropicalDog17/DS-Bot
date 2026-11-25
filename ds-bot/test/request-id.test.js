@@ -1,5 +1,3 @@
-// Real-disk integration tests for request_id durability across restarts, hangs, and lock loss.
-// In-process idempotency rules (replay, conflict, concurrency, expiry, readonly) live in dispatch.test.ts.
 import assert from 'node:assert/strict'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { hostname, tmpdir } from 'node:os'

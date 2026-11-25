@@ -1,9 +1,8 @@
-// Tests for the ds-bot Office skill provider (src/host/office-skills.js).
 import { existsSync } from 'node:fs'
 import { sep } from 'node:path'
 import { describe, test } from 'node:test'
 import assert from 'node:assert'
-import { officeProvider, officeNode, cliPath } from '../src/host/office-skills.js'
+import { officeProvider, officeNode, cliPath } from '../src/host/office-skills.ts'
 
 describe('office skill provider', () => {
   test('lists office and office-tools with bundled metadata', async () => {
@@ -38,7 +37,6 @@ describe('office node selection', () => {
   })
   test('ignores DS_BOT_OFFICE_NODE that does not exist', () => {
     const { node } = officeNode({ DS_BOT_OFFICE_NODE: '/no/such/node-here' })
-    // In the test harness the host is plain Node, so execPath applies.
     assert.equal(node, process.execPath)
   })
   test('falls back to the host interpreter under plain Node', () => {

@@ -1,9 +1,7 @@
-// An approval the user does not see where it opened reaches the Bot the user talks to:
-// the Bot that gave the waiting Bot its work at once, the Main Bots once it stays open.
 import assert from 'node:assert/strict'
 import { mock, test } from 'node:test'
-import { install } from '../src/host/approvals.js'
-import { APPROVAL_REMIND_MS } from '../src/host/constants.js'
+import { install } from '../src/host/approvals.ts'
+import { APPROVAL_REMIND_MS } from '../src/host/constants.ts'
 
 const bots = {
   chief: { id: 'chief', name: 'Chief' },
@@ -31,7 +29,6 @@ function host({ info, works = {}, mainBotIds = ['chief'] } = {}) {
     warn() {},
   }
   install(rt)
-  // An approval request DSH would answer later; `controller` cancels it.
   const ask = (sessionId, { tool = 'bash', reason = 'rm -rf build' } = {}) => {
     const controller = new AbortController()
     void listeners.get('approval/request')(

@@ -1,13 +1,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { contrastRatio, MIN_SKIN_ALPHA, over, parseColor, readSkinSurfaceVars, skinSurfaceVars, SKIN_VARIABLES, writeSkinSurfaceVars } from '../src/client/skin.js'
-import { themeVars } from '../src/client/themes.js'
+import { contrastRatio, MIN_SKIN_ALPHA, over, parseColor, readSkinSurfaceVars, skinSurfaceVars, SKIN_VARIABLES, writeSkinSurfaceVars } from '../src/client/skin.ts'
+import { themeVars } from '../src/client/themes.ts'
 import { THEMES } from './skin-themes.js'
-
-// public#1507: a third-party skin's glass sliders write DSH's background tokens; DS Bot's
-// own surfaces use the theme colors. These tests keep the bridge honest: nothing changes
-// while the tokens are opaque, a translucent token reaches exactly the surfaces named, the
-// alpha floor holds, and the theme's text keeps its contrast over the wallpaper behind.
 
 test('theme colors parse as hex, short hex and rgba, and anything else is unreadable', () => {
   assert.deepEqual(parseColor('#f2f2f2'), { r: 242, g: 242, b: 242, a: 1 })
@@ -22,15 +17,12 @@ test('theme colors parse as hex, short hex and rgba, and anything else is unread
 
 test('an opaque token changes nothing, and each translucent token moves its own surfaces', () => {
   const colors = { main: '#fcfcfc', sidebar: '#f7f7f7', card: '#ffffff' }
-  // DS Bot writes these tokens itself when it applies a theme: solid, so the theme stays.
   assert.deepEqual(skinSurfaceVars({ main: '#fcfcfc', sidebar: '#f7f7f7', colors }), {})
   assert.deepEqual(skinSurfaceVars({ main: 'rgb(20,20,20)', sidebar: 'rgb(27,27,27)', colors }), {})
-  // The canvas token reaches the pane, the cards and the composer glass.
   const canvas = skinSurfaceVars({ main: 'rgba(252,252,252,0.5)', sidebar: '#f7f7f7', colors })
   assert.deepEqual(Object.keys(canvas).sort(), ['--bt-skin-card', '--bt-skin-main'])
   assert.ok(Math.abs(parseColor(canvas['--bt-skin-main']).a - 0.7) < 0.005)
   assert.deepEqual([parseColor(canvas['--bt-skin-card']).r, parseColor(canvas['--bt-skin-card']).g, parseColor(canvas['--bt-skin-card']).b], [255, 255, 255])
-  // The sidebar token is its own surface, and does not move the canvas.
   const side = skinSurfaceVars({ main: '#fcfcfc', sidebar: 'rgba(247,247,247,0.4)', colors })
   assert.deepEqual(Object.keys(side), ['--bt-skin-sidebar'])
   assert.ok(Math.abs(parseColor(side['--bt-skin-sidebar']).a - 0.7) < 0.005)
@@ -65,7 +57,6 @@ test('the theme surfaces ask for the skin variables and keep the theme color as 
   assert.equal(vars['--bt-main'], `var(--bt-skin-main, ${light.bg})`)
   assert.equal(vars['--bt-sidebar'], `var(--bt-skin-sidebar, ${light.sidebar})`)
   assert.equal(vars['--bt-card'], `var(--bt-skin-card, ${light.card})`)
-  // Text and the other colors never take a skin alpha.
   assert.equal(vars['--bt-ink'], light.text)
   assert.equal(vars['--bt-bubble'], light.bubble)
 })
@@ -76,12 +67,10 @@ test('the bridge writes the body properties while a token is translucent and rem
     defaultView: { getComputedStyle: () => ({ getPropertyValue: name => tokens[name] ?? '' }) },
   })
   const theme = THEMES.deepseek
-  // A translucent canvas and sidebar from a skin.
   const doc = makeDoc({ '--dsw-alias-bg-base': 'rgba(252,252,252,0.4)', '--dsw-specific-sidebar-fill': 'rgba(247,247,247,0.4)' })
   const bridge = writeSkinSurfaceVars(doc, () => readSkinSurfaceVars(doc, theme))
   bridge.apply()
   assert.deepEqual([...doc.body.style.values.keys()].sort(), [...SKIN_VARIABLES].sort())
-  // The skin turned off: the tokens are opaque again, so the body goes back to the theme.
   doc.defaultView.getComputedStyle = () => ({ getPropertyValue: name => (name === '--dsw-alias-bg-base' ? '#fcfcfc' : '#f7f7f7') })
   bridge.apply()
   assert.deepEqual([...doc.body.style.values.keys()], [])
@@ -90,10 +79,6 @@ test('the bridge writes the body properties while a token is translucent and rem
   assert.deepEqual([...doc.body.style.values.keys()], [])
 })
 
-// public#1507 follow-up: the reader handed `skinSurfaceVars` the whole theme mode,
-// which names its surfaces bg/sidebar/card. `main` was undefined there, so the pane
-// fell back to a near-white color on a dark theme and the light ink on it measured
-// about 1.9:1. These cases go through the reader (not `skinSurfaceVars` directly).
 test('the reader gives the bridge the active mode surfaces, so a dark theme stays dark', () => {
   const tokens = { '--dsw-alias-bg-base': 'rgba(0,0,0,0.5)', '--dsw-specific-sidebar-fill': 'rgba(0,0,0,0.5)' }
   const makeDoc = dark => ({

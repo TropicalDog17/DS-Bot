@@ -1,12 +1,9 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { Config as PiAiConfig } from '@deepseek-ai/dsh-llm-pi-ai'
-import { install as installModels } from '../src/host/models.js'
-import { checkKey, install, keyRefFor } from '../src/host/providers.js'
+import { install as installModels } from '../src/host/models.ts'
+import { checkKey, install, keyRefFor } from '../src/host/providers.ts'
 
-// A DSH with the official DeepSeek route, an account route, and the pi-ai adapter: its
-// directory offers catalog providers, and its settings take path writes the way DSH's
-// do, under a revision. Routes come and go with the pi-ai section.
 function dsh({ keys = {}, readOnly = [], user = {}, base = {}, catalog = { anthropic: ['claude-a', 'claude-b'], moonshotai: ['kimi-k3'] } } = {}) {
   const store = { ...keys }
   const writes = []
@@ -79,7 +76,6 @@ test('models of a provider whose API key is set nowhere need the key', async () 
   const catalog = { moonshotai: ['kimi-k3'], bedrock: ['nova'] }
   assert.deepEqual(await needing(dsh({ user, catalog }).rt), ['deepseek-official', 'moonshotai'])
   assert.deepEqual(await needing(dsh({ user, catalog, keys: { DEEPSEEK_API_KEY: 'k' } }).rt), ['moonshotai'])
-  // A route without a key reference authenticates some other way.
   assert.ok((await dsh({ user, catalog }).rt.catalog()).some(entry => entry.provider === 'bedrock' && !entry.needsKey))
 })
 
@@ -97,7 +93,6 @@ test('the page lists the providers set up and the ones DSH can add', async () =>
     ['deepseek-official', { configured: true, writable: true }, false, 1],
     ['moonshotai', { configured: false, writable: true }, true, 1],
   ])
-  // The account route has no key and no models before a sign-in.
   assert.equal(row(view, 'deepseek-account'), undefined)
   assert.deepEqual(view.addable, [{ id: 'anthropic', name: 'anthropic' }])
   assert.deepEqual(view.protocols, ['openai-completions', 'openai-responses', 'anthropic-messages'])
@@ -200,7 +195,6 @@ test('existing custom routes and custom-endpoint catalog routes backfill missing
     { op: 'set', path: ['providers', 'openai', 'compat'], value: { supportsDeveloperRole: false } },
     { op: 'set', path: ['providers', 'relay', 'compat'], value: { supportsDeveloperRole: false, supportsStore: true, maxTokensField: 'max_tokens', requiresReasoningContentOnAssistantMessages: true } },
   ]]])
-  // A second read sees every switch in place and writes nothing again.
   writes.length = 0
   await rt.providersView()
   assert.deepEqual(writes, [])
@@ -225,7 +219,6 @@ test('a custom gateway model whose id matches a built-in catalog model inherits 
   assert.deepEqual(writes[0][1][0].value.models, [
     { id: 'moonshotai/k3.1-pro', contextWindow: 1048576, input: ['text', 'image'] },
   ])
-  // Verify the written profile against the real dsh-llm-pi-ai schema.
   const validated = PiAiConfig({ providers: { 'my-gateway': writes[0][1][0].value } }).providers.get()['my-gateway']
   assert.equal(validated.models[0].id, 'moonshotai/k3.1-pro')
   assert.equal(validated.models[0].contextWindow, 1048576)
@@ -256,7 +249,6 @@ test('fetching models asks DSH about the endpoint, with the typed key for that q
   assert.deepEqual(discovered, [['llm-pi-ai', { baseURL: 'https://relay.example/v1', api: 'openai-completions', apiKey: 'sk-relay' }]])
   assert.deepEqual(models, [{ id: 'relay-1', name: 'Relay One', contextWindow: 128000, inputModalities: ['text'] }, { id: 'relay-2' }])
   assert.deepEqual(store, {})
-  // A provider DSH ships is answered from its own catalog.
   await rt.discoverModels({ provider: 'anthropic' })
   assert.deepEqual(discovered.at(-1), ['llm-pi-ai', { provider: 'anthropic' }])
 })
@@ -304,8 +296,6 @@ test('a route\'s key reference follows DSH\'s own Models page', () => {
   assert.equal(keyRefFor('my-gateway2'), 'MY_GATEWAY2_API_KEY')
 })
 
-// #968: a saved custom route is discovered through the profile DSH already holds; the
-// browser sends only its id, never the endpoint, headers or key.
 test('an existing custom provider refreshes through its saved profile without a key', async () => {
   const user = { providers: { relay: { api: 'openai-completions', baseURL: 'https://relay.example/v1', apiKeyEnv: 'RELAY_API_KEY', models: [{ id: 'old' }] } } }
   const { rt, discovered, store } = dsh({ user, keys: { RELAY_API_KEY: 'sk' } })
@@ -350,7 +340,6 @@ test('refreshing saves only the model list, keeps advanced fields, and leaves th
   const saved = row(next, 'relay')
   assert.deepEqual(saved.models.map(model => model.id), ['relay-1', 'relay-2', 'manual'])
   assert.equal(rt.state.bots.b1.model, 'relay/relay-1')
-  // The route itself, its key reference, and its compatibility switches are untouched.
   const profile = rt.ctx.get('settings').describe().find(section => section.ns === 'llm-pi-ai').value.providers.relay
   assert.equal(profile.api, 'openai-completions')
   assert.equal(profile.baseURL, 'https://relay.example/v1')

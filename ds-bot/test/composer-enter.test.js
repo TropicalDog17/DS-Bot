@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { insertComposerNewline } from '../src/client/enter-key.js'
+import { insertComposerNewline } from '../src/client/enter-key.ts'
 
 function bench({ composing = false, listbox = false, actions = true } = {}) {
   const inserted = []

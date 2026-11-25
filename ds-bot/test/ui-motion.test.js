@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
 import { apply } from '../index.js'
-import { effectsOf } from '../src/client/themes.js'
+import { effectsOf } from '../src/client/themes.ts'
 import { fakeContext } from './fake-ctx.js'
 
 const PLUGIN = dirname(dirname(fileURLToPath(import.meta.url)))
@@ -285,7 +285,6 @@ test('BotMark gaze listeners and offsets respond dynamically to data-bt-effects 
   flushRaf()
   assert.notEqual(node.style.getPropertyValue('--bt-gx'), '')
 
-  // Switching to reduced clears existing gaze offsets and stops scheduling RAF
   document.body.dataset.btEffects = 'reduced'
   await new Promise(r => setTimeout(r, 20))
   assert.equal(node.style.getPropertyValue('--bt-gx'), '')
@@ -294,7 +293,6 @@ test('BotMark gaze listeners and offsets respond dynamically to data-bt-effects 
   move(180, 140)
   assert.equal(rafCalls, 0)
 
-  // Switching back to full re-attaches without remounting the mark
   document.body.dataset.btEffects = 'full'
   await new Promise(r => setTimeout(r, 20))
   move(180, 140)

@@ -1,16 +1,10 @@
-// Runs the Bot browser reader (READ_PAGE_SCRIPT) on pages in headless Chrome and prints
-// the time it took, the sizes, and the first lines of the text, as read_browser would get
-// them. Quicker than the Desktop for working on the reader and for timing real sites.
-//   node dev/read-page-check.mjs [--lines 40] [--out dir] [--chrome path] <url>...
-// playwright-core comes from the deepseek-harness checkout next to ds-bot (DSH_HARNESS).
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join, resolve } from 'node:path'
 import '../test/harness-resolve.mjs'
-import { READ_PAGE_SCRIPT } from '../src/client/read-page.js'
+import { READ_PAGE_SCRIPT } from '../src/client/read-page.ts'
 
-// After the resolve hook above: browser.js imports @deepseek-ai/dsh-tools.
-const { pageText } = await import('../src/host/browser.js')
+const { pageText } = await import('../src/host/browser.ts')
 
 const args = process.argv.slice(2)
 const option = (name, fallback) => {

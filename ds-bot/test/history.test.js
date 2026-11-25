@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { termQuery } from '../src/host/chat-index.js'
-import { canonicalHeadings, cardText, historyEntry, questionReply, readReply, replyText, viewCardText } from '../src/host/parts.js'
+import { termQuery } from '../src/host/chat-index.ts'
+import { canonicalHeadings, cardText, historyEntry, questionReply, readReply, replyText, viewCardText } from '../src/host/parts.ts'
 import { VIEW_BYTE_LIMIT, viewBytes } from 'deep-view/core'
 
 test('cardText shows a question card as the user saw it', () => {
@@ -19,13 +19,9 @@ test('viewCardText records only a card the tool would show', () => {
   const choices = { type: 'options', id: 'pick', options: [{ label: 'A' }, { label: 'B' }] }
   assert.equal(viewCardText({ title: 'Meter', view: meter }), '[View card] Meter\nmetric: 进度=70%')
   assert.equal(viewCardText(JSON.stringify({ title: 'Pick', view: choices })), '[View card] Pick\noptions: A/B')
-  // A provider-wrapped array normalizes before the summary, as in the tool.
   const wrapped = { title: 'Pick', view: { type: 'stack', children: { item: { item: [choices] } } } }
   assert.equal(viewCardText(wrapped), '[View card] Pick\noptions: A/B')
-  // A view needs no title.
   assert.equal(viewCardText({ title: ' ', view: meter }), '[View card]\nmetric: 进度=70%')
-  // Calls the tool refuses showed no card: an unknown component or a broken one,
-  // a wait the card cannot honor, or too many bytes as sent.
   assert.equal(viewCardText({ title: 'X', view: { type: 'chart' } }), '')
   assert.equal(viewCardText({ title: 'X', view: { type: 'gauge' } }), '')
   assert.equal(viewCardText({ title: 'Meter', view: meter, await_reply: true }), '')
@@ -148,7 +144,6 @@ test('one answer carries every question of a card, and a blank one goes out as s
     '[Answer to question card] PR #1208: Merge?\nAnswer: (skipped)',
     '[Answer to question card] Release: Which notes?\nAnswer: Short, Full, plus a link',
   ].join('\n\n'))
-  // The single form answers the first question; nothing answered is no reply.
   assert.deepEqual(JSON.parse(questionReply(SEVERAL, { selected: ['Not yet'] }).text).answers.map(answer => answer.selected), [['Not yet'], [], []])
   assert.equal(questionReply(SEVERAL, { answers: [{ id: 'q2', selected: ['Nope'] }] }), undefined)
   assert.equal(questionReply(SEVERAL, { answers: [] }), undefined)

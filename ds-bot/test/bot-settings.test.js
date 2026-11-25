@@ -5,7 +5,7 @@ import { test } from 'node:test'
 import { build } from 'esbuild'
 
 const { outputFiles } = await build({
-  entryPoints: [fileURLToPath(new URL('../src/client/bot-settings.js', import.meta.url))],
+  entryPoints: [fileURLToPath(new URL('../src/client/bot-settings.ts', import.meta.url))],
   bundle: true, format: 'cjs', platform: 'browser', write: false, logLevel: 'silent',
   external: ['react', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives'],
 })
@@ -62,7 +62,6 @@ test('a private Bot can always turn privacy off, and cannot become Main or be du
   assert.equal(tree.some(node => node.props?.onClick && node.props.className === 'bt-set-row bt-bs-row' && JSON.stringify(node).includes('Duplicate')), false)
 })
 
-// One InlineText with working state, so a test can type into it, press keys and blur it.
 function field(props) {
   const cells = []
   let slot = 0

@@ -6513,16 +6513,16 @@ var require_lib = __commonJS({
   }
 });
 
-// src/office/cli.js
+// src/office/cli.ts
 import { existsSync as existsSync2, mkdirSync as mkdirSync2, readFileSync as readFileSync2, readdirSync as readdirSync2, statSync as statSync2, writeFileSync as writeFileSync2 } from "node:fs";
 import { join as join2 } from "node:path";
 import { parseArgs } from "node:util";
 
-// src/office/package.js
+// src/office/package.ts
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmdirSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, posix, resolve, sep } from "node:path";
 
-// src/office/xml.js
+// src/office/xml.ts
 var xml_exports = {};
 __export(xml_exports, {
   NS: () => NS,
@@ -6556,6 +6556,7 @@ var parser = new import_xmldom.DOMParser({ onError: (level, message) => {
 } });
 var serializer = new import_xmldom.XMLSerializer();
 var XmlError = class extends Error {
+  code;
   constructor(message) {
     super(`XML not well-formed: ${message}`);
     this.code = "xml";
@@ -6639,7 +6640,7 @@ function textOf(node, { skipDeleted = true } = {}) {
   return out;
 }
 
-// src/office/zip.js
+// src/office/zip.ts
 import { deflateRawSync, inflateRawSync } from "node:zlib";
 var EOCD = 101010256;
 var CDIR = 33639248;
@@ -6772,7 +6773,7 @@ function crc32(buf) {
   return ~crc >>> 0;
 }
 
-// src/office/package.js
+// src/office/package.ts
 function fail2(message) {
   const error = new Error(message);
   error.code = "package";
@@ -6784,13 +6785,19 @@ var absTarget = (base, target) => {
 };
 var relSig = (map) => [...map.values()].map((r) => `${r.id}${r.type}${r.target}${r.mode}`).join("");
 var Package = class _Package {
+  parts;
+  rels;
+  defaults;
+  overrides;
+  dataCache;
+  relSigs;
+  ctSig;
   constructor() {
     this.parts = /* @__PURE__ */ new Map();
     this.rels = /* @__PURE__ */ new Map();
     this.defaults = /* @__PURE__ */ new Map();
     this.overrides = /* @__PURE__ */ new Map();
   }
-  /** @param {string} file - a ZIP package file */
   static open(file) {
     const pkg = new _Package();
     for (const member of readZip(readFileSync(file))) {
@@ -6800,7 +6807,6 @@ var Package = class _Package {
     pkg.#readModel();
     return pkg;
   }
-  /** @param {string} dir - a directory tree as `unpack` writes it */
   static loadDir(dir) {
     const pkg = new _Package();
     const walk = (base, rel) => {
@@ -6849,15 +6855,12 @@ var Package = class _Package {
     this.relSigs = new Map([...this.rels].map(([owner, map]) => [owner, relSig(map)]));
     this.ctSig = JSON.stringify([...this.defaults].sort().concat([...this.overrides].filter(([n]) => this.parts.has(n)).sort()));
   }
-  /** @returns {Buffer|undefined} part bytes */
   get(name) {
     return this.dataCache?.get(name) ?? this.parts.get(name)?.data;
   }
-  /** @returns {Document} parsed XML part */
   xml(name) {
     return parseXml(this.get(name));
   }
-  /** Store XML text (or bytes) as a part, replacing its entry. */
   put(name, content) {
     const data = Buffer.isBuffer(content) ? content : Buffer.from(content, "utf8");
     this.parts.set(name, { data });
@@ -6870,34 +6873,24 @@ var Package = class _Package {
     this.parts.delete(name);
     this.dataCache?.delete(name);
   }
-  /** @returns {string|undefined} content type for a part, from Override or Default */
   contentType(name) {
     return this.overrides.get(name) ?? this.defaults.get(name.slice(name.lastIndexOf(".") + 1));
   }
-  /** Add or update an Override for a part. */
   override(name, type) {
     this.overrides.set(name, type);
   }
-  /** The .rels owner name for a part ('word/document.xml' → itself, '' → package root). */
   relsOf(owner) {
     return this.rels.get(owner) ?? /* @__PURE__ */ new Map();
   }
-  /** Absolute part name a relationship target resolves to. */
   targetOf(owner, target) {
     return absTarget(owner === "" ? "x" : owner, target);
   }
-  /** @returns {{ id: string, type: string, target: string, mode: string }[]} relationships of a part (or package root) */
   relList(owner) {
     return [...this.relsOf(owner).values()];
   }
-  /** @returns {string} the .rels part name for an owner part ('' for the package root). */
   relsName(owner) {
     return owner === "" ? "_rels/.rels" : `${posix.dirname(owner)}/_rels/${posix.basename(owner)}.rels`;
   }
-  /** Write .rels and [Content_Types].xml back into parts from the model — a
-   * .rels part changes only when its owner part is gone or its map's signature
-   * differs from the load baseline, so malformed or empty-but-valid .rels keep
-   * their bytes instead of being dropped. */
   flush() {
     for (const name of [...this.parts.keys()]) {
       if (!name.endsWith(".rels")) continue;
@@ -6953,15 +6946,10 @@ var Package = class _Package {
   #relsOwner(name) {
     return name === "_rels/.rels" ? "" : posix.dirname(posix.dirname(name)) + "/" + posix.basename(name, ".rels");
   }
-  /** @returns {Buffer} the package as a ZIP */
   save() {
     this.flush();
     return writeZip([...this.parts.entries()].map(([name, part]) => ({ name, ...part })));
   }
-  /** Write an `unpack` directory tree. An existing non-empty dir must hold an
-   * earlier unpack ([Content_Types].xml at its root); files the package no
-   * longer has are removed. The model is flushed first so .rels and content
-   * types written to disk match the in-memory state. */
   unpack(dir) {
     this.flush();
     if (existsSync(dir) && readdirSync(dir).length > 0 && !existsSync(join(dir, "[Content_Types].xml"))) {
@@ -7009,7 +6997,7 @@ function prettyForUnpack(data) {
   return prettyXml2(parseXml(data));
 }
 
-// src/office/check.js
+// src/office/check.ts
 import { posix as posix2 } from "node:path";
 var KNOWN_OVERRIDES = {
   "word/document.xml": "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml",
@@ -7335,7 +7323,7 @@ function hasIdAnywhere(doc, tag, id) {
   return false;
 }
 
-// src/office/docx.js
+// src/office/docx.ts
 var RUN_MARKS = { "w:tab": "	", "w:br": "\n", "w:cr": "\n" };
 var parts = (pkg) => [...pkg.parts.keys()].filter((name) => name === "word/document.xml" || /^word\/(header|footer)\d+\.xml$/.test(name) || /^word\/(footnotes|endnotes|comments)\.xml$/.test(name));
 function blockText(el, changes = false) {
@@ -8009,7 +7997,7 @@ function resolveChanges(doc, accept) {
   return dirty;
 }
 
-// src/office/pptx.js
+// src/office/pptx.ts
 import { posix as posix3 } from "node:path";
 var EMU = 914400;
 var SLIDE_RE = /^ppt\/slides\/slide\d+\.xml$/;
@@ -8400,7 +8388,7 @@ function pptxClean(pkg, { dryRun = false } = {}) {
   return { removed: [...new Set(removed)], check: dryRun ? void 0 : checkPackage(pkg).length };
 }
 
-// src/office/xlsx.js
+// src/office/xlsx.ts
 var DATE_FORMATS = /* @__PURE__ */ new Set([14, 15, 16, 17, 22, 45, 46, 47]);
 function dateLike(code, value) {
   const sections = (code ?? "").replace(/"[^"]*"|\\.|_.|\*./g, "").split(";").slice(0, 3);
@@ -8528,7 +8516,7 @@ function xlsxRead(pkg, sheetName, range) {
   return { sheet: sheetName, range, rows };
 }
 
-// src/office/png.js
+// src/office/png.ts
 import { deflateSync, inflateSync } from "node:zlib";
 function fail3(message) {
   const error = new Error(message);
@@ -8718,7 +8706,7 @@ function contactSheet(images, { cols = 4, width = 320 } = {}) {
 }
 var rowBaseline = (rowH, row) => rowH.slice(0, row).reduce((a, b) => a + b + 10, 0);
 
-// src/office/cli.js
+// src/office/cli.ts
 var USAGE = `ds-bot office — inspect, check and edit .docx/.pptx/.xlsx
 
 unpack <file> <dir>                        extract with pretty-printed XML (new or reused dir)
@@ -8736,6 +8724,7 @@ xlsx read <file> --sheet <name> [--range A1:H40]
 sheet <png…|dir> -o <contact.png> [--cols 4] [--width 320]`;
 var JSON_MODE = false;
 var Usage = class extends Error {
+  code;
   constructor(m) {
     super(m);
     this.code = "usage";

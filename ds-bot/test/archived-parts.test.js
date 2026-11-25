@@ -16,9 +16,6 @@ import { fakeContext } from './fake-ctx.js'
 // DSH 0.2.2 exports the JSONL persistence as a plugin module; earlier DSH as a default class.
 const SessionPersistence = typeof Jsonl.apply === 'function' ? Jsonl : Jsonl.default
 
-// DSH's own Workspace registry, which holds the archive, on files in a temporary folder.
-// The listed Sessions count as live, so they can be archived. The plugin's archive hooks
-// on `plugin` (a fake context) run inside an archive as DSH runs them.
 async function dshRegistry(t, root, live, plugin) {
   const host = new Context()
   t.after(() => host.fiber.dispose())
@@ -45,8 +42,6 @@ async function dshRegistry(t, root, live, plugin) {
   })
 }
 
-// Writer's current part is `w2`, its earlier part `w1`; the group's own Session is `g1`
-// and Writer's Session in the group `gw`.
 const TEAM = {
   version: 1,
   mainBotIds: ['m1'],

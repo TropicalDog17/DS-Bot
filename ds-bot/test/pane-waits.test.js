@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { ARM_MS, WAITS_PER_BOT, WAIT_MAX_MS, createPaneWaits } from '../src/board/waits.js'
+import { ARM_MS, WAITS_PER_BOT, WAIT_MAX_MS, createPaneWaits } from '../src/board/waits.ts'
 
 function fixture({ wake, wakeAvailable = true, status, cardId } = {}) {
   let data = { cards: { c_1: { id: 'c_1', status: 'active' } } }
@@ -44,7 +44,6 @@ function fixture({ wake, wakeAvailable = true, status, cardId } = {}) {
   return {
     tool: (args, bot = 'writer') => tool.execute(args, { agent: { id: bot } }),
     poll, dispose, bots, statuses, statusCalls, reads, wakes, warnings, storedWaits,
-    // Existing wait assertions compare the wait fields apart from warning bookkeeping.
     waits: () => storedWaits().map(({ warned: _warned, ...wait }) => wait),
     writes: () => writeCount,
     card: () => store.read().cards.c_1,

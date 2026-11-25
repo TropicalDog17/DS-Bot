@@ -5,7 +5,7 @@ import { syncBuiltinESMExports } from 'node:module'
 import { hostname, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { install } from '../src/host/store.js'
+import { install } from '../src/host/store.ts'
 
 function patch(method, replace) {
   const original = fsp[method]
@@ -74,12 +74,10 @@ test('a failed state write rejects and leaves the saved file unchanged', async (
 
 test('a failed migration write warns but load() still resolves', async (t) => {
   const { rt, statePath, warnings } = runtime(t, { version: 1, mainBotId: 'chief', bots: { chief: { id: 'chief', name: 'Chief' } } })
-  // The migrated team's first write fails: a directory takes the temp file's path.
   fs.mkdirSync(`${statePath}.${process.pid}.tmp`)
   await rt.load()
   assert.equal(rt.readOnly(), undefined)
   assert.ok(warnings.some(args => /saving the migrated Bot team failed/.test(String(args))))
-  // Once the disk is free the next save() writes the migrated state.
   fs.rmSync(`${statePath}.${process.pid}.tmp`, { recursive: true })
   await rt.save()
   const saved = JSON.parse(fs.readFileSync(statePath, 'utf8'))
@@ -181,11 +179,9 @@ test('a state file changed while the lock was gone is adopted, this host\'s stat
   await rt.load()
   rt.state.prefs.marker = 'ours'
   await rt.save()
-  // A lock that only went missing changes nothing: the file is still this host's.
   fs.rmSync(join(home, 'state.lock'))
   await rt.refresh()
   assert.deepEqual(fs.readdirSync(home).filter(name => name.startsWith('state.json.replaced-')), [])
-  // A tool with full file access can edit the team file and remove the lock.
   fs.writeFileSync(statePath, JSON.stringify({ version: 1, revision: 900, prefs: { marker: 'outside edit' } }))
   fs.rmSync(join(home, 'state.lock'))
   await rt.refresh()
@@ -195,7 +191,6 @@ test('a state file changed while the lock was gone is adopted, this host\'s stat
   const backups = fs.readdirSync(home).filter(name => name.startsWith('state.json.replaced-'))
   assert.equal(backups.length, 1)
   assert.equal(JSON.parse(fs.readFileSync(join(home, backups[0]), 'utf8')).prefs.marker, 'ours')
-  // The next save writes the adopted state, so the outside edit is not lost.
   rt.state.prefs.after = 'saved'
   await rt.save()
   const saved = JSON.parse(fs.readFileSync(statePath, 'utf8'))
@@ -230,13 +225,10 @@ test('a save that takes the lock back adopts a changed file first', async (t) =>
   await rt.load()
   rt.state.prefs.marker = 'ours'
   await rt.save()
-  // A tool with full file access edits the team file and removes the lock; the
-  // next save runs before any refresh sees it.
   fs.writeFileSync(statePath, JSON.stringify({ version: 1, revision: 900, prefs: { marker: 'outside edit' } }))
   fs.rmSync(join(home, 'state.lock'))
   rt.state.prefs.after = 'late change'
   await rt.save()
-  // The file on disk was adopted, not overwritten by the old in-memory state.
   const saved = JSON.parse(fs.readFileSync(statePath, 'utf8'))
   assert.equal(saved.prefs.marker, 'outside edit')
   assert.equal(rt.state.prefs.marker, 'outside edit')
@@ -270,8 +262,6 @@ test('a save cannot slip between a reclaim and the adopt it waits on', async (t)
   try {
     const refreshing = rt.refresh()
     await atBackup
-    // The reclaim already happened; this save must wait for the adopt, not write
-    // the in-memory state it still holds.
     rt.state.prefs.after = 'racing save'
     const racing = rt.save()
     unblock()
@@ -304,8 +294,6 @@ test('a save writes the unsaved change when the lock went away but the file did 
     rt.state.bots.b1 = { id: 'b1', name: 'Renamed' }
     const saving = rt.save()
     await atMkdir
-    // The lock file is deleted while the save waits, but the file is unchanged:
-    // the reclaim keeps the in-memory state and the save writes the change.
     fs.rmSync(join(home, 'state.lock'))
     const refreshing = rt.refresh()
     unblock()
@@ -331,7 +319,6 @@ test('a save writes nothing after adopting a file from a newer DS Bot', async (t
   await rt.save()
   assert.match(rt.readOnly(), /saved by a newer DS Bot/)
   assert.equal(fs.readFileSync(statePath, 'utf8'), future)
-  // The outside edit was still kept aside before it was adopted.
   const backups = fs.readdirSync(home).filter(name => name.startsWith('state.json.replaced-'))
   assert.equal(backups.length, 1)
   assert.equal(JSON.parse(fs.readFileSync(join(home, backups[0]), 'utf8')).prefs.marker, 'ours')
@@ -391,12 +378,10 @@ test('a save paused while another host held the team does not overwrite its fina
     rt.state.prefs.after = 'stale snapshot'
     const saving = rt.save()
     await atMkdir
-    // Another dsh takes the lock and writes; this host turns read-only and adopts.
     fs.writeFileSync(join(home, 'state.lock'), JSON.stringify({ pid: process.ppid, host: hostname(), token: 'other-host', since: Date.now() }))
     fs.writeFileSync(statePath, JSON.stringify({ version: 1, revision: 900, prefs: { marker: 'other write' } }))
     await rt.refresh()
     assert.match(rt.readOnly(), /another dsh/)
-    // The other dsh writes its final state and exits; this host takes over.
     fs.writeFileSync(statePath, JSON.stringify({ version: 1, revision: 901, prefs: { marker: 'final' } }))
     fs.rmSync(join(home, 'state.lock'))
     const refreshing = rt.refresh()
@@ -416,7 +401,6 @@ test('a changed file is adopted when another host left its lock behind', async (
   await rt.load()
   rt.state.prefs.marker = 'before'
   await rt.save()
-  // A dsh that took over and is gone leaves its lock beside the file it wrote.
   fs.writeFileSync(join(home, 'state.lock'), JSON.stringify({ pid: 99999999, host: hostname(), token: 'other-host', since: Date.now() }))
   fs.writeFileSync(statePath, JSON.stringify({ version: 1, revision: 900, prefs: { marker: 'taken over' } }))
   await rt.refresh()
@@ -434,13 +418,11 @@ test('a reading host takes over the team once the dsh that held it is gone', asy
   fs.writeFileSync(join(home, 'state.lock'), JSON.stringify({ pid: process.ppid, host: hostname(), token: 'other-host', since: Date.now() }))
   await rt.load()
   assert.match(rt.readOnly(), /another dsh/)
-  // The other dsh wrote its last state and closed, releasing the lock.
   fs.writeFileSync(statePath, JSON.stringify({ version: 1, revision: 5, prefs: { marker: 'handed over' } }))
   fs.rmSync(join(home, 'state.lock'))
   await rt.refresh()
   assert.equal(rt.readOnly(), undefined)
   assert.equal(rt.state.prefs.marker, 'handed over')
-  // A normal hand-over adopts silently: no copy of this host's state, no diagnostic.
   assert.deepEqual(fs.readdirSync(home).filter(name => name.startsWith('state.json.replaced-')), [])
   assert.ok(!warnings.some(args => /adopted/.test(String(args))))
   await rt.save()
@@ -557,7 +539,6 @@ test('dispose waits for a pending save and prevents later writes', async (t) => 
   }
 })
 
-// #715: a model that quotes the Bot's name must find it, like findRooms does.
 test('findBot unquotes a Bot ref before matching the name', async (t) => {
   const { rt } = runtime(t, {
     version: 1,
@@ -573,7 +554,6 @@ test('findBot unquotes a Bot ref before matching the name', async (t) => {
     assert.equal(rt.findBot(ref)?.id, 'a1', ref)
   }
   assert.equal(rt.findBot('“Sun Tzu”')?.id, 's2')
-  // An id still resolves itself; an unknown name still misses.
   assert.equal(rt.findBot('a1')?.id, 'a1')
   assert.equal(rt.findBot('"Nobody"'), undefined)
   assert.equal(rt.findBot(undefined), undefined)

@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { bridgeService, install, rosterService, notesService } from '../src/host/companions.js'
-import { bridgedTools } from '../src/host/local-agents/index.js'
+import { bridgeService, install, rosterService, notesService } from '../src/host/companions.ts'
+import { bridgedTools } from '../src/host/local-agents/index.ts'
 
 const fixture = () => {
   const sent = []
@@ -64,7 +64,6 @@ test('a note goes to the group the Bot is in, else to its own chat', async () =>
   const solo = await notes.deliver({ botId: 'a', text: 'solo' })
   assert.deepEqual(withoutId(solo), { sessionId: 'a', where: 'chat' })
   assert.deepEqual(sent.map(entry => [entry.sessionId, entry.content[0].text]), [['r', '@Ada ship it'], ['b', 'hello'], ['a', 'solo']])
-  // Each note is its own user message: the id it went with comes back to the caller.
   assert.equal(typeof solo.requestId, 'string')
   assert.equal(sent[2].requestId, solo.requestId)
   assert.equal(new Set(sent.map(entry => entry.requestId)).size, 3)
@@ -108,7 +107,6 @@ test('a shared tool crosses the MCP bridge to a CLI Bot until its last share is 
   const offered = [{ name: 'message_bot' }, { name: 'board' }, { name: 'read_file' }, { name: 'approve_agent_action' }]
   const crossing = () => bridgedTools(rt, offered).map(tool => tool.name)
   assert.deepEqual(crossing(), ['message_bot', 'approve_agent_action'])
-  // A plugin reloaded before its old copy disposes shares the same name twice.
   const first = bridge.share('board')
   const second = bridge.share('board')
   assert.deepEqual(crossing(), ['message_bot', 'board', 'approve_agent_action'])

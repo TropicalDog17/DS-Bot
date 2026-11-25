@@ -1,8 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { createServer } from 'node:http'
 
-// A minimal RFC 6455 server for adapter tests: the handshake, masked frame
-// decode, unmasked send. Text only, no fragmentation beyond reassembly.
 const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'
 
 const encode = (data, opcode = 0x81) => {
@@ -18,9 +16,6 @@ const encode = (data, opcode = 0x81) => {
   return frame
 }
 
-// onSocket(socket) runs per connection; socket.send(text) / socket.close() and
-// socket.on('message'|'close'). checkUpgrade(req) may refuse a handshake by
-// returning an HTTP status. Returns { server, url, sockets } once listening.
 export function fakeWsServer({ onSocket, onRequest, checkUpgrade } = {}) {
   const sockets = []
   const pending = onRequest ?? (() => undefined)
@@ -42,8 +37,8 @@ export function fakeWsServer({ onSocket, onRequest, checkUpgrade } = {}) {
     const ws = {
       send: data => socket.write(encode(data, Buffer.isBuffer(data) ? 0x82 : 0x81)),
       close: () => {
-        try { socket.write(encode('', 0x88)) } catch { /* down */ }
-        try { socket.destroy() } catch { /* down */ }
+        try { socket.write(encode('', 0x88)) } catch {}
+        try { socket.destroy() } catch {}
       },
       listeners: { message: [], close: [] },
       on(kind, fn) { this.listeners[kind].push(fn) },
@@ -92,6 +87,6 @@ export function fakeWsServer({ onSocket, onRequest, checkUpgrade } = {}) {
   })
   return new Promise(resolve => server.listen(0, '127.0.0.1', () => {
     const url = `ws://127.0.0.1:${server.address().port}`
-    resolve({ server, url, sockets, close: () => { for (const ws of sockets) try { ws.close() } catch { /* down */ } server.closeAllConnections?.(); server.close() } })
+    resolve({ server, url, sockets, close: () => { for (const ws of sockets) try { ws.close() } catch {} server.closeAllConnections?.(); server.close() } })
   }))
 }

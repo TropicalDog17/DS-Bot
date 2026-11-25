@@ -1,9 +1,3 @@
-// A fake Claude Code whose run count lives in a file: the runs listed in its
-// second argument die before `system/init`, like a CLI whose sign-in failed.
-// Every other run behaves like 2.1.302: init after the first message, and it
-// echoes the `--resume` id it was given so a resumed session is visible.
-// Ids in the third argument are conversations the CLI no longer has: resuming
-// one fails the way 2.1.317 does (stderr line, an error result, exit 1).
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs'
 
 const [stateFile, failOn = '', gone = ''] = process.argv.slice(2, 5)
@@ -41,7 +35,6 @@ process.stdin.on('data', (chunk) => {
       send({ type: 'system', subtype: 'init', session_id: sessionId })
     }
     const text = (message.message?.content ?? []).map(block => block.text ?? '').join('\n')
-    // What the CLI actually received, so a test can tell a replay from a delta.
     appendFileSync(`${stateFile}.prompts`, `${text}\n---\n`)
     send({ type: 'assistant', message: { content: [{ type: 'text', text: `ok: ${text.slice(0, 60)} resume=${resumed}` }] } })
     send({ type: 'result', subtype: 'success', session_id: sessionId, result: 'ok', usage: { input_tokens: 3, output_tokens: 1 } })

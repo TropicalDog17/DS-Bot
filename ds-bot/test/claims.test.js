@@ -3,8 +3,8 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { absoluteLinks } from '../src/host/links.js'
-import { announcesWork, claimsFor, fileRefs, missingFileRefs } from '../src/host/claims.js'
+import { absoluteLinks } from '../src/host/links.ts'
+import { announcesWork, claimsFor, fileRefs, missingFileRefs } from '../src/host/claims.ts'
 
 test('only deliberate local Markdown file links are checked, never URLs, bare names, code spans or plain paths', () => {
   const text = [

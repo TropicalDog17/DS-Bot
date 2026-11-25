@@ -6,8 +6,6 @@ import { test } from 'node:test'
 import { apply } from '../index.js'
 import { fakeContext } from './fake-ctx.js'
 
-// A team saved by an older release, opened by this one. The saved team has no Bots, so
-// the first read also makes the default Main Bot through these stand-in services.
 function open(saved) {
   const home = mkdtempSync(join(tmpdir(), 'ds-bot-legacy-'))
   writeFileSync(join(home, 'state.json'), JSON.stringify(saved))

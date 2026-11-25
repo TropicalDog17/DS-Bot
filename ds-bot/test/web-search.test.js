@@ -14,7 +14,6 @@ const page = (content, statusCode = 200, url = 'https://www.bing.com/search') =>
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
 
-/** A provider over recorded fakes; `keys` is the whole credential store, `fetch` answers by URL. */
 function harness({ route, keys = {}, fetch, webFetch, token, now, config } = {}) {
   const calls = { fetch: [], webFetch: [], keys: [] }
   const provider = createAutoSearchProvider({
@@ -30,16 +29,12 @@ function harness({ route, keys = {}, fetch, webFetch, token, now, config } = {})
 const urls = calls => calls.fetch.map(call => call.url)
 
 const KIMI = { provider: 'moonshotai-cn', model: 'kimi-k3', api: 'openai-completions', baseURL: 'https://api.moonshot.cn/v1', apiKeyEnv: 'MOONSHOT_API_KEY' }
-// A host this plugin has never heard of, whose protocol the route does not say.
 const ACME = { provider: 'acme', model: 'acme-1', baseURL: 'https://llm.acme.example/v1', apiKeyEnv: 'ACME_KEY' }
 const MESSAGES_HIT = { content: [
   { type: 'server_tool_use', name: 'web_search' },
   { type: 'web_search_tool_result', content: [{ type: 'web_search_result', url: 'https://m.example/', title: 'M' }] },
 ] }
 const KIMI_HIT = { search_results: [{ title: 'A', url: 'https://a.example/', snippet: 'alpha', date: '2026-10-01' }] }
-
-// ---------------------------------------------------------------------------
-// Route → what to try
 
 test('planNative tries the standard search tool of the route protocol, on the route base', () => {
   const plan = route => { const p = planNative({ provider: 'r', model: 'm', ...route }); return p.reason ?? p.candidates.map(c => `${c.id} ${c.url}`) }
@@ -60,9 +55,7 @@ test('planNative puts search APIs declared for the route host first, on the rout
   assert.deepEqual(plan({ baseURL: 'https://api.moonshot.ai/v1' }).slice(0, 1), ['kimi https://api.moonshot.ai/v1/tools/search'])
   assert.deepEqual(plan({ baseURL: 'https://open.bigmodel.cn/api/coding/paas/v4' }).slice(0, 1), ['zhipu https://open.bigmodel.cn/api/paas/v4/web_search'])
   assert.deepEqual(plan({ baseURL: 'https://token-plan-cn.xiaomimimo.com/v1' }).slice(0, 1), ['mimo https://token-plan-cn.xiaomimimo.com/v1/chat/completions'])
-  // A local Ollama is not ollama.com: no declared API, only the protocol.
   assert.deepEqual(plan({ baseURL: 'http://localhost:11434/v1' }), ['responses http://localhost:11434/v1/responses', 'messages http://localhost:11434/v1/messages'])
-  // A path that would move the key to another origin is never planned.
   const hostile = ['@evil.example/steal', '.evil.example/steal', ':8443/steal'].map(path => ({ id: 'evil', hosts: ['api.acme.example'], path, body: { q: '$query' } }))
   assert.deepEqual(planNative({ provider: 'r', model: 'm', api: 'openai-responses', baseURL: 'https://api.acme.example/v1' }, hostile).candidates.map(c => c.url), ['https://api.acme.example/v1/responses'])
 })
@@ -72,7 +65,6 @@ test('planNative explains when there is nothing to try', () => {
   assert.match(planNative({ provider: 'r', api: 'anthropic-messages', baseURL: 'https://api.anthropic.com' }).reason, /no current model/)
   assert.match(planNative({ provider: 'r', model: 'm', api: 'bedrock-converse-stream', baseURL: 'https://bedrock.example' }).reason,
     /speaks bedrock-converse-stream, which has no standard search tool, and bedrock\.example declares no search API/)
-  // Search APIs that need no model still run without one.
   assert.deepEqual(planNative({ provider: 'r', baseURL: 'https://api.moonshot.cn/v1', api: 'openai-completions' }).candidates.map(c => c.id), ['kimi'])
   assert.deepEqual(planNative({ provider: 'r', baseURL: 'https://api.xiaomimimo.com/v1', api: 'openai-completions' }).candidates, [])
 })
@@ -118,9 +110,6 @@ test('routeOf reads the asking Session route: protocol, endpoint, key name, and 
   assert.deepEqual(routeOf(ctxFor('opencode', {}, 'sess-184')).headers, { 'X-OpenCode-Session': 'mine' })
 })
 
-// ---------------------------------------------------------------------------
-// Native search: own key, own origin, found by trying
-
 test('a native search on an OpenCode route names the asking Session, as the gateway requires', async () => {
   const ctx = {
     get: name => ({
@@ -163,7 +152,6 @@ test('a host this plugin has never heard of gets native search through its proto
   assert.deepEqual(body.tools, [{ type: 'web_search_20250305', name: 'web_search', max_uses: 1 }])
   assert.deepEqual(calls.keys, ['ACME_KEY'])
   assert.deepEqual(calls.webFetch, [])
-  // What worked is tried first; what was absent is not asked again.
   await provider.search({ query: 'acme again' })
   assert.deepEqual(urls(calls).slice(2), ['https://llm.acme.example/v1/messages'])
 })
@@ -271,16 +259,12 @@ test('credential-bearing native requests do not follow redirects', async (t) => 
   const { provider } = harness({
     route: KIMI,
     keys: { MOONSHOT_API_KEY: 'sk-secret' },
-    // The endpoint URLs are real; only the socket is pointed at the local redirecting server.
     fetch: (url, init) => fetch(url.replace('https://api.moonshot.cn', `http://127.0.0.1:${origin.address().port}`), init),
   })
   const result = await provider.search({ query: 'q' })
   assert.equal(targetHits, 0)
   assert.match(result.content, /Kimi search API \(api\.moonshot\.cn\/v1\/tools\/search\): request failed: .*redirect/i)
 })
-
-// ---------------------------------------------------------------------------
-// Outcome memory
 
 test('each outcome keeps its endpoint from being retried for its own time', async () => {
   const cases = [
@@ -341,9 +325,6 @@ test('remembered endpoints are skipped without reading the key', async () => {
   await provider.search({ query: 'q' })
   assert.deepEqual(calls.keys, ['ACME_KEY'])
 })
-
-// ---------------------------------------------------------------------------
-// Fallback and final failure
 
 test('the fallback follows a Bing regional redirect once, and only to bing.com', async () => {
   const redirect = origin => Object.assign(new Error(`cross-origin redirect to ${origin} is not followed automatically; retry against that URL directly`), { code: 'WEB_REDIRECT_BLOCKED' })
@@ -435,9 +416,6 @@ test('config rejects unknown engines, tiny timeouts, and search APIs that could 
   assert.throws(() => resolveConfig({ searchApis: [{ ...api, id: '' }] }), /needs an id/)
   assert.throws(() => resolveConfig({ searchApis: {} }), /searchApis must be a list/)
 })
-
-// ---------------------------------------------------------------------------
-// Parsers and response readers
 
 test('parseBing reads real result pages and decodes Bing redirect links', () => {
   const en = parseBing(fixture('bing.html'))

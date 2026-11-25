@@ -4,7 +4,7 @@ import { execFile } from 'node:child_process'
 import { createServer } from 'node:net'
 import { test } from 'node:test'
 import { promisify } from 'node:util'
-import { connectImap } from '../src/host/connectors/mail/transport.js'
+import { connectImap } from '../src/host/connectors/mail/transport.ts'
 
 const execFileP = promisify(execFile)
 const account = {
@@ -90,7 +90,6 @@ test('an IMAP failure cancels a real nodemailer verification socket', async (t) 
     socket.on('error', () => {})
     socket.on('close', () => closed.resolve())
     accepted.resolve()
-    // Deliberately never send an SMTP greeting.
   })
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
   t.after(() => server.close())
@@ -144,7 +143,7 @@ test('loading the plugin does not load mailparser', async () => {
       if (specifier === 'mailparser') throw new Error('mailparser loaded at import time')
       return next(specifier, context)
     } })
-    await import(${JSON.stringify(new URL('../src/host/connectors/mail/transport.js', import.meta.url).href)})
+    await import(${JSON.stringify(new URL('../src/host/connectors/mail/transport.ts', import.meta.url).href)})
   `
   await execFileP(process.execPath, ['--input-type=module', '-e', script])
 })

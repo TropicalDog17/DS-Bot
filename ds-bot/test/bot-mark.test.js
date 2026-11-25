@@ -11,7 +11,6 @@ const bundle = await build({
   external: ['react', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives'],
 })
 const module = { exports: {} }
-// A test can queue the values the next useState calls return, and read what was set.
 const states = []
 const sets = []
 const react = {
@@ -29,12 +28,10 @@ const { botState, BotAvatar, BotMark, SHELL_CSS } = module.exports
 
 test('a Bot that waits for work it handed on has a mark of its own, behind a running turn and a question', () => {
   assert.equal(botState(false, 'waiting', false), 'waiting')
-  // A turn of its own runs: the turn shows, not the wait.
   assert.equal(botState(true, 'waiting', false), 'working')
   assert.equal(botState(true, 'searching', false), 'searching')
   assert.equal(botState(false, 'waiting', true), 'alert')
   assert.equal(botState(false, undefined, false), 'idle')
-  // It moves like a Bot coordinating its teammates.
   assert.match(SHELL_CSS, /\.bt-mark:is\(\[data-state=orbit\],\[data-state=waiting\]\) \.bt-b\{animation:bt-sway/)
 })
 
@@ -52,12 +49,10 @@ test('a photo that does not load shows the Bot\'s character instead', () => {
   sets.length = 0
   img.props.onError()
   assert.deepEqual(sets, [photo])
-  // Rendered again with that photo marked broken: the character, not an empty image.
   states.push(false, photo)
   const mark = BotMark({ bot })
   assert.equal(mark.children[0].type, 'svg')
   assert.notEqual(mark.props['data-shape'], 'image')
-  // A new photo is tried again.
   states.push(false, photo)
   assert.equal(BotMark({ bot: { ...bot, avatar: { ...bot.avatar, image: `${photo}AA` } } }).children[0].type, 'img')
 })

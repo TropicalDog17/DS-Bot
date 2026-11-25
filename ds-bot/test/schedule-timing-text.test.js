@@ -5,8 +5,6 @@ import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
 
-// The schedules page imports the browser's React; bundle it with a minimal stand-in, as the
-// sidebar tests do. timingText is a plain function of a task, so nothing is rendered.
 const PLUGIN = dirname(dirname(fileURLToPath(import.meta.url)))
 const { outputFiles } = await build({
   stdin: { contents: "export { timingText } from './src/client/schedules.js'", resolveDir: PLUGIN },
@@ -33,15 +31,12 @@ const { timingText } = module.exports
 // fires: the seconds were cut off, so 07:05:30 read as 07:05.
 test('a daily task shows its seconds when they are not zero, and hides ":00"', () => {
   const daily = time => timingText({ kind: 'daily', time })
-  // The shape the schedule service lists.
   assert.equal(daily('07:05:30.000'), 'Every day at 07:05:30')
   assert.equal(daily('18:25:00.000'), 'Every day at 18:25')
   assert.equal(daily('00:00:01.000'), 'Every day at 00:00:01')
   assert.equal(daily('09:30:59.000'), 'Every day at 09:30:59')
-  // Without the milliseconds.
   assert.equal(daily('07:05:30'), 'Every day at 07:05:30')
   assert.equal(daily('18:25:00'), 'Every day at 18:25')
-  // The zone suffix is unchanged by the seconds.
   assert.match(timingText({ kind: 'daily', time: '07:05:30.000', timeZone: 'Pacific/Kiritimati' }), /^Every day at 07:05:30 \(Pacific\/Kiritimati\)$/)
 })
 

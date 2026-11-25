@@ -2,8 +2,8 @@ import assert from 'node:assert/strict'
 import { once } from 'node:events'
 import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
-import { AcpEngine } from '../src/host/local-agents/acp.js'
-import { CodexEngine } from '../src/host/local-agents/codex.js'
+import { AcpEngine } from '../src/host/local-agents/acp.ts'
+import { CodexEngine } from '../src/host/local-agents/codex.ts'
 
 const fixture = name => fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url))
 const makeEngine = (kind, args = []) => new (kind === 'acp' ? AcpEngine : CodexEngine)(

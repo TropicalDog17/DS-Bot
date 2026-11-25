@@ -68,11 +68,9 @@ test('the board sorts cards into five columns and keeps old Done and cancelled c
   const { columns, history } = boardColumns(cards, now)
   assert.deepEqual(plain(COLUMNS.map(([status]) => columns[status].map(entry => entry.id))), [['t'], ['a'], ['r'], ['b'], ['d1']])
   assert.deepEqual(plain(history.map(entry => entry.id)).sort(), ['d2', 'x'])
-  // Review leads, since it is the user's to act on; then blocked.
   assert.equal(leadColumn(columns), 'review')
   assert.equal(leadColumn(boardColumns({ b: card('b', 'blocked'), a: card('a', 'active') }, now).columns), 'blocked')
   assert.equal(leadColumn(boardColumns({}, now).columns), 'todo')
-  // At most ten recent Done cards show.
   const many = Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`d${i}`, card(`d${i}`, 'done', { doneAt: now - i * 1000 })]))
   const split = boardColumns(many, now)
   assert.equal(split.columns.done.length, 10)
@@ -89,14 +87,11 @@ test('the Board page shows each card with its ticket key and Vietnamese text int
   assert.equal(cards.length, 2)
   assert.match(text(find(tree, 'bt-board-cols')), /LIFE-782Sửa lỗi đăng nhậpĐang viết test/)
   assert.equal(all(tree, 'bt-board-add').length, 1)
-  // Each column takes a drop, and on a phone the tabs pick the column that needs the user.
   assert.equal(all(tree, 'bt-board-col').filter(col => col.props.onDrop).length, 5)
   assert.equal(all(tree, 'bt-board-col').find(col => col.props['data-shown']).props['data-status'], 'blocked')
-  // The three empty columns are bare drop zones; a phone adds cards from one button by the thumb.
   assert.equal(all(tree, 'bt-board-empty').length, 3)
   assert.equal(text(find(tree, 'bt-board-empty')), '')
   assert.equal(all(tree, 'bt-board-fab').length, 1)
-  // A card with a link says so.
   const linked = { ...roster, board: { cards: { k: card('k', 'review', { title: 'PR', links: [{ url: 'https://github.com/x/y/pull/1' }] }) } } }
   assert.equal(all({ type: BoardScreen, props: { roster: linked, actions: { closeBoard() {} } }, children: [] }, 'bt-board-has-link').length, 1)
 })
@@ -105,14 +100,12 @@ test('the Board is a screen, not a dialog: no close button, and a back arrow onl
   const roster = { byId: {}, bots: [], board: { cards: {} } }
   let closed = 0
   const screen = paneLeft => ({ type: BoardScreen, props: { roster, paneLeft, actions: { closeBoard: () => { closed += 1 } } }, children: [] })
-  // Beside the sidebar: any chat there leads away, so the screen has no way out of its own.
   const wide = screen(280)
   const root = find(wide, 'bt-board-page')
   assert.equal(root.props.role, 'region')
   assert.equal(root.props['aria-modal'], undefined)
   assert.equal(all(wide, 'bt-board-close').length, 0)
   assert.equal(all(wide, 'bt-board-back').length, 0)
-  // Alone in the window (a phone): one back arrow returns to the chat.
   const back = all(screen(0), 'bt-board-back')
   assert.equal(back.length, 1)
   assert.equal(back[0].props['aria-label'], 'Back')
@@ -135,21 +128,16 @@ test('an open card is a conversation: the user on the right, the Bot\'s replies 
   const messages = all(tree, 'bt-board-msg')
   assert.deepEqual(plain(messages.map(message => message.props['data-by'])), ['user', 'bot', 'user'])
   assert.deepEqual(plain(all(tree, 'bt-board-msg-text').map(text)), ['Gọi trước 5h nhé', 'Ok, mình gọi lúc 4h.\nXong sẽ báo.', 'an older note without by'])
-  // The Bot's reply is Markdown, as in the chat; the user's own message stays as typed.
   assert.equal(all(tree, 'bt-board-md').length, 1)
   assert.equal(all(tree, 'bt-board-md')[0].props.className.split(' ').includes('bt-board-msg-text'), true)
-  // The Bot's reply sits under its mark; the user's own messages carry no mark.
   assert.equal(messages[1].children.some(child => child?.props?.bot?.id === 'b'), true)
   assert.equal(messages[0].children.some(child => child?.props?.bot !== undefined), false)
   const box = find(tree, 'bt-board-write')
   assert.equal(box.children[0].props.placeholder, 'Message')
-  // A finished card shows the conversation and takes no new message.
   const done = { type: CardDetail, props: { card: { ...talk, status: 'done', result: 'Đã gọi' }, roster, actions: {} }, children: [] }
   assert.equal(all(done, 'bt-board-msg').length, 3)
   assert.equal(find(done, 'bt-board-write'), null)
-  // No messages yet, no thread.
   assert.equal(find({ type: CardDetail, props: { card: card('e', 'todo'), roster, actions: {} }, children: [] }, 'bt-board-thread'), null)
-  // While the Bot owes an answer, its mark waits under the last message; a finished card shows no wait.
   const asked = { ...talk, awaiting: { botId: 'b', since: now } }
   const waiting = all({ type: CardDetail, props: { card: asked, roster, actions: {} }, children: [] }, 'bt-board-waiting')
   assert.equal(waiting.length, 1)
@@ -172,16 +160,12 @@ test('a waiting card shows its Bot at work, and an answer keeps how it got there
   assert.deepEqual(plain(all(waiting, 'bt-board-step').map(text)), ['Đọc log trước.', 'Opening a file · login.log', 'Ran npm test'])
   assert.deepEqual(plain(all(waiting, 'bt-board-tool').map(step => step.props['data-state'])), ['done', 'running'])
   assert.equal(all(waiting, 'bt-board-dots').length, 1)
-  // A turn that runs for the card without a note waiting shows under the assignee's mark.
   const woken = { type: CardDetail, props: { card: { ...asked, awaiting: undefined }, roster, actions: {}, live }, children: [] }
   assert.equal(all(find(woken, 'bt-board-waiting'), 'bt-board-step').length, 3)
-  // Also on a card nobody has written on yet: its first turn, on the brief.
   const fresh = { type: CardDetail, props: { card: { ...asked, awaiting: undefined, notes: [] }, roster, actions: {}, live }, children: [] }
   assert.equal(all(find(fresh, 'bt-board-waiting'), 'bt-board-step').length, 3)
   assert.equal(all({ type: CardDetail, props: { card: { ...asked, awaiting: undefined }, roster, actions: {} }, children: [] }, 'bt-board-waiting').length, 0)
-  // No steps yet: the mark waits with its dots alone.
   assert.equal(all({ type: CardDetail, props: { card: asked, roster, actions: {} }, children: [] }, 'bt-board-trace').length, 0)
-  // The answer carries its trace closed above the text; a reply without one has none.
   const answered = { ...asked, awaiting: undefined, notes: [...asked.notes,
     { at: now, by: 'b', text: 'Token hết hạn.', trace: { ms: 4000, steps: live.steps.map(step => ({ ...step, state: 'done' })) } },
     { at: now, by: 'b', text: 'Thêm nữa.' }] }
@@ -193,7 +177,6 @@ test('a waiting card shows its Bot at work, and an answer keeps how it got there
   assert.match(text(folds[0].children[0]), /Thought it through/)
   assert.equal(all(folds[0], 'bt-board-step').length, 3)
   assert.equal(all(done, 'bt-board-waiting').length, 0)
-  // A call with its input and output opens on them; closed at first, open at the `all` level.
   const called = { since: now, steps: [{ kind: 'tool', tool: 'bash', target: 'ls', input: 'command: ls', output: 'a.txt', state: 'done' }] }
   const opened = level => find({ type: CardDetail, props: { card: asked, roster: { ...roster, board: { trace: level } }, actions: {}, live: called }, children: [] }, 'bt-board-tool-fold')
   const fold = opened('thinking')
@@ -214,11 +197,9 @@ test('the board header picks how much of a Bot\'s work shows', () => {
   assert.deepEqual(plain(select.children.map(text)), ['Off', 'Tool calls', 'Thinking', 'All'])
   select.props.onChange({ target: { value: 'all' } })
   assert.deepEqual(picked, ['all'])
-  // A page without the action (an older plugin) shows no picker.
   assert.equal(find({ type: BoardScreen, props: { roster: { byId: {}, bots: [], board: { cards: {} } }, actions: {} }, children: [] }, 'bt-board-level'), null)
 })
 
-// A fake `dsBotPages` seat: what the page registered, and whether it was taken back.
 const seat = () => {
   const list = []
   const marks = []
@@ -240,12 +221,10 @@ test('the page registers in the DS Bot seat only when ds-bot/board answers', asy
   assert.equal(typeof on.list[0].icon, 'function')
   stop()
   assert.equal(on.list.length, 0)
-  // Plugin off: the route is not there, so nothing shows.
   const off = seat()
   installBoardPage(off, { call: async () => undefined })
   await settle()
   assert.equal(off.list.length, 0)
-  // A network failure is tried once more, then left alone.
   const flaky = seat()
   let calls = 0
   installBoardPage(flaky, { retryMs: 0, call: async () => { calls += 1; throw new Error('offline') } })
@@ -282,9 +261,7 @@ test('an unread answer marks its card: the answer shows on it, and its column le
   assert.match(text(marked[0]), /Có, thêm log ở redirect\./)
   assert.equal(all(tree, 'bt-board-new').length, 1)
   assert.equal(all(tree, 'bt-board-new')[0].props['aria-label'], 'New reply')
-  // Review would lead; the unread answer leads instead.
   assert.equal(leadColumn(boardColumns(roster.board.cards).columns), 'active')
-  // A notice leads straight into its card.
   const focused = { type: BoardScreen, props: { roster, actions: {}, focus: 'k' }, children: [] }
   assert.equal(all(focused, 'bt-board-sheet').length, 1)
   assert.equal(all({ type: BoardScreen, props: { roster, actions: {}, focus: 'gone' }, children: [] }, 'bt-board-sheet').length, 0)
@@ -297,30 +274,24 @@ test('the watch marks the Board button and shows one notice per new answer while
   const on = seat()
   const timers = []
   const live = boardWatch(on, { first: state, call: async () => state, setTimer: (fn, ms) => { timers.push(ms); return timers.length }, clearTimer: () => {} })
-  // An answer already there when the app loads: a dot, no notice.
   assert.deepEqual(on.marks.at(-1), ['board', true])
   assert.equal(on.alerts.length, 0)
   await live.refresh()
   assert.equal(on.alerts.length, 0)
-  // A newer answer: one notice naming the Bot and the card, however often the watch looks.
   state = { cards: { k: answered(2) }, bots }
   await live.refresh()
   await live.refresh()
   assert.equal(on.alerts.length, 1)
   assert.equal(on.alerts[0].id, 'board')
   assert.equal(on.alerts[0].text, 'Coder replied on LIFE-782')
-  // Its Open leads to that card, once.
   on.alerts[0].onOpen()
   assert.equal(live.focus(), 'k')
   assert.equal(live.focus(), null)
-  // While the page is open it polls faster and the card itself says it.
   const off = live.opened()
   assert.ok(timers.at(-1) < timers[0])
   state = { cards: { k: answered(3) }, bots }
   await live.refresh()
   assert.equal(on.alerts.length, 1)
-  // A card waiting for its Bot: the open page follows the Bot's work every second, then
-  // slows down once the answer lands.
   const open = timers.at(-1)
   state = { cards: { k: answered(3, { awaiting: { botId: 'b', since: 3 } }) }, bots }
   await live.refresh()
@@ -329,7 +300,6 @@ test('the watch marks the Board button and shows one notice per new answer while
   await live.refresh()
   assert.equal(timers.at(-1), open)
   off()
-  // Read: the dot goes.
   state = { cards: { k: answered(3, { unread: undefined }) }, bots }
   await live.refresh()
   assert.deepEqual(on.marks.at(-1), ['board', false])
@@ -345,13 +315,11 @@ test('a card note in a chat is a tag of the card: the whole note line, after a B
   assert.deepEqual(piece.data, { cardId: 'c_bcd80b5f', key: 'LIFE-782', title: 'Fix login redirect loop on Safari' })
   assert.equal(piece.start, 0)
   assert.equal(chat.slice(piece.end), 'Có cần thêm log cho Safari không?')
-  // In a group the note follows the Bot's mention; a card with no key keeps its title.
   const group = '@Writer Note on card c_0a1b2c3d "Đặt lịch khám răng": gọi trước 5h'
   const there = plain(rule.match(group, 0))
   assert.equal(there.start, '@Writer '.length)
   assert.deepEqual(there.data, { cardId: 'c_0a1b2c3d', title: 'Đặt lịch khám răng' })
   assert.equal(group.slice(there.end), 'gọi trước 5h')
-  // Nothing past `from`, and ordinary text stays text.
   assert.equal(rule.match(chat, 1), undefined)
   assert.equal(rule.match('a note on card LIFE-782', 0), undefined)
 })
@@ -386,11 +354,9 @@ test('the card tags come with the page and go with it; the tag leads the page to
   tags[0].Node({ node: { data: { cardId: 'c_9', title: 'x' } }, interactive: true, actions: { openPage: () => {} } }).props.onClick()
   const page = on.list[0].Page({ close: () => {}, paneLeft: 0, leaving: false })
   stop()
-  // The fake useState hands back its initializer as is.
   const focus = typeof page.props.focus === 'function' ? page.props.focus() : page.props.focus
   assert.equal(focus, 'c_9')
   assert.equal(tags[0].off, true)
-  // Plugin off: no tags either.
   const off = seat()
   let asked = 0
   installBoardPage(off, { call: async () => undefined, cardTags: () => { asked += 1 } })
@@ -405,17 +371,13 @@ const known = {
 
 test('a card a Bot names in its text is a link its bubble draws as a tag; code and unknown ids stay', () => {
   const link = id => `${CARD_LINK_ORIGIN}${id}`
-  // The note line the Bot quotes, whole: its id, key, title and colon.
   assert.equal(linkCards('收到：Note on card c_bcd80b5f · LIFE-782 "Fix login redirect loop on Safari": ok', known),
     `收到：[LIFE-782](${link('c_bcd80b5f')}) ok`)
-  // The label the board's tools show, and a card with no key by its title.
   assert.equal(linkCards('Xong c_bcd80b5f · LIFE-782, còn c_0a1b2c3d.', known),
     `Xong [LIFE-782](${link('c_bcd80b5f')}), còn [Đặt lịch khám răng](${link('c_0a1b2c3d')}).`)
-  // An id the board does not have, and code, stay as written.
   assert.equal(linkCards('c_ffffffff và `c_bcd80b5f`', known), 'c_ffffffff và `c_bcd80b5f`')
   assert.equal(linkCards('```\nc_bcd80b5f\n```', known), '```\nc_bcd80b5f\n```')
   assert.equal(linkCards('no card here', known), 'no card here')
-  // A title's brackets do not break the link.
   assert.equal(linkCards('c_00000001', { c_00000001: { id: 'c_00000001', title: 'a [b]' } }), `[a \\[b\\]](${link('c_00000001')})`)
 })
 
@@ -423,7 +385,6 @@ test('the Board\'s own lines name a card by its key, not by its note line', () =
   assert.equal(nameCards('收到：Note on card c_bcd80b5f · LIFE-782 "Fix login redirect loop on Safari": ok', known), '收到：LIFE-782 ok')
   assert.equal(nameCards('xem c_0a1b2c3d', known), 'xem Đặt lịch khám răng')
   assert.equal(nameCards(undefined, known), undefined)
-  // On the card itself, the copied answer reads plainly.
   const cards = { ...known, c_bcd80b5f: card('c_bcd80b5f', 'active', { key: 'LIFE-782', title: 'Fix login redirect loop on Safari', assignee: 'b', unread: true, notes: [{ by: 'b', text: 'Note on card c_bcd80b5f · LIFE-782 "Fix login redirect loop on Safari": đã thêm log', at: now }] }) }
   const screen = BoardScreen({ roster: { bots: [], byId: {}, board: { cards } }, actions: {}, paneLeft: 0, leaving: false })
   assert.ok(all(screen, 'bt-board-progress').some(node => text(node) === 'LIFE-782 đã thêm log'))
@@ -445,7 +406,6 @@ test('a Bot\'s card links follow the board: a tap opens the Board on the card, a
   assert.equal(botText.link('c_bcd80b5f'), `[LIFE-782](${CARD_LINK_ORIGIN}c_bcd80b5f)`)
   let redraws = 0
   botText.subscribe(() => { redraws += 1 })
-  // A poll with the same names is no redraw; a new key is one.
   await new Promise(resolve => setTimeout(resolve, 20))
   assert.equal(redraws, 0)
   view = { cards: { c_bcd80b5f: card('c_bcd80b5f', 'active', { key: 'LIFE-900', title: 'Fix login' }) }, bots: [] }
@@ -469,9 +429,7 @@ test('a Bot\'s answer reads as Markdown in the card and as one plain line on the
   let opened
   const tree = { type: CardDetail, props: { card: talk, roster: { byId: { b: bot }, bots: [bot], board: { cards } }, actions: {}, onOpenCard: id => { opened = id } }, children: [] }
   const md = all(tree, 'bt-board-md')
-  // The result and the reply both go to the host's Markdown; a named card becomes its link.
   assert.deepEqual(plain(md.map(text)), ['**Done** — see `log.txt`', `## Kết quả\n- **Fixed** [LIFE-782](${CARD_LINK_ORIGIN}c_bcd80b5f)\n- see [the PR](https://x.test/1)`])
-  // A tap on that link opens the card on the board.
   const detail = find(tree, 'bt-board-detail')
   let stopped = 0
   const anchor = { getAttribute: () => `${CARD_LINK_ORIGIN}c_bcd80b5f` }
@@ -480,7 +438,6 @@ test('a Bot\'s answer reads as Markdown in the card and as one plain line on the
   assert.equal(stopped, 1)
   detail.props.onClick({ target: { closest: () => null }, preventDefault: () => { stopped += 1 } })
   assert.equal(stopped, 1)
-  // The card's one line drops the marks.
   assert.equal(plainLine('## Kết quả\n- **Fixed** the `login` bug\n- see [the PR](https://x.test/1) *now*'), 'Kết quả Fixed the login bug see the PR now')
   assert.equal(plainLine('```js\nrun()\n```'), 'run()')
   assert.equal(plainLine('snake_case and 2 * 3 * 4'), 'snake_case and 2 * 3 * 4')
@@ -503,11 +460,9 @@ test('a Bot\'s question shows its options as buttons; a tap sends the pick, whic
   assert.equal(buttons.some(button => button.props.disabled), false)
   buttons[1].props.onClick()
   assert.deepEqual(sent, [['k', 'Production']])
-  // Answered: the options stay, the pick marked, none to tap.
   const answered = { ...asking, notes: [...asking.notes, { at: now, by: 'user', text: 'Production' }] }
   const after = all({ type: CardDetail, props: { card: answered, roster, actions }, children: [] }, 'bt-board-option')
   assert.deepEqual(plain(after.map(button => [button.props.disabled, button.props['data-picked'] ?? false])), [[true, false], [true, true]])
-  // A finished card takes no pick.
   const done = all({ type: CardDetail, props: { card: { ...asking, status: 'done' }, roster, actions }, children: [] }, 'bt-board-option')
   assert.equal(done.every(button => button.props.disabled), true)
 })
@@ -539,18 +494,14 @@ test('a card that waits on the user leads with what the user must do; its steps 
   assert.equal(need.props['data-status'], 'review')
   assert.equal(text(need), 'Merge o/r#7')
   assert.deepEqual(lines(view(review)), ['Merge o/r#7', 'PR up'])
-  // Before Bots said what the user must do, the progress line says it, once.
   const older = card('k', 'blocked', { progress: 'Chờ duyệt: merge #1218' })
   assert.equal(text(find(view(older), 'bt-board-need')), 'Chờ duyệt: merge #1218')
   assert.deepEqual(lines(view(older)), ['Chờ duyệt: merge #1218'])
-  // A card at work shows no need, even one left behind.
   assert.equal(find(view({ ...review, status: 'active' }), 'bt-board-need'), null)
-  // The earlier steps fold under a count; the newest is the progress itself.
   const steps = find(view(review), 'bt-board-steps')
   assert.equal(text(find(steps, 'bt-board-steps-toggle')), 'History (2)')
   assert.equal(find(steps, 'bt-board-steps-list'), null)
   assert.equal(find(view(card('k', 'active', { log: log.slice(0, 1) })), 'bt-board-steps'), null)
-  // A long brief folds; a short one shows whole.
   const long = find(view(card('k', 'active', { brief: 'Goal.\nContext.\nLimits.\nDone when.\nMore.' })), 'bt-board-brief')
   assert.equal(long.props['data-folded'], true)
   assert.equal(text(find(long, 'bt-more')), 'Show more')

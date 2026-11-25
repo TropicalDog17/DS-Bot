@@ -31,7 +31,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-// src/client/index.js
+// src/client/index.ts
 var index_exports = {};
 __export(index_exports, {
   apply: () => apply,
@@ -39,7 +39,7 @@ __export(index_exports, {
 });
 module.exports = __toCommonJS(index_exports);
 
-// src/client/i18n.js
+// src/client/i18n.ts
 var NAMESPACE = "ds-bot";
 var fill = (text, params) => params ? text.replace(/\{(\w+)\}/g, (match, name) => name in params ? String(params[name]) : match) : text;
 function t(key, params) {
@@ -58,7 +58,7 @@ function mdLabels() {
   return labels;
 }
 
-// src/client/diagnostics.js
+// src/client/diagnostics.ts
 var MAX = 30;
 var REPEAT_MS = 5 * 60 * 1e3;
 var entries = [];
@@ -137,7 +137,7 @@ ${REST_NOTE}`);
   return { url: facts.length <= URL_LIMIT ? facts : build(PASTE_NOTE), inline: false };
 }
 
-// src/client/api.js
+// src/client/api.ts
 var ROUTE = "api/bot";
 var REFUSALS = /* @__PURE__ */ new Set(["bot/refused", "bot/invalid", "bot/read-only", "bot/not-found", "bot/browser-off"]);
 var call = async (endpoint, payload, signal) => {
@@ -174,7 +174,7 @@ var call = async (endpoint, payload, signal) => {
   return result.value;
 };
 
-// src/client/inks.js
+// src/client/inks.ts
 var INKS = {
   deepseek: ["#4D6BFE", "#6A84FF"],
   charcoal: ["#141416", "#F1F2F4"],
@@ -206,7 +206,7 @@ var inkFill = (color) => isHex(color) ? color : `var(--bt-ink-${inkName(color)})
 var inkText = (color) => color === "black" ? "var(--bt-ink-gray)" : inkFill(color);
 var paintCss = (color) => GRADIENTS[color] ? `linear-gradient(135deg,${GRADIENTS[color].map(([offset, value]) => `${value} ${offset * 100}%`).join(",")})` : inkFill(color);
 
-// src/client/characters.js
+// src/client/characters.ts
 var CHARACTERS = {
   whale: { label: "Whale", body: "M65.3 20.9l5.1 .1 4.8 .9 4.8 1.7 4.3 2.3 3.8 3.1 3 3.4 2.3 3.8 1.6 4.3 .9 4.3 0 4.8-.8 4.8-1.4 4.3-2.3 4.3-3.2 4.3-3.4 3.3-4.3 3.1-7.2 3.5-7.6 1.7-7.2 .1-9.6-1.6-3.3-1-2.9-1.7-8.8-8.9-6-4.7-3.3-.5-7.7 1.1-4.8-.1-4.7-1.2-1.9-1.2-1-1-.5-1.5 .4-1.4 1.1-1.3 1.9-1.3 4.7-1.5 7.7-.6 1.1-.5 .7-1 0-1.4-2.8-7.2-1.2-5.3-.1-4.3 .4-1.4 .9-1.2 1.9-.2 2 1 2.2 2.3 2.2 3.4 3.2 7.6 1.9 9.7 .5-.1 1.1-7.2 1.8-4.8 3.2-5.2 3.9-4.3 4.9-3.9 5.6-2.9 5.8-1.9z", paints: [["M93.3 55.8l1-.3 .1 1.2-2.4 5.3-3.4 4.8-3.8 3.8-4.8 3.4-5.7 2.8-4.8 1.5-4.8 .4 20.1-17.4 5.2-3.7z", "#fff", 1]], shade: "M88.6 29.5l2.4 2.9 1.9 2.8 2.4 6.3 .5 3.3 .1 5.3-1.5 6.6-1.9 4.3-2 3.3-4.8 5.4-5.7 4.3-7.2 3.3-6.2 1.5-6.7 .1-3.3-.2-9.6-1.8-3.3-1.5-2.4-1.9-8.6-8.9-5.3-3.9-3.3-.1-2.9 .2-3.3 .8-5.8 0-4.3-1-2.9-1.9 .6-.6 3.8-1.3 10.5-2.5 4.3 .9 1.4-.1 2.2-1.7 .5-1.4-.3-1.5-1.2-1.4-2.2-1.4-1.2-1.9-.6-12 .4-3.3 .5-.5 2.9 3.8 2.4 4.8 1.9 5.7 .7 5.8 .7 2.8 2.1 2.4 2.7 5.5 3.8 4.3 2.9 2.2 3.3 1 3.4-.4 6.2-3 7.1-4.5 7.3-5.6 6.6-5.9 5.9-6.5 3.7-5.3 1.7-4.2 .1-2.9z", light: "M55.6 22.8l1.9-.3 1.5 .3 .6 1 .1 .9-2 4.3-3.8 5.3-5.8 6.2-5.4 4.4-4.8 2.3-1.4 0-1.2-.5-.8-1.9 .5-3.3 2.5-4.8 3.3-4.3 2.4-2.4 5.3-3.9zM19.3 28.1l-1.4 2 .3-1.1zM21.7 49.1l.6 .5-.3 .5-.8 0zM35.8 52l1.2-.4 .9 .7 .7 1.6-.4 .9-1.2 .1-2.6-.5zM7.2 52.9l-2.9 2.9 1.2-1.6z", eyes: [[72.5, 48.4, 9.3, 23, -15.8], [85.6, 43.4, 7, 22.9, -21.2]] },
   star: { label: "Star", body: "M40.1 4.4l1.5-.4 1.9 .1 5.2 1.1 1.9 .9 13.2 14.9 17.1-.8 5.2 1.1 1.8 .9 1.7 1.6 .7 2.4-.4 1.9-9.7 23.6 5.6 23.7 .1 1.9-.6 1.4-2.1 1.8-2.3 .5-19.9-1.8-16.6 15.5-1.9 1-1.9 .3-7-1.5-2.6-2.1-.9-2.4-2.8-24.1-16-13.6-1.1-1.5-.5-1.9 .4-1.9 1.2-1.5 18.9-13.6 7.1-24.6 1-1.7z", shade: "M52 7.7l14.3 16.1 1 2.9 .3 3.1 19.4-1.3 2-1.4 .7-2.3-.4-1 .5 .5 .5 1.9-.4 1.9-9.8 23.2 5.5 23.1 .1 3.4-2 2.4-2.8 .8-19.4-2.1-1.9 1.4-14.7 14-2.4 1.4-3.3 .1-4.7-1-2-1 .6-.2 3.3 .8 2.8 .1 5.1-2.1 .7-.9 .4-2.4-2.6-22.7-.3-.3-1.4 .2-1.4 .7-5.7 .7-5.6-1.2-16.7-13.8 1-.1 5.2 1 3.8-1.1 1-.7 1.9-.4 .4-.4 1.5 .3 .4-.4 1 .2 18-12.8 6.7-23.5 0-1.8-.4-.5-.3-1.9 .4-2.4z", light: "M40.1 4.4l2-.1 4.7 1 .7 1-.5 1.4-2.8 1.5-6.6 23.1 .7 1.2 .6 .3-18.1 12.5-1.8 2.1-3.4 .7-5.2-1.2-.3-.4 .3-.9 1.4-1.4 18.3-12.9 .9-2.3 6.4-22.7 .8-1.4z", eyes: [[53.9, 53.4, 7.2, 18.8, -10], [65.1, 49.2, 7.2, 18.8, -10]] },
@@ -318,7 +318,7 @@ function maskOf(shape) {
 }
 var DEFAULT_MASK = maskOf(FALLBACK_SHAPE);
 
-// src/client/sources.js
+// src/client/sources.ts
 function createSource(initial) {
   let value = initial;
   const listeners3 = /* @__PURE__ */ new Set();
@@ -374,7 +374,7 @@ function countCards(state, sessionId, callIds, delta) {
   return { ...state, [sessionId]: own };
 }
 
-// src/client/team-actions.js
+// src/client/team-actions.ts
 var FRONT = ["newChat", "exchange", "menu", "palette", "groupSearch", "page"];
 function clearFront(state) {
   if (!FRONT.some((key) => state[key])) return state;
@@ -392,18 +392,15 @@ function teamActions({ call: call2, after, partFor, roster, ui: ui2, live, cards
     ui2.set((state) => ({ ...state, settings: { page, id }, menu: null, palette: null, newChat: null }));
   };
   return {
-    // The pane starts at the rail's edge, so a floating drawer would stick out from under it.
     openNewChat: (mode, sectionId = null) => {
       ui2.set((state) => ({ ...state, newChat: mode, newChatSection: sectionId ?? null, menu: null, palette: null, leftDrawer: false }));
     },
     openPalette: (query = "") => {
       ui2.set((state) => ({ ...state, palette: { query, token: Date.now() }, newChat: null, menu: null }));
     },
-    // The token keeps a late exit timer from closing a palette opened again since.
     closePalette: (token) => {
       ui2.set((state) => state.palette && (token === void 0 || state.palette.token === token) ? { ...state, palette: null } : state);
     },
-    // Searching one group's own history, from its header.
     openGroupSearch: (roomId) => {
       if (roomId) ui2.set((state) => ({ ...state, groupSearch: { roomId, token: Date.now() }, palette: null, newChat: null, menu: null }));
     },
@@ -426,9 +423,6 @@ function teamActions({ call: call2, after, partFor, roster, ui: ui2, live, cards
         return { ...state, renaming: false, tab: null, details, view: "details" };
       });
     },
-    // The open panel follows the main view; a subject with no browser (a group
-    // chat, an outside Session) settles on the details view. So does one that
-    // does not own the open side chat.
     followPanel: (id) => {
       ui2.set((state) => {
         if (!state.details || state.details === id) return state;
@@ -440,19 +434,16 @@ function teamActions({ call: call2, after, partFor, roster, ui: ui2, live, cards
     showDetails: (id, tab = null) => {
       ui2.set((state) => ({ ...state, details: id, view: "details", renaming: false, tab, panelYield: yieldTo(state, "details") }));
     },
-    // Opening the conversation would move focus to its composer and blur the name field.
     renameBot: (id) => {
       ui2.set((state) => ({ ...state, details: id, view: "details", renaming: true, tab: null, panelYield: yieldTo(state, "details") }));
     },
     openSettings,
-    // A companion plugin's full page (pages.js); one open at a time.
     openPage: (id) => {
       ui2.set((state) => ({ ...state, page: id, menu: null, palette: null, newChat: null, leftDrawer: false }));
     },
     closePage: () => {
       ui2.set((state) => state.page ? { ...state, page: null } : state);
     },
-    // DS Bot's own Models page: the providers DSH serves, their keys and models.
     openModels: () => openSettings("models"),
     closeSettings: () => {
       ui2.set((state) => state.settings ? { ...state, settings: null } : state);
@@ -470,11 +461,7 @@ function teamActions({ call: call2, after, partFor, roster, ui: ui2, live, cards
       if (view !== "details" && view !== "browser" && view !== "side") return;
       ui2.set((state) => state.details && state.view !== view ? { ...state, view, panelYield: yieldTo(state, view) } : state);
     },
-    // A side chat on the panel's own view, opened from the strip, the `···`
-    // menus or `/side`. Closing the panel keeps the chats; only a tab's × deletes.
     openSideChat,
-    // The roster is pulled before the panel opens on a new chat: a view on a chat
-    // the roster does not hold yet folds back into details.
     newSideChat: async (sessionId) => {
       const value = await after(call2("side-new", { sessionId }));
       openSideChat(sessionId, value?.chatId);
@@ -491,14 +478,12 @@ function teamActions({ call: call2, after, partFor, roster, ui: ui2, live, cards
       ui2.set((state) => state.details ? { ...state, details: null, view: "details", renaming: false, tab: null, side: null } : state);
     },
     quote: (sessionId, text) => ui2.set((state) => ({ ...state, quote: { sessionId, text, token: Date.now() } })),
-    // A long paste becomes a card; its text stays here until it goes back into the box.
     addPaste: (sessionId, text, name) => {
       pastes += 1;
       const block = { id: `paste-${pastes}`, text, name, attachmentId: null };
       ui2.set((state) => pasteState(state, sessionId, [...state.paste?.[sessionId] ?? [], block]));
       return block.id;
     },
-    // The shell attachment whose label is that waiting card's own file name.
     linkPastes: (sessionId, links) => ui2.set((state) => {
       const blocks = state.paste?.[sessionId] ?? [];
       const byBlock = /* @__PURE__ */ new Map();
@@ -533,28 +518,23 @@ function teamActions({ call: call2, after, partFor, roster, ui: ui2, live, cards
       ui2.set((state) => ({ ...state, newChat: null, newChatSection: null, exchange: null, details: state.newChat || state.exchange ? state.details : null }));
     },
     createBot: (payload) => after(call2("create-bot", payload)),
-    // The avatar library: photos the user imported once, kept by the host.
     avatarLibrary: (options = {}) => call2("avatar-library", options),
     importAvatars: (items) => call2("avatar-import", { items }),
     deleteAvatar: (id) => call2("avatar-delete", { id }),
     createRoom: (members, options = {}) => after(call2("create-room", { members, ...options })),
     updateBot: (id, patch) => after(call2("update-bot", { id, ...patch })),
-    // Give up one wait the Bot has on a hand-off that will not come back.
     abandonWork: (id) => after(call2("abandon-work", { id })),
     refreshModels: () => after(call2("models")).catch(() => {
     }),
-    // One local agent's models: the first look starts its CLI, later ones read what it said.
     agentModels: (route) => after(call2("local-agent-models", { route })).catch(() => {
     }),
     efforts: (ref) => call2("efforts", { ref }),
-    // Model providers and their API keys; DSH keeps them, and a key only travels to the host.
     providers: () => call2("providers"),
     setProviderKey: (provider, value) => after(call2("provider-key", { provider, value })),
     addProvider: (body) => after(call2("provider-add", body)),
     providerModels: (body) => call2("provider-models", body),
     saveProviderModels: (body) => call2("provider-models-save", body),
     removeProvider: (provider) => after(call2("provider-remove", { provider })),
-    // After a failed turn: the Bot answers the user's last unanswered message, which is never sent again.
     resume: (botId) => after(call2("resume", { botId })),
     folders: () => call2("folders"),
     folderPick: () => call2("folder-pick"),
@@ -588,7 +568,6 @@ function teamActions({ call: call2, after, partFor, roster, ui: ui2, live, cards
     computerShot: (attachmentId) => call2("computer-shot", { attachmentId }),
     computerUserActive: (idleSeconds) => call2("computer-user-active", { idleSeconds }),
     stopMemberWork: (roomId, botId) => after(call2("stop-member-work", { roomId, botId })),
-    // A running part opened from the session list takes no input until it ends.
     newPart: (botId) => after(call2("bot-new-part", { botId })),
     openPart: (botId, sessionId, running = false) => {
       ui2.set((state) => ({ ...state, readOnlyPart: running ? sessionId : null }));
@@ -603,7 +582,6 @@ function teamActions({ call: call2, after, partFor, roster, ui: ui2, live, cards
       return after(call2("stop-chat", { botId }));
     },
     stopRoomWork: (roomId) => after(call2("stop-room-work", { roomId })),
-    // Values go out in these requests and never come back in a response.
     secretSet: (payload) => after(call2("secret-set", payload)),
     secretAllow: (requestId) => after(call2("secret-allow", { requestId })),
     secretCancel: (requestId) => after(call2("secret-cancel", { requestId })),
@@ -655,11 +633,8 @@ function teamActions({ call: call2, after, partFor, roster, ui: ui2, live, cards
     roomProgress: (roomId) => call2("room-progress", { roomId }).catch(() => []),
     groupRows: (roomId, from, to, anchor) => call2("group-rows", { roomId, from, ...to === void 0 ? {} : { to }, ...anchor === void 0 ? {} : { anchor } }).catch(() => null),
     earlier: (sessionId, cursor) => call2("earlier", { sessionId, cursor: cursor ?? null }),
-    // Hours come back in this browser's time zone, so days start at local midnight.
     usage: () => call2("usage", { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
-    // The details panel's status line: turns, speed, cache hits and context for one Bot.
     runStats: (botId) => call2("run-stats", { botId }),
-    // `summarize` starts a summary when the entries changed; `regenerate` always does.
     memoryView: (id, flags = {}) => call2("memory-view", { ...memoryOf(id), ...flags }),
     memoryAsk: (id, text) => call2("memory-ask", { ...memoryOf(id), text }),
     memoryLayer: (id, entry, always) => call2("memory-layer", { ...memoryOf(id), topic: entry.topic, text: entry.text, always }),
@@ -673,13 +648,10 @@ function teamActions({ call: call2, after, partFor, roster, ui: ui2, live, cards
     diagnosticsLog: () => call2("diagnostics-log"),
     diagnosticsClear: () => call2("diagnostics-clear"),
     repoStars: () => call2("repo-stars"),
-    // A failed action away from any form (a menu, the palette) shows as a toast.
     reportError: (error, where = "action") => {
       noteClientError(where, error);
       ui2.set((state) => ({ ...state, toast: { text: error?.message ?? String(error), token: Date.now() } }));
     },
-    // A message with no failure behind it (a review that expired, a window without the
-    // column): a toast, but not in the client-error log.
     notice: (text) => ui2.set((state) => ({ ...state, toast: { text, token: Date.now() } })),
     dismissToast: (token) => ui2.set((state) => state.toast && (token === void 0 || state.toast.token === token) ? { ...state, toast: null } : state),
     noteTurnTime: (sessionId, turn, key, time) => {
@@ -728,7 +700,7 @@ function teamActions({ call: call2, after, partFor, roster, ui: ui2, live, cards
   };
 }
 
-// src/client/themes.js
+// src/client/themes.ts
 var THEME_KEYS = ["bg", "sidebar", "bubble", "card", "text", "user", "userText", "accent"];
 var THEMES = {
   deepseek: {
@@ -774,7 +746,6 @@ function themeVars(mode, dark, accent = mode.accent) {
     "--bt-user-ink": mode.userText,
     "--bt-tag-bg": rgba(mode.text, dark ? 0.09 : 0.06),
     "--bt-tag-ink": rgba(mode.text, 0.58),
-    // Warning text and icon: readable on the card in both modes (ui-standard 2.3).
     "--bt-warn": dark ? "#f0b84a" : "#8a5a00"
   };
 }
@@ -848,7 +819,7 @@ var thinkingShown = (prefs) => prefs?.thinking === true;
 var widthOf = (prefs) => percent(prefs?.width, 80);
 var flatWidthOf = (prefs) => percent(prefs?.flatWidth, 100);
 
-// src/client/skin.js
+// src/client/skin.ts
 var MIN_SKIN_ALPHA = 0.7;
 var SKIN_VARIABLES = ["--bt-skin-main", "--bt-skin-sidebar", "--bt-skin-card"];
 var HEX = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
@@ -943,7 +914,7 @@ function writeSkinSurfaceVars(doc, read) {
   };
 }
 
-// src/shared/mentions.js
+// src/shared/mentions.ts
 var ALL_WORDS = ["all", "everyone", "所有人", "全体"];
 var USER_NAMES = ["user", "you"];
 var speakerOf = (line) => line.botId !== void 0 && USER_NAMES.includes(String(line.who ?? "").trim().toLowerCase()) ? `Bot "${line.who}"` : line.who;
@@ -993,7 +964,7 @@ function mentionSpans(text, bots, { references = [] } = {}) {
   return spans;
 }
 
-// src/client/text.js
+// src/client/text.ts
 var MENTION_ORIGIN = "https://bots.local/";
 function linkMentions(text, bots, selfId) {
   if (!text || !text.includes("@")) return text;
@@ -1234,7 +1205,7 @@ function runStatsOf(values) {
   return shown;
 }
 
-// src/client/motion.js
+// src/client/motion.ts
 var import_react = require("react");
 var effectsTier = () => {
   const tier = typeof document === "undefined" ? void 0 : document.body?.dataset?.btEffects || document.documentElement?.dataset?.btEffects;
@@ -1489,7 +1460,7 @@ function stepMenuFocus(menu, event, trigger) {
   return true;
 }
 
-// src/client/storage.js
+// src/client/storage.ts
 var STORAGE = {
   unread: "ds-bot:unread",
   reactions: "ds-bot:reactions",
@@ -1555,7 +1526,7 @@ function migrateStorage(storage = globalThis.localStorage) {
   }
 }
 
-// src/client/frame-layout.js
+// src/client/frame-layout.ts
 var MIN_CHAT = 420;
 var RAIL_WIDTH = 88;
 var PANEL_MIN = { details: 320, browser: 360, side: 320 };
@@ -1617,7 +1588,7 @@ function writeSidebar(value, storage = globalThis.localStorage) {
   }
 }
 
-// src/client/styles.js
+// src/client/styles.ts
 var SHELL_CSS = `
 body{--bt-im-telegram:#229ed9;--bt-im-weixin:#07c160;--bt-im-feishu:#3370ff;--bt-im-dingtalk:#1e88e5;--bt-im-wecom:#0082ef;--bt-im-qq:#e03e3e;--bt-im-discord:#5865f2;--bt-im-slack:#4a154b;--bt-im-mark-ink:#ffffff;--bt-qr-paper:#ffffff;--bt-qr-ink:#141414;--bt-ink:#141414;--bt-danger:#e02135;--bt-warn:#8a5a00;--bt-ink-2:rgba(20,20,20,.6);--bt-ink-3:rgba(20,20,20,.36);--bt-bubble:#eeeeee;--bt-sidebar:#f7f7f7;--bt-main:#fcfcfc;--bt-line:rgba(20,20,20,.08);--bt-line-2:rgba(20,20,20,.15);--bt-line-weak:rgba(20,20,20,.1);--bt-hover:rgba(119,119,119,.09);--bt-active:rgba(119,119,119,.17);--bt-card:#ffffff;--bt-accent:#4d6bfe;--bt-green:#00c972;--bt-star:#ff9800;--bt-user:#070707;--bt-user-ink:#fcfcfc;--bt-tag-bg:rgba(20,20,20,.06);--bt-tag-ink:rgba(20,20,20,.56);--bt-knob:#ffffff;--bt-glass-bg:color-mix(in srgb,var(--bt-main) 78%,transparent);--bt-glass-border:rgba(255,255,255,.72);--bt-glass-rim:rgba(20,20,20,.09);--bt-glass-shadow:0 8px 28px -6px rgba(0,0,0,.08),0 2px 6px -1px rgba(0,0,0,.04),inset 0 1px 0 rgba(255,255,255,.82);--bt-dialog-shadow:0 28px 90px -12px rgba(0,0,0,.22),0 8px 24px -4px rgba(0,0,0,.08),inset 0 1px 0 rgba(255,255,255,.78);--bt-card-shadow:0 1px 2px rgba(20,20,20,.03),inset 0 1px 0 rgba(255,255,255,.65);--bt-nav-thumb-bg:color-mix(in srgb,var(--bt-card) 82%,var(--bt-active));--bt-nav-thumb-shadow:0 1px 2px rgba(20,20,20,.06),inset 0 .5px 0 rgba(255,255,255,.8);--bt-select-arrow:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%23888' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m3 4.5 3 3 3-3'/%3E%3C/svg%3E");--bt-accent-soft:color-mix(in srgb,var(--bt-accent) 14%,transparent);--bt-danger-soft:color-mix(in srgb,var(--bt-danger) 14%,transparent);--bt-danger-glow:color-mix(in srgb,var(--bt-danger) 24%,transparent);-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;--bt-font:var(--dsw-font-family,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif)}
 /* iOS waits out a double-tap zoom on buttons; the plugin's own controls never zoom. */
@@ -1632,9 +1603,6 @@ ${Object.entries(INKS).map(([name, [, dark]]) => `body[data-ds-dark-theme]{--bt-
 .bt-mark .bt-b,.bt-mark .bt-eye,.bt-mark .bt-eyes,.bt-mark .bt-gaze{transform-box:fill-box}
 .bt-mark .bt-b{transform-origin:50% 100%}
 .bt-mark .bt-eye,.bt-mark .bt-eyes{transform-origin:center}
-/* Motion levels (Settings → Bots → Animation) set body[data-bt-motion]: quiet moves a
-   mark only for its state; normal, the default, adds petting, pokes and eyes that follow
-   the pointer; lively adds blinks and fidgets at rest and a question riding on the head. */
 body[data-bt-motion=lively] .bt-mark[data-live]:is([data-state=idle],[data-state=alert]) .bt-eye{animation:bt-blink-idle 5s linear infinite;animation-delay:var(--bt-delay,0s)}
 body[data-bt-motion=lively] .bt-mark[data-live][data-state=idle]:is([data-fidget=hop],[data-fidget=sway],[data-fidget=stretch]) :is(.bt-b,.bt-mark-img){animation:var(--bt-fidget) 9s ease-in-out var(--bt-fidget-delay,0s) infinite}
 body[data-bt-motion=lively] .bt-mark[data-live][data-state=idle][data-fidget=hop]{--bt-fidget:bt-fidget-hop}
@@ -1648,9 +1616,6 @@ body[data-bt-motion=lively] .bt-mark[data-live][data-state=idle][data-fidget=loo
 body[data-bt-motion=lively] .bt-badge-alert{right:auto;bottom:auto;left:50%;top:calc(var(--bt-size,36px) * -.14);translate:-50% 0;animation:bt-q-ride 1.3s cubic-bezier(.3,.7,.4,1) infinite}
 body[data-bt-motion=lively] :is(.bt-row,.bt-tile)>.bt-mark:hover .bt-badge-alert{animation:none}
 @keyframes bt-q-ride{0%,55%,100%{transform:translateY(0)}20%{transform:translateY(calc(var(--bt-size,36px) * -.14))}40%{transform:translateY(0)}}
-/* Petting: with the pointer on a sidebar avatar or just around it (a ring a fifth of its
-   size wide), a resting mark leans into the pointer and keeps nuzzling it, its eyes
-   closed in a happy arc, and springs back when the pointer leaves. */
 :is(.bt-row,.bt-tile)>:is(.bt-mark,.bt-cluster)::before{content:'';position:absolute;inset:-20%;border-radius:50%}
 .bt-mark[data-live] .bt-b,.bt-mark[data-live] .bt-mark-img{transition:rotate .5s cubic-bezier(.34,1.56,.64,1),translate .5s cubic-bezier(.34,1.56,.64,1),scale .3s ease-out}
 .bt-mark[data-live] .bt-eye{transition:scale .14s ease-in}
@@ -1672,11 +1637,8 @@ body[data-bt-motion=quiet] .bt-mark[data-gaze] .bt-gaze,body[data-bt-effects=red
 .bt-mark[data-state=working]:is([data-shape=gumdrop],[data-shape=peanut],[data-shape=cushion],[data-shape=squircle],[data-shape=moon],[data-shape=wave]) .bt-b{animation:bt-squash 1.2s ease-in-out infinite}
 .bt-mark[data-state=working] .bt-eye{animation:bt-blink 2.4s ease-in-out infinite}
 .bt-mark[data-state=sending] .bt-b{animation:bt-dash 1.1s cubic-bezier(.4,0,.2,1) infinite}
-/* Waiting for teammates to hand back work circles like coordinating them. */
 .bt-mark:is([data-state=orbit],[data-state=waiting]) .bt-b{animation:bt-sway 2.6s ease-in-out infinite;transform-origin:50% 50%}
 .bt-mark:is([data-state=orbit],[data-state=waiting]) .bt-eyes{animation:bt-roll 2.6s linear infinite}
-/* A question for you hops twice when it arrives and the badge keeps it in view after;
-   a lively mark keeps hopping. */
 .bt-mark[data-state=alert] .bt-b{animation:bt-hop 1.3s cubic-bezier(.3,.7,.4,1) 2}
 .bt-mark[data-shape=image]:not([data-state=idle]) .bt-mark-img{animation:bt-bob 1.6s ease-in-out infinite}
 .bt-mark[data-shape=image][data-state=alert] .bt-mark-img{animation:bt-hop 1.3s cubic-bezier(.3,.7,.4,1) 2}
@@ -1702,7 +1664,6 @@ body[data-bt-motion=quiet] .bt-mark[data-poke]{cursor:default}
 @keyframes bt-hop{0%,55%,100%{transform:translateY(0) scale(1,1)}20%{transform:translateY(-14%) scale(.96,1.05)}40%{transform:translateY(0) scale(1.06,.94)}}
 @keyframes bt-poke{0%{transform:none}55%{transform:translateY(-16%) rotate(360deg)}78%{transform:translateY(0) scale(1.08,.92) rotate(360deg)}100%{transform:rotate(360deg)}}
 @keyframes bt-poke-img{0%,100%{transform:scale(1)}40%{transform:scale(1.14) rotate(-6deg)}}
-/* Idle clip: two .26s blinks (lid to 3%, then a 6% overshoot) at 1.48s and 3.46s. */
 @keyframes bt-blink-idle{0%,29.6%,35%,69.2%,74.6%,100%{transform:scaleY(1)}32.2%,71.8%{transform:scaleY(.03)}33.8%,73.4%{transform:scaleY(1.06)}}
 @keyframes bt-blink{0%,42%,50%,100%{transform:scaleY(1)}46%{transform:scaleY(.03)}48%{transform:scaleY(1.06)}}
 @media (prefers-reduced-motion:reduce){.bt-mark *{animation:none!important;transition:none!important}}
@@ -1745,7 +1706,6 @@ body[data-bt-motion=quiet] .bt-mark[data-poke]{cursor:default}
 .bt-row{display:flex;align-items:center;gap:8px;min-height:54px;padding:8px;border:0;border-radius:12px;background:transparent;color:var(--bt-ink);text-align:left;cursor:pointer;width:100%;box-sizing:border-box;font-family:inherit;transition:background-color .12s ease}
 .bt-row:hover{background:var(--bt-hover)}
 .bt-row[aria-current=page]{background:var(--bt-active)}
-/* Inset: the .bt-list scroll box clips anything drawn outside the row. */
 .bt-row:focus-visible{outline:2px solid var(--bt-accent);outline-offset:-2px}
 .bt-row[aria-current=page] .bt-row-name{font-weight:500}
 .bt-side[data-page] :is(.bt-tile,.bt-row,.bt-agent-sub-row)[aria-current=page]{background:none}
@@ -1760,11 +1720,6 @@ body[data-bt-motion=quiet] .bt-mark[data-poke]{cursor:default}
 .bt-row-preview{font-size:13px;line-height:18px;color:var(--bt-ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bt-unread{width:8px;height:8px;border-radius:50%;background:var(--bt-accent);flex:none;margin-right:2px;animation:bt-fade .13s cubic-bezier(.22,1,.36,1)}
 .bt-unread-wait{background:var(--bt-star)}
-/* Our own left column, portalled over the shell's collapsed sidebar. It reaches
-   the window's top edge so the title band and the column share one fill (under
-   Mica the app styles DSH's sidebar the same way, via --bt-leftcol-fill there);
-   it stays under the shell's title-bar switch (z 30) and the popovers (z 60),
-   and the floating drawer keeps the opaque fill over the conversation. */
 .bt-leftcol{position:fixed;left:0;top:0;bottom:0;z-index:25;display:flex;--bt-lc-clear:var(--dsh-frame-top-clearance,var(--dsh-windows-titlebar-height,0px));background:var(--bt-leftcol-fill,var(--bt-sidebar));border-right:.5px solid var(--bt-line);box-sizing:border-box;padding:calc(var(--bt-lc-clear) + 6px) 12px 6px;color:var(--bt-ink);font-family:var(--bt-font)}
 html[data-windows-titlebar] .bt-leftcol,html[data-platform=darwin] .bt-leftcol{border-right:none}
 .bt-leftcol{animation:bt-leftcol-in ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing}}
@@ -1789,15 +1744,9 @@ html[data-bt-collapsing] [class*="_frame"]:has(>[class*="_sidebarCol"]){transiti
 .bt-rail-top{display:flex;flex-direction:column;align-items:center;gap:8px;padding-bottom:8px}
 .bt-rail-sep{width:24px;height:1px;flex:none;background:var(--bt-line)}
 .bt-rail .bt-agent-ava{width:44px;height:44px}
-/* Icon rows breathe the way the open column's rows do: 8px of gap puts ~20px
-   between avatar edges, the open list's 19px (8px padding + 3px gap + 8px). */
 .bt-rail .bt-list{align-self:stretch;align-items:center;gap:8px}
-/* The rail's list spans the whole column: the badges and dots that sit on a row's
-   edge need room beside the 56px rows, or the list scrolls sideways. */
 .bt-leftcol[data-left=rail]{padding:calc(var(--bt-lc-clear) + 8px) 0 8px}
 .bt-leftcol-foot-rail{flex-direction:column;gap:8px}
-/* A drag that crosses the rail's snap line rides the spring to its target: the
-   content is pinned at the target size so only the column's edge moves. */
 .bt-leftcol[data-folding]{overflow:hidden;transition:width ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing}}
 .bt-leftcol[data-folding]>.bt-side{flex:none;width:calc(var(--bt-lc-w) - 24px)}
 .bt-leftcol[data-left=rail][data-folding]>.bt-side{width:var(--bt-lc-w);margin-inline:auto}
@@ -1829,7 +1778,6 @@ html[data-bt-collapsing] [class*="_frame"]:has(>[class*="_sidebarCol"]){transiti
 .bt-pill[data-memory=updated]:is(:hover,:focus-visible,[aria-expanded=true]) .bt-pill-go{width:0;margin-left:-8px;opacity:0;filter:blur(6px);transform:translateX(-6px)}
 @media (prefers-reduced-motion:reduce){.bt-pill,.bt-pill-go,.bt-pill-go svg{transition:none!important}.bt-pill-go{filter:none}.bt-pill:active{transform:none}}
 
-/* The width settings: the share of the column a bubble may take, and the flat text. */
 body{--bt-msg-w:.8;--bt-flat-w:1}
 body{--bt-qr-paper:#fff;--bt-qr-ink:#000}
 .bt-astack{display:flex;flex-direction:column;align-items:flex-start;gap:4px;margin:0}
@@ -1843,7 +1791,6 @@ body{--bt-qr-paper:#fff;--bt-qr-ink:#000}
 .bt-bubble ul,.bt-bubble ol{margin:4px 0;padding-left:20px}
 .bt-bubble [class*="_markdown"] li+li{margin-top:6px}
 .bt-bubble [class*="_markdown"] li::marker{color:var(--bt-ink-2)}
-/* line-height:1 keeps the monospace line box from making an inline code line taller. */
 .bt-bubble [class*="_markdown"] :not(pre)>code{line-height:1;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .bt-bubble :is(img,video),.bt-ububble :is(img,video),[data-chat-flow] [class*="_bubble"] :is(img,video){max-width:100%;height:auto}
 .bt-bubble a[href^="${MENTION_ORIGIN}"]{text-decoration:none;font-weight:400;cursor:pointer;white-space:nowrap}
@@ -1859,7 +1806,6 @@ body:not([data-bt-layout=flat]) .bt-group-msg[data-chain-next]>.bt-astack>.bt-ms
 [data-chat-flow]>[data-chat-group-key][data-bt-chain-prev]{padding-top:2px!important;margin-top:0!important}
 .bt-lead{flex:none;display:flex;margin-bottom:1px}
 button.bt-lead{border:0;background:none;padding:0;cursor:pointer}
-/* Rows without the avatar start where the bubble beside it starts: 22px avatar + 8px gap. */
 .bt-astack[data-lead]>.bt-msg:not(:last-child)>.bt-msg-line,.bt-astack[data-lead] .bt-reacts{margin-left:30px}
 .bt-group-name{font-size:12px;line-height:16px;font-weight:500;margin-left:42px}
 .bt-group-name:has(>.bt-lead){display:flex;align-items:center;margin:0 0 2px;font-size:13px;line-height:22px;font-weight:600;color:var(--bt-ink)}
@@ -1897,7 +1843,6 @@ button.bt-q-opt:active{background:var(--bt-active)}
 .bt-q:not(.bt-q-raised) :is(button.bt-q-opt:hover,.bt-q-opt[aria-pressed=true]) .bt-key{background:var(--bt-card);color:var(--bt-ink)}
 .bt-key{flex:none;box-sizing:border-box;width:var(--bt-key,24px);height:var(--bt-key,24px);border-radius:8px;background:var(--bt-hover);color:var(--bt-ink-2);font-size:12px;line-height:var(--bt-key,24px);font-weight:500;text-align:center;font-variant-numeric:tabular-nums;transition:background-color .12s ease,color .12s ease}
 .bt-q-body{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:1px;padding-top:2px}
-/* With a description the key spans the two text lines less 2px above and below. */
 .bt-q-opt:has(.bt-q-desc){--bt-key:34px}
 .bt-q-opt:has(.bt-q-desc) .bt-key{margin-top:2px;border-radius:10px;font-size:13px}
 .bt-q-opt:has(.bt-q-desc) .bt-q-body{padding-top:0}
@@ -2054,8 +1999,6 @@ html[data-windows-titlebar]:not([data-fullscreen]) :is(.bt-pane,.bt-panel)::befo
 .bt-fold{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px;margin-top:4px;white-space:normal}
 .bt-fold-code{position:relative}
 .bt-fold-code>.bt-tool{position:absolute;right:6px;bottom:6px}
-/* The part of a cut code block the preview keeps, drawn by DS Bot so the host's
-   Markdown draws no copy control of its own for it. */
 .bt-fold-code>.bt-fold-pre{margin:0;padding:10px 12px;border-radius:10px;background:color-mix(in srgb,currentColor 6%,transparent);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;line-height:20px;overflow-x:auto}
 .bt-fold-code>*+.bt-fold-pre{margin-top:6px}
 .bt-fold-note{font-size:12px;line-height:16px;color:var(--bt-ink-3)}
@@ -2078,8 +2021,6 @@ html[data-windows-titlebar]:not([data-fullscreen]) :is(.bt-pane,.bt-panel)::befo
 .bt-panel[data-leaving]{transform:translateX(100%);transition:transform .3s cubic-bezier(.2,0,0,1);pointer-events:none}
 .bt-panel[data-instant]{transition:none}
 @keyframes bt-pane-in{from{transform:translateX(100%)}}
-/* The conversation's margins glide with the Bot panel's slide and with our left
-   column's slide in and out. */
 [class*="_centerCol"]{transition:margin-right ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing},margin-left ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing}}
 .bt-panel-grip{position:absolute;left:-5px;top:0;bottom:0;width:8px;cursor:col-resize;z-index:3;touch-action:none}
 .bt-panel-grip:hover,.bt-panel[data-dragging] .bt-panel-grip{background:linear-gradient(to right,transparent 4px,var(--bt-line-2) 4px,var(--bt-line-2) 6px,transparent 6px)}
@@ -2124,7 +2065,6 @@ html[data-windows-titlebar]:not([data-fullscreen]) :is(.bt-pane,.bt-panel)::befo
 .bt-run-sep{color:var(--bt-ink-3)}
 .bt-danger{color:var(--bt-danger)}
 
-/* Bot settings: fields, the avatar editor popover, and the details-pane sub-view. */
 .bt-field{display:flex;flex-direction:column;gap:6px}
 .bt-field-label{font-size:13px;line-height:18px;font-weight:500}
 .bt-input{width:100%;box-sizing:border-box;height:36px;border:.5px solid var(--bt-line-2);border-radius:8px;padding:0 11px;background:var(--bt-card);color:var(--bt-ink);font:inherit;font-size:13px;outline:none;transition:border-color .14s ease,box-shadow .14s ease,background-color .14s ease}
@@ -2180,7 +2120,6 @@ html[data-windows-titlebar]:not([data-fullscreen]) :is(.bt-pane,.bt-panel)::befo
 .bt-drawer-permission{display:flex;flex-direction:column}
 .bt-seg button.bt-perm-danger,.bt-seg button.bt-perm-danger[aria-pressed=true],.bt-kv span.bt-perm-danger{color:var(--bt-danger)}
 
-/* Settings dialog: a 198px page list beside the page. */
 .bt-settings-layer{position:fixed;inset:var(--dsh-frame-chrome-top,0px) 0 0;z-index:60;display:flex;align-items:center;justify-content:center;font-family:var(--bt-font)}
 .bt-scrim{position:absolute;inset:0;background:rgba(0,0,0,.32);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);animation:bt-fade .22s ease-out}
 body[data-ds-dark-theme] .bt-scrim{background:rgba(0,0,0,.5)}
@@ -2217,8 +2156,6 @@ body[data-ds-dark-theme] .bt-scrim{background:rgba(0,0,0,.5)}
 .bt-advanced:hover{background:var(--bt-hover)}
 .bt-advanced>svg{flex:none;color:var(--bt-ink-3)}
 .bt-settings-item>svg{flex:none;transition:color .14s ease}
-/* Usage while another page is open: out of the flow, so it keeps its layout, and not
-   rendered. */
 .bt-settings-usage[data-off]{position:absolute;top:0;left:198px;width:calc(var(--bt-set-w) - 198px);height:100%;box-sizing:border-box;content-visibility:hidden;pointer-events:none}
 .bt-settings-main{flex:none;display:flex;flex-direction:column;min-width:0;width:calc(var(--bt-set-w) - 198px);height:var(--bt-set-h)}
 .bt-settings-head{display:flex;align-items:center;gap:8px;padding:20px 56px 8px 28px}
@@ -2255,7 +2192,6 @@ button.bt-set-row:hover .bt-chevron{transform:translateX(2px);color:var(--bt-ink
 .bt-set-hint{font-size:12px;line-height:17px;color:color-mix(in srgb,var(--bt-ink-2) 55%,var(--bt-ink-3))}
 .bt-set-control{flex:none;display:flex;align-items:center;gap:8px}
 .bt-set-places .bt-set-control{flex:0 1 auto;max-width:50%;min-width:0}
-/* Shrinkable, so a long model name gets its ellipsis instead of pushing Reset out of the card. */
 .bt-set-model .bt-set-control{flex:0 1 auto;min-width:0;max-width:65%}
 .bt-set-number{width:112px}
 .bt-set-places .bt-set-hint{overflow-wrap:anywhere}
@@ -2311,7 +2247,6 @@ button.bt-set-row:hover .bt-chevron{transform:translateX(2px);color:var(--bt-ink
 .bt-set-form-foot{justify-content:flex-end}
 @media(max-width:600px){.bt-set-form-row{grid-template-columns:1fr}}
 
-/* Settings → Phone. */
 .bt-phone{display:flex;flex-direction:column;gap:22px}
 .bt-phone-server{gap:8px}
 .bt-set-card>.bt-phone-server{border-top:0;padding-top:2px}
@@ -2325,7 +2260,6 @@ button.bt-set-row:hover .bt-chevron{transform:translateX(2px);color:var(--bt-ink
 .bt-phone-pair-copy{display:flex;flex-direction:column;gap:8px;font-size:14px;line-height:20px}
 @media(max-width:700px){.bt-phone-pair{flex-direction:column;align-items:flex-start}}
 
-/* Settings → Connectors. */
 .bt-connector{display:flex;flex-direction:column;gap:12px;padding:14px 16px}
 .bt-connector-head{display:flex;align-items:center;gap:12px;min-width:0}
 .bt-connector-mark{flex:none;width:36px;height:36px;border-radius:10px;background:var(--bt-main);border:.5px solid var(--bt-line-2);box-shadow:0 1px 2px rgba(0,0,0,.04);display:flex;align-items:center;justify-content:center;color:var(--bt-ink)}
@@ -2347,8 +2281,6 @@ button.bt-set-row:hover .bt-chevron{transform:translateX(2px);color:var(--bt-ink
 .bt-connector-banner{padding:0 0 8px}
 .bt-mail-form{gap:10px}
 .bt-mail-seg{align-self:flex-start}
-/* Six providers share the width: a label that wraps would leave its fixed-height
-   button and spill out of the pill, so every provider name stays on one line. */
 .bt-mail-seg button{white-space:nowrap}
 .bt-mail-guide{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-radius:10px;background:var(--bt-hover);font-size:12px;line-height:18px;color:var(--bt-ink-2)}
 .bt-mail-guide ol{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:2px}
@@ -2362,8 +2294,6 @@ button.bt-set-row:hover .bt-chevron{transform:translateX(2px);color:var(--bt-ink
 /* Shell chrome reshaped for the team view. Selectors use stable data attributes where the
    shell offers them and CSS-module name suffixes elsewhere. */
 [class*="_newSession"],nav[class*="_panelList"],[class*="_logoRow"]>[class*="_brand"],[class*="_logoRow"]:not(:has([class*="_toggle"])){display:none!important}
-/* An open sidebar uses the team's own top row; under a Windows title bar the shell's
-   logo row stays, flattened to nothing. */
 html:not([data-windows-titlebar]) :not([class*="_collapsed"])>[class*="_logoRow"]{display:none!important}
 html[data-windows-titlebar] :not([class*="_collapsed"])>[class*="_logoRow"]{height:0!important;margin:0!important}
 html[data-windows-titlebar] .bt-side-collapse{display:none}
@@ -2378,12 +2308,7 @@ html[data-windows-titlebar] .bt-side-collapse{display:none}
    --bt-caption-start to the room they take. */
 html[data-windows-titlebar] .bt-title-toggle{position:fixed;left:calc(12px + var(--bt-caption-start,0px));top:calc((var(--dsh-windows-titlebar-height,0px) - 28px) / 2);width:28px;height:28px;z-index:30;-webkit-app-region:no-drag;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:6px;padding:0;background:transparent;color:var(--bt-ink);cursor:pointer;font-family:var(--bt-font)}
 html[data-windows-titlebar] .bt-title-toggle:hover{background:var(--bt-hover)}
-/* Elsewhere the switch shows only while the column is hidden, where the column's
-   own top row had it. */
 html:not([data-windows-titlebar]) .bt-title-toggle{position:fixed;left:12px;top:calc(var(--dsh-frame-top-clearance,0px) + 6px);z-index:30}
-/* The footer ends in the Bot row: the whale's settings seat, then the account menu
-   when no plugin holds that seat. Every other plugin's entry takes a whole row above
-   it, in the shell's order, so none of them squeezes the Bot row. */
 [class*="_footArea"]{grid-template-columns:auto minmax(0,1fr);grid-auto-flow:row dense;align-items:center;gap:4px 9px;padding:8px 6px 6px!important}
 /* DSH hides the footer of a collapsed sidebar under a Windows title bar; the grid
    stays out of that one place. */
@@ -2421,28 +2346,14 @@ html:not([data-windows-titlebar]) [class*="_footArea"],:not([class*="_collapsed"
 @keyframes bt-fade{from{opacity:0}to{opacity:1}}
 @keyframes bt-blur-in{from{opacity:0;filter:var(--bt-fx-blur-2,blur(2px))}to{opacity:1;filter:none}}
 @media (prefers-reduced-motion:reduce){.bt-voice-pane,.bt-voice-caption,.bt-voice-ring{animation:none!important}}
-/* A bubble takes the set share of the column, as the user's does; 82px stays free for
-   the hover toolbar beside it: a 6px margin and three 24px tools 2px apart. */
 .bt-msg{display:flex;flex-direction:column;align-items:flex-start;max-width:min(calc(var(--bt-msg-w) * 100%),calc(100% - 82px))}
-/* The bubble's row: reactions hang below it, so the hover toolbar (and a group
-   sender's avatar) line up with the bubble alone. */
 .bt-msg-line{position:relative;display:flex;align-items:flex-end;gap:8px;max-width:100%}
 .bt-msg-line>.bt-bubble{max-width:none;min-width:0}
-/* The same bubble width as beside an avatar column: the share of (100% - 30px), plus the 30px. */
 .bt-astack[data-lead]>.bt-msg{max-width:min(calc(var(--bt-msg-w) * (100% - 30px) + 30px),calc(100% - 82px))}
-/* The indent of earlier rows comes out of their line, so their toolbar keeps its 82px too. */
 .bt-astack[data-lead]>.bt-msg:not(:last-child)>.bt-msg-line{max-width:calc(100% - 30px)}
 .bt-tools{position:absolute;bottom:0;z-index:0;left:100%;margin-left:6px;display:flex;gap:2px;opacity:0;visibility:hidden;transition:opacity .12s ease,visibility .12s}
-/* The hover bridge spans only the 6px gap (plus a little overlap) between the
-   bubble's edge and the toolbar: wider, it sits over the bubble's tail and
-   blocks text selection and link clicks there. Its z-index:-1 only stays under
-   the toolbar, not under the full-width .bt-astack, because z-index:0 above
-   gives the toolbar its own stacking context. */
 .bt-tools::after{content:"";position:absolute;top:-8px;bottom:-8px;right:100%;width:10px;z-index:-1}
 .bt-msg:hover>.bt-msg-line>.bt-tools,.bt-msg:focus-within>.bt-msg-line>.bt-tools,.bt-tools[data-open]{opacity:1;visibility:visible}
-/* The flat layout: a Bot's text has no bubble and takes its own share of the column
-   (the whole of it unless set). The toolbar hangs below the message's bottom right,
-   clear of its last line. */
 body[data-bt-layout=flat] .bt-astack{align-items:stretch;gap:10px}
 body[data-bt-layout=flat] .bt-msg,body[data-bt-layout=flat] .bt-astack[data-lead]>.bt-msg{align-items:stretch;max-width:calc(var(--bt-flat-w) * 100%)}
 body[data-bt-layout=flat] .bt-msg{position:relative}
@@ -2450,9 +2361,6 @@ body[data-bt-layout=flat] .bt-msg-line{position:static}
 body[data-bt-layout=flat] .bt-bubble{background:none;padding:0;border-radius:0}
 body[data-bt-layout=flat] .bt-tools{top:100%;bottom:auto;right:0;left:auto;margin-left:0;margin-top:2px;transform:none;padding:2px;border-radius:999px;background:var(--bt-card);box-shadow:inset 0 0 0 .5px var(--bt-line-2),0 4px 14px rgba(0,0,0,.14)}
 body[data-bt-layout=flat] .bt-tools::after{display:none}
-/* Flat layout and touch both hang the toolbar below a position:relative message.
-   The next message is position:relative too, so it paints over that toolbar and
-   takes the tap. The active message stays above its neighbors. */
 .bt-msg:hover,.bt-msg:focus-within,.bt-msg:has(>.bt-msg-line>.bt-tools[data-open]){z-index:2}
 .bt-tool{width:24px;height:24px;border:0;padding:0;border-radius:6px;background:none;color:var(--bt-ink-2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:background-color .12s ease,color .12s ease}
 .bt-tool:hover,.bt-tool[aria-expanded=true]{background:var(--bt-hover);color:var(--bt-ink)}
@@ -2549,8 +2457,6 @@ button:hover .bt-you{background:color-mix(in srgb,var(--bt-ink) 9%,var(--bt-side
 .bt-account-menu{width:224px}
 .bt-account{flex:none;width:36px;height:36px;border:0;padding:0;background:none;border-radius:50%;cursor:pointer;display:inline-flex}
 .bt-account:hover .bt-you,.bt-account[aria-expanded=true] .bt-you{background:color-mix(in srgb,var(--bt-ink) 9%,var(--bt-sidebar))}
-/* Popover keyframes move translate and scale, which compose with a transform the popover
-   already has. */
 @keyframes bt-pop-drop{from{translate:0 -4px;scale:.96}}
 @keyframes bt-pop-lift{from{translate:0 4px;scale:.96}}
 @keyframes bt-pop-out{to{opacity:0;scale:.97;filter:var(--bt-fx-blur-2,blur(2px))}}
@@ -2596,7 +2502,6 @@ body[data-ds-dark-theme] .bt-theme-chip i{background:var(--da)}
 .bt-addlist{display:flex;flex-direction:column;margin-top:4px;padding:4px;border:1px solid var(--bt-line);border-radius:10px;background:var(--bt-card);animation:bt-rise .16s ease-out}
 .bt-seg{position:relative;display:flex;gap:2px;padding:2px;border-radius:10px;background:var(--bt-hover)}
 .bt-motion-seg,.bt-look-seg{width:216px}
-/* A range input: the track fills with the accent up to the thumb (--bt-fill). */
 .bt-range{display:flex;align-items:center;gap:10px;width:216px}
 .bt-range input{flex:1;min-width:0;height:20px;margin:0;background:none;-webkit-appearance:none;appearance:none;cursor:pointer}
 .bt-range input::-webkit-slider-runnable-track{height:4px;border-radius:999px;background:linear-gradient(to right,var(--bt-accent) var(--bt-fill),var(--bt-active) var(--bt-fill))}
@@ -2615,7 +2520,6 @@ body[data-ds-dark-theme] .bt-theme-chip i{background:var(--da)}
 @keyframes bt-rise{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.bt-addlist{animation:none}}
 
-/* Memory dialog: a summary of every entry, the entries behind the menu, "Ask or update" below. */
 .bt-mem-row{display:flex;align-items:center;gap:8px;width:100%;height:36px;padding:0 8px 0 10px;border:.5px solid var(--bt-line-2);border-radius:10px;background:var(--bt-card);color:var(--bt-ink);font:inherit;font-size:13px;cursor:pointer;box-sizing:border-box;transition:background-color .12s ease}
 .bt-mem-row:hover{background:var(--bt-hover)}
 .bt-mem-row>svg{flex:none;color:var(--bt-ink-2)}
@@ -2732,10 +2636,6 @@ body[data-ds-dark-theme] .bt-theme-chip i{background:var(--da)}
 :is(.bt-icon-btn,.bt-settings-close,.bt-nc-send,.bt-shape,.bt-swatch,.bt-color,.bt-x,.bt-q-x,.bt-palette-clear):active:not(:disabled){scale:.9}
 :is(.bt-soft,.bt-send,.bt-mini,.bt-tab,.bt-avedit-tab,.bt-pick,.bt-q-submit,.bt-q-btn):active:not(:disabled){scale:.96}
 @media (prefers-reduced-motion:reduce){.bt-thumb{transition:none}.bt-panel-view>[data-move],.bt-drawer-name-input,.bt-veil,.bt-pop-in,.bt-token,.bt-drop,.bt-newchat,.bt-option-hint,.bt-connector-form,.bt-settings-head>*{animation:none}}
-/* Phone-width viewports: the settings dialog takes the whole screen, its page
-   list becomes a horizontal strip across the top, and fixed-width pages wrap
-   or scroll instead of overflowing. These rules sit at the end of the sheet:
-   the base column widths below would otherwise win the cascade back. */
 @media (max-width:640px){
   .bt-settings-layer{align-items:stretch;justify-content:stretch}
   .bt-settings{--bt-set-w:100vw;--bt-set-h:100vh;width:100vw;height:100vh;height:100dvh;border-radius:0;border-width:0;flex-direction:column}
@@ -2798,7 +2698,6 @@ body[data-bt-layout=flat] .bt-think{max-width:calc(var(--bt-flat-w) * 100%)}
 .bt-think summary{cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:6px}
 .bt-think summary::-webkit-details-marker{display:none}
 .bt-think-time{font-variant-numeric:tabular-nums;white-space:nowrap}
-/* Five lines of the 18px line height; the rest scrolls inside the box. */
 .bt-think-text{white-space:pre-wrap;overflow-wrap:anywhere;margin-top:6px;padding-left:10px;border-left:2px solid var(--bt-line-2);max-height:90px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;outline:none}
 .bt-think-text:focus-visible{border-left-color:var(--bt-ink-2)}
 .bt-think-text[data-fade=top]{mask-image:linear-gradient(to bottom,transparent,#000 18px)}
@@ -2813,7 +2712,6 @@ body[data-bt-layout=flat] .bt-think{max-width:calc(var(--bt-flat-w) * 100%)}
 .bt-event button.bt-event-whole{min-width:0;max-width:100%;padding:4px 6px 4px 8px}
 .bt-event-whole>*{flex:none}
 .bt-event-whole>span:first-child{margin-right:2px}
-/* One button cannot wrap like separate parts, so a long name is cut to fit the chat. */
 .bt-event-whole>.bt-event-name{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bt-time-sep{display:flex;justify-content:center;align-items:center;height:28px;margin:14px 0 8px;font-size:12px;line-height:16px;color:var(--bt-ink-2);white-space:nowrap}
 [class*="_scroll"]>[class*="_column"]::before{content:var(--bt-first-sep,none);display:block;flex:none;height:28px;margin:17px 0 12px;font-size:12px;line-height:28px;text-align:center;color:var(--bt-ink-2);white-space:nowrap}
@@ -2834,7 +2732,6 @@ body[data-bt-layout=flat] .bt-think{max-width:calc(var(--bt-flat-w) * 100%)}
    fills — even with plain text and no element child — is never taken for empty. */
 [data-step-process]:has(> [data-step-process-body] [data-slot="conversation.chat.node"][data-bt-emptied]):not(:has(> [data-step-process-body] [data-slot="conversation.chat.node"]:not([data-bt-emptied]))){display:none!important}
 [class*="_header"]:has(.bt-head){border-bottom-color:transparent!important;box-shadow:none!important}
-/* The transcript runs under a floating header pill. */
 header[class*="_header"]:has(.bt-head){position:absolute!important;top:0;left:0;right:0;z-index:8;display:flex!important;padding:10px 0 0!important;background:transparent!important;pointer-events:none;justify-content:center}
 header[class*="_header"]:has(.bt-head)::before{content:"";position:absolute;inset:0 0 auto;height:calc(60px + env(safe-area-inset-top,0px));background:linear-gradient(to bottom,var(--bt-main),color-mix(in srgb,var(--bt-main) 0%,transparent));pointer-events:none;z-index:-1}
 header[class*="_header"]:has(.bt-head)>[class*="_headerLeading"]{position:absolute;left:12px;top:10px;pointer-events:auto}
@@ -2853,18 +2750,12 @@ html[data-platform=darwin] header[class*="_header"]:has(.bt-head) :is(a,button,i
    group chat. Kept on the root alone, a write restyles one element. */
 @property --dsh-conversation-column-width{syntax:"*";inherits:false}
 @property --dsh-chat-user-width{syntax:"*";inherits:false}
-/* DSH's turn tail keeps what plugins put in it (delivered files, the Bot's separators),
-   without its copy and branch row; a tail with nothing in it takes no room. */
 [data-turn-tail]>:not([data-slot="conversation.chat.turnTail"]){display:none!important}
 [class*="_flowItem"][data-chat-flow-kind="turn-tail"]:not(:has([data-slot="conversation.chat.turnTail"]:not(:empty))){display:none!important}
-/* Every team Session belongs to a Bot or a group, so a blank one is an empty chat, not
-   the shell's new-session hero: no headline, no workspace or mode picker, and the
-   composer stays docked at the bottom. */
 [data-content-phase=hero] [class*="_scrollBody"]{justify-content:flex-end!important}
 [data-content-phase=hero] [class*="_composerHero"]{align-self:stretch!important;width:auto!important;padding-bottom:0!important}
 [data-content-phase=hero] [class*="_composerHero"]>[class$="_root"],[data-content-phase=hero] [class*="_heroWorkspaceRow"]{display:none!important}
 [data-content-phase=hero] [class*="_composerHero"] [class*="_input"]{min-height:0!important}
-/* The right sides give back the scrollbar gutter so both edges sit 16px from the column. */
 [class*="_scroll"]:has(> [class*="_column"]){padding:calc(60px + env(safe-area-inset-top,0px)) calc(11px + env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) calc(16px + env(safe-area-inset-left,0px))!important}
 /* The shell's running status keeps its slot but hosts nothing visible: the activity
    row mounts at the flow's end, after the shell's pending rows, so an interjection's
@@ -2887,10 +2778,8 @@ html[data-platform=darwin] header[class*="_header"]:has(.bt-head) :is(a,button,i
 @keyframes bt-typing-in{from{opacity:0;transform:scale(.9)}}
 @keyframes bt-typing-out{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(.92);filter:var(--bt-fx-blur-3,blur(3px))}}
 @keyframes bt-typing-label{from{opacity:0;filter:var(--bt-fx-blur-5,blur(5px));transform:translateY(3px)}}
-/* Shimmer: a stepped sweep clipped to the text. */
 .bt-shimmer{color:transparent;background:linear-gradient(90deg,var(--bt-shimmer-base) 0%,var(--bt-shimmer-base) 25%,var(--bt-ink) 60%,var(--bt-shimmer-base) 75%,var(--bt-shimmer-base) 100%);background-size:200% 100%;-webkit-background-clip:text;background-clip:text;animation:bt-shimmer 2.2s steps(60) infinite;--bt-shimmer-base:color-mix(in srgb,var(--bt-ink) 40%,transparent)}
 @keyframes bt-shimmer{from{background-position:200% 0}to{background-position:-200% 0}}
-/* New rows slide up; a reply that replaces the activity row grows out of its corner. */
 [data-bt-enter="new"]{animation:bt-row-in ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing}}
 [data-bt-enter="after-collapse"]{transform-origin:0 100%;animation:bt-row-after .24s cubic-bezier(.23,1,.32,1) .38s backwards}
 @keyframes bt-row-in{from{transform:translateY(12px)}to{transform:none}}
@@ -2924,7 +2813,6 @@ html[data-platform=darwin] header[class*="_header"]:has(.bt-head) :is(a,button,i
 [data-composer-placeholder]{font-size:0!important;line-height:0!important}
 /* The name sits on ::before so that ::after stays free for other composer skins. */
 [data-composer-placeholder]::before{content:var(--bt-placeholder,"Message")!important;display:block!important;font-size:14px!important;line-height:24px!important;color:color-mix(in srgb,var(--bt-ink) 36%,transparent)!important}
-/* The team's "+" (ComposerPlus) takes the seat of the shell's command-menu button. */
 [data-composer-card] button[class*="_add"]{display:none!important}
 .bt-plus{flex:none;width:28px;height:28px;padding:0;border:0;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--bt-ink) 5%,transparent);box-shadow:inset 0 0 0 .5px var(--bt-line);color:var(--bt-ink-2);cursor:pointer;transition:background-color .15s ease,color .15s ease,${spring(SPRING_TAP, "scale")}}
 .bt-plus:hover,.bt-plus[aria-expanded=true]{background:color-mix(in srgb,var(--bt-ink) 10%,transparent);color:var(--bt-ink)}
@@ -2953,16 +2841,11 @@ html[data-platform=darwin] header[class*="_header"]:has(.bt-head) :is(a,button,i
 .bt-voice{display:none;background:var(--bt-accent);color:var(--bt-accent-ink,#fff);animation:bt-icon-swap ${SPRING_POP.duration}ms ${SPRING_POP.easing}}
 .bt-voice:hover{opacity:.9}
 .bt-mic:active,.bt-voice:active{scale:.9}
-/* Touch devices never hover: tap-open toolbars (data-open on the message), always
-   visible icon buttons and 44px targets replace the hover affordances. The message
-   toolbar sits below the message instead of over it; its secondary buttons are 36px,
-   so the pill stays shorter than the primary touch controls. */
 @media (hover:none){
   .bt-msg{position:relative}
   .bt-msg-line{position:static}
   .bt-tools{top:100%;bottom:auto;left:auto;right:4px;margin-left:0;margin-top:2px;border-radius:999px;padding:2px;background:var(--bt-card);box-shadow:inset 0 0 0 .5px var(--bt-line-2),0 4px 14px rgba(0,0,0,.14)}
   .bt-tools::after{display:none}
-  /* 36px touch pill plus the 4px gap. The next message moves down instead of sitting under the open toolbar. */
   .bt-msg:has(>.bt-msg-line>.bt-tools[data-open]){margin-bottom:40px}
   .bt-tool{width:36px;height:36px}
   .bt-menu button,.bt-menu [role=menuitem],.bt-react-strip button{min-height:44px}
@@ -2985,11 +2868,7 @@ div:has(> nav [class*="_marks"]){display:none!important}
    surface the text sits on. */
 [class*="_userRow"] [class*="_bubble"],.bt-uhost [class*="_bubble"],[data-chat-flow-kind=question-reply] [class*="_bubble"],[data-chat-flow-kind=command-input] [class*="_bubble"]{background:var(--bt-user)!important;background-image:linear-gradient(var(--bt-user),var(--bt-user))!important;color:var(--bt-user-ink)!important;border-radius:18px!important;padding:7px 12px!important;font-size:var(--dsh-content-font-size,14px)!important;line-height:calc(var(--dsh-content-font-size,14px) + 8px)!important}
 [class*="_userRow"] [class*="_bubble"] [class*="_markdown"],[class*="_userRow"] [class*="_bubble"] a,.bt-uhost [class*="_bubble"] a{color:inherit}
-/* Sent messages get the hover toolbar below; steering and unsent bubbles keep none. */
 [class*="_userRow"] [class*="_actions"]{display:none!important}
-/* A steering message the Bot has not read yet shows a small unread label under
-   its bubble's right edge; --bt-steer-unread is set per window (header.js), and
-   the none fallback means no English can leak into a Chinese window. */
 [data-pending-steering]{flex-wrap:wrap}
 [data-pending-steering]::after{content:var(--bt-steer-unread,none);display:block;flex-basis:100%;width:100%;order:99;margin-top:4px;font-size:11px;line-height:14px;color:var(--bt-ink-3);font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
 [data-chat-flow-kind=user] [class*="_userRow"]{flex-direction:row-reverse;align-items:center;justify-content:flex-start}
@@ -3008,10 +2887,6 @@ div:has(> nav [class*="_marks"]){display:none!important}
 .bt-q-dock .bt-q{margin:0 auto 8px}
 .bt-q-dock[data-leaving]{pointer-events:none;animation:bt-dock-out .15s ease-out forwards}
 @keyframes bt-dock-out{to{opacity:0;transform:translateY(6px) scale(.985)}}
-/* Phones: the conversation flow gets the whole screen instead of the desktop
-   shares. A Bot message may take the width beside its avatar, a card the width of
-   the flow, and long text or a wide block wraps inside it instead of running off
-   the edge. This covers the group's chat flow, not only DS Bot's own panels. */
 @media (max-width:640px){
 .bt-msg,.bt-astack[data-lead]>.bt-msg{max-width:100%}
 .bt-bubble,[data-chat-flow] [class*="_bubble"]{max-width:100%;overflow-wrap:anywhere;word-break:break-word}
@@ -3045,7 +2920,6 @@ div:has(> nav [class*="_marks"]){display:none!important}
 .bt-news-x svg{width:12px;height:12px}
 .bt-news-x:hover{opacity:1;background:rgba(20,20,20,.5)}
 @media (prefers-reduced-motion:reduce){.bt-news,[class*="_toBottomSlot"]>button{animation:none}}
-/* The pill over a long reply whose start has scrolled away (reading.js). */
 .bt-reading{position:fixed;z-index:29;display:inline-flex;align-items:center;max-width:min(360px,calc(100vw - 32px));height:28px;padding:0 2px;box-sizing:border-box;border-radius:999px;background:var(--bt-glass-bg);-webkit-backdrop-filter:blur(24px) saturate(180%);backdrop-filter:blur(24px) saturate(180%);box-shadow:inset 0 0 0 .5px var(--bt-glass-rim),var(--bt-glass-shadow);font-family:var(--bt-font);transform-origin:top left;animation:bt-pop-drop ${SPRING_TAP.duration}ms ${SPRING_TAP.easing},bt-veil-in .16s ease-out}
 .bt-reading[data-leaving]{pointer-events:none;animation:bt-pop-out .12s cubic-bezier(.4,0,1,1) forwards}
 .bt-reading>button{display:inline-flex;align-items:center;gap:4px;min-width:0;height:24px;margin:0;padding:0 8px;border:0;border-radius:999px;background:none;color:var(--bt-ink-2);font:inherit;font-size:12px;line-height:16px;white-space:nowrap;cursor:pointer;transition:background-color .12s ease,color .12s ease}
@@ -3095,7 +2969,6 @@ div:has(> nav [class*="_marks"]){display:none!important}
 .bt-agent-act code{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--bt-hover);border-radius:4px;padding:1px 5px;color:var(--bt-ink-1,inherit)}
 .bt-part-line{display:flex;align-items:center;gap:10px;margin:10px 0 6px;font-size:11px;line-height:14px;color:var(--bt-ink-3)}
 .bt-part-line::before,.bt-part-line::after{content:"";flex:1;height:1px;background:var(--bt-line)}
-/* The dock wrapper also holds the context meter, so it stays hidden until a side question is in it. */
 [data-composer-dock]:has(.bt-btw){display:flex!important;flex-direction:column;align-items:center;width:100%;max-width:var(--dsh-composer-card-max-width,748px)}
 [data-composer-dock]:has(.bt-btw)>:not([data-slot="conversation.composer.dock"]){display:none!important}
 .bt-btw-dock,.bt-btw-stack{display:flex;flex-direction:column;gap:6px;width:100%;max-width:var(--dsh-composer-card-max-width,748px)}
@@ -3264,7 +3137,7 @@ var RETURN_TOKENS = `
 body{--bt-return-fill:rgba(127,127,127,.08);--bt-return-fill-hover:rgba(127,127,127,.14)}
 `;
 
-// src/client/mark.js
+// src/client/mark.ts
 var import_react2 = require("react");
 var STATES = ["idle", "thinking", "searching", "working", "sending", "orbit", "waiting", "alert", "done"];
 var botState = (running, activity, alert) => running ? STATES.includes(activity) && activity !== "waiting" ? activity : "working" : alert ? "alert" : activity === "waiting" ? "waiting" : "idle";
@@ -3458,10 +3331,10 @@ function RoomAvatar({ room: room2, roster, size = 36 }) {
   );
 }
 
-// src/client/dsh-primitives.js
+// src/client/dsh-primitives.ts
 var import_dsh_client_ui_primitives = require("@deepseek-ai/dsh-client-ui-primitives");
 
-// src/client/icons.js
+// src/client/icons.ts
 var import_react3 = require("react");
 function PlusIcon() {
   return (0, import_react3.createElement)("svg", { width: 18, height: 18, viewBox: "0 0 20 20", "aria-hidden": true }, (0, import_react3.createElement)("path", { d: "M10 3.5v13M3.5 10h13", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round" }));
@@ -3588,7 +3461,7 @@ var ImIcon = lineIcon(["M6.5 3.5h7A1.5 1.5 0 0 1 15 5v10a1.5 1.5 0 0 1-1.5 1.5h-
 var QueueIcon = lineIcon(["M4 6h12", "M4 10h12", "M4 14h8", "M14 12.5l2 1.5-2 1.5"]);
 var SETTINGS_ICONS = { general: GearIcon, bots: PeopleIcon, groups: ChatsIcon, im: ImIcon, usage: GaugeIcon };
 
-// src/client/agent-logos.js
+// src/client/agent-logos.ts
 var AGENT_LOGOS = {
   "claude-code": {
     "kind": "path",
@@ -3667,7 +3540,7 @@ var AGENT_LOGOS = {
   }
 };
 
-// src/client/agent-routes.js
+// src/client/agent-routes.ts
 var PREFIX = "local-";
 var CUSTOM_PREFIX = `${PREFIX}acp-`;
 var cliOf = (route) => typeof route === "string" && route.startsWith(PREFIX) ? route.slice(PREFIX.length) : void 0;
@@ -3721,7 +3594,7 @@ function agentAvatar(engine) {
   return { image: `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg2)))}` };
 }
 
-// src/client/agent-badge.js
+// src/client/agent-badge.ts
 var import_react4 = require("react");
 var badgeColor = (hex) => {
   const full2 = `#${String(hex ?? "").replace(/^#/, "")}`;
@@ -3759,7 +3632,7 @@ function AgentBadge({ engine, size = 15 }) {
   );
 }
 
-// src/client/pages.js
+// src/client/pages.ts
 var import_react5 = require("react");
 var ID = /^[a-z][a-z0-9-]{0,39}$/;
 function createPages({ alert } = {}) {
@@ -3808,7 +3681,7 @@ function PageView({ page, paneLeft, leaving, actions }) {
   return (0, import_react5.createElement)(page.Page, { paneLeft, leaving: leaving === true, close: () => actions.closePage() });
 }
 
-// src/client/text-links.js
+// src/client/text-links.ts
 var entries2 = createSource(Object.freeze([]));
 var textLinks = {
   subscribe: entries2.subscribe,
@@ -3832,7 +3705,7 @@ function linkTarget(event, links) {
   return null;
 }
 
-// src/client/changes-card.js
+// src/client/changes-card.ts
 var import_react6 = require("react");
 var NAMES = 3;
 function ChangesCard({ changes, actions }) {
@@ -3885,7 +3758,7 @@ var CHANGES_CSS = `
 @media (max-width:640px){.bt-changes{margin-left:0}}
 `;
 
-// src/client/cell-empty.js
+// src/client/cell-empty.ts
 var import_react7 = require("react");
 var emptied = (slot, gone) => {
   let marks = 0;
@@ -3914,7 +3787,7 @@ function CellEmpty({ className }) {
   return (0, import_react7.createElement)("span", { ref, className, hidden: true, "data-bt-empty": true });
 }
 
-// src/client/enter-key.js
+// src/client/enter-key.ts
 var sendsOnEnter = (prefs) => prefs?.enterToSend !== false;
 function insertComposerNewline(event, inputActions) {
   if (event.key !== "Enter" || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || event.isComposing || event.keyCode === 229 || event.getModifierState?.("AltGraph")) return false;
@@ -3929,7 +3802,7 @@ function insertComposerNewline(event, inputActions) {
   return true;
 }
 
-// src/client/card-hold.js
+// src/client/card-hold.ts
 var import_react8 = require("react");
 function useDockHold(sessionId, kind, requestId, actions, inline) {
   const release = (0, import_react8.useRef)(null);
@@ -3946,7 +3819,7 @@ function useDockHold(sessionId, kind, requestId, actions, inline) {
   };
 }
 
-// src/client/questions.js
+// src/client/questions.ts
 var import_react9 = require("react");
 var keyLetter = (index) => String.fromCharCode(65 + index);
 var optionsOf = (question) => (question?.options ?? []).map((option) => typeof option === "string" ? { label: option } : option);
@@ -4537,7 +4410,7 @@ function AnsweredCell({ node }) {
   })));
 }
 
-// src/client/handoff-card.js
+// src/client/handoff-card.ts
 var import_react10 = require("react");
 var titleOf2 = (reason) => {
   switch (reason) {
@@ -4678,7 +4551,7 @@ var HANDOFF_CSS = `
 .bt-handoff .bt-q-foot{flex-wrap:wrap}
 `;
 
-// src/client/computer.js
+// src/client/computer.ts
 var import_react11 = require("react");
 var LEVELS = [
   ["off", "Off"],
@@ -7593,7 +7466,7 @@ Answer: ${actionSummary(answer, view.view)}`;
   }).join("\n\n");
 }
 
-// src/client/widget-cell.js
+// src/client/widget-cell.ts
 var import_react16 = require("react");
 var viewT = (key, params) => key === "Send" ? t("Send to Bot") : t(key, params);
 var VIEW_UI = { t: viewT, Markdown: import_dsh_client_ui_primitives.MarkdownText };
@@ -7945,7 +7818,7 @@ body[data-bt-layout=flat] .bt-q-inline .dv-view,body[data-bt-layout=flat] .bt-q-
 .dv-seg.dv-view-seg button{flex:0 1 auto;height:auto;min-height:30px;min-width:0;padding-block:5px;white-space:normal;overflow-wrap:anywhere}
 `;
 
-// src/client/secret-card.js
+// src/client/secret-card.ts
 var import_react18 = require("react");
 var MIN_VALUE = 4;
 var NONE = {};
@@ -8486,7 +8359,7 @@ var SECRET_CSS = `
 @media (prefers-reduced-motion:reduce){.bt-secret-glide{transition:none}.bt-secret-check,.bt-secret-done,.bt-secret-ok,.bt-secret-edit{animation:none}}
 `;
 
-// src/client/model-menu.js
+// src/client/model-menu.ts
 var import_react19 = require("react");
 var import_react_dom = require("react-dom");
 var MENU_EXIT_MS = 120;
@@ -8940,7 +8813,6 @@ function useModelPicker({ bot, roster, actions, run: run2, onPick, onPickEffort,
     withEfforts,
     manage: local ? void 0 : manageModels(actions),
     hasEfforts: withEfforts && effortStops(reasoning).length > 0,
-    // DSH settings can change the list at any time, so opening asks again.
     opened: () => {
       if (local) readModels(routeOf(current2));
       else void actions?.refreshModels?.();
@@ -8950,7 +8822,6 @@ function useModelPicker({ bot, roster, actions, run: run2, onPick, onPickEffort,
       if (onPick) onPick(ref);
       else if (ref !== current2 || !bot.model) void run2(actions.updateBot(bot.id, { model: ref }));
     },
-    // Hands the save back, so the slider can tell when the Bot has caught up with its pick.
     chooseEffort: (effort) => onPickEffort ? onPickEffort(effort) : run2(actions.updateBot(bot.id, { effort: effort ?? null }))
   };
 }
@@ -9294,7 +9165,7 @@ menus use, with the menu item's hover, focus ring and a caret that points at the
 @media (prefers-reduced-motion:reduce){.bt-collapse{transition:none}.bt-model-dock{animation:none}.bt-model-spin{animation-duration:2s}.bt-model-caret,.bt-effort-fill,.bt-effort-knob{transition:none}.bt-model-tick svg{animation:none}}
 `;
 
-// src/client/bot-draft.js
+// src/client/bot-draft.ts
 function freshBotName(roster, base = "New Bot") {
   const taken = new Set(roster.bots.map((bot) => bot.name.toLowerCase()));
   if (!taken.has(base.toLowerCase())) return base;
@@ -9334,7 +9205,7 @@ function runModeNotes({ bot, roster, target, agent }) {
   return notes;
 }
 
-// src/client/agent-cards.js
+// src/client/agent-cards.ts
 var import_react20 = require("react");
 function useLocalAgents(wanted) {
   const [view, setView] = (0, import_react20.useState)(null);
@@ -9514,7 +9385,7 @@ var AGENT_CARDS_CSS = `
 @media (prefers-reduced-motion:reduce){.bt-loading-spin{animation-duration:2s}}
 `;
 
-// src/client/folder-menu.js
+// src/client/folder-menu.ts
 var import_react21 = require("react");
 var import_react_dom2 = require("react-dom");
 var folderName = (path2) => String(path2).replace(/[\\/]+$/, "").split(/[\\/]/).pop() || String(path2);
@@ -9670,7 +9541,7 @@ var FOLDER_CSS = `
 @media (prefers-reduced-motion:reduce){.bt-folder-view{animation:none}}
 `;
 
-// src/client/schedules.js
+// src/client/schedules.ts
 var import_react22 = require("react");
 var POLL_MS = 3e4;
 var shared = null;
@@ -10034,7 +9905,7 @@ var SCHEDULE_CSS = `
 }
 `;
 
-// src/client/capability-settings.js
+// src/client/capability-settings.ts
 var import_react23 = require("react");
 var blank = () => ({ name: "", kind: "mcp", description: "", transport: "stdio", command: "", argsText: "", envText: "{}", url: "", headersText: "{}", content: "", items: [] });
 var parseMap = (text, label) => {
@@ -10255,7 +10126,7 @@ function BotCapabilitiesCard({ bot, roster, actions, run: run2, Card: Card4, Swi
   );
 }
 
-// src/client/avatar-library.js
+// src/client/avatar-library.ts
 var import_react24 = require("react");
 var CHUNK = 20;
 var PAGE = 24;
@@ -10431,7 +10302,7 @@ var AVATAR_LIBRARY_CSS = `
 .bt-lib-report{display:flex;flex-direction:column;gap:4px}
 `;
 
-// src/client/overlay-hooks.js
+// src/client/overlay-hooks.ts
 var import_react25 = require("react");
 var escapeLayers = [];
 var onEscapeKey = (event) => {
@@ -10450,7 +10321,7 @@ function useEscape(onClose) {
   }, []);
 }
 
-// src/client/memory-panel.js
+// src/client/memory-panel.ts
 var import_react26 = require("react");
 var POLL_MS2 = 1500;
 var MENU_EXIT_MS2 = 120;
@@ -11055,7 +10926,7 @@ function MemoryDialog({ owner, actions, leaving = false }) {
   );
 }
 
-// src/client/bot-settings.js
+// src/client/bot-settings.ts
 var import_react27 = require("react");
 var capitalize = (word) => word[0].toUpperCase() + word.slice(1);
 function InlineText({ label, value, placeholder, required = false, maxLength, multiline = false, className, autoFocus = false, onSave, onDone }) {
@@ -11280,8 +11151,6 @@ function AvatarEditor({ bot, actions, run: run2, onClose, leaving = false }) {
         upload(file);
       } })
     ) : null,
-    // A photo from the library is the same photo the user uploaded before: the Bot
-    // keeps its own copy, and the library keeps its entry.
     tab === "library" ? (0, import_react27.createElement)(AvatarLibraryPanel, {
       actions,
       onPick: (entry) => run2(actions.updateBot(bot.id, { avatar: { ...bot.avatar, image: entry.image } }))
@@ -11423,7 +11292,6 @@ function BotSettingsForm({ bot, roster, actions, run: run2 }) {
         onChange: (on) => run2(actions.setMain(bot.id, on))
       })
     ),
-    // The Main Bot tile is always first and always shown, like in the context menu.
     isTile ? null : (0, import_react27.createElement)(
       Card2,
       { title: t("Sidebar") },
@@ -11487,7 +11355,7 @@ label.bt-bs-row{cursor:text}
 @media (prefers-reduced-motion:reduce){.bt-switch,.bt-switch-knob{transition:none}.bt-avedit :is(.bt-shapes,.bt-colors,.bt-dropzone){animation:none}}
 `;
 
-// src/client/open-window.js
+// src/client/open-window.ts
 function reserveWindow() {
   if (window.dshDesktop !== void 0) return { go: (url) => {
     window.open(url, "_blank");
@@ -11509,7 +11377,7 @@ function reserveWindow() {
 }
 var openPage = (url) => reserveWindow().go(url);
 
-// src/client/connector-marks.js
+// src/client/connector-marks.ts
 var import_react28 = require("react");
 var svg = (...kids) => (0, import_react28.createElement)("svg", { width: 20, height: 20, viewBox: "0 0 24 24", fill: "none", "aria-hidden": true }, ...kids);
 var path = (d, fill2) => (0, import_react28.createElement)("path", { d, fill: fill2 });
@@ -11677,7 +11545,7 @@ var MARKS = {
   "mail-qq": siMarks.qq
 };
 
-// src/client/connectors.js
+// src/client/connectors.ts
 var import_react29 = require("react");
 var TOKEN_URL = "https://github.com/settings/personal-access-tokens/new";
 function ConnectorMark({ connector }) {
@@ -12461,7 +12329,7 @@ var CONNECTOR_CSS = `
 .dv-q-textarea{field-sizing:content;min-height:66px;max-height:240px;overflow-y:auto;line-height:22px}
 `;
 
-// src/client/turn-reasoning.js
+// src/client/turn-reasoning.ts
 function turnReasoning(steps, current2) {
   const members = steps.length ? steps : [current2];
   if (members.findLast((step) => stepReasoning(step) !== "")?.step !== current2.step) return "";
@@ -12488,7 +12356,7 @@ var reasoningText = (step) => step.blocks.filter((block) => block.kind === "reas
 var stepReasoning = (step) => reasoningText(step).split("\n").filter((line) => !isActivity(line)).join("\n").trim();
 var stepActivity = (step) => reasoningText(step).split("\n").filter(isActivity).map((line) => line.slice(ACTIVITY.length).trim()).filter(Boolean);
 
-// src/shared/group-replies.js
+// src/shared/group-replies.ts
 function relayRange(text) {
   try {
     const value = JSON.parse(text);
@@ -12571,7 +12439,7 @@ function stackReplies(replies) {
   return items;
 }
 
-// src/client/fold.js
+// src/client/fold.ts
 var import_react30 = require("react");
 var FOLD_AT = { chars: 1500, lines: 25 };
 var FOLD_HUGE = { chars: 2e4, lines: Infinity };
@@ -12640,9 +12508,6 @@ function foldView(text, limit = FOLD_AT, markdown = true) {
   return {
     head: `${lines.join("\n")}
 ${opened.marker}`,
-    // The markdown before the block and the part of the block the preview
-    // keeps: the half block is drawn outside the host's Markdown, whose own
-    // copy control would hold only the part shown.
     prose: lines.slice(0, opened.line).join("\n"),
     codeHead: lines.slice(opened.line + 1).join("\n"),
     code: blockCode(body, opened.line, opened.marker)
@@ -12693,7 +12558,7 @@ function useFold(text, { limit = FOLD_AT, whole, live = false, markdown = true }
   };
 }
 
-// src/client/reading.js
+// src/client/reading.ts
 var import_react31 = require("react");
 var import_react_dom3 = require("react-dom");
 var GAP = 8;
@@ -12888,7 +12753,7 @@ function ReplyGuide({ box, active }) {
   );
 }
 
-// src/client/btw-model.js
+// src/client/btw-model.ts
 function seqNum(value) {
   const seq = value !== null && typeof value === "object" ? value.seq : value;
   if (typeof seq === "bigint") return Number(seq);
@@ -13086,7 +12951,7 @@ function withBtwRows(items, cards) {
   return out;
 }
 
-// src/client/btw.js
+// src/client/btw.ts
 var import_react32 = require("react");
 function failureText(card) {
   const raw = typeof card.error === "string" ? card.error : card.error?.message;
@@ -13199,7 +13064,7 @@ function BtwTurnTail({ turn, sessionId, useRoster, actions }) {
   return (0, import_react32.createElement)("div", { className: "bt-btw-stack" }, cards.map((card) => (0, import_react32.createElement)(BtwCardView, { key: card.id, card, sessionId, actions })));
 }
 
-// src/shared/im-platforms.js
+// src/shared/im-platforms.ts
 var IM_PLATFORMS = [
   {
     id: "telegram",
@@ -13279,7 +13144,7 @@ var IM_PLATFORMS = [
 var imPlatform = (id) => IM_PLATFORMS.find((platform) => platform.id === id);
 var viaOf = (source) => typeof source?.rpcId === "string" && source.rpcId.startsWith("im:") ? source.rpcId.split(":")[1] : void 0;
 
-// src/client/user-message.js
+// src/client/user-message.ts
 var import_react33 = require("react");
 var ui = __toESM(require("@deepseek-ai/dsh-client-ui-primitives"), 1);
 var projects = typeof ui.projectUserText === "function";
@@ -13504,7 +13369,7 @@ var USER_MESSAGE_CSS = `
 .bt-umsg:hover .bt-utools,.bt-umsg:focus-within .bt-utools{opacity:1;visibility:visible}
 `;
 
-// src/client/cells.js
+// src/client/cells.ts
 var import_react34 = require("react");
 var import_react_dom4 = require("react-dom");
 function Bubbles({ texts: texts2, roster, selfId, actions, streaming, sessionId, msgKey, useUi, lead, mentions, fold = FOLD_AT, whole, time, textInteractionSource }) {
@@ -13822,8 +13687,6 @@ function AssistantCell({ node, groupPart, sessionId, openFile, fileMentions, use
       live: thinking !== void 0,
       viewKey: `${sessionId}:${data.turn}`,
       textInteractionSource,
-      // The live clock counts the settled steps too: backing `at` by the settled
-      // time makes one Elapsed show settled + running.
       ...thinking !== void 0 ? { at: typeof thinking.time === "number" ? thinking.time - (ms ?? 0) : void 0 } : { ms }
     }) : null,
     texts2.length ? (0, import_react34.createElement)(Bubbles, { texts: texts2, roster, selfId, actions, streaming: running, sessionId, msgKey: `${sessionId}:${data.turn}:${node.key ?? data.seq ?? ""}`, useUi, mentions, fold: FOLD_HUGE, time: speaker === void 0 ? data.time : void 0, textInteractionSource }) : null
@@ -13970,7 +13833,6 @@ function memoryFailure(code) {
     case "memory/refused":
     case "memory/denied":
       return t("The memory refused this change");
-    // A write that broke, and any failure this interface does not know.
     default:
       return t("The memory could not be changed");
   }
@@ -14143,10 +14005,8 @@ function chatRow(row, key, { sessionId, selfId, roster, actions, useUi, onBtwDel
       return (0, import_react34.createElement)(EarlierUser, { key, row, actions });
     case "answer":
       return (0, import_react34.createElement)(AnsweredReply, { key, node: { data: row } });
-    // A question or view card closed without an answer on it.
     case "closed":
       return row.view === void 0 ? (0, import_react34.createElement)("div", { key, className: "bt-q-inline" }, (0, import_react34.createElement)(SettledQuestion, { question: row.question, closed: row.closed })) : (0, import_react34.createElement)(ClosedView, { key, title: row.title, view: row.view, closed: row.closed });
-    // A display-only view replays from the blueprint the host kept on the call.
     case "view":
       return (0, import_react34.createElement)(WidgetCell, { key, sessionId, callId: row.callId, args: { text: (name) => name === "title" ? row.title : void 0, value: (name) => name === "view" ? row.view : void 0 }, done: true, isError: false, roster, actions });
     case "bot": {
@@ -14774,7 +14634,7 @@ function ToolCell({ node, sessionId, useRoster, useUi, useWork, useHeldCards, us
   return (0, import_react34.createElement)(import_react34.Fragment, null, drawn.map((call2, index) => (0, import_react34.createElement)(import_react34.Fragment, { key: call2.callId ?? index }, renderCall(call2, env))));
 }
 
-// src/client/activity-row.js
+// src/client/activity-row.ts
 var import_react35 = require("react");
 var import_react_dom5 = require("react-dom");
 var PHRASE_HOLD_MS = 800;
@@ -14957,7 +14817,7 @@ function ActivityIndicator({ sessionId, useRoster, useSessionStatus, useLive, us
   ), host);
 }
 
-// src/client/dsh-offer.js
+// src/client/dsh-offer.ts
 var APP_OFFER = /* @__PURE__ */ new Set(["available", "downloading", "verifying", "installing", "ready"]);
 var bare = (value) => String(value ?? "").trim().replace(/^v/i, "").split("+")[0];
 var sameVersion = (a, b) => bare(a) !== "" && bare(a) === bare(b);
@@ -14967,7 +14827,7 @@ function showsDshRow(dsh, app) {
   return dsh.kind === "app" && APP_OFFER.has(app?.phase) && sameVersion(app.version, dsh.verified);
 }
 
-// src/client/frame-watch.js
+// src/client/frame-watch.ts
 var sidebarTrackWidth = () => {
   const box = typeof document === "undefined" ? void 0 : document.querySelector('[class*="_sidebarCol"]')?.getBoundingClientRect();
   return box === void 0 ? null : trackRoom(box);
@@ -14998,15 +14858,12 @@ var margin = (side, width, style) => {
 };
 var roomHold = 0;
 var chatRoom = {
-  /** The margin the Bot panel takes on the right, in px, or null for the shell's own. */
   setRight(width) {
     margin("right", width, roomRule().style);
   },
-  /** The margin our own left column takes while the shell sidebar is collapsed. */
   setLeft(width) {
     margin("left", width, roomRule().style);
   },
-  /** While on, a margin change lands at once instead of gliding. */
   hold(on) {
     cancelAnimationFrame(roomHold);
     if (on) {
@@ -15017,7 +14874,6 @@ var chatRoom = {
       roomHold = requestAnimationFrame(() => roomRule().style.removeProperty("transition"));
     });
   },
-  /** The columns themselves, for a drag's per-frame writes. */
   columns() {
     roomRule();
     return room.selector ? [...document.querySelectorAll(room.selector)] : [];
@@ -15068,7 +14924,7 @@ function installFrameWatch(frame) {
   };
 }
 
-// src/client/sidebar.js
+// src/client/sidebar.ts
 var import_react36 = require("react");
 var import_react_dom6 = require("react-dom");
 function useMarkedUnread(id, active, marked2, actions) {
@@ -15274,7 +15130,6 @@ function AgentRow({ agent, actions, useSessions, useSessionStatus, useUi, wide, 
     const row = list.byId[id];
     return {
       id,
-      // A blank Session's title is the workspace folder name; show the label instead.
       title: row?.blank === true ? "" : row?.displayTitle ?? row?.title ?? "",
       at: row?.updatedAt ?? 0,
       running: row?.running === true,
@@ -15331,8 +15186,6 @@ function AgentRow({ agent, actions, useSessions, useSessionStatus, useUi, wide, 
       ) : null,
       wide && unread && !active ? (0, import_react36.createElement)("span", { className: "bt-unread", "aria-hidden": true }) : !wide && unread && !active ? (0, import_react36.createElement)("span", { className: "bt-dot", "aria-hidden": true }) : null
     ),
-    // The rail has no Session list. Left in, its text is wider than the rail, so this wrapper
-    // filled the rail and the 56px row sat at its left edge instead of the centre.
     wide ? (0, import_react36.createElement)(
       "div",
       { className: "bt-agent-sub", "data-open": open || void 0 },
@@ -15662,7 +15515,6 @@ function TeamSidebar(props) {
     const entries3 = [
       ...roster.bots.filter((bot) => bot.id !== roster.mainBotId).map((bot) => ({ kind: "bot", item: bot, at: stamps[currentPart(bot)] ?? bot.createdAt })),
       ...roster.rooms.map((room2) => ({ kind: "room", item: room2, at: stamps[room2.id] ?? room2.createdAt })),
-      // The Agent sorts by its most recent Session, falling back to when it was added.
       ...(roster.agents ?? []).map((agent) => ({ kind: "agent", item: agent, at: Math.max(0, ...agent.sessions.map((id) => stamps[id] ?? 0)) || agent.createdAt }))
     ];
     return entries3.sort((a, b) => Number(Boolean(b.item.pinned)) - Number(Boolean(a.item.pinned)) || b.at - a.at);
@@ -16555,7 +16407,7 @@ var SIDEBAR_CSS = `
 @media (prefers-reduced-motion:reduce){.bt-sec-body,.bt-sec-chev,.bt-sec-act,.bt-rail-folder{transition:none}.bt-sec-pile{animation:none}}
 `;
 
-// src/client/permission-picker.js
+// src/client/permission-picker.ts
 var import_react37 = require("react");
 var LABELS = { "read-only": "Read only", "workspace-write": "Workspace", "danger-full-access": "Full access" };
 var DANGER = /* @__PURE__ */ new Set(["danger-full-access"]);
@@ -16605,7 +16457,7 @@ function PermissionPicker({ catalog, saved, onPick, repick = false }) {
   );
 }
 
-// src/client/group-settings.js
+// src/client/group-settings.ts
 var import_react38 = require("react");
 var ROOM_MODES = [
   ["admin", "Admin leads", "Plain messages go to the admin, who calls others with @Name."],
@@ -16755,7 +16607,6 @@ function GroupSettingsForm({ room: room2, roster, actions, run: run2, onDeleted 
       (0, import_react38.createElement)("div", { className: "bt-set-row bt-gs-note" }, (0, import_react38.createElement)(
         "span",
         { className: "bt-set-hint" },
-        // The host checks for two members on every change, even a rename.
         members.length < 2 ? t("Add a Bot first: a group chat needs at least two.") : admin ? t("{name} leads this group: it can call members with @Name, change the group, and post here.", { name: admin.name }) : t("No admin yet. An admin can call members with @Name, change the group, and post here.")
       ))
     ),
@@ -16870,7 +16721,7 @@ var GROUP_SETTINGS_CSS = `
 @media (prefers-reduced-motion:reduce){.bt-gs-pick{animation:none}}
 `;
 
-// src/client/create-bot.js
+// src/client/create-bot.ts
 var import_react39 = require("react");
 var pick = (list) => list[Math.floor(Math.random() * list.length)];
 var randomLook = (avoid = {}) => {
@@ -16935,7 +16786,6 @@ function CreateBot({ roster, actions, start, brief = "", onBack, canGoBack, onCr
     (0, import_react39.createElement)(
       "div",
       { className: "bt-create-preview" },
-      // The key remounts the mark, so every new pick plays the pop.
       (0, import_react39.createElement)(
         "span",
         { key: `${look.shape}:${look.color}:${previewLook.image ? "photo" : ""}`, className: "bt-create-pop" },
@@ -16979,7 +16829,6 @@ function CreateBot({ roster, actions, start, brief = "", onBack, canGoBack, onCr
         } })
       )
     ),
-    // The library is a block of its own under the look, not a part of the button row.
     library ? (0, import_react39.createElement)(AvatarLibraryPanel, { actions, onPick: (entry) => {
       setImage(entry.image);
       setLibrary(false);
@@ -17048,7 +16897,7 @@ function CreateBot({ roster, actions, start, brief = "", onBack, canGoBack, onCr
   );
 }
 
-// src/client/kept-private.js
+// src/client/kept-private.ts
 var import_react40 = require("react");
 function KeptPrivateSection({ roster, actions, run: run2, Section: Section2, Row: Row4 }) {
   const kept = roster.privateArchives ?? [];
@@ -17078,7 +16927,7 @@ function KeptPrivateSection({ roster, actions, run: run2, Section: Section2, Row
   );
 }
 
-// src/client/usage-data.js
+// src/client/usage-data.ts
 var HOUR = 0;
 var OWNER = 1;
 var MODEL = 2;
@@ -17210,7 +17059,7 @@ function percent2(part, whole) {
   return value < 1 ? "<1" : String(Math.round(value));
 }
 
-// src/client/usage-page.js
+// src/client/usage-page.ts
 var import_react41 = require("react");
 var HEAT_WEEKS = 53;
 var TOP_SERIES = 7;
@@ -17427,7 +17276,6 @@ function Chart({ range, columns: columns2, series, tipSeries, by, onBy, onPick }
       (0, import_react41.createElement)(
         "div",
         { className: "bt-us-ticks", "aria-hidden": true },
-        // A preset counts its labels back from now; a picked span forward from its first day.
         columns2.map((column, at) => (0, import_react41.createElement)(
           "span",
           { key: column.key, "data-now": at === count - 1 && range.ends !== false ? "" : void 0 },
@@ -18086,7 +17934,7 @@ button.bt-us-row:hover{background:var(--bt-hover)}
 }
 `;
 
-// src/client/connectors-page.js
+// src/client/connectors-page.ts
 var import_react42 = require("react");
 var CATEGORIES = [["dev", "Developer"], ["docs", "Docs & files"], ["work", "Work"], ["design", "Design"], ["data", "Data"], ["commerce", "Commerce"], ["search", "Search"]];
 var FEATURED = ["github", "mail", "notion", "linear", "figma", "slack"];
@@ -20033,7 +19881,7 @@ var createDataURL = function(width, height, getPixel) {
 var qrcode_default = qrcode;
 var stringToBytes = qrcode.stringToBytes;
 
-// src/client/phone-page.js
+// src/client/phone-page.ts
 var import_react43 = require("react");
 var OFF = { server: "", on: false, status: "off", phones: [], pairing: null };
 var QUIET = 4;
@@ -20144,7 +19992,7 @@ function PhonePage({ roster, actions, Section: Section2, Row: Row4 }) {
   );
 }
 
-// src/client/im-page.js
+// src/client/im-page.ts
 var import_react44 = require("react");
 var import_react_dom7 = require("react-dom");
 var BRAND = { telegram: "telegram", weixin: "wechat", qq: "qq", discord: "discord", slack: "slack" };
@@ -20692,7 +20540,7 @@ var IM_CSS = `
 @media (prefers-reduced-motion:reduce){.bt-im-dot,.bt-im-qr-blank,.bt-im-qr{animation:none}}
 `;
 
-// src/client/browser-settings.js
+// src/client/browser-settings.ts
 var import_react45 = require("react");
 var ACTIONS = [["post", "Post"], ["upload", "Upload"], ["download", "Download"], ["delete", "Delete"]];
 var DURATIONS = [["hour", "1 hour"], ["today", "Today"], ["week", "7 days"], ["permanent", "Permanent"]];
@@ -20868,7 +20716,7 @@ function BrowserPage({ roster, actions, run: run2, Section: Section2, Row: Row4 
   );
 }
 
-// src/client/feedback.js
+// src/client/feedback.ts
 var import_react46 = require("react");
 var FeedbackIcon = () => (0, import_react46.createElement)(
   "svg",
@@ -20937,7 +20785,7 @@ function FeedbackPage({ actions, run: run2, Section: Section2, Row: Row4 }) {
   }));
   const clearLog = () => run2(actions.diagnosticsClear().then(clearClientErrors).then(load).then(() => setNote(t("Cleared the error log."))));
   const browserErrors = clientErrors().map((entry) => ({ ...entry, source: "browser" }));
-  const entries3 = [...report?.entries ?? [], ...browserErrors].sort((a, b) => new Date(b.time) - new Date(a.time));
+  const entries3 = [...report?.entries ?? [], ...browserErrors].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
   const total = (report?.total ?? 0) + browserErrors.length;
   const shown = entries3.slice(0, 8);
   return [
@@ -21059,7 +20907,7 @@ var FEEDBACK_CSS = `
 @media (prefers-reduced-motion:reduce){.bt-toast{animation:none}.bt-toast[data-leaving]{transition:none}}
 `;
 
-// src/client/about.js
+// src/client/about.ts
 var import_react47 = require("react");
 var CHEER_MS = 1800;
 var starCount = (count) => new Intl.NumberFormat(dateLocale(), { notation: "compact", maximumFractionDigits: 1 }).format(count);
@@ -21224,7 +21072,7 @@ body:not([data-bt-motion=quiet]) .bt-about-mark:hover .bt-mark[data-live][data-s
 @media (prefers-reduced-motion:reduce){.bt-star:hover .bt-star-icon,.bt-star-count{animation:none}}
 `;
 
-// src/client/providers-page.js
+// src/client/providers-page.ts
 var import_react48 = require("react");
 var PROTOCOL_NAMES = {
   "openai-completions": "OpenAI Chat Completions",
@@ -21361,7 +21209,6 @@ function ProvidersPage({ actions, run: run2, roster, Section: Section2, advanced
       })),
       adding ? (0, import_react48.createElement)(AddProvider, { key: "add", view, apply: apply2, actions, onDone: () => setAdding(false) }) : null
     ),
-    // DSH's own Models page: each model's context, output, inputs, thinking levels and order.
     advanced ? (0, import_react48.createElement)(
       "div",
       { key: "advanced", className: "bt-set-card" },
@@ -21603,7 +21450,6 @@ function AddProvider({ view, apply: apply2, actions, onDone }) {
         onClick: () => setMode(id)
       }, label))
     ),
-    // Both forms stay mounted, so switching keeps what is typed in the other.
     (0, import_react48.createElement)("div", { hidden: mode !== "known" }, (0, import_react48.createElement)(KnownForm, { view, apply: apply2, actions, onDone })),
     (0, import_react48.createElement)("div", { hidden: mode !== "custom" }, (0, import_react48.createElement)(CustomForm, { view, apply: apply2, actions, onDone }))
   );
@@ -21759,7 +21605,7 @@ var PROVIDERS_CSS = `
 @media (prefers-reduced-motion:reduce){.bt-provider-add{animation:none}}
 `;
 
-// src/client/local-agents-page.js
+// src/client/local-agents-page.ts
 var import_react49 = require("react");
 function AgentForm({ initial, submit, close }) {
   const [name, setName] = (0, import_react49.useState)(initial?.name ?? "");
@@ -21903,7 +21749,7 @@ function LocalAgentsPage({ run: run2, Row: Row4 }) {
   ];
 }
 
-// src/client/bot-model-batch.js
+// src/client/bot-model-batch.ts
 var SKIP_LOCAL_AGENT = "local-agent";
 var SKIP_UNAVAILABLE = "unavailable";
 var modelRefOf = (bot) => bot?.model ?? bot?.appliedModel;
@@ -21943,7 +21789,7 @@ function summarizeModelChange(results) {
   return { total: (results ?? []).length, updated: count("updated"), unchanged: count("unchanged"), skipped: count("skipped"), failed: count("failed") };
 }
 
-// src/client/bot-models-page.js
+// src/client/bot-models-page.ts
 var import_react50 = require("react");
 var modelLine = (bot, roster) => {
   const shown = modelOf(bot, roster);
@@ -22086,7 +21932,7 @@ var BOT_MODELS_CSS = `
 .bt-bm-summary .bt-set-copy>span{font-size:12px;line-height:16px;color:var(--bt-ink-2)}
 `;
 
-// src/client/settings.js
+// src/client/settings.ts
 var import_react51 = require("react");
 var import_dsh_client_ui_primitives2 = require("@deepseek-ai/dsh-client-ui-primitives");
 var capitalize2 = (word) => word[0].toUpperCase() + word.slice(1);
@@ -22229,7 +22075,6 @@ function GeneralPage({ roster, actions, run: run2, dsh }) {
         )
       ),
       (0, import_react51.createElement)(SetRow, { label: t("Message layout") }, (0, import_react51.createElement)(Choice, { label: t("Message layout"), value: layoutOf(prefs), options: LAYOUTS, pick: (id) => run2(actions.setPrefs({ layout: id })) })),
-      // The flat layout's text has a width of its own; the bubble width stays for the user's messages.
       layoutOf(prefs) === "flat" ? (0, import_react51.createElement)(SetRow, { label: t("Text width") }, (0, import_react51.createElement)(WidthSlider, { label: t("Text width"), value: flatWidthOf(prefs), save: (flatWidth) => run2(actions.setPrefs({ flatWidth })) })) : null,
       (0, import_react51.createElement)(SetRow, { label: t("Bubble width") }, (0, import_react51.createElement)(WidthSlider, { label: t("Bubble width"), value: widthOf(prefs), save: (width) => run2(actions.setPrefs({ width })) })),
       (0, import_react51.createElement)(SetRow, { label: t("Interface motion") }, (0, import_react51.createElement)(Choice, { label: t("Interface motion"), value: effectsOf(prefs), options: EFFECTS, pick: (id) => run2(actions.setPrefs({ effects: id })) })),
@@ -22277,7 +22122,6 @@ function GeneralPage({ roster, actions, run: run2, dsh }) {
         (0, import_react51.createElement)(MemorySize, { label: t(label), value: prefs.memoryLimits?.[scope] ?? size, save: (value) => run2(actions.setPrefs({ memoryLimits: { [scope]: value } })) })
       ))
     ),
-    // Settings opens in Agent mode too; there the way goes back to Bot mode.
     actions.setSurface ? (0, import_react51.createElement)(
       SetSection,
       { key: "mode", title: t("Mode") },
@@ -22554,7 +22398,7 @@ function SettingsDialog({ page, id, roster, actions, useUpdate, leaving = false,
   );
 }
 
-// src/client/notify.js
+// src/client/notify.ts
 var NOTIFY_KEY = "ds-bot:notify";
 function notifyKind({ before, after, viewing, focused, enabled, muted, group }) {
   if (before === void 0 || enabled !== true || muted === true) return void 0;
@@ -22624,7 +22468,7 @@ function notificationRows({ statuses, roster, approvals = [] }) {
   return rows2;
 }
 
-// src/client/notifications.js
+// src/client/notifications.ts
 var import_react52 = require("react");
 var shellNotify = (notice) => Promise.resolve(bridge()?.notify?.(notice)).catch(() => {
 });
@@ -22732,7 +22576,7 @@ function toggleMuted(id) {
   return changeNotify({ mute: { id, on: !isMuted(id) } });
 }
 
-// src/client/settings-shell.js
+// src/client/settings-shell.ts
 var import_react53 = require("react");
 var import_react_dom8 = require("react-dom");
 var import_dsh_client_ui_primitives3 = require("@deepseek-ai/dsh-client-ui-primitives");
@@ -23299,7 +23143,6 @@ function installSettingsShell(ctx, { face, actions, ui: ui2, held }) {
         })
       }, HostReleasePrompt)), "ds-bot: host release prompt");
     }),
-    // Notifications are this window's own switches, so the row registers without a form.
     ctx.effect(() => slots.inject("settings.general.item", () => slots.register({
       name: "settings.general.item",
       id: "notifications",
@@ -23377,7 +23220,7 @@ var SETTINGS_SHELL_CSS = `
 .bt-release-line.bt-release-done{border-top-style:solid;color:var(--bt-green);opacity:1}
 `;
 
-// src/client/header.js
+// src/client/header.ts
 var import_react54 = require("react");
 var import_react_dom9 = require("react-dom");
 var GoArrow = () => (0, import_react54.createElement)("svg", { width: 14, height: 14, viewBox: "-12 -12 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2.2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true }, (0, import_react54.createElement)("path", { d: "M-7 0H7M2 -5L7 0L2 5" }));
@@ -23616,7 +23459,7 @@ function NewMessagePills({ sessionId, useSessions, useUi, useTurnClock }) {
   );
 }
 
-// src/client/enter-steer.js
+// src/client/enter-steer.ts
 var steerable = (input) => input !== void 0 && input.phase === "plain" && input.draft.trim() === "" && input.attachmentIds.length === 0 && input.queue.some((message) => message.source?.kind === "user");
 var enterSteers = (event, input) => event.key === "Enter" && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey && !event.getModifierState?.("AltGraph") && !event.isComposing && event.keyCode !== 229 && !event.repeat && steerable(input);
 var steerQueued = async (session) => {
@@ -23634,7 +23477,7 @@ var steerQueued = async (session) => {
   }
 };
 
-// src/client/composer.js
+// src/client/composer.ts
 var import_react55 = require("react");
 var import_react_dom10 = require("react-dom");
 var speechApi = () => window.SpeechRecognition ?? window.webkitSpeechRecognition;
@@ -23877,7 +23720,7 @@ function ComposerPlus({ sessionId, inputActions, useInput, useRoster, actions })
   );
 }
 
-// src/client/at-menu.js
+// src/client/at-menu.ts
 var BOTS_SOURCE = "ds-bot";
 var CHATS_SOURCE = "ds-bot-chats";
 var ROOM_ALL = ["all", "everyone", "所有人", "全体"];
@@ -23965,7 +23808,7 @@ function atSources({ roster, sessions, launched, iconFor }) {
   return [bots, chats];
 }
 
-// src/client/side-model.js
+// src/client/side-model.ts
 var SIDE_SOURCE = "ds-bot-side";
 var SIDE_TOKEN = "/side ";
 var GROUP_REFUSAL = "Side chat is only available in a Bot's private chat.";
@@ -24097,7 +23940,7 @@ function drawerMenuKeys({ bot, room: room2, canBrowse, canTerminal, canFiles }) 
   return [...keys, ...tail];
 }
 
-// src/client/side-chat.js
+// src/client/side-chat.ts
 var import_react56 = require("react");
 function SideEntry({ chatId, entry, actions }) {
   const [cancelling, setCancelling] = (0, import_react56.useState)(false);
@@ -24185,7 +24028,6 @@ function SideChatView({ subject, chat, roster, actions }) {
           ask();
         }
       }),
-      // With Enter sending off this is the only way to ask; on, it sends the same.
       (0, import_react56.createElement)("button", {
         type: "button",
         className: "bt-side-send",
@@ -24273,7 +24115,7 @@ var SIDE_CSS = `
 .bt-pmenu-sep{height:.5px;flex:none;margin:4px 8px;background:var(--bt-line-2)}
 `;
 
-// src/client/speech.js
+// src/client/speech.ts
 var VOICE_BUNDLE = "@deepseek-ai/dsh-experimental-voice-input-bundle";
 var USABLE = /* @__PURE__ */ new Set(["ready", "standby", "waking"]);
 async function speechCatalog(speech) {
@@ -24425,7 +24267,7 @@ function turnDetector({ loud = 0.12, quiet = 0.06, quietMs = 1200 } = {}) {
   };
 }
 
-// src/client/surface.js
+// src/client/surface.ts
 function groupsFor({ mode, plain = false }) {
   return { shell: mode === "bot", conversation: mode === "bot" && !plain };
 }
@@ -24469,13 +24311,6 @@ function surfaceGroups(install, { onError } = {}) {
         if (!mount(group)) break;
       }
     },
-    // A step can go on with nothing actually contributed — a slot inject whose
-    // callback threw inside the host still returns its disposer. remount takes
-    // the group off and lets the reconcile put it back, so a caller that
-    // notices the contribution is missing can retry instead of trusting
-    // `mounted`. Groups that lean on it (the conversation on the shell's
-    // styles) come off first and go back only through the reconcile — a
-    // failed remount never leaves one stranded.
     remount(group, wanted = lastWanted) {
       if (!GROUPS.includes(group)) return;
       for (const later of GROUPS.slice(GROUPS.indexOf(group) + 1)) withdraw(later);
@@ -24507,7 +24342,7 @@ function writeMode(mode, storage = globalThis.localStorage) {
   }
 }
 
-// src/client/header-navigation.js
+// src/client/header-navigation.ts
 var navigationEntry = (entries3) => entries3.find((entry) => entry.store && typeof entry.inject === "function");
 function headerNavigation(entries3, face) {
   const source = navigationEntry(entries3);
@@ -24545,7 +24380,7 @@ function installHeaderNavigation(slots, face, component, priority) {
   };
 }
 
-// src/shared/file-chunks.js
+// src/shared/file-chunks.ts
 async function* fileChunks(call2, target) {
   let offset = 0;
   let version;
@@ -24564,7 +24399,7 @@ async function* fileChunks(call2, target) {
   }
 }
 
-// src/client/file-target.js
+// src/client/file-target.ts
 function presentedFileTarget(actionUrl) {
   if (typeof actionUrl !== "string" || !actionUrl.includes("?")) return null;
   const params = new URLSearchParams(actionUrl.slice(actionUrl.indexOf("?") + 1));
@@ -24577,7 +24412,7 @@ function presentedFileTarget(actionUrl) {
   return { sessionId, seq, index };
 }
 
-// src/client/file-save.js
+// src/client/file-save.ts
 var import_react57 = require("react");
 function SaveFileAction({ actionUrl, available = true, pending = false }) {
   const [busy, setBusy] = (0, import_react57.useState)(false);
@@ -24614,7 +24449,7 @@ function SaveFileAction({ actionUrl, available = true, pending = false }) {
   );
 }
 
-// src/client/mention-source.js
+// src/client/mention-source.ts
 function fileMentionSource(ctx, sessionId) {
   return (owner, getFileTriggerProps) => {
     const service = ctx?.get?.("chatFileMentions");
@@ -24622,7 +24457,7 @@ function fileMentionSource(ctx, sessionId) {
   };
 }
 
-// src/client/turn-error.js
+// src/client/turn-error.ts
 var import_react58 = require("react");
 var OFFICIAL = "deepseek-official";
 var ACCOUNT = "deepseek-account";
@@ -24674,7 +24509,6 @@ function fixesFor(code, { canSignIn, official, topUp, onAccount = false }) {
       return ["rekey", "model"];
     case "AUTH":
       return ["rekey", canSignIn ? "use-account" : null, "model"].filter(Boolean);
-    // A content audit is about the input, not the credentials; no key action helps.
     case "CONTENT_POLICY":
       return [];
     case "QUOTA":
@@ -24884,7 +24718,7 @@ var TURN_ERROR_CSS = `
 .bt-fail-copy svg{width:13px;height:13px}
 `;
 
-// src/client/palette.js
+// src/client/palette.ts
 var import_react59 = require("react");
 var PALETTE_EXIT_MS = 160;
 function CommandPalette({ start, token, roster, actions, useSessions }) {
@@ -25080,7 +24914,7 @@ ${shown}`, { axis: "y", ...QUICK_EDGES });
   );
 }
 
-// src/client/group-search.js
+// src/client/group-search.ts
 var import_react60 = require("react");
 var EXIT_MS = 160;
 var MIN_QUERY = 2;
@@ -25300,7 +25134,7 @@ function GroupSearch({ room: room2, roster, token, actions }) {
   );
 }
 
-// src/client/paste-card.js
+// src/client/paste-card.ts
 var import_react61 = require("react");
 var PASTE_LIMIT = 1500;
 var NO_BLOCKS = [];
@@ -25472,7 +25306,7 @@ var PASTE_CSS = `
 .bt-paste-x:hover{background:color-mix(in srgb,var(--bt-ink) 8%,transparent);color:var(--bt-ink)}
 `;
 
-// src/client/new-chat.js
+// src/client/new-chat.ts
 var import_react62 = require("react");
 function NewChat({ mode, sectionId = null, paneLeft, roster, actions }) {
   const [query, setQuery] = (0, import_react62.useState)("");
@@ -25750,7 +25584,7 @@ ${listed}`, { axis: "y", ...QUICK_EDGES });
   );
 }
 
-// src/client/exchange.js
+// src/client/exchange.ts
 var import_react63 = require("react");
 var SHEET_EXIT_MS = 220;
 function ExchangeDialog({ pair, paneLeft, roster, actions }) {
@@ -25838,7 +25672,7 @@ function ExchangeDialog({ pair, paneLeft, roster, actions }) {
   );
 }
 
-// src/client/voice.js
+// src/client/voice.ts
 var import_react64 = require("react");
 var plainSpeech = (text) => stripHeader(text).replace(/```[\s\S]*?```/g, " ").replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/[*_`#>|~-]+/g, " ").replace(/\s+/g, " ").trim();
 var VOICE_LABELS = {
@@ -26183,7 +26017,7 @@ function VoiceMode({ sessionId, paneLeft, roster, actions, useSessions, useSessi
   );
 }
 
-// src/client/context-menu.js
+// src/client/context-menu.ts
 var import_react65 = require("react");
 var SECTION_COLORS = ["blue", "orange", "green", "violet", "rose"];
 function sectionMoveItems(entry, roster, actions) {
@@ -26493,7 +26327,7 @@ function AgentMenu({ menu, roster, actions, leaving }) {
   );
 }
 
-// src/client/mark-flight.js
+// src/client/mark-flight.ts
 var FLIGHT_ENDS = { tab: ":scope > .bt-ptabs .bt-ptab-bot .bt-mark", drawer: ":scope > .bt-panel-view .bt-drawer-id .bt-mark" };
 var flightEnd = (next) => next === "details" ? "drawer" : "tab";
 var flightStart = (next) => next === "details" ? "tab" : "drawer";
@@ -26568,14 +26402,8 @@ function createFlight(env) {
   }
   const arm = () => later(finish, shape.duration + SAFETY_MS);
   return {
-    /** The end the flying mark is heading for, or null with no flight. */
     active: () => live?.end ?? null,
     finish,
-    /**
-     * Take off. Whatever flew before ends first.
-     * @param {{panel: Element, end: 'tab'|'drawer', node: Element, from: {left: number, top: number, width: number, height: number}}} flight
-     * @returns {boolean} false when there is nothing to fly (a mark without a box)
-     */
     begin({ panel, end, node, from }) {
       finish();
       if (!(from.width > 0 && from.height > 0)) return false;
@@ -26587,10 +26415,6 @@ function createFlight(env) {
       place(null);
       return true;
     },
-    /**
-     * Turn the mark that is flying round, from where it is now toward the other end.
-     * @returns {boolean} false when no flight was on
-     */
     retarget(end) {
       if (live === null) return false;
       live.from = boxOf(live.node.getBoundingClientRect());
@@ -26604,7 +26428,7 @@ function createFlight(env) {
   };
 }
 
-// src/client/member-status.js
+// src/client/member-status.ts
 var import_react66 = require("react");
 var NO_WORK = { bots: {}, rooms: {}, approvals: [] };
 var FACES_MAX = 3;
@@ -26731,8 +26555,6 @@ function ApprovalCard({ approval, bot, actions }) {
     approval.detail?.text ? (0, import_react66.createElement)("div", { className: "bt-mw-text" }, approval.detail.text) : null,
     approval.reason ? (0, import_react66.createElement)("div", { className: "bt-mw-reason" }, approval.reason) : null,
     approval.detail?.code ? (0, import_react66.createElement)("code", { className: "bt-mw-code", title: approval.detail.code }, approval.detail.code) : null,
-    // Own-chat approvals are answerable for IM and the phone app; here the Bot's
-    // own DSH card stays the place to answer, so the row still opens that chat.
     approval.answerable && approval.roomId !== void 0 ? (0, import_react66.createElement)(
       "div",
       { className: "bt-mw-actions" },
@@ -26834,7 +26656,7 @@ body[data-ds-dark-theme] .bt-member-state.bt-mw-ask{color:#f0b84a}
 @media (prefers-reduced-motion:reduce){.bt-mw-pill,.bt-mw-face,.bt-mw-label,.bt-member,.bt-mw-card{animation:none}.bt-mw-pill{transition:background-color .12s ease}}
 `;
 
-// src/client/details-drawer.js
+// src/client/details-drawer.ts
 var import_react67 = require("react");
 function transcriptOf(list, id, name, hiddenTurns = []) {
   const outline = list.projectionsBySession?.[id]?.values?.turnOutline ?? list.byId[id]?.projectionValues?.turnOutline;
@@ -26864,7 +26686,6 @@ function PermissionRow({ bot, roster, actions, run: run2 }) {
     "div",
     { className: "bt-drawer-permission" },
     (0, import_react67.createElement)("div", { className: "bt-section-title" }, t("Permissions")),
-    // A Bot without its own preset may run on another one set in DSH, so its first pick always applies.
     (0, import_react67.createElement)(PermissionPicker, { catalog, saved: bot.permission ?? catalog.defaultPreset, repick: bot.permission === void 0, onPick: (permission) => run2(actions.updateBot(bot.id, { permission })) })
   );
 }
@@ -26878,7 +26699,6 @@ function RunStats({ bot, part, running, actions }) {
       (values) => {
         if (current2) setRead({ scope, values });
       },
-      // The line stays as it was until the next read works.
       () => {
       }
     );
@@ -27314,12 +27134,12 @@ function DetailsDrawer({ sessionId, startRenaming, startTab, hasStrip, roster, a
   ];
 }
 
-// src/client/browser-overlap.js
+// src/client/browser-overlap.ts
 function rectsOverlap(a, b) {
   return a.width > 0 && a.height > 0 && b.width > 0 && b.height > 0 && a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
 }
 
-// src/client/browser-pane.js
+// src/client/browser-pane.ts
 var import_react68 = require("react");
 var import_react_dom11 = require("react-dom");
 var PANEL_LINGER_MS = 300;
@@ -27596,7 +27416,6 @@ function PanelStrip({ bot, subject, view, ids, active, sides, side, canBrowse, r
       }),
       (0, import_react68.createElement)("span", { ref: ind, className: "bt-ptab-ind", "aria-hidden": true })
     ),
-    // The `···` and Close stay outside the scrolling tabs, so a narrow panel keeps both.
     (0, import_react68.createElement)(PanelMenu, { items, className: "bt-ptab-new", "aria-label": t("More") }),
     (0, import_react68.createElement)("button", { type: "button", className: "bt-icon-btn bt-ptab-close", "aria-label": t("Close panel"), title: t("Close panel"), onClick: () => actions.closePanel() }, (0, import_react68.createElement)(CloseIcon3))
   );
@@ -28189,8 +28008,6 @@ function BotPanel({ pane, leaving, room: room2, overlay, roster, actions, useSes
       }
     },
     leaving || overlay ? null : (0, import_react68.createElement)("div", { className: "bt-panel-grip", role: "separator", "aria-orientation": "vertical", "aria-label": t("Resize panel"), onPointerDown: startResize }),
-    // Over the whole window while dragging: the cursor stays a resize cursor and the
-    // pages underneath (the chat, the guest) see no pointer.
     dragging ? (0, import_react_dom11.createPortal)((0, import_react68.createElement)("div", { className: "bt-drag-shield", "aria-hidden": true }), document.body) : null,
     hasStrip ? (0, import_react68.createElement)(PanelStrip, { bot, subject: pane.id, view, ids: tabState.ids, active, sides: sideChats, side: pane.side, canBrowse, reading, onView: switchView, actions: panelActions, useBrowserPages }) : null,
     view === "browser" && bot ? (0, import_react68.createElement)(BrowserView, { key: `browser:${active}`, bot, tabId: active, leaving, landed: landed && !settling, actions, useBrowserPages, hold }) : view === "side" && sideChat ? (0, import_react68.createElement)("div", { key: `side:${sideChat.id}`, className: "bt-panel-view" }, (0, import_react68.createElement)(SideChatView, { subject: pane.id, chat: sideChat, roster, actions: panelActions })) : (0, import_react68.createElement)(
@@ -28340,7 +28157,7 @@ var BROWSER_CSS = `
 @media (prefers-reduced-motion:reduce){.bt-ptabs,.bt-panel-view,.bt-bcard,.bt-ptab-name{animation:none}}
 `;
 
-// src/client/opening.js
+// src/client/opening.ts
 var import_react69 = require("react");
 var OPENING_WAIT_MS = 5e3;
 function openingPastWait(pending, target) {
@@ -28417,7 +28234,7 @@ var OPENING_CSS = `
 @keyframes bt-opening-in{from{opacity:0}to{opacity:1}}
 `;
 
-// src/client/overlays.js
+// src/client/overlays.ts
 var import_react70 = require("react");
 var import_react_dom12 = require("react-dom");
 var DIALOG_EXIT_MS2 = 160;
@@ -28487,7 +28304,7 @@ function Overlays({ useRoster, useUi, useSessions, useSessionStatus, useActivity
   );
 }
 
-// src/board/client/icons.js
+// src/board/client/icons.ts
 var import_react71 = require("react");
 var lineIcon3 = (paths) => function LineIcon() {
   return (0, import_react71.createElement)(
@@ -28500,7 +28317,7 @@ var LinkIcon2 = lineIcon3(["M8.5 11.5l3-3", "M9.5 6.5l1.2-1.2a2.8 2.8 0 0 1 4 4l
 var StepsIcon = lineIcon3(["M4.5 5.5h.01", "M8 5.5h7.5", "M4.5 10h.01", "M8 10h7.5", "M4.5 14.5h.01", "M8 14.5h5"]);
 var BoardIcon = lineIcon3(["M3.5 4.5h3.5v11H3.5z", "M8.25 4.5h3.5v7h-3.5z", "M13 4.5h3.5v9H13z"]);
 
-// src/board/client/card-tag.js
+// src/board/client/card-tag.ts
 var import_react72 = require("react");
 var CARD_TAG_ID = "board-card-note";
 var ORDER = 4;
@@ -28580,7 +28397,7 @@ ${BOT_TAG} svg{display:none}
 @media (hover:hover){${BOT_TAG}:hover{border-color:color-mix(in srgb,currentColor 45%,transparent)}}
 `;
 
-// src/board/client/board.js
+// src/board/client/board.ts
 var import_react73 = require("react");
 var COLUMNS = [["todo", "Todo"], ["active", "In progress"], ["review", "Review"], ["blocked", "Blocked"], ["done", "Done"]];
 var OPEN = ["todo", "active", "review", "blocked"];
@@ -29385,7 +29202,7 @@ a.bt-board-key:hover{color:var(--bt-ink)}
 }
 `;
 
-// src/board/client/index.js
+// src/board/client/index.ts
 var import_react74 = require("react");
 var BOARD_ROUTE = "api/ds-bot-board";
 var POLL_MS3 = 4e3;
@@ -29432,7 +29249,6 @@ function BoardPage({ live, focus, call: call2, close, paneLeft, leaving }) {
     boardCancel: (id, reason) => act("cancel", { id, reason }),
     boardSeen: (id) => act("seen", { id }),
     boardTrace: (trace) => act("trace", { trace }),
-    // A pane's tail is not the board's state: it goes to the sheet, not the view.
     boardPane: (id, pane) => call2("pane", { id, pane }),
     closeBoard: close,
     reportError: () => live.refresh()
@@ -29488,7 +29304,6 @@ function boardWatch(pages, { first, call: call2, openMs = POLL_MS3, liveMs = LIV
     source,
     take,
     refresh,
-    // The page is on screen: poll faster, and say nothing it already shows.
     opened() {
       open += 1;
       pace();
@@ -29498,11 +29313,9 @@ function boardWatch(pages, { first, call: call2, openMs = POLL_MS3, liveMs = LIV
         pace();
       };
     },
-    // The card the page opens on next (a notice's Open, a card tag in a chat).
     show(id) {
       focus = id;
     },
-    // The card the page opens on, once.
     focus() {
       const id = focus;
       focus = null;
@@ -29570,7 +29383,7 @@ function installBoardPage(pages, { call: call2 = boardCall, retryMs = 3e3, watch
   };
 }
 
-// src/client/read-page.js
+// src/client/read-page.ts
 var READ_LIMITS = {
   chars: 4e5,
   nodes: 15e4,
@@ -29904,7 +29717,7 @@ ${marked2}
 var readPageScript = (limits = READ_LIMITS) => `(${readPage})(${JSON.stringify(limits)})`;
 var READ_PAGE_SCRIPT = readPageScript();
 
-// src/client/shared-map.js
+// src/client/shared-map.ts
 function sharedMap(key, storage = globalThis.localStorage) {
   const read = (fallback = {}) => {
     if (!storage) return fallback;
@@ -29958,7 +29771,7 @@ function noteLeft(seen, ids, now) {
   return next;
 }
 
-// src/client/bot-browsers.js
+// src/client/bot-browsers.ts
 var STORE_KEY = STORAGE.browsers;
 var MAX_LIVE = 6;
 var READ_TIMEOUT_MS = 1e4;
@@ -30433,7 +30246,6 @@ function createBotBrowsers({ bridge: bridge2, createSource: createSource2, stora
     setHolds(value) {
       holds.set(value && typeof value === "object" ? value : {});
     },
-    /** Restore a Bot's saved strip (or an empty one) so the panel can render it. */
     ensureTabs,
     openTab,
     closeTab,
@@ -30452,7 +30264,6 @@ function createBotBrowsers({ bridge: bridge2, createSource: createSource2, stora
     focus(tabId) {
       views.get(tabId)?.element.focus();
     },
-    /** Pages a read can reach: each Bot's active tab, live and showing a document. */
     openPages() {
       const open2 = {};
       const snapshot = pages.getSnapshot();
@@ -30464,7 +30275,6 @@ function createBotBrowsers({ bridge: bridge2, createSource: createSource2, stora
       }
       return open2;
     },
-    /** A Bot's read reaches its active tab. */
     async read(botId) {
       const tabId = activeTab(botId);
       const entry = tabId ? views.get(tabId) : void 0;
@@ -30485,7 +30295,6 @@ function createBotBrowsers({ bridge: bridge2, createSource: createSource2, stora
     },
     release,
     forget,
-    /** Forget every Bot outside `botIds`, as when Bots were deleted from another window. */
     retain(botIds) {
       const keep = new Set(botIds);
       const known = /* @__PURE__ */ new Set([...Object.keys(tabs.getSnapshot()), ...Object.keys(saved), ...owner.values(), ...seen]);
@@ -30559,7 +30368,7 @@ function serveBrowserReads({ browsers, post, clientId = globalThis.crypto.random
   };
 }
 
-// src/client/learning-card-model.js
+// src/client/learning-card-model.ts
 function proposalPlacement(proposal, turns) {
   const settled = proposal?.outcome !== void 0;
   if (!Number.isFinite(proposal?.at) || typeof turns?.values !== "function") return { kind: settled ? "none" : "dock" };
@@ -30643,7 +30452,7 @@ function proposalCards({ proposals = [], settled = [], failures = {} }) {
   return visible.sort((a, b) => (a.at ?? 0) - (b.at ?? 0));
 }
 
-// src/client/learning-card.js
+// src/client/learning-card.ts
 var import_react75 = require("react");
 var failedAnswers = /* @__PURE__ */ new Map();
 function ProposalCard({ proposal, initialError = "", onFailure, onResolved, actions }) {
@@ -30888,7 +30697,7 @@ var LEARNING_CSS = `
 .bt-learning-error{font-size:12px;line-height:16px;color:var(--bt-danger)}
 `;
 
-// src/client/read-only-dock.js
+// src/client/read-only-dock.ts
 var import_react76 = require("react");
 function ReadOnlyDock({ sessionId, useUi, useRoster, actions }) {
   const readOnlyPart = useUi((state) => state.readOnlyPart);
@@ -30937,7 +30746,7 @@ var READ_ONLY_CSS = `
 .bt-readonly-text{min-width:0}
 `;
 
-// src/client/command-actions.js
+// src/client/command-actions.ts
 var SCHEDULED_TASK = "scheduled-task";
 function commandEntries({ roster, actions }) {
   const entry = (sessionId) => {
@@ -30980,7 +30789,7 @@ function installCommandActions(ctx, { roster, actions }) {
   });
 }
 
-// src/client/right-panel.js
+// src/client/right-panel.ts
 var RIGHTBAR_ATTRIBUTES = ["data-rightbar-collapsed", "data-rightbar-fullscreen"];
 function rightColumnOpen(doc) {
   if (doc.querySelector("[data-rightbar-fullscreen]")) return true;
@@ -31009,7 +30818,7 @@ function createSwitchWindow(settle) {
   };
 }
 
-// src/client/user-text-rule.js
+// src/client/user-text-rule.ts
 var BOT_MENTION_ID = "bot-mention";
 var ORDER2 = 5;
 function botMentionRule(bots) {
@@ -31045,7 +30854,7 @@ function installBotMentionRule(userText, roster) {
   };
 }
 
-// src/client/queue-dock.js
+// src/client/queue-dock.ts
 var import_react77 = require("react");
 var OWN_QUEUE_KINDS = /* @__PURE__ */ new Set(["user", "schedule", "user-question-reply"]);
 var EMPTY_QUEUE = [];
@@ -31274,7 +31083,7 @@ var QUEUE_CSS = `
 .bt-queue-action:disabled{cursor:default;opacity:.45}
 `;
 
-// src/client/approval-notices.js
+// src/client/approval-notices.ts
 function noticeApprovals({ work, roster, shownSession, openSession, since = Date.now() }) {
   if (typeof window !== "undefined" && typeof window.dsBotApp?.notify === "function") return () => {
   };
@@ -31308,7 +31117,7 @@ function noticeApprovals({ work, roster, shownSession, openSession, since = Date
   return work.subscribe(notify);
 }
 
-// src/client/open-listed.js
+// src/client/open-listed.ts
 function listedOpener({ list, open, refresh, current: current2, begin, done }) {
   let drop = () => {
   };
@@ -31350,7 +31159,7 @@ function listedOpener({ list, open, refresh, current: current2, begin, done }) {
   };
 }
 
-// src/client/polling.js
+// src/client/polling.ts
 var POLL_MAX_MS = 5e3;
 function pollDelay(base, unchanged) {
   const steps = Math.min(Math.max(unchanged, 0), 8);
@@ -31360,7 +31169,7 @@ function needsIdleSample(computer, settings) {
   return Object.values(computer?.bots ?? {}).some((entry) => entry?.waitingFor === "user-idle") || Object.values(settings?.bots ?? {}).some((bot) => bot?.level === "foreground");
 }
 
-// src/client/motion-rest.js
+// src/client/motion-rest.ts
 var REST_MS = 3e4;
 var INPUTS2 = ["pointermove", "pointerdown", "keydown", "wheel", "touchstart"];
 var CHANGES = ["animationstart", "animationcancel", "animationend"];
@@ -31480,7 +31289,7 @@ function installMotionRest({ doc = document, win = window, restMs = REST_MS, now
   };
 }
 
-// src/client/agent-new.js
+// src/client/agent-new.ts
 function agentSessionToReuse(list, latest, pending) {
   if (pending !== void 0 && list.byId[pending] === void 0) return pending;
   return latest !== void 0 && list.byId[latest]?.blank === true ? latest : void 0;
@@ -31496,7 +31305,7 @@ function singleFlight(map, key, run2) {
   return tracked;
 }
 
-// src/client/text-annotation.js
+// src/client/text-annotation.ts
 var import_react78 = require("react");
 var quoteMarkdown = (text) => text.replace(/\r\n?/gu, "\n").split("\n").map((line) => `> ${line}`).join("\n");
 var withAnnotation = (text, annotation) => annotation.trim() ? `${text}
@@ -31677,7 +31486,7 @@ var ANNOTATION_CSS = `
 @media (prefers-reduced-motion:reduce){.bt-selection-actions,.bt-annotation,.bt-annotation[data-leaving]{animation:none}}
 `;
 
-// src/client/index.js
+// src/client/index.ts
 var inject = ["sessions", "uiWorkspace", "uiConversation", "slots", "theme", "layout"];
 function apply(ctx) {
   migrateStorage();
@@ -31695,7 +31504,6 @@ function apply(ctx) {
   let seenAt = seenStore.read();
   const ui2 = createSource({ details: null, view: "details", readOnlyPart: null, renaming: false, tab: null, side: null, newChat: null, exchange: null, menu: null, voice: null, palette: null, quote: null, paste: {}, pendingOpen: null, settings: null, memory: null, toast: null, signIn: null, renameAgent: null, unread: unreadStore.read(), reactions: reactionStore.read(), visits: {}, panelYield: false, leftDrawer: false, bootFailed: false, page: null });
   const pages = createPages({
-    // A companion's notice is a toast whose Open leads to its page.
     alert: ({ page, text, onOpen }) => ui2.set((state) => ({ ...state, toast: { text, token: Date.now(), page, onOpen } }))
   });
   if (typeof ctx.provide === "function") ctx.provide("dsBotPages", pages.service);
@@ -32062,9 +31870,10 @@ function apply(ctx) {
   };
   ctx.effect(() => {
     const hub = { registerShape, registerTheme, themes: () => Object.keys(allThemes()), shapes: () => Object.keys(SHAPES) };
-    const queued = Array.isArray(window.dshBotQueue) ? window.dshBotQueue : [];
-    window.dshBot = hub;
-    window.dshBotQueue = { push: (task) => {
+    const win = window;
+    const queued = Array.isArray(win.dshBotQueue) ? win.dshBotQueue : [];
+    win.dshBot = hub;
+    win.dshBotQueue = { push: (task) => {
       try {
         task(hub);
       } catch (error) {
@@ -32072,10 +31881,10 @@ function apply(ctx) {
         noteClientError("registration", error);
       }
     } };
-    for (const task of queued) window.dshBotQueue.push(task);
+    for (const task of queued) win.dshBotQueue.push(task);
     return () => {
-      if (window.dshBot === hub) delete window.dshBot;
-      delete window.dshBotQueue;
+      if (win.dshBot === hub) delete win.dshBot;
+      delete win.dshBotQueue;
     };
   }, "ds-bot: registry");
   ctx.inject(["shortcuts"], (scope) => {
@@ -32174,12 +31983,6 @@ function apply(ctx) {
   };
   const actions = {
     ...teamActions({ call, after, partFor, roster, ui: ui2, live, cards, heldCards, turnClock, panelFolded }),
-    // The files a group row names open DSH's own review tab for that turn. The tab reads
-    // the changes of the Session the shell shows, so that Session is opened first; the same
-    // call then retries until its right column is mounted. This jump is the one place a
-    // different place for the review (in the group, or a review that carries its Session)
-    // would replace. A summary the Host no longer serves, or a window without the column,
-    // says so instead of doing nothing.
     openChanges: async (changes) => {
       if (changes === null || typeof changes !== "object" || typeof changes.sessionId !== "string" || !Number.isInteger(changes.seq) || !Number.isInteger(changes.turn)) return;
       let available = false;
@@ -32207,8 +32010,6 @@ function apply(ctx) {
       const target = partFor(id);
       show2(target);
     },
-    // The conversation replacements withdraw for a plain Session; set the surface
-    // before the navigation so the Bot skin never flashes.
     openAgentSession: (sessionId) => {
       ui2.set((state) => ({ ...clearFront(state), details: null, view: "details", renaming: false, tab: null }));
       setPlain(true);
@@ -32258,8 +32059,6 @@ function apply(ctx) {
     renameAgentSession: (agentId, sessionId, title) => after(call("agent-rename", { agentId, sessionId, title })),
     beginAgentRename: (sessionId) => ui2.set((state) => ({ ...state, renameAgent: sessionId })),
     endAgentRename: () => ui2.set((state) => state.renameAgent ? { ...state, renameAgent: null } : state),
-    // Removing the Agent archives every Session it owns; one of them may fill the
-    // main view, and it must not stay there wearing the Bot surface afterwards.
     removeAgent: async (agentId) => {
       const owned = agentSessions(agentId);
       const result = await after(call("remove-agent", { agentId }));
@@ -32268,8 +32067,6 @@ function apply(ctx) {
       if (main !== void 0 && owned.includes(main) && roster.getSnapshot().mainBotId) actions.openSession(roster.getSnapshot().mainBotId);
       return result;
     },
-    // `last` is the Bot conversation the view held before it cleared: when that part
-    // was archived for a fresh one, the view goes on in the fresh one.
     landOn: async (id, last) => {
       if (last) await pull().catch(() => {
       });
@@ -32284,8 +32081,6 @@ function apply(ctx) {
     toggleSidebar: () => {
       ctx.layout.toggleSidebar();
     },
-    // The left column's own preference: 'open', 'rail' or 'hidden'. The switch
-    // remembers the shown one it hid; a drag sets the open column's width.
     setSidebarPref: (pref) => {
       const next = pref === "rail" || pref === "hidden" ? pref : "open";
       sidebarSaved = { ...sidebarSaved, pref: next, ...next === "hidden" ? {} : { shown: next } };
@@ -32303,8 +32098,6 @@ function apply(ctx) {
     },
     setLeftDrawer: (on) => ui2.set((state) => state.leftDrawer === on ? state : { ...state, leftDrawer: on }),
     setPanelYield: (on) => ui2.set((state) => state.panelYield === on ? state : { ...state, panelYield: on }),
-    // Agent mode hands the surface back to the shell; everything open on the Bot
-    // surface closes first so nothing stale reopens on the way back.
     surfaceMode: () => surface.getSnapshot().mode,
     setSurface: (mode) => {
       if (mode !== "bot" && mode !== "agent") return;
@@ -32344,7 +32137,6 @@ function apply(ctx) {
   };
   if (browsers) {
     Object.assign(actions, {
-      // The globe button: the Bot's active tab in the browser view, or a new tab.
       openBrowser: (id) => {
         const bot = roster.getSnapshot().byId[id];
         if (!bot) return;
@@ -32352,7 +32144,6 @@ function apply(ctx) {
         if (browsers.tabs.getSnapshot()[bot.id]?.active == null) browsers.openTab(bot.id);
         ui2.set((state) => ({ ...state, details: id, view: "browser", renaming: false, tab: null, panelYield: yieldBrowser(state) }));
       },
-      // '+' on the strip or the drawer's new-tab card: a blank tab in the browser view.
       browserNewTab: (id) => {
         const bot = roster.getSnapshot().byId[id];
         if (!bot) return null;
@@ -32361,7 +32152,6 @@ function apply(ctx) {
         ui2.set((state) => ({ ...state, details: id, view: "browser", renaming: false, tab: null, panelYield: yieldBrowser(state) }));
         return tabId;
       },
-      // A drawer card: its tab active, the panel on the browser view.
       browserPick: (id, tabId) => {
         const bot = roster.getSnapshot().byId[id];
         if (!bot) return;
@@ -32385,14 +32175,11 @@ function apply(ctx) {
         await bridge2.views.hold(botId, true);
         return result;
       } : void 0,
-      // `answer` is a handoff card's { callId, outcome }; the panel's Give back sends none.
       browserGiveBack: bridge2.views ? async (botId, answer = {}) => {
         const result = await call("browser-give-back", { botId, ...answer });
         await bridge2.views.hold(botId, false);
         return result;
       } : void 0,
-      // Cookie imports, only where the bridge offers them (the desktop app): a file or an
-      // installed browser's profile is previewed, then applied into the Bot's storage key.
       browserImport: typeof bridge2.importSources === "function" ? {
         sources: () => bridge2.importSources(),
         pick: () => bridge2.importPick(),
@@ -32802,8 +32589,6 @@ function apply(ctx) {
     () => shadow("sidebar.brand.name", { priority: BOT_PRIORITY }, BrandName),
     () => shadow("sidebar.footer.action", { id: "bot-account", order: -200, inject: face }, FooterAccount),
     () => shadow("settings.trigger", { priority: BOT_PRIORITY }, YouAvatar),
-    // The whale wins the seat over a shell account plugin's own launcher (the
-    // Desktop's "··· More"), which comes back in Agent mode.
     () => shadow("settings.launcher", { priority: BOT_PRIORITY, inject: face }, AccountLauncher),
     () => shadow("shell.overlay", { id: "bot-computer", order: 40, inject: face }, ComputerIndicator),
     () => shadow("shell.overlay", { id: "bot", order: 50, inject: face }, Overlays),
@@ -32823,24 +32608,13 @@ function apply(ctx) {
     () => shadow("conversation.chat.node", { key: "turn-trigger", priority: BOT_PRIORITY, locale: "chat", inject: face }, TriggerCell),
     () => shadow("conversation.chat.node", { key: "tool-call", priority: BOT_PRIORITY, locale: "chat", inject: face }, ToolCell),
     () => shadow("conversation.chat.node", { key: "turn-process", priority: BOT_PRIORITY, locale: "chat", inject: face }, TurnProcessCell),
-    // A failed turn shows what the user can do about it instead of the provider's raw text.
     () => shadow("conversation.chat.node", { key: "turn-error", priority: BOT_PRIORITY, locale: "chat", inject: face }, FailureCell),
-    // DSH's own turn tail stays, so what other plugins add there shows, such as the
-    // cards of the files a turn delivered; its copy and branch row is hidden.
     () => shadow("conversation.chat.turnTail", { id: "bot-turn-separators", order: 1e3, inject: face }, TurnTailCell),
-    // A side question is not a transcript row. After its snapshot turn closes it
-    // sits on that turn's tail, ahead of the time separator.
     () => shadow("conversation.chat.turnTail", { id: "bot-btw", order: 800, priority: BOT_PRIORITY, inject: face }, BtwTurnTail),
     () => shadow("conversation.chat.turnTail", { id: "bot-learning", order: 850, priority: BOT_PRIORITY, inject: face }, LearningTurnTail),
-    // The cards of the files a turn delivered get a Save action beside DSH's own
-    // actions, so a phone browser can put the file on the device.
     () => ctx.slots.inject("deliverables.file.actions", () => ctx.slots.register({ name: "deliverables.file.actions", id: "bot-file-save", locale: "chat" }, SaveFileAction)),
-    // A Bot condenses its conversation without telling anyone; the chat keeps showing
-    // every message.
     () => shadow("conversation.chat.node", { key: "question-reply", priority: BOT_PRIORITY, locale: "chat" }, AnsweredReply),
     () => shadow("conversation.chat.node", { key: "compaction", priority: BOT_PRIORITY, locale: "chat" }, CellEmpty),
-    // A Bot chat leaves DSH's context lines (tool updates, injected context) out; a Bot
-    // message spliced in mid-turn gets an event line from the step that reads it instead.
     () => shadow("conversation.chat.node", { key: "context", priority: BOT_PRIORITY, locale: "chat" }, CellEmpty),
     ...canDrawUserMessages(hostDrawsUserText) ? [() => installUserBubble(ctx.slots, () => {
       const offs = ["user", "steering"].map((key) => shadow("conversation.chat.node", { key, priority: BOT_PRIORITY, locale: "chat", inject: face }, UserMessageCell));
@@ -32857,8 +32631,6 @@ function apply(ctx) {
     ] : [],
     () => shadow("conversation.input.permission", { priority: BOT_PRIORITY }, Nothing),
     () => shadow("conversation.input.plan", { priority: BOT_PRIORITY }, Nothing),
-    // The composer carries no model picker or run statistics; a Bot's model lives
-    // in its details panel.
     () => shadow("conversation.input.model", { priority: BOT_PRIORITY }, Nothing),
     () => shadow("conversation.composer.dock", { id: "activity", order: 0, priority: BOT_PRIORITY }, Nothing),
     () => shadow("conversation.composer.dock", { id: "usage", order: 1, priority: BOT_PRIORITY }, Nothing),

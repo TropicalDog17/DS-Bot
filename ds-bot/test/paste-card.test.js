@@ -5,10 +5,9 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
-import { createSource } from '../src/client/sources.js'
-import { teamActions } from '../src/client/team-actions.js'
+import { createSource } from '../src/client/sources.ts'
+import { teamActions } from '../src/client/team-actions.ts'
 
-// jsdom comes from the harness that test/harness-resolve.mjs found.
 const PLUGIN = dirname(dirname(fileURLToPath(import.meta.url)))
 const { JSDOM } = createRequire(join(process.env.DSH_HARNESS ?? join(PLUGIN, '..', 'deepseek-harness'), 'package.json'))('jsdom')
 const dom = new JSDOM('<!doctype html><body></body>')
@@ -25,8 +24,6 @@ const { outputFiles } = await build({
   bundle: true, format: 'cjs', platform: 'browser', write: false, logLevel: 'silent',
   external: ['react', 'react-dom'],
 })
-// The minimal React stand-in the other client tests use: hooks keep their first value,
-// effects never run, and a component is expanded through its function.
 const expand = (node) => {
   if (node === null || node === undefined || node === false || node === true) return node
   if (Array.isArray(node)) return node.map(expand)
@@ -87,8 +84,6 @@ test('a card lives while its attachment is in the box, or while it waits for one
   assert.equal(blockLives(linked, ['att-2']), false)
 })
 
-// The composer facade: every call the card makes is recorded, and its draft is whatever
-// the test says the caret can take.
 function inputActions({ takes = true } = {}) {
   const calls = []
   return {
@@ -155,7 +150,6 @@ test('the dock draws nothing while no paste waits', () => {
   assert.equal(PasteDock({ sessionId: 'bot-1', useUi: select => select({ paste: {} }), actions: {} }), null)
 })
 
-// A paste event over the composer's own file input, as the guard receives it.
 function pasteEvent(value, files = []) {
   return {
     clipboardData: { files, getData: kind => (kind === 'text/plain' ? value : '') },
@@ -207,7 +201,6 @@ test('the guard draws nothing in the composer', () => {
   assert.equal(tree.props.className, 'bt-paste-guard')
 })
 
-// The shell's attachment rail, in id order: one titled file card per name.
 function composerRail(names) {
   document.body.innerHTML = ''
   const card = document.createElement('div')
@@ -234,7 +227,6 @@ function composerRail(names) {
   return guard
 }
 
-// One PasteGuard instance: refs and effects persist across renders, as React's do.
 function guardMount() {
   const slots = []
   const effectSlots = []
@@ -309,17 +301,14 @@ test('a user file added while a paste card waits is not claimed or deleted', () 
     guard.flush()
   }
   try {
-    // The card is already waiting. The first paint only learns the empty rail.
     actions.addPaste('bot-1', kept, name)
     paint([])
-    // The user then drops their own file. It appears before the paste's file does.
     ids = ['user-1']
     paint(['notes.pdf'])
     const waiting = ui.getSnapshot().paste['bot-1'][0]
     assert.equal(waiting.attachmentId, null)
     dismissPaste(ui, actions, recorder)
     assert.deepEqual(removed, [])
-    // Once the paste's own file is in the rail, dismissing the card removes that file.
     actions.addPaste('bot-1', kept, name)
     ids = ['user-1', 'paste-1']
     paint(['notes.pdf', name])

@@ -1,15 +1,10 @@
-// A memory change that was interrupted.
-//
-// The faults come from the file system: a path that cannot be written (a directory
-// where a file belongs) fails the write that would have carried the change, and the
-// record of the change says what still has to happen.
 import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { createRuntime } from '../index.js'
-import { PENDING_FILE, record } from '../src/host/memory-pending.js'
+import { PENDING_FILE, record } from '../src/host/memory-pending.ts'
 import { fakeContext } from './fake-ctx.js'
 
 const TEAM = {
@@ -42,7 +37,6 @@ function start({ home = mkdtempSync(join(tmpdir(), 'ds-bot-memory-')) } = {}) {
   return { ctx, home, tool, read, journal, stop }
 }
 
-// These storage tests also run with the structured tool-error UI change (#482).
 const failureText = promise => promise.catch(error => {
   assert.match(error.code ?? '', /^memory\//)
   return error.message
@@ -59,7 +53,6 @@ const warned = (home, text) => until(() => {
   const path = join(home, 'logs', 'diagnostics.jsonl')
   return existsSync(path) && readFileSync(path, 'utf8').includes(text)
 })
-// The record of a change that was interrupted, as it lies on disk.
 const interrupted = (home, { id = 'change-1', op = 'add', scope = 'bot:b2', steps, row }) => {
   const time = '2026-10-23T10:00:00.000Z'
   writeFileSync(pendingFile(home), JSON.stringify(record({ id, time, op, scope, steps, row })))
@@ -68,7 +61,6 @@ const interrupted = (home, { id = 'change-1', op = 'add', scope = 'bot:b2', step
 test('a change that cannot be published stays pending, and is finished before the next read', async (t) => {
   const { ctx, home, tool, read, journal, stop } = start()
   t.after(() => stop())
-  // The change log cannot be written: the entry is published, but its row is not.
   mkdirSync(join(home, 'memory', 'journal.jsonl'), { recursive: true })
   const said = await failureText(tool('remember', { text: 'Trip to Kyoto', topic: 'travel' }, 'b2'))
   assert.doesNotMatch(said, /^Saved to your memory/)
@@ -78,14 +70,12 @@ test('a change that cannot be published stays pending, and is finished before th
   const prompt = () => ctx.sections.get('bot-memory').text({ agent: { id: 'b2' } })
   assert.match(prompt(), /memory.*unavailable/i)
   assert.doesNotMatch(prompt(), /\[\[travel\]\]/)
-  // The change log is there again: the next read finishes the change.
   rmSync(join(home, 'memory', 'journal.jsonl'), { recursive: true, force: true })
   assert.match(await tool('recall', { query: 'Kyoto' }, 'b2'), /Trip to Kyoto/)
   assert.ok(!existsSync(pendingFile(home)), 'the change is finished')
   assert.deepEqual(journal().map(row => [row.op, row.scope, row.file]), [['add', 'bot:b2', 'travel.md']])
   assert.match(read('bots', 'b2', 'MEMORY.md'), /- \[\[travel\]\]/)
   assert.match(prompt(), /\[\[travel\]\]/)
-  // Reading again does not write a second row.
   await tool('recall', {}, 'b2')
   assert.equal(journal().length, 1)
 })
@@ -95,14 +85,11 @@ test('a change that cannot be accepted leaves the memory as it was', async (t) =
   t.after(() => stop())
   await tool('remember', { text: 'First fact' }, 'b2')
   const before = read('bots', 'b2', 'MEMORY.md')
-  // The record of the change cannot be written: the change is not accepted, so
-  // nothing changed.
   mkdirSync(pendingFile(home), { recursive: true })
   const said = await failureText(tool('remember', { text: 'Second fact' }, 'b2'))
   assert.doesNotMatch(said, /Second fact/)
   assert.equal(read('bots', 'b2', 'MEMORY.md'), before)
   assert.doesNotMatch(read('journal.jsonl'), /Second fact/)
-  // With the record writable again, the change goes through.
   rmSync(pendingFile(home), { recursive: true, force: true })
   assert.match(await tool('remember', { text: 'Second fact' }, 'b2'), /^Saved to your memory/)
   assert.match(read('bots', 'b2', 'MEMORY.md'), /Second fact/)
@@ -111,8 +98,6 @@ test('a change that cannot be accepted leaves the memory as it was', async (t) =
 test('an interrupted change is finished when the host starts', async (t) => {
   const home = mkdtempSync(join(tmpdir(), 'ds-bot-memory-'))
   writeFileSync(join(home, 'state.json'), JSON.stringify(TEAM))
-  // A change that was interrupted after its topic was written, before the Index
-  // that links it.
   mkdirSync(join(home, 'memory', 'bots', 'b2'), { recursive: true })
   const topic = '# travel\n\n- Trip to Kyoto [source: part 1 #10; added: 2026-10-23]\n'
   writeFileSync(join(home, 'memory', 'bots', 'b2', 'travel.md'), topic)
@@ -136,8 +121,6 @@ test('an interrupted change that removes a topic and its link is finished as one
   mkdirSync(join(home, 'memory', 'bots', 'b2'), { recursive: true })
   writeFileSync(join(home, 'memory', 'bots', 'b2', 'MEMORY.md'), '# Memory\n\n## Index\n- [[travel]]\n')
   writeFileSync(join(home, 'memory', 'bots', 'b2', 'travel.md'), '# travel\n\n- Trip to Kyoto [added: 2026-10-23]\n')
-  // The change was interrupted after the topic was removed, before the Index lost
-  // its link.
   interrupted(home, {
     op: 'remove',
     steps: [
@@ -158,8 +141,6 @@ test('a change that was already finished does not get a second row', async (t) =
   const home = mkdtempSync(join(tmpdir(), 'ds-bot-memory-'))
   writeFileSync(join(home, 'state.json'), JSON.stringify(TEAM))
   const row = { op: 'add', scope: 'bot:b2', file: 'MEMORY.md', actor: 'b2', actorName: 'Writer', after: '- One [added: 2026-10-23]' }
-  // The change is finished: its row is in the change log, and the record of it is
-  // still there.
   mkdirSync(join(home, 'memory'), { recursive: true })
   writeFileSync(join(home, 'memory', 'journal.jsonl'), `${JSON.stringify({ id: 'change-1', time: '2026-10-23T10:00:00.000Z', ...row })}\n`)
   interrupted(home, {
@@ -203,7 +184,6 @@ test('a prompt keeps its committed snapshot while an unfinished change is recove
   await failureText(tool('remember', { text: 'Pending fact' }, 'b2'))
   assert.ok(existsSync(pendingFile(home)))
   assert.equal(prompt('b2'), committed)
-  // A snapshot read from disk after a restart is equally safe.
   await stop({ keep: true })
   const next = start({ home })
   active = next
@@ -246,7 +226,6 @@ test('a half-written row of the change log is not proof: the change gets one who
   const home = mkdtempSync(join(tmpdir(), 'ds-bot-memory-'))
   writeFileSync(join(home, 'state.json'), JSON.stringify(TEAM))
   mkdirSync(join(home, 'memory'), { recursive: true })
-  // The row of op-1 was cut in half while it was being appended.
   const half = '{"id":"op-1","time":"2026-10-23T10:00:00.000Z","op":"ad'
   writeFileSync(join(home, 'memory', 'journal.jsonl'), half)
   interrupted(home, {
@@ -257,11 +236,9 @@ test('a half-written row of the change log is not proof: the change gets one who
   const { read, stop } = start({ home })
   t.after(() => stop())
   await until(() => !existsSync(pendingFile(home)))
-  // Every line of the log parses, and the change has one whole row.
   const rows = read('journal.jsonl').trim().split('\n').map(line => JSON.parse(line))
   assert.deepEqual(rows.map(row => row.id), ['op-1'])
   assert.match(read('bots', 'b2', 'MEMORY.md'), /- One/)
-  // The half row is kept beside the log, as the evidence it is.
   assert.ok(read('journal.torn').includes(half))
 })
 
@@ -286,13 +263,10 @@ test('a change that would not fit in the record is refused, and the memory still
   const home = mkdtempSync(join(tmpdir(), 'ds-bot-memory-'))
   writeFileSync(join(home, 'state.json'), JSON.stringify(TEAM))
   mkdirSync(join(home, 'memory', 'bots', 'b2'), { recursive: true })
-  // A memory file that was edited by hand and is far past its size.
   const huge = `# Memory\n\n- Teas and a long story about the tea [added: 2026-10-23]\n${'x'.repeat(1_200_000)}\n\n## Index\n`
   writeFileSync(join(home, 'memory', 'bots', 'b2', 'MEMORY.md'), huge)
   const { tool, read, stop } = start({ home })
   t.after(() => stop())
-  // The change would leave a record that cannot be read back, so it is refused
-  // before it is accepted: the memory is as it was, and still reads.
   const said = await failureText(tool('remember', { text: 'Coffee', replace: 'Teas and a long story about the tea' }, 'b2'))
   assert.match(said, /too large to record/)
   assert.equal(read('bots', 'b2', 'MEMORY.md'), huge)

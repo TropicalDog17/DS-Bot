@@ -1,16 +1,7 @@
-// Real-model check of the skill review in src/host/learning.js, on an OpenAI-compatible
-// endpoint. Two stages per case in learning-eval/skill-cases.json:
-//   decide: does the review propose the expected action (none, create, update) with the
-//           rules the work showed and none of the one-off details?
-//   effect: for the skills it creates, do held-out tasks of the same class come out
-//           better with the skill than without, and does an unrelated task stay clean?
-// Usage (no defaults; nothing is saved but the report):
-//   LEARN_EVAL_BASE_URL=… LEARN_EVAL_MODEL=… LEARN_EVAL_KEY=… \
-//   node --import ./test/harness-resolve.mjs dev/learning-eval.mjs [--kind skill|agents] [--reps 3] [--cases case-file.json] [--only id,id] [--out report.json]
 import { readFileSync, writeFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
-import { agentsAnswer, agentsProblem, agentsRequest, agentsSystem, applyEdits, parseJson, skillProblem, skillRequest, skillSystem, LEARNING } from '../src/host/learning.js'
-import { writtenIn } from '../src/host/memory.js'
+import { agentsAnswer, agentsProblem, agentsRequest, agentsSystem, applyEdits, parseJson, skillProblem, skillRequest, skillSystem, LEARNING } from '../src/host/learning.ts'
+import { writtenIn } from '../src/host/memory.ts'
 
 const { values: args } = parseArgs({ options: { kind: { type: 'string', default: 'skill' }, reps: { type: 'string', default: '3' }, only: { type: 'string' }, cases: { type: 'string' }, out: { type: 'string' }, stage: { type: 'string', default: 'decide,effect' } } })
 const base = process.env.LEARN_EVAL_BASE_URL

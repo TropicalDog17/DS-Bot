@@ -1,16 +1,6 @@
-// Checks the context steward's judgment on a real model: hand-written conversation endings,
-// each with the answer it should get, sent through the steward's own prompt and request
-// (src/host/steward.js) to an OpenAI-compatible chat completions route, or with
-// `--api messages` to an Anthropic Messages route with thinking off, as DSH's DeepSeek
-// adapter sends it (base URL e.g. https://api.deepseek.com/anthropic). Costs real tokens,
-// about 3,000 per call.
-//
-//   KEY=... node dev/steward-eval.mjs --base-url https://host/v1 --model <id> --key-env KEY [--api chat|messages] [--runs 3] [--only id,id] [--out file.json]
-//
-// `expect` is compact, switch or either (a judgment call; the answer is only recorded).
 import { writeFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
-import { STEWARD_SYSTEM, parseDecision, stewardRequest } from '../src/host/steward.js'
+import { STEWARD_SYSTEM, parseDecision, stewardRequest } from '../src/host/steward.ts'
 
 const { values: args } = parseArgs({ options: {
   'base-url': { type: 'string' },
@@ -30,11 +20,9 @@ if (!args['base-url'] || !args.model || !args['key-env'] || !process.env[args['k
 const U = 'user'
 const ME = 'you'
 const BOT = 'bot'
-// Long messages, as in a real batch review: the steward sees only their start and end.
 const code = name => `### ${name}\n\`\`\`ts\n${Array.from({ length: 120 }, (_, index) => `export function step${index}(input: Input): Output { return run(input, ${index}) }`).join('\n')}\n\`\`\``
 const findings = (from, count) => Array.from({ length: count }, (_, index) => `**P${from + index} · packages/session/session-persistence-jsonl/src/file${index}.ts**\n问题：${'状态在提交之前就改了，提交失败时状态和日志对不上。'.repeat(5)}\n建议：先提交，成功后再改状态。`).join('\n\n')
 const ranked = count => Array.from({ length: count }, (_, index) => `- **P${count - index}** · packages/core/file${index}.ts：提交前改状态，失败后对不上。`).join('\n')
-// Each case lists its messages oldest first, as the conversation went.
 const CASES = [
   { id: 'review-midway', expect: 'compact', lines: [
     [U, '我要你审查支付模块的代码，我分 6 批贴给你。每批列出问题，编号跨批连续。下面是第 1 批。（代码略）'],

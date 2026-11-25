@@ -4,10 +4,6 @@ import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
 
-// The repair card of a failed Bot turn, bundled once and rendered with a stateful
-// stand-in React: useState slots persist across renders, so a click and the next render
-// see the same state the real React would keep. Effects run after each render, when
-// their dependencies changed, as the real React would run them.
 const { outputFiles } = await build({
   stdin: {
     contents: [
@@ -18,7 +14,6 @@ const { outputFiles } = await build({
   bundle: true, format: 'cjs', platform: 'browser', write: false, logLevel: 'silent',
   external: ['react', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives'],
 })
-// Hook slots per component, by its place among the components above it.
 const slots = new Map()
 let scope = ''
 let cursor = 0
@@ -47,7 +42,6 @@ const react = {
   useMemo: make => make(), useLayoutEffect() {}, useSyncExternalStore: (subscribe, get) => get(), useId: () => 'id',
 }
 const copied = []
-// Timers the card set, for a test to run.
 const timers = []
 const module = { exports: {} }
 runInNewContext(outputFiles[0].text, {
@@ -67,7 +61,6 @@ const walk = (node, match, out = []) => {
   walk(node.props?.children, match, out)
   return out
 }
-// Runs the function components in a tree, keeping each element with its output.
 const expand = (node) => {
   if (Array.isArray(node)) return node.map(expand)
   if (!node || typeof node !== 'object') return node
@@ -93,10 +86,6 @@ const models = [
   { ref: 'router/flash', provider: 'router', providerName: 'Router', name: 'Flash' },
 ]
 
-// `blocked` is what the host's state view carries on the Bot; `later` adds a turn after
-// the failed one; `account` is the shell account snapshot's view, which a test may change
-// between renders; `asked` marks the failed turn, or the turns listed, as ones another
-// Bot asked for.
 function cell({ code, message = '', turn = 3, blocked, model = models[0].ref, later = false, signIn = true, account, sessionId = 'chief-part', bot: botPatch = {}, catalog = models, defaultModel = null, asked = false } = {}) {
   slots.clear()
   effects.length = 0
@@ -143,7 +132,6 @@ test('a missing key offers the key first, the sign-in and another model, but no 
   assert.deepEqual(labels(list), ['Enter API key', 'Sign in with a DeepSeek account', 'Pick another model'])
   assert.equal(list[0].primary, true)
   assert.equal(list.filter(entry => entry.primary).length, 1)
-  // The raw text is only under Technical details.
   assert.equal(walk(tree, node => node.props?.className === 'bt-fail-text').some(node => textOf(node).includes('no API key for provider')), false)
   assert.ok(side.tech(tree).includes('llm-deepseek: no API key for provider route'))
   list[1].node.props.onClick()
@@ -161,13 +149,11 @@ test('Enter API key opens the key card for the failing provider, with the DeepSe
   assert.equal(link.props.href, 'https://platform.deepseek.com/api_keys')
   assert.equal(link.props.target, '_blank')
   assert.match(textOf(card), /billed by usage; the account needs a balance first/)
-  // The key goes to the failing provider.
   const [input] = walk(card, node => typeof node.props?.onChange === 'function' && node.props?.label !== undefined)
   input.props.onChange('sk-test-ok')
   const [save] = walk(side.render(), node => node.type === 'button' && textOf(node) === 'Save')
   save.props.onClick()
   assert.deepEqual(side.calls, [['key', 'deepseek-official', 'sk-test-ok']])
-  // Saving closes the card again.
   card.props.onSaved()
   assert.equal(walk(side.render(), node => node.props?.model !== undefined).length, 0)
 })
@@ -249,7 +235,6 @@ test('an account sign-in failure asks to sign in again, or offers another model 
   }
 })
 
-// The account route next to the failing key route, as the account plugin lists it.
 const withAccount = [
   ...models,
   { ref: 'deepseek-account/deepseek-v4-flash', provider: 'deepseek-account', providerName: 'DeepSeek account', name: 'V4 Flash' },
@@ -262,7 +247,6 @@ test('a sign-in started from the card moves the Bot onto the account route once 
     const side = cell({ code, blocked: { code, provider: 'deepseek-official', at: 1 }, account: view, catalog: withAccount })
     side.buttons(side.render()).find(entry => entry.label === label).node.props.onClick()
     assert.deepEqual(side.calls, [['signIn']], code)
-    // Nothing moves while the sign-in is under way, or after one that did not finish.
     view.status = 'signing-in'
     side.render()
     assert.deepEqual(side.calls, [['signIn']], code)
@@ -270,7 +254,6 @@ test('a sign-in started from the card moves the Bot onto the account route once 
     side.render()
     side.render()
     assert.deepEqual(side.calls, [['signIn'], ['updateBot', 'chief', { model: 'deepseek-account/deepseek-v4-flash' }]], code)
-    // The host lifts the block with the new model; going on is all that is left.
     side.bot.model = 'deepseek-account/deepseek-v4-flash'
     side.bot.blocked = undefined
     const list = side.buttons(side.render())
@@ -347,7 +330,6 @@ test('a failed turn another Bot asked for offers its fixes but no Retry', () => 
   const list = key.buttons(key.render())
   assert.deepEqual(labels(list), ['Enter API key', 'Sign in with a DeepSeek account', 'Pick another model'])
   assert.equal(list[0].primary, true)
-  // A turn of the user's own in the same chat keeps its Retry.
   const own = cell({ code: 'SERVER', asked: [2] })
   assert.deepEqual(labels(own.buttons(own.render())), ['Retry'])
 })

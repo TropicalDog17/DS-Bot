@@ -4,10 +4,8 @@ import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
 
-// The client module imports the icon set (a React module) and the interface copy; bundle
-// it with a React stand-in, as the composer's own client tests do.
 const { outputFiles } = await build({
-  entryPoints: [fileURLToPath(new URL('../src/client/command-actions.js', import.meta.url))],
+  entryPoints: [fileURLToPath(new URL('../src/client/command-actions.ts', import.meta.url))],
   bundle: true, format: 'cjs', platform: 'browser', write: false, logLevel: 'silent',
   external: ['react'],
 })

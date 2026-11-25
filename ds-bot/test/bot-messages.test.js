@@ -10,15 +10,14 @@ import TokenMeter from '@deepseek-ai/dsh-token-meter'
 import { createRuntime } from '../index.js'
 import { fakeAttachments, fakeContext } from './fake-ctx.js'
 import { fakeAdapter } from './im-fixture.js'
-import { adapters } from '../src/host/im/platforms/index.js'
-import { install as installTurns } from '../src/host/turns.js'
-import { install as installParts } from '../src/host/parts.js'
-import { HANDOFF_ACK, SOURCE_KIND } from '../src/host/constants.js'
-import { estimateTokens } from '../src/host/text.js'
+import { adapters } from '../src/host/im/platforms/index.ts'
+import { install as installTurns } from '../src/host/turns.ts'
+import { install as installParts } from '../src/host/parts.ts'
+import { HANDOFF_ACK, SOURCE_KIND } from '../src/host/constants.ts'
+import { estimateTokens } from '../src/host/text.ts'
 
 let rt
 
-// A two-Bot team, optionally with b in a group Session 'gb' of room 'Ops'.
 function team({ group = false } = {}) {
   return {
     version: 1,
@@ -37,8 +36,6 @@ function team({ group = false } = {}) {
   }
 }
 
-// Services for a full apply(): resolveAgent returns a per-Session agent that
-// records followup/steer/inject/cancel calls.
 async function start(seed) {
   const home = mkdtempSync(join(tmpdir(), 'ds-bot-messages-'))
   writeFileSync(join(home, 'state.json'), JSON.stringify(seed))
@@ -106,7 +103,6 @@ async function start(seed) {
       if (listener.length >= 2) listener({ id }, { type, seq: ++seq, data, ...extra })
     }
   }
-  // Runs every registered waterfall listener; `next` settles the chain.
   const fire = (name, payload) => Promise.all((ctx.listeners.get(name) ?? []).map(listener => listener(payload, () => Promise.resolve(undefined))))
   const tool = (name, args, sessionId) => rt.teamTools.find(d => d.name === name).execute(args, { agent: { id: sessionId } })
   const call = async (endpoint, payload) => (await route.fetch(new Request('http://localhost/api/bot', {
@@ -117,7 +113,6 @@ async function start(seed) {
     await ctx.dispose()
     rmSync(home, { recursive: true, force: true, maxRetries: 5 })
   }
-  // Loading once fills the Session-owner indexes turns.js filters events by.
   await tool('list_bots', {}, 'a')
   return { rt, ctx, agents, agentOf, emit, fire, tool, call, exchanges, home, stop }
 }
@@ -128,14 +123,12 @@ test('message_bot steers by default; on an idle Bot it opens the next turn', asy
   const { agents, emit, tool, stop } = await start(team())
   t.after(stop)
 
-  // Idle: the message goes to the Bot's own chat and starts its next turn.
   const idle = await tool('message_bot', { to: 'Writer', message: 'how are you' }, 'a')
   assert.equal(idle, 'Delivered to Writer. Its reply will arrive later as a new message; do not wait for it.')
   assert.deepEqual(agents.get('b').calls.map(([kind]) => kind), ['steer'])
   assert.match(textOf(agents.get('b').calls[0][1].content), /^\[Message from Chief\]/)
   assert.equal(agents.get('b').calls[0][1].source.role, 'request')
 
-  // Running: the message cuts into that turn instead of queuing.
   emit('b', 'turn/start', { turn: 1 })
   const busy = await tool('message_bot', { to: 'Writer', message: 'watch out' }, 'a')
   assert.equal(busy, 'Delivered to Writer while it is working: it reads your message at its next step and answers once that work is done. Its reply will arrive later as a new message; do not wait for it. Writer now: working in its own chat for less than a minute, for the user; not read yet: 1 from Chief.')
@@ -157,7 +150,6 @@ test('message_bot when "queue" waits for the current work, and reply_to "user" a
   assert.equal(agents.get('b').calls[1][1].source.audience, 'user')
 })
 
-// The user on their phone does not read the other Bot's web chat: its reply comes back.
 test('reply_to "user" from a turn the user started over IM comes back to the sender', async (t) => {
   const fake = fakeAdapter()
   const telegram = adapters.telegram
@@ -177,7 +169,6 @@ test('reply_to "user" from a turn the user started over IM comes back to the sen
   assert.match(out, /^Delivered to Writer\. Its reply will arrive later as a new message; do not wait for it\. The user wrote to you from their phone and does not read Writer's chat, so its reply comes back to you: pass it on to the user in full\./)
   assert.equal(agents.get('b').calls[0][1].source.audience, undefined)
 
-  // A turn the user started in the web chat keeps reply_to "user".
   emit('a', 'turn/end', { turn: 1, reason: { kind: 'completed' } })
   emit('a', 'turn/start', { turn: 2 })
   emit('a', 'user/message', { content: [{ type: 'text', text: 'hi' }], source: { kind: 'user', rpcId: 'web-1' } })
@@ -197,7 +188,6 @@ test('a Bot busy in a group gets the message in its own chat, and the sender is 
   assert.deepEqual(agents.get('b').calls.map(([kind]) => kind), ['steer'])
   assert.equal(agents.get('gb'), undefined)
 
-  // A non-Main sender gets no stop_bot hint.
   emit('ga', 'turn/start', { turn: 1 })
   const back = await tool('message_bot', { to: 'Chief', message: 'done' }, 'b')
   assert.equal(back, 'Delivered to Chief. Its reply will arrive later as a new message; do not wait for it. Chief now: working in group "Ops" for less than a minute. Your message does not reach its work in group "Ops".')
@@ -216,7 +206,6 @@ test('a request steered into a running turn is recorded once and answered in a t
   emit('b', 'turn/end', { turn: 1, reason: { kind: 'completed' } })
   for (let count = 0; count < 200 && agents.get('b').calls.length < 2; count += 1) await delay(5)
 
-  // Nothing from the user's turn goes to Chief; the request comes back to Writer.
   assert.equal(agents.get('a')?.calls.length ?? 0, 0)
   const [kind, again] = agents.get('b').calls[1]
   assert.equal(kind, 'followup')
@@ -243,25 +232,21 @@ test('an answer the user reads reaches dsBotNotes onReply: the Bot\'s own chat a
   const heard = []
   rt.companions.notes.onReply(reply => heard.push({ ...reply }))
 
-  // The user's turn in Writer's chat, with a step shown on the way.
   emit('b', 'turn/start', { turn: 1 }, { time: 5000 })
   emit('b', 'user/message', { content: textBlock('gọi trước 5h nhé'), source: { kind: 'user' } })
   emit('b', 'assistant/message', { message: { content: [...textBlock('Mình xem lịch.'), { type: 'tool-call', id: 't1', name: 'calendar' }] } })
   emit('b', 'assistant/message', assistantText('Ok, mình gọi lúc 4h.'))
   emit('b', 'turn/end', { turn: 1, reason: { kind: 'completed' } })
-  // A turn answering Chief's request goes back to Chief, not to the user.
   emit('b', 'turn/start', { turn: 2 }, { time: 6000 })
   emit('b', 'user/message', { content: textBlock('[Message from Chief]\nstatus?'), source: replySource('request') })
   emit('b', 'assistant/message', assistantText('all good'))
   emit('b', 'turn/end', { turn: 2, reason: { kind: 'completed' } })
-  // A failed turn and a turn that wrote nothing answer nothing.
   emit('b', 'turn/start', { turn: 3 }, { time: 7000 })
   emit('b', 'user/message', { content: textBlock('again'), source: { kind: 'user' } })
   emit('b', 'assistant/message', assistantText('half'))
   emit('b', 'turn/end', { turn: 3, reason: { kind: 'error', error: { code: 'QUOTA', message: 'out' } } })
   emit('b', 'turn/start', { turn: 4 }, { time: 7500 })
   emit('b', 'turn/end', { turn: 4, reason: { kind: 'completed' } })
-  // Writer in the group chat.
   emit('gb', 'turn/start', { turn: 1 }, { time: 8000 })
   emit('gb', 'assistant/message', assistantText('On it: tests first.'))
   emit('gb', 'turn/end', { turn: 1, reason: { kind: 'completed' } })
@@ -279,14 +264,12 @@ test('an answer names the user messages its turns read, also one steered in and 
   rt.companions.notes.onReply(reply => heard.push({ ...reply }))
   const note = (session, rpcId) => emit(session, 'user/message', { content: textBlock(rpcId), source: { kind: 'user', rpcId } })
 
-  // Two notes read by one turn: the second was steered in while it ran.
   emit('b', 'turn/start', { turn: 1 }, { time: 5000 })
   note('b', 'n1')
   emit('b', 'assistant/message', { message: { content: [...textBlock('Xem cả hai.'), { type: 'tool-call', id: 't1', name: 'look' }] } })
   note('b', 'n2')
   emit('b', 'assistant/message', assistantText('Cả hai xong.'))
   emit('b', 'turn/end', { turn: 1, reason: { kind: 'completed' } })
-  // A turn that answers Chief and a failed turn answer the user nothing: their notes wait.
   emit('b', 'turn/start', { turn: 2 }, { time: 6000 })
   emit('b', 'user/message', { content: textBlock('[Message from Chief]\nstatus?'), source: replySource('request') })
   note('b', 'n3')
@@ -299,7 +282,6 @@ test('an answer names the user messages its turns read, also one steered in and 
   note('b', 'n5')
   emit('b', 'assistant/message', assistantText('Ba việc kia đây.'))
   emit('b', 'turn/end', { turn: 4, reason: { kind: 'completed' } })
-  // A message typed without a request id is still answered, naming nothing.
   emit('b', 'turn/start', { turn: 5 }, { time: 9000 })
   emit('b', 'user/message', { content: textBlock('hi'), source: { kind: 'user' } })
   emit('b', 'assistant/message', assistantText('hello'))
@@ -322,15 +304,12 @@ test('a group turn names the user messages its round showed it, also when the ro
     source: { kind: SOURCE_KIND, form: 'relay', role: 'room', roomId: 'r1', exchangeId, senderName: 'You', ...(requests ? { requests } : {}) },
   })
 
-  // The note reaches Writer while its turn is still on earlier work: that turn read
-  // it and answers it, though it began before the note.
   emit('gb', 'turn/start', { turn: 1 }, { time: 5000 })
   round('x1')
   emit('gb', 'assistant/message', { message: { content: [...textBlock('Đang chờ build.'), { type: 'tool-call', id: 't1', name: 'wait' }] } })
   round('x2', ['n1'])
   emit('gb', 'assistant/message', assistantText('Card đã xong, PR đã mở.'))
   emit('gb', 'turn/end', { turn: 1, reason: { kind: 'completed' } })
-  // Its next turn there is about something else and names no note.
   emit('gb', 'turn/start', { turn: 2 }, { time: 6000 })
   round('x3')
   emit('gb', 'assistant/message', assistantText('Đã đóng các phiên cũ.'))
@@ -342,8 +321,6 @@ test('a group turn names the user messages its round showed it, also when the ro
   ])
 })
 
-// #1501: a Bot may ask from a background part of its own chat while the user reads the
-// foreground one. The answer comes back to the thread it was asked from.
 test('a reply to a Bot that asked from a background part comes back to that part', async (t) => {
   const seed = team()
   seed.bots.a.openParts = [{ sessionId: 'a-bg', segments: [] }]
@@ -353,7 +330,6 @@ test('a reply to a Bot that asked from a background part comes back to that part
   const request = agents.get('b').calls[0][1]
   assert.equal(request.source.senderPart, 'a-bg')
 
-  // Writer takes the request up and answers it.
   emit('b', 'turn/start', { turn: 1 })
   emit('b', 'user/message', { content: request.content, source: request.source })
   emit('b', 'assistant/message', assistantText('data checked'))
@@ -361,12 +337,9 @@ test('a reply to a Bot that asked from a background part comes back to that part
   for (let count = 0; count < 200 && (agents.get('a-bg')?.calls ?? []).length < 1; count += 1) await delay(5)
   const reply = agents.get('a-bg').calls[0][1]
   assert.equal(textOf(reply.content), '[Reply from Writer]\ndata checked')
-  // The foreground chat, where the user is, got none of it.
   assert.equal(agents.get('a')?.calls.length ?? 0, 0)
 })
 
-// Issue #580: a queued message the user steers into the running turn restarts
-// the activity row's clock from when it landed, not from the turn's start.
 test('a user message steered into the running steps marks when it landed', async (t) => {
   const { emit, call, stop } = await start(team())
   t.after(stop)
@@ -375,33 +348,27 @@ test('a user message steered into the running steps marks when it landed', async
   const spliced = (target, inserted, time, extra = {}) => emit('b', 'agent/inbox/spliced', { target, start: 0, inserted, ...extra }, { time })
 
   emit('b', 'turn/start', { turn: 1 })
-  // Queued for the next turn first; only moving it into the running steps steers.
   spliced('next-turn', [userMessage('m1')], 2000)
   assert.deepEqual(await steered(), {})
   spliced('next-turn', [], 3000, { removedCount: 1, outcome: 'canceled' })
   spliced('next-step', [userMessage('m1')], 3001)
   assert.equal((await steered()).b, 3001)
-  // A Bot's request spliced into the same place is not the user's input.
   spliced('next-step', [{ ...userMessage('m2'), source: replySource('request') }], 4000)
   assert.equal((await steered()).b, 3001)
   emit('b', 'turn/end', { turn: 1, reason: { kind: 'completed' } })
   assert.deepEqual(await steered(), {})
 
-  // A turn a part switch cut short may see turn/start without a turn/end.
   emit('b', 'turn/start', { turn: 2 })
   spliced('next-step', [userMessage('m3')], 5000)
   emit('b', 'turn/start', { turn: 3 })
   assert.deepEqual(await steered(), {})
 })
 
-// #1501: two parts of the sender's own chat are two conversations. One answer could come
-// back to only one of them, so their unread requests are not merged; each is answered.
 test('requests from two parts of one Bot are answered apart, not merged', async (t) => {
   const seed = team()
   seed.bots.a.openParts = [{ sessionId: 'a-bg', segments: [] }]
   const { agentOf, agents, emit, tool, stop } = await start(seed)
   t.after(stop)
-  // What Writer is sent waits unread in its inbox.
   const writer = agentOf('b')
   writer.steer = (message) => { writer.calls.push(['steer', message]); writer.inbox.nextStep.push(message) }
   emit('b', 'turn/start', { turn: 1 })
@@ -411,7 +378,6 @@ test('requests from two parts of one Bot are answered apart, not merged', async 
   assert.equal(waiting.length, 2)
   assert.deepEqual(waiting.map(message => message.source.senderPart), ['a', 'a-bg'])
   assert.notEqual(waiting[0].source.exchangeId, waiting[1].source.exchangeId)
-  // Each is answered in the part that asked.
   for (const [turn, message, said, asked] of [[1, waiting[0], 'data checked', 'a'], [2, waiting[1], 'docs checked', 'a-bg']]) {
     emit('b', 'turn/start', { turn })
     emit('b', 'user/message', { content: message.content, source: message.source })
@@ -447,7 +413,6 @@ test('a request from a name with brackets keeps its body when replayed after the
 test('a message its recipient has not read yet takes in the next one, however many come', async (t) => {
   const { ctx, agentOf, emit, tool, exchanges, stop } = await start(team())
   t.after(stop)
-  // Writer's turn waits on something and never reaches its next step.
   const writer = agentOf('b')
   writer.steer = (message) => { writer.calls.push(['steer', message]); writer.inbox.nextStep.push(message) }
   emit('b', 'turn/start', { turn: 1 })
@@ -456,7 +421,6 @@ test('a message its recipient has not read yet takes in the next one, however ma
   const second = await tool('message_bot', { to: 'Writer', message: 'task 2', when: 'queue' }, 'a')
   assert.match(second, /Writer had not read your earlier message yet, so this one was added to it, and it answers both at once\. Writer now: working in its own chat for less than a minute, for the user; not read yet: 1 from Chief\.$/)
   for (let index = 3; index <= 12; index += 1) await tool('message_bot', { to: 'Writer', message: `task ${index}` }, 'a')
-  // One message, still steered, under the first one's exchange.
   assert.equal(writer.inbox.nextStep.length, 1)
   const [waiting] = writer.inbox.nextStep
   assert.equal(textOf(waiting.content), `[Message from Chief]\n${Array.from({ length: 12 }, (_, index) => `task ${index + 1}`).join('\n\n')}`)
@@ -464,16 +428,13 @@ test('a message its recipient has not read yet takes in the next one, however ma
   assert.deepEqual((await exchanges()).map(entry => entry.text.split('\n\n').length), [12])
   assert.match(await tool('list_bots', {}, 'a'), /- Writer \(Write\)\n {2}now: working in its own chat for less than a minute, for the user; not read yet: 1 from Chief\n/)
 
-  // Once a step takes it up, the next message is a new one.
   emit('b', 'user/message', { content: waiting.content, source: waiting.source })
   writer.inbox.nextStep.length = 0
   assert.match(await tool('message_bot', { to: 'Writer', message: 'task 13' }, 'a'), /^Delivered to Writer while it is working[^]*Writer now: working in its own chat for less than a minute, for Chief\.$/)
   assert.equal((await exchanges()).length, 2)
 
-  // An approval the Bot waits for shows in what the sender is told.
   for (const listener of ctx.listeners.get('approval/request')) void listener({ agent: { session: { id: 'b' } }, toolName: 'bash', reason: 'rm' }, () => new Promise(() => {}))
   assert.match(await tool('message_bot', { to: 'Writer', message: 'task 14' }, 'a'), /Writer now: waiting for the user's approval to run bash in its own chat \(for less than a minute\); not read yet: 1 from Chief\.$/)
-  // Chief, whose request Writer works on, hears of it without asking.
   const notice = agentOf('a').calls.find(([kind, message]) => kind === 'followup' && message.source.role === 'approval')?.[1]
   assert.match(textOf(notice.content), /^\[Writer waits for the user's approval · tell the user here\]\nWriter is waiting for the user's approval to run bash \(rm\)\. The user answers it in Writer's own chat\./)
 })
@@ -489,7 +450,6 @@ test('requests from two Bots, or for different work, stay apart', async (t) => {
 
   await tool('message_bot', { to: 'Writer', message: 'from Chief' }, 'a')
   assert.doesNotMatch(await tool('message_bot', { to: 'Writer', message: 'from Tester' }, 'c'), /added to it/)
-  // Tester, now working on what Chief asked it for, writes for that work.
   await tool('message_bot', { to: 'Tester', message: 'check it' }, 'a')
   const ask = agentOf('c').calls.at(-1)[1]
   emit('c', 'turn/start', { turn: 1 })
@@ -532,13 +492,11 @@ test('stop_bot stops a turn running in a background part of the Bot\'s chat', as
   seed.bots.b.openParts = [{ sessionId: 'b-bg', segments: [] }]
   const { agents, emit, tool, stop } = await start(seed)
   t.after(stop)
-  // The foreground chat is idle; only the background part runs.
   emit('b-bg', 'turn/start', { turn: 1 })
   const out = await tool('stop_bot', { bot: 'Writer', reason: 'that command deletes data' }, 'a')
   assert.equal(out, 'Stopped Writer in another of its conversations. It is told why in a new turn, whose reply comes back to you.')
   assert.deepEqual(agents.get('b-bg').calls.map(([kind]) => kind), ['cancel'])
   assert.deepEqual(agents.get('b-bg').calls[0][1], { kind: 'hook', reason: 'ds-bot/stopped' })
-  // The foreground chat was not cancelled; it gets the notice.
   assert.deepEqual(agents.get('b').calls.map(([kind]) => kind), ['followup'])
   assert.equal(agents.get('b').calls[0][1].source.role, 'stopped')
 })
@@ -610,7 +568,6 @@ test('a stopped notice routes the acknowledgement back like a request', () => {
   assert.equal(delivered[0].text, 'understood')
 })
 
-// What the turn hands back for a joined request: the request itself, to answer next.
 const deferredOf = job => [job.fromId, job.toId, job.sessionId, job.role, job.exchangeId, job.deferred, job.text]
 
 test('a request that joins a user-started turn is handed back, not answered with the turn\'s text', () => {
@@ -624,7 +581,6 @@ test('a request that joins a user-started turn is handed back, not answered with
   assert.deepEqual(delivered.map(deferredOf), [['a', 'b', 'b', 'request', 'e1', true, 'make it shorter']])
   assert.deepEqual(rt.state.exchangeTurns, {})
 
-  // The handed-back request opens a hidden turn whose text is the reply.
   emit('b', 'turn/start', { turn: 2 })
   emit('b', 'user/message', { content: textBlock('[Message from Chief · you read it during your last task; answer it now]\nmake it shorter'), source: replySource('request', { exchangeId: 'e1', deferred: true }) })
   emit('b', 'assistant/message', assistantText('done, it is shorter'))
@@ -683,9 +639,7 @@ test('a content-audit 403 stays on its turn without blocking the key', () => {
   assert.equal(failure.status, 403)
   assert.equal(failure.requestId, '00000000-0000-4000-8000-000000000000')
   assert.match(failure.message, /content_policy_violation/)
-  // No key repair: the Bot stays usable and no blocked credential state is set.
   assert.equal(rt.bots.b.blocked, undefined)
-  // A completed turn in the same part drops the record.
   emit('b', 'turn/start', { turn: 2 })
   emit('b', 'user/message', { content: textBlock('hello'), source: { kind: 'user' } })
   emit('b', 'assistant/message', assistantText('hi'))
@@ -764,17 +718,14 @@ test('a joined request crosses a part switch and is handed back in the new part'
   emit('b', 'user/message', { content: textBlock('[Message from Chief]\ntask'), source: replySource('request', { exchangeId: 'e0' }) })
   emit('b', 'assistant/message', assistantText('half'))
   emit('b', 'user/message', { content: textBlock('[Message from Chief]\nmore'), source: replySource('request', { exchangeId: 'e1' }) })
-  // The model call hits the window: the turn stops and the part moves on.
   await fire('agent/request-error', { failure: { code: 'CONTEXT_WINDOW_EXCEEDED' }, signal: AbortSignal.timeout(60_000), agent: agentOf('b') })
   emit('b', 'turn/end', { turn: 1, reason: { kind: 'error', error: { code: 'CONTEXT_WINDOW_EXCEEDED' } } })
-  // Neither the trigger nor the joined request answers from the old part.
   for (let count = 0; count < 200 && agents.get('s1')?.calls.find(([, message]) => message.source?.handoff === true) === undefined; count += 1) await delay(5)
   const handoff = agents.get('s1').calls.find(([, message]) => message.source?.handoff === true)[1]
   assert.equal((agents.get('a')?.calls ?? []).filter(([, message]) => message.source?.role === 'reply').length, 0)
   assert.equal(handoff.source.exchangeId, 'e0')
   assert.deepEqual(handoff.source.joined.map(item => [item.info.exchangeId, item.text]), [['e1', 'more']])
 
-  // The resumed turn answers its trigger and hands the joined request back there.
   emit('s1', 'turn/start', { turn: 1 })
   emit('s1', 'user/message', { content: textBlock('[Handoff]\npackage'), source: handoff.source })
   emit('s1', 'assistant/message', assistantText('done'))
@@ -789,7 +740,6 @@ test('a joined request crosses a part switch and is handed back in the new part'
   assert.equal(textOf(handedBack()[1].content), '[Message from Chief · you read it during your last task; answer it now]\nmore')
 })
 
-// Each Session takes up the newest message it was sent as its next turn.
 function turnTaker(agents, emit) {
   const turns = new Map()
   const take = (id) => {
@@ -826,7 +776,6 @@ const worksIn = async ({ call, home }) => {
   return JSON.parse(readFileSync(join(home, 'state.json'), 'utf8')).works ?? {}
 }
 
-// Chief asks Writer, which hands part of it on to Tester.
 async function handedOn({ agents, emit, tool }) {
   const turns = turnTaker(agents, emit)
   turns.userTurn('a', 'have Writer do it')
@@ -846,11 +795,9 @@ test('a Bot\'s answer waits for the work it handed on, and carries what came bac
   assert.deepEqual(await shown(), [false, {}])
   assert.match(handed, /When you have handed on everything, end your turn: each reply brings you back to this work, and your answer goes to Chief once all of it is back\.$/)
   end('b', 'handed it to Tester')
-  // Nothing goes up yet; Writer waits, and the team can see it.
   assert.match(await tool('list_bots', {}, 'a'), /- Writer \(Write\)\n {2}now: waiting for Tester to hand back work, for Chief\n/)
   assert.deepEqual(Object.values(await worksIn(team)).map(work => [work.from, work.to, work.open.length, work.held]), [['a', 'b', 1, 'handed it to Tester'], ['b', 'c', 0, undefined]])
   assert.deepEqual(callsOf(agents, 'a'), [])
-  // Its mark shows it waits, its row whom for, and the menu names the wait to give up.
   const [, waitingWork] = await shown()
   const waits = waitingWork.b.waits
   assert.equal(waits.length, 1)
@@ -877,12 +824,9 @@ test('a Bot may take part in the same work again, but not message one that waits
   const team = await start(threeBots())
   t.after(team.stop)
   const { agents, tool } = team
-  // Chief designs, Writer builds, Tester reviews; then Chief accepts.
   const { take, end } = await handedOn(team)
   end('b')
   take('c')
-  // The guard answers with a result, not a failed call: the turn goes on with the
-  // work, and the result says where its answer goes.
   const refused = /^Not sent: (Chief|Writer) is waiting for the result of the work you are doing, and your answer reaches it by itself once everything you handed on is back\./
   assert.match(await tool('message_bot', { to: 'Chief', message: 'please accept it' }, 'c'), refused)
   assert.match(await tool('message_bot', { to: 'Writer', message: 'it passes' }, 'c'), refused)
@@ -894,7 +838,6 @@ test('a Bot may take part in the same work again, but not message one that waits
   end('b', 'built and reviewed')
   await settled(() => callsOf(agents, 'a').length === 1)
   take('a')
-  // With the result in hand, Chief asks Tester again, and Tester may ask Writer.
   assert.match(await tool('message_bot', { to: 'Tester', message: 'check the last part once more' }, 'a'), /^Delivered to Tester/)
   end('a')
   take('c')
@@ -909,7 +852,6 @@ test('message_bot tells the Bot not to message one that waits for its result', a
   assert.match(description, /Do not message a Bot that is waiting for the result of the work you are doing \(the Bot that asked you for it, or one above that\): your answer reaches it by itself once you end your turn and everything you handed on is back\./)
 })
 
-// Chief asks Writer, and Writer messages Chief with what it has instead of answering.
 async function refusedUp({ agents, emit, tool }) {
   const turns = turnTaker(agents, emit)
   turns.userTurn('a', 'have Writer do it')
@@ -1104,7 +1046,6 @@ test('a result read during other work comes back in a turn of its own and goes o
   end('c', 'reviewed')
   await settled(() => callsOf(agents, 'b').length === 2)
   const [, result] = callsOf(agents, 'b')[1]
-  // The user's turn reads the result along with the user's message.
   userTurn('b', 'an unrelated question')
   emit('b', 'user/message', { content: result.content, source: result.source })
   end('b', 'the answer for the user')
@@ -1162,7 +1103,6 @@ test('Bots keep messaging and posting with no count of messages or rounds', asyn
   assert.equal(agents.get('r1').calls.length, 5)
 })
 
-// A Writer whose earlier part b1 holds `events`.
 function earlierParts(events) {
   const writer = { id: 'b', name: 'Writer', createdAt: 1, sessionId: 'b2', segments: [{ sessionId: 'b1', endedAt: 2 }] }
   const rt = {
@@ -1190,8 +1130,6 @@ test('an earlier part keeps the request its Bot answered', async () => {
   assert.equal(items[0].botId, 'a')
 })
 
-// #537: an archived earlier part may have no live agent to resolve; the page
-// still loads from the stored events.
 test('an earlier part loads when its agent is gone', async () => {
   const rt = earlierParts([
     { type: 'user/message', seq: 1, time: 10, data: { content: [{ type: 'text', text: 'still here' }], source: { kind: 'user' } } },
@@ -1201,8 +1139,6 @@ test('an earlier part loads when its agent is gone', async () => {
   assert.deepEqual(items.map(item => [item.kind, item.text]), [['user', 'still here']])
 })
 
-// #537: a turn that spans a page boundary keeps its number on the newer page
-// even when the part's agent is gone (no live projection to seed it).
 test('an agentless part keeps the turn that opened on an older page', async () => {
   const events = [{ seq: 1, type: 'turn/start', time: 1, data: { turn: 6 } }]
   for (let seq = 2; seq <= 430; seq += 1) {
@@ -1264,9 +1200,6 @@ test('earlier-part rows carry seq and the turn that turn/start opened', () => {
   assert.equal(items[5].name, 'Chief')
 })
 
-// parts.js: an earlier group page stacks the replies of one turn. The change line must
-// come from the stacked row (the wrapper carries the last reply's `changes`), not from
-// the first reply of the turn.
 test('an earlier group page takes the change line of the last stacked reply', () => {
   const rt = earlierParts([])
   rt.roomOf = id => (id === 'g1' ? { id: 'g1', name: 'Launch' } : undefined)
@@ -1285,8 +1218,6 @@ test('an earlier group page takes the change line of the last stacked reply', ()
   assert.deepEqual(post.changes, last)
 })
 
-// One turn opened on the older page and still running on the newer one.
-// The page holds 60 events, so the newer page starts after that turn/start.
 test('one turn keeps its identity across two earlier pages', async (t) => {
   const log = [{ seq: 1, type: 'turn/start', time: 1, data: { turn: 6 } }]
   for (let seq = 2; seq <= 70; seq += 1) {
@@ -1359,7 +1290,6 @@ test('an image offload failure moves the Bot on, without its latest messages the
   t.after(stop)
   let made = 0
   ctx.sessionController.create = async () => ({ sessionId: `s${++made}` })
-  // Per Session, the events DS Bot reads back; only the previous turn's end matters.
   const ends = new Map()
   const endedWith = (id, code) => ends.set(id, { 9: { type: 'turn/end', data: { reason: { kind: 'error', error: { code } } } } })
   const failTurn = async (id, code) => {
@@ -1397,7 +1327,6 @@ test('an image offload failure moves the Bot on, without its latest messages the
   assert.match(second, /so they are left out this time\. First tell the user/)
   assert.match(second, /## Latest messages[^#]*\(none\)/)
 
-  // A part that already left the messages out stays where it is.
   endedWith('s2', 'IMAGE_OFFLOAD_REQUIRED')
   await failTurn('s2', 'IMAGE_OFFLOAD_REQUIRED')
   await delay(30)
@@ -1518,31 +1447,26 @@ for (const id of ['b', 'gb']) {
       emit(sessionId, 'user/message', handoff)
     }
 
-    // A grown conversation still gets its normal overflow recovery.
     emit(id, 'assistant/message', assistantText('Earlier work'))
     await overflow(agentOf(id))
     await waitForHandoff('s1')
     assert.equal(await preStep(agentOf('s1')), 'next')
-    // A larger tool set can cross the growth line without adding any conversation.
     tokens += 192_000
     assert.equal(await preStep(agentOf('s1')), 'next')
     await overflow(agentOf('s1'))
     await delay(30)
     assert.equal(made, 1, 'replacing an unchanged handoff cannot make room')
 
-    // An idle handoff acknowledgement is synthetic, not evidence the model works.
     emit('s1', 'assistant/message', assistantText(HANDOFF_ACK))
     ctx.emit('agent/status', { agent: agentOf('s1'), status: 'idle' })
     await delay(30)
     assert.equal(made, 1)
 
-    // A model reply alone does not fix a tool set that still exceeds the window.
     emit('s1', 'assistant/message', assistantText('A short reply'))
     await overflow(agentOf('s1'))
     await delay(30)
     assert.equal(made, 1)
 
-    // Once the tool set fits, shortening the conversation can help again.
     tokens = 1_000
     await overflow(agentOf('s1'))
     await waitForHandoff('s2')
@@ -1605,8 +1529,6 @@ for (const id of ['b', 'gb']) {
   }
 }
 
-// #206: a message between Bots used to go whole into state.json, which is written whole
-// on every save; an empty one started a turn on nothing.
 test('message_bot turns down an empty message', async (t) => {
   const { agentOf, tool, exchanges, stop } = await start(team())
   t.after(stop)
@@ -1615,7 +1537,6 @@ test('message_bot turns down an empty message', async (t) => {
   assert.deepEqual(await exchanges(), [])
 })
 
-// A message between Bots is in the book of the pair, whole; state.json does not hold it.
 test('a long message between Bots is kept whole in the book of the pair, not in state.json', async (t) => {
   const { agentOf, tool, call, exchanges, home, stop } = await start(team())
   t.after(stop)
@@ -1635,7 +1556,6 @@ test('a long message between Bots is kept whole in the book of the pair, not in 
   assert.deepEqual(book.map(record => [record.event ?? record.role, record.id]), [['request', entry.id], ['delivered', entry.id]])
   assert.equal(book[0].text, long)
 
-  // The dialog reads it whole from the book, with no Session to read back.
   assert.deepEqual((await call('exchange-text', { id: entry.id, a: 'a', b: 'b' })).value, { text: long, whole: true })
 })
 
@@ -1649,8 +1569,6 @@ test('a team saved with long messages whole keeps only their start after it load
   assert.equal(entry.length, 5000)
 })
 
-// #206: a message past 20,000 characters went whole into every Session it reached and
-// into the model's context at once. It now goes as a DSH file the recipient reads.
 test('a message past 20,000 characters goes as a file, which the exchange dialog reads back', async (t) => {
   const { ctx, agentOf, tool, call, exchanges, stop } = await start(team())
   t.after(stop)
@@ -1693,13 +1611,10 @@ test('without file storage a message past 20,000 characters is not sent', async 
   assert.equal(answer, 'Not sent: the message has 20001 characters, more than 20000, and this DeepSeek Harness cannot send it as a file. Write it to a file in your working folder and send its path instead.')
   assert.deepEqual(agentOf('b').calls, [])
   assert.deepEqual(await exchanges(), [])
-  // 20,000 characters still go as they are.
   await tool('message_bot', { to: 'Writer', message: 'x'.repeat(20_000) }, 'a')
   assert.equal(agentOf('b').calls.length, 1)
 })
 
-// A request merged with another the recipient had not read goes out under the same id. If
-// the merged text never reaches the recipient, the dialog keeps the text that did.
 test('a merged request that does not go out leaves the delivered text in the dialog', async (t) => {
   const { ctx, agentOf, exchanges, tool, stop } = await start(team())
   t.after(stop)
@@ -1714,7 +1629,6 @@ test('a merged request that does not go out leaves the delivered text in the dia
   assert.deepEqual((await exchanges()).map(entry => [entry.id, entry.text]), [[exchangeId, 'Draft the plan']])
 })
 
-// The book is written before the message goes out: one it cannot keep is not sent.
 test('a message between Bots that the book cannot keep is not sent', { skip: process.platform === 'win32' || process.getuid?.() === 0 }, async (t) => {
   const { agentOf, tool, exchanges, home, stop } = await start(team())
   t.after(stop)
@@ -1736,8 +1650,6 @@ test('a deferred request from a background part sends its reply back to that par
   const { agents, agentOf, emit, tool, stop } = await start(seed)
   t.after(stop)
 
-  // Writer is in a user-started turn, reads Chief's steered request from 'a-bg',
-  // and ends the user turn without having answered the joined request yet.
   emit('b', 'turn/start', { turn: 1 })
   emit('b', 'user/message', { content: textBlock('Draft first'), source: { kind: 'user' } })
   await tool('message_bot', { to: 'Writer', message: 'Check appendix' }, 'a-bg')
@@ -1749,7 +1661,6 @@ test('a deferred request from a background part sends its reply back to that par
   const [, deferred] = agentOf('b').calls.find(([kind]) => kind === 'followup')
   assert.equal(deferred.source.senderPart, 'a-bg')
 
-  // When Writer answers that deferred turn, the reply must return to Chief's background part.
   emit('b', 'turn/start', { turn: 2 })
   emit('b', 'user/message', { content: deferred.content, source: deferred.source })
   emit('b', 'assistant/message', assistantText('Appendix looks good'))
@@ -1775,7 +1686,6 @@ test('a deferred later result follows a switched background openPart instead of 
   } : get(name)
   ctx.llm.resolveModelInfo = async () => ({ context: { contextWindow: 192_000 } })
 
-  // Chief asks Writer (foreground is 'b-bg'), and Writer hands part of that work on to Tester.
   turns.userTurn('a', 'have Writer do it')
   await tool('message_bot', { to: 'Writer', message: 'carry out the plan' }, 'a')
   turns.end('a', 'asked Writer')
@@ -1788,11 +1698,8 @@ test('a deferred later result follows a switched background openPart instead of 
   await settled(() => callsOf(agents, 'b-bg').length === 2)
   const [, replyMsg] = callsOf(agents, 'b-bg')[1]
 
-  // User opens 'b-fg' as Writer's foreground, moving 'b-bg' into a background openPart.
   assert.equal((await call('bot-open-part', { botId: 'b', sessionId: 'b-fg' })).ok, true)
 
-  // During an unrelated turn in background 'b-bg', Writer reads Tester's reply, then hits a
-  // context-window switch ('b-bg' -> 's1', into pastOwners) before turn/end drains `later`.
   emit('b-bg', 'turn/start', { turn: 2 })
   emit('b-bg', 'user/message', { content: textBlock('unrelated question'), source: { kind: 'user' } })
   emit('b-bg', 'user/message', { content: replyMsg.content, source: replyMsg.source })

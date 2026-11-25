@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { answerKeepsCard, editLines, lineDiff, proposalPlacement, withoutEntry } from '../src/client/learning-card-model.js'
+import { answerKeepsCard, editLines, lineDiff, proposalPlacement, withoutEntry } from '../src/client/learning-card-model.ts'
 
 const turns = new Map([
   [1, { turn: 1, end: { time: 100 }, status: 'closed' }],
@@ -24,7 +24,6 @@ test('a proposal uses the dock when there are no closed turns', () => {
 
 test('an answered proposal stays where it was answered and never goes to the dock', () => {
   assert.deepEqual(proposalPlacement({ at: 150, outcome: 'approved', settledAt: 900 }, turns), { kind: 'turn', turn: 1 })
-  // Shown after the latest turn while waiting; answered then, it stays there as later turns end.
   const later = new Map([...turns, [4, { turn: 4, end: { time: 1000 }, status: 'closed' }]])
   assert.deepEqual(proposalPlacement({ at: 50, outcome: 'declined', settledAt: 300 }, later), { kind: 'turn', turn: 2 })
   assert.deepEqual(proposalPlacement({ at: 50 }, later), { kind: 'turn', turn: 4 })
@@ -73,9 +72,7 @@ test('AGENTS.md edit previews keep the blank lines the edit writes', () => {
 })
 
 test('a failure keeps the card only while another try could work', () => {
-  // The host no longer has the proposal: nothing is left to answer.
   assert.equal(answerKeepsCard(Object.assign(new Error('gone'), { code: 'bot/stale' })), false)
-  // Everything else can pass on a retry, or still wants a different answer.
   for (const code of ['NETWORK', 'bot/internal', 'bot/refused', 'HTTP_502', 'bot/error']) {
     assert.equal(answerKeepsCard(Object.assign(new Error(code), { code })), true, code)
   }

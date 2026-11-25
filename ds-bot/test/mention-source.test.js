@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { fileMentionSource } from '../src/client/mention-source.js'
+import { fileMentionSource } from '../src/client/mention-source.ts'
 
 // The chat node's inline-file resolver comes from the shared `chatFileMentions`
 // service; a view that shadows DSH's node must read it itself.

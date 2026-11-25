@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { flatWidthOf, layoutOf, widthOf } from '../src/client/themes.js'
+import { flatWidthOf, layoutOf, widthOf } from '../src/client/themes.ts'
 
 test('a layout or width the plugin does not know reads as the default', () => {
   assert.equal(layoutOf(undefined), 'bubble')

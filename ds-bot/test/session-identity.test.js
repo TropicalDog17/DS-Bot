@@ -7,8 +7,7 @@ import { createRuntime } from '../index.js'
 import { fakeContext } from './fake-ctx.js'
 
 // Some routes (OpenCode Go among them) turn down every model request that names no
-// Session. DS Bot's own requests name the Session they serve, and the hooks that act
-// on a Session's own rounds still leave them alone.
+// Session.
 
 const TEAM = {
   version: 1,
@@ -38,9 +37,6 @@ async function drain(stream) {
   return chunks
 }
 
-// `ctx.llm.stream` runs the plugin's `llm/stream` listeners in order, as DSH does,
-// and then a route that turns down a request without a Session. `respond` gives the
-// text of each answer the route lets through.
 function start() {
   const home = mkdtempSync(join(tmpdir(), 'ds-bot-session-identity-'))
   writeFileSync(join(home, 'state.json'), JSON.stringify(TEAM))
@@ -99,7 +95,6 @@ function start() {
   const hook = pattern => ctx.listeners.get('llm/stream').find(listener => pattern.test(String(listener)))
   const stop = async () => {
     await ctx.dispose()
-    // A reading is cached on disk in the background.
     if (bench.requests.some(request => request.model === 'vision' && request.sessionId !== undefined)) {
       for (let tries = 0; tries < 100 && !existsSync(join(home, 'ocr.json')); tries += 1) await new Promise(resolve => setTimeout(resolve, 10))
     }

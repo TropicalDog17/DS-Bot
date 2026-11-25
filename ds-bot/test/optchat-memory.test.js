@@ -1,4 +1,3 @@
-// OptChat memory plugin: store, import, and the plugin on the real DSH agent loop.
 import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -8,10 +7,10 @@ import { Context } from '@deepseek-ai/cordis'
 import { mountAgentLoopTestDependencies, mountAgentLoopTestHarness } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { createUserMessage, LlmAdapter } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
-import { closeNamespace, contextSource, openNamespace } from '../src/optchat/core.js'
-import { importStore } from '../src/optchat/import.js'
-import { buildAll } from '../src/optchat/summarize.js'
-import { HISTORY_KIND, install } from '../src/optchat/plugin.js'
+import { closeNamespace, contextSource, openNamespace } from '../src/optchat/core.ts'
+import { importStore } from '../src/optchat/import.ts'
+import { buildAll } from '../src/optchat/summarize.ts'
+import { HISTORY_KIND, install } from '../src/optchat/plugin.ts'
 
 const temp = t => {
   const dir = mkdtempSync(join(tmpdir(), 'optchat-'))
@@ -91,8 +90,6 @@ test('a failing summarizer keeps every transcript record, and a later run comple
   assert.deepEqual([reopened.events.length, reopened.nodes.size], [4, 7])
 })
 
-// --- The plugin on the real DSH agent loop ---------------------------------------
-
 async function boot(t, { failSummary = false, replaceAfterBytes = 400 } = {}) {
   const root = new Context()
   await mountAgentLoopTestDependencies(root)
@@ -164,7 +161,6 @@ test('real loop: each Bot writes only its own namespace; unknown, conflicting or
   assert.equal(a.search('bravo').length, 0)
   assert.equal(b.search('alpha').length, 0)
   assert.equal(handle.pending.get('u1')?.length, 2, 'unknown owner: held, not written')
-  // Ownership resolved later flushes what was held, once.
   identity.set('u1', { botId: 'bot-b' })
   assert.equal(handle.pending.has('u1'), false)
   assert.equal(b.search('unknown owner').length, 1)
@@ -184,7 +180,6 @@ test('real loop: tools answer from the caller\'s own namespace only', async t =>
   assert.match(await search.execute({ query: 'mango' }, { agent: a1 }), /^0 \[.*\] user: alpha mango/)
   assert.equal(await search.execute({ query: 'mango' }, { agent: b1 }), 'No message has all of those words.')
   assert.match(await zoom.execute({ id: 0 }, { agent: b1 }), /^0\+0\|user: bravo kiwi\ndate: /)
-  // A model sometimes writes the number as a string; DS Bot's defineTool reads it as the number.
   assert.match(await zoom.execute({ id: '0', count: '1' }, { agent: b1 }), /^0\+0\|user: bravo kiwi\ndate: /)
   assert.match(await search.execute({ query: 'mango', limit: '5' }, { agent: a1 }), /^0 \[/)
   assert.equal(await search.execute({ query: 'mango' }, { agent: { id: 'nobody' } }), 'OptChat memory is not on for this Session.')
@@ -203,7 +198,6 @@ test('real loop: old turns are replaced on the surface by the summary view; the 
   const last = replacements.at(-1)
   assert.equal(last.data.source.kind, HISTORY_KIND)
   assert.match(last.data.content[0].text, /^\[OptChat memory: this Bot's transcript, messages 0-/)
-  // Every shadowed surface node is cited.
   for (let seq = last.surfaceOp.startSeq; seq <= last.surfaceOp.endSeq; seq += 1) {
     if (a1.session.surface.nodes.includes(seq)) assert.fail('shadowed node still visible')
   }
@@ -211,7 +205,6 @@ test('real loop: old turns are replaced on the surface by the summary view; the 
   assert.ok(seen.some(text => text.startsWith('[OptChat memory')), 'model received the summary view')
   assert.ok(!seen.some(text => text.startsWith('turn 0 ')), 'turn 0 is no longer verbatim on the surface')
   assert.ok(seen.some(text => text.startsWith('turn 3 ')), 'the newest turn stays verbatim')
-  // The transcript still holds every original message, and zoom returns it.
   const ns = handle.space('bot-a')
   assert.deepEqual(ns.events.filter(event => event.kind === 'user').map(event => event.text.slice(0, 6)), ['turn 0', 'turn 1', 'turn 2', 'turn 3'])
   assert.match(ns.zoom(0, 1), /^0\+0\|user: turn 0 w+$/)
@@ -221,7 +214,6 @@ test('real loop: with a failing summarizer nothing is replaced and the transcrip
   const { identity, handle, turn, agent, requests } = await boot(t, { failSummary: true })
   identity.set('a1', { botId: 'bot-a' })
   const a1 = await agent('a1')
-  // Longer than a leaf (256 bytes), so even leaves need the failing summarizer.
   for (let k = 0; k < 4; k += 1) {
     await turn(a1, `turn ${k} ${'w'.repeat(400)}`)
     await handle.idle()

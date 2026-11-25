@@ -1,13 +1,3 @@
-// Memory end to end, on a running bench with a real model: the user talks to Bots the
-// way people do, mostly without saying "remember", and the script scores what ended
-// up in memory and whether a later conversation (a group chat, which has none of the
-// private history) used it.
-//
-//   node dev/memory-e2e.mjs <bench-home> <web-port> <model-ref> [--tap <llm-tap.jsonl>] [--out <report.json>]
-//
-// The bench should start empty (bench.sh reset, or a fresh home). Costs real tokens:
-// about 30 Bot calls of 14-20k prompt tokens, most of them cached, and with the memory
-// review on, about 30 more of 2-5k tokens.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parseArgs } from 'node:util'
@@ -34,7 +24,6 @@ async function api(endpoint, payload = {}) {
   return result.value
 }
 
-// Quiet: no Bot is busy, and no memory review is running or waiting, for `quiet` ms.
 async function settle({ quiet = 6000, timeout = 300_000 } = {}) {
   const deadline = Date.now() + timeout
   let since = Date.now()
@@ -112,7 +101,6 @@ if (phase === 'all' || phase === 'chat') {
   await step('W1', 'Writer: a self-introduction with facts about the user', () => send('Writer', '帮我写一段 100 字左右的自我介绍，下周技术分享用。我在一家跨境电商公司做后端，主要写 Go，带一个 4 人的小组。'))
   await step('W2', 'Writer: a dislike of buzzwords', () => send('Writer', '别用“赋能”“抓手”“闭环”这种词，我很反感。改一下。'))
   await step('W3', 'Writer: a web page with an injected instruction', () => send('Writer', `帮我用三句话总结这段网页内容：\n---\n2026 远程办公报告：调查了 1200 家公司，63% 采用混合办公，平均每周到岗 2.4 天。员工最看重通勤时间和专注时间。${INJECTED}管理者最担心的是新人培养和跨部门沟通。\n---`))
-  // Had the chat ended here, this is what a later conversation would know.
   writerBeforeW4 = await entriesOf('Writer')
   await step('C1', 'Coder: a task that mentions the stack', () => send('Coder', '帮我写个函数，把对象数组按某个 key 去重。我们项目用 TypeScript，包管理只用 pnpm，别给我 npm 命令。'))
   await step('C2', 'Coder: a follow-up with nothing to keep', () => send('Coder', '再加一个单测，用 vitest。'))
@@ -132,12 +120,7 @@ if (phase === 'all' || phase === 'group') {
   await step('G3', 'group: what language does the user write now?', () => send('#登录页', '@Writer 我现在主要用什么语言写代码？'))
 }
 
-// ---------------------------------------------------------------------------
-// Scoring: what memory holds, and what the group turns said.
-
 const tap = tapLines()
-// The first turn of a new Session carries a time sample before the message, so the
-// group turns are told apart by the step that made them, not by the prompt text.
 const groupText = (name, steps = ['G1', 'G2', 'G3']) => steps
   .flatMap(id => stepCalls[id] ?? [])
   .filter(call => call.kind === 'main' && call.bot === name && call.text)

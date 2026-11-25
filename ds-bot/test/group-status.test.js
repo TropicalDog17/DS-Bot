@@ -6,11 +6,10 @@ import { test } from 'node:test'
 import { afterRound } from './relay-rows.js'
 import { createRuntime } from '../index.js'
 import { fakeContext } from './fake-ctx.js'
-import { ROOM_REPLY_TIMEOUT_MS } from '../src/host/constants.js'
+import { ROOM_REPLY_TIMEOUT_MS } from '../src/host/constants.ts'
 
 let rt
 
-// Chief in its own chat 'a'; Writer, the admin of group 'r1', speaks there from 'gb'.
 const seed = () => ({
   version: 1,
   mainBotIds: ['a'],
@@ -36,7 +35,6 @@ async function start() {
     if (!agents.has(sessionId)) {
       const calls = []
       const cancelled = []
-      // What the Session has not taken up yet; a test empties it when the turn starts.
       const held = []
       const inbox = {
         nextStep: [],
@@ -79,7 +77,6 @@ async function start() {
   return { agentOf, emit, tool, call, askApproval, stop, archived, rt }
 }
 
-// Waits on real I/O (state writes) without timers, which some tests mock.
 const settle = async (check) => {
   const until = Date.now() + 3000
   while (!check() && Date.now() < until) await new Promise(resolve => setImmediate(resolve))
@@ -87,7 +84,6 @@ const settle = async (check) => {
 }
 const text = message => message.content.map(block => block.text ?? '').join('\n')
 
-// Starts a round in 'r1' and opens Writer's turn in 'gb'; the round stops with the test.
 async function openTurn(t, { agentOf, emit, tool }) {
   let result
   const stop = new AbortController()
@@ -144,11 +140,9 @@ test('an own chat\'s approval races DSH\'s card and is listed while it waits', a
   assert.deepEqual([approval.botId, approval.roomId, approval.answerable], ['a', undefined, true])
   assert.equal((await host.call('approval-answer', { id: approval.id, choice: 'allow' })).ok, true)
   assert.equal(await outcome, 'allowed-once')
-  // DSH's card answering late is ignored once DS Bot settled the race.
   release('rejected')
   assert.equal((await host.call('approval-answer', { id: approval.id, choice: 'allow' })).error.code, 'bot/stale')
   assert.deepEqual((await host.call('state', {})).value.work.approvals, [])
-  // Sessions off the team are not DS Bot's to answer.
   assert.equal(await host.askApproval('elsewhere'), 'from-dsh')
 })
 
@@ -171,7 +165,6 @@ test('a member still going keeps its turn; one quiet for the whole wait is misse
   t.after(host.stop)
   const result = await openTurn(t, host)
   t.mock.timers.tick(ROOM_REPLY_TIMEOUT_MS - 1000)
-  // A team tool is quick: it does not let the round go on without the member.
   host.emit('gb', 'tool/call', { callId: 'k1', name: 'list_bots', arguments: '{}' })
   t.mock.timers.tick(ROOM_REPLY_TIMEOUT_MS - 1000)
   await settle(() => true)
@@ -187,7 +180,6 @@ test('a member still going keeps its turn; one quiet for the whole wait is misse
   assert.equal(host.agentOf('r1').calls.length, 0)
 })
 
-// Real I/O that does not end in a condition the test can see.
 const idle = () => new Promise(resolve => setTimeout(resolve, 50))
 
 test('stopping a round stops the member turn it started, and that turn posts nothing', async (t) => {
@@ -198,7 +190,6 @@ test('stopping a round stops the member turn it started, and that turn posts not
   await settle(() => result() !== undefined)
   await settle(() => host.agentOf('gb').cancelled.length === 1)
   assert.equal(host.agentOf('gb').cancelled[0].reason, 'ds-bot/stopped')
-  // The turn may end with text before the stop lands.
   host.emit('gb', 'assistant/message', { message: { content: [{ type: 'text', text: 'Done anyway.' }] } })
   host.emit('gb', 'turn/end', { turn: 1, reason: { kind: 'completed' } })
   await idle()
@@ -262,14 +253,12 @@ test('a member that fails after the round moved on shows the failure in the grou
 
   host.emit('r1', 'user/message', { content: post.content, source: post.source })
   const round = await afterRound(rt, 'r1', await host.tool('group_relay', {}, 'r1', { callId: 'c2', signal: new AbortController().signal }))
-  // The failure shows where it happened, before the post that tells the group.
   assert.deepEqual(rt.groupRows('r1', 1).filter(reply => reply.kind === 'failed').map(reply => [reply.kind, reply.name, reply.code, reply.status]), [['failed', 'Writer', 'RATE_LIMIT', 429]])
   assert.deepEqual(round.replies, [])
   assert.deepEqual(round.failed, ['Writer'])
   assert.equal(host.agentOf('gb').calls.length, 1)
 })
 
-// Under PTC the model calls run_code, and the program dispatches the real tools.
 const program = (emit, sessionId, callId, code = 'await main()') => emit(sessionId, 'tool/call', { callId, name: 'run_code', arguments: JSON.stringify({ code }) })
 const dispatch = (emit, sessionId, parentCallId, n, name, args = {}) => {
   const subCallId = `${parentCallId}:ptc:${n}`

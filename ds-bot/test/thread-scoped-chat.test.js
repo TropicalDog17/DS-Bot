@@ -3,16 +3,10 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { install } from '../src/host/chat-index.js'
-
-// #1548: read_own_chat runs in the part that asks. A part opened while the Bot was busy
-// is its own thread: its history and anchors come from that thread's parts, not from the
-// foreground chat. The index is unavailable here (its folder cannot be made), so these
-// reads take the log-scanning path, which uses the same parts list.
+import { install } from '../src/host/chat-index.ts'
 
 function runtime() {
   const dir = mkdtempSync(join(tmpdir(), 'dsb-thread-chat-'))
-  // A file where the index folder would go: opening the index fails, the scan is used.
   const home = join(dir, 'home')
   writeFileSync(home, 'not a folder')
   const said = new Map([

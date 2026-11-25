@@ -4,8 +4,8 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { gateScope } from '../src/host/browser/gate.js'
-import { createSession } from '../src/host/browser/session.js'
+import { gateScope } from '../src/host/browser/gate.ts'
+import { createSession } from '../src/host/browser/session.ts'
 
 function deferred() {
   let resolve
@@ -114,9 +114,6 @@ test('an asynchronously started download still needs its original approval', asy
   assert.equal(incoming.deleted, 1)
 })
 
-// The observation window belongs to actions that can start a download from a click.
-// A select and an ordinary key press are not clicks: they return without holding the
-// action open for the whole actionTimeout.
 test('a select does not wait for a download', async (t) => {
   const { session } = await fixture(t, { actionTimeout: 1_500 })
   const started = Date.now()
@@ -131,8 +128,6 @@ test('a key press other than Enter does not wait for a download', async (t) => {
   assert.ok(Date.now() - started < 1_000, 'a non-Enter press returned before the download window')
 })
 
-// A click waits for a download, but only for its own grace window: a large
-// actionTimeout must not make an ordinary click slower.
 test('a click with no download returns after the download grace, not the action timeout', async (t) => {
   const { session } = await fixture(t, { actionTimeout: 5_000 })
   const started = Date.now()
@@ -141,8 +136,6 @@ test('a click with no download returns after the download grace, not the action 
   assert.ok(elapsed < 500, `a click without a download returned in ${elapsed} ms: it holds at most its 300 ms grace, not the 5 s action timeout`)
 })
 
-// A download that starts after the grace window is not captured: it is canceled and
-// named in the next snapshot, never silently dropped.
 test('a download that starts after the grace window is canceled and reported', async (t) => {
   const incoming = download()
   const { session, files } = await fixture(t, {
@@ -157,7 +150,6 @@ test('a download that starts after the grace window is canceled and reported', a
   assert.deepEqual(await files(), [])
 })
 
-// Enter can submit a form whose answer is a download, so it keeps the window.
 test('an Enter press keeps the download window and captures a delayed download', async (t) => {
   const incoming = download()
   const { session, files } = await fixture(t, {

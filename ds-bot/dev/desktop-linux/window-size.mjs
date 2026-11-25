@@ -1,6 +1,5 @@
 // Resize the Desktop window through the main process inspector (launch.mts opens it on
 // 9429); Electron's renderer port has no Browser.setWindowBounds.
-// Usage: node window-size.mjs <width> <height> [main-inspect-port=9429]
 const [width = '1400', height = '860', port = '9429'] = process.argv.slice(2)
 const [target] = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()
 const socket = new WebSocket(target.webSocketDebuggerUrl)

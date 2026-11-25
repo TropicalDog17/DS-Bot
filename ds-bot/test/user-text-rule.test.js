@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { botMentionRule, installBotMentionRule } from '../src/client/user-text-rule.js'
+import { botMentionRule, installBotMentionRule } from '../src/client/user-text-rule.ts'
 
 const bots = [{ id: 'g', name: 'BetterNotch GM' }, { id: 'n', name: 'BetterNotch' }, { id: 'd', name: 'Docs' }, { id: 'c', name: 'Chief' }]
 const read = (facts = {}) => ({ read: key => facts[key] })
@@ -45,7 +45,6 @@ function nodesOf(text, rules) {
 test('a Bot name with a space is one mention, not a file cut at the space', () => {
   const text = '@BetterNotch GM 你好'
   assert.deepEqual(match(text), { id: 'bot-mention', start: 0, end: 15, data: { botId: 'g', label: 'BetterNotch GM' } })
-  // Beside DSH's file rule the whole name still goes to the Bot; without ours the file rule cuts it.
   assert.deepEqual(nodesOf(text, [fileRule, rule]).map(node => [node.id, node.text]), [['bot-mention', '@BetterNotch GM'], ['text', ' 你好']])
   assert.deepEqual(nodesOf(text, [fileRule]).map(node => [node.id, node.text]), [['file', '@BetterNotch'], ['text', ' GM 你好']])
 })
@@ -99,7 +98,6 @@ test('the rule follows the roster: a new Bot name is matched, and the old rule i
   for (const listener of listeners) listener()
   assert.equal(registered.length, 1)
   assert.equal(registered[0].match('@新 Bot', 0, read()).data.botId, 'x')
-  // Nothing changed in the names: the registry is not touched, so no document is parsed again.
   const before = registered[0]
   roster = { bots: [...roster.bots] }
   for (const listener of listeners) listener()

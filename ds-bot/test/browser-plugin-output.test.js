@@ -5,8 +5,8 @@ import { createToolResultMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
 import { Session } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { defineTool } from '@deepseek-ai/dsh-tools'
-import { mountBrowserPlugin } from '../src/host/browser/mount.js'
-import { toolDefs as refsTools } from '../src/host/browser/refs.js'
+import { mountBrowserPlugin } from '../src/host/browser/mount.ts'
+import { toolDefs as refsTools } from '../src/host/browser/refs.ts'
 
 // DSH 0.2.2 runs tool calls as batches through a mounted executor; earlier DSH runs one
 // call directly and has no executor package.

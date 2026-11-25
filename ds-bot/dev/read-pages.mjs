@@ -1,7 +1,3 @@
-// Sample pages for the Bot browser reader (test/fixtures/read-page), plus a generated
-// large table at /big-table.html?rows=N. Open http://127.0.0.1:<port>/ : its second iframe
-// loads from http://localhost:<port>/, another origin, so it shows the cross-origin case.
-//   node dev/read-pages.mjs [port=8833]
 import { readFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { join, normalize } from 'node:path'

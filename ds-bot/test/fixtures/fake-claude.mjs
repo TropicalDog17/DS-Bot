@@ -1,5 +1,3 @@
-// A fake Claude Code for tests: stream-json both ways. Prints the init system
-// line, then answers each user message with thinking + text + result events.
 const sessionId = `claude-${Math.random().toString(36).slice(2)}`
 const send = (message) => process.stdout.write(`${JSON.stringify(message)}\n`)
 

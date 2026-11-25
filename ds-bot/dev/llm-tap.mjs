@@ -1,23 +1,3 @@
-// A logging pass-through for runs against a real model route, in OpenAI chat completions
-// or Anthropic Messages format. Point the provider's baseURL at it; it forwards every
-// request to the upstream base URL unchanged (all headers but the hop-by-hop ones, the
-// provider's key and session headers included) and writes one JSON line per call: what
-// kind of call it was, which Bot made it, token usage, the latest input and the answer.
-// Headers are never logged. `usage` is the provider's own; `tokens` puts both formats in
-// one shape: { prompt (cached included), cached, output }.
-//
-//   node dev/llm-tap.mjs <port> <upstream base URL> <log.jsonl> [body dir]
-//
-// The request path is appended to the upstream base, less a leading /v1: with upstream
-// https://host/v1, a request to /v1/chat/completions goes to https://host/v1/chat/completions;
-// with upstream https://api.deepseek.com and baseURL http://127.0.0.1:<port>/anthropic,
-// /anthropic/v1/messages goes to https://api.deepseek.com/anthropic/v1/messages.
-//
-// Kinds: steward (the context steward), checkpoint, handoff (a handoff note), main.
-// Answers are logged whole; a main call's input and reasoning are cut short. Each line
-// also compares the request with the same Bot's previous one: a provider serves only a
-// shared prefix from its cache, so `prefix` names where the two first differ. With a
-// body dir, every request body is saved there whole, as <id>-<kind>-<bot>.json.
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import path from 'node:path'
@@ -75,8 +55,6 @@ function tokensOf(usage) {
 const SIZE_FIELDS = new Set(['messages', 'tools', 'max_tokens', 'max_completion_tokens'])
 const previousOf = new Map()
 
-// Where this request first departs from the previous one: the other fields, the tools,
-// then the messages in order, down to the first differing character.
 function prefixAgainst(previous, body) {
   if (previous === undefined) return undefined
   const fields = [...new Set([...Object.keys(previous.body), ...Object.keys(body)])]
@@ -102,7 +80,6 @@ function prefixAgainst(previous, body) {
   return result
 }
 
-// Text, reasoning, tool calls and usage from a streamed or a plain completion.
 function answerOf(raw, streamed) {
   const out = { text: '', reasoning: '', tools: [], usage: undefined, finish: undefined }
   const take = (choice, usage) => {
@@ -158,7 +135,7 @@ function answerOf(raw, streamed) {
     if (!line.startsWith('data:')) continue
     const data = line.slice(5).trim()
     if (data === '' || data === '[DONE]') continue
-    try { one(JSON.parse(data)) } catch { /* a partial line; the rest of the stream still counts */ }
+    try { one(JSON.parse(data)) } catch {}
   }
   return out
 }

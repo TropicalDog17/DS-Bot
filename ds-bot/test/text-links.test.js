@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { linkTarget, linkTexts, textLinks } from '../src/client/text-links.js'
+import { linkTarget, linkTexts, textLinks } from '../src/client/text-links.ts'
 
 test('a companion\'s links join every Bot bubble, redraw on its word, and leave with it', () => {
   const before = textLinks.getSnapshot()

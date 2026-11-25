@@ -69,7 +69,6 @@ test('a Bot changes itself by leaving out bot, or by naming itself', async (t) =
   const king = state().bots.b2
   assert.equal(king.name, 'King')
   assert.equal(king.instructions, 'Lead the team')
-  // Its current name resolves to it again.
   assert.equal(await tool('update_bot', { bot: 'King', role: '掌门' }, 'b2'), 'Updated King.')
   assert.equal(state().bots.b2.role, '掌门')
 })
@@ -96,21 +95,17 @@ test('an instructions change lands as a message in the Bot chat', async (t) => {
   const { call, tool, sent, stop } = start()
   t.after(stop)
   assert.equal((await call('update-bot', { id: 'b2', instructions: 'Ship the fix' })).ok, true)
-  // The notice goes out as a follow-up; let the queued delivery run.
   await new Promise(resolve => setTimeout(resolve, 0))
   assert.equal(sent.length, 1)
   assert.equal(sent[0].sessionId, 'b2')
   const text = sent[0].message.content[0].text
   assert.match(text, /profile was updated/)
   assert.match(text, /Ship the fix/)
-  // A patch that changes nothing sends no message.
   await call('update-bot', { id: 'b2', instructions: 'Ship the fix' })
   await call('update-bot', { id: 'b2', color: 'red' })
   await new Promise(resolve => setTimeout(resolve, 0))
   assert.equal(sent.length, 1)
 
-  // A Bot editing itself in its own chat just got the tool result; no second
-  // turn queues for it. The same edit from a group Session still reaches it.
   assert.equal(await tool('update_bot', { instructions: 'Own fix' }, 'b2'), 'Updated Writer.')
   await new Promise(resolve => setTimeout(resolve, 0))
   assert.equal(sent.length, 1)

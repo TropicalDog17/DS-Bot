@@ -1,17 +1,15 @@
 import assert from 'node:assert/strict'
 import { resolve } from 'node:path'
 import { test } from 'node:test'
-import { absoluteLinks } from '../src/host/links.js'
+import { absoluteLinks } from '../src/host/links.ts'
 
 const folder = resolve('/work/group folder')
-// The path DSH opens for a link, as its chat decodes the destination.
 const opened = text => decodeURIComponent(/\]\(([^)#]+)/.exec(text)[1])
 const full = path => resolve(folder, path).replace(/\\/g, '/')
 
 test('a relative file link names the file in the folder it was written in', () => {
   assert.equal(opened(absoluteLinks('See [a.txt](sub/a.txt).', folder)), full('sub/a.txt'))
   assert.equal(opened(absoluteLinks('[up](../notes.md)', folder)), full('../notes.md'))
-  // A line range and an image keep their form.
   assert.match(absoluteLinks('[main](src/main.js#L12-L20)', folder), /#L12-L20\)$/)
   assert.equal(opened(absoluteLinks('![chart](out/chart.png)', folder)), full('out/chart.png'))
 })

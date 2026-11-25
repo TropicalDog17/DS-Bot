@@ -1,9 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { RANGES, bucketsOf, compact, percent, spanOf, spanRange, summarize } from '../src/client/usage-data.js'
+import { RANGES, bucketsOf, compact, percent, spanOf, spanRange, summarize } from '../src/client/usage-data.ts'
 
 const range = id => RANGES.find(item => item.id === id)
-// [hour, owner, model, kind, input, cacheRead, cacheWrite, output, calls]
 const row = (hour, owner, tokens, model = 0) => [hour, owner, model, 0, tokens, 0, 0, 0, 1]
 
 test('buckets end at the current hour, day, week, or month, after as many before them', () => {
@@ -16,7 +15,6 @@ test('buckets end at the current hour, day, week, or month, after as many before
   const days = bucketsOf(range('7d'), '2026-10-09 22')
   assert.deepEqual(days.slice(7).map(bucket => bucket.key), ['2026-10-03', '2026-10-04', '2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08', '2026-10-09'])
 
-  // 2026-10-09 is a Friday; its week starts on Monday the 5th.
   const weeks = bucketsOf(range('12w'), '2026-10-09 22')
   assert.equal(weeks.at(-1).key, '2026-10-05')
   assert.equal(weeks.at(-2).key, '2026-09-28')
@@ -40,7 +38,6 @@ test('a summary sums the range, the span before it, and each owner, model, and s
   }
   const week = summarize(view, range('7d'), undefined, item => `o${item[1]}`)
   assert.equal(week.total.total, 172)
-  // The cache write counts as input.
   assert.deepEqual(week.total, { input: 122, cacheRead: 30, output: 20, calls: 4, total: 172 })
   assert.equal(week.previous, 50)
   assert.equal(week.buckets[2].key, '2026-10-05')
@@ -70,7 +67,6 @@ test('a picked span sums by hour, day, week, or month by its length', () => {
   assert.equal(hourSpan.buckets.at(-1).key, '2026-10-09 23')
   assert.equal(hourSpan.before, '2026-10-06 00')
 
-  // 2026-07-01 is a Wednesday: the first week starts on Monday the 29th but is cut to the span.
   const weeks = spanRange('2026-07-01', '2026-10-09')
   const weekSpan = spanOf(weeks, '2026-10-09 22')
   assert.equal(weeks.count, 15)
@@ -103,7 +99,6 @@ test('a picked span compares with as many days just before it and ignores the da
   assert.equal(days.previous, 11)
   assert.equal(days.owners.get(1).total, 20)
 
-  // The Tuesday before the span shares its first week's key but counts as the span before.
   const weeks = summarize({ now: view.now, rows: [row('2026-06-30 10', 0, 4), row('2026-07-01 00', 0, 9)] }, spanRange('2026-07-01', '2026-10-09'))
   assert.equal(weeks.buckets[0].sum.total, 9)
   assert.equal(weeks.previous, 4)

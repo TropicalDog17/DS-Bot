@@ -5,7 +5,7 @@ import { hostname, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { createRuntime } from '../index.js'
-import { decryptSecrets, encryptSecrets, isEncryptedSecretsFile, PASSPHRASE_ENV, PASSPHRASE_FILE_ENV } from '../src/host/secrets-crypto.js'
+import { decryptSecrets, encryptSecrets, isEncryptedSecretsFile, PASSPHRASE_ENV, PASSPHRASE_FILE_ENV } from '../src/host/secrets-crypto.ts'
 import { fakeContext } from './fake-ctx.js'
 
 const TEAM = {
@@ -95,7 +95,6 @@ test('the envelope hides the values, round-trips, and rejects a wrong passphrase
   assert.throws(() => decryptSecrets(tampered, PASS), error => error.code === 'secrets/passphrase')
   const noTag = { ...envelope, tag: Buffer.alloc(0).toString('base64') }
   assert.throws(() => decryptSecrets(noTag, PASS), error => error.code === 'secrets/format')
-  // A file asking for an absurd key cost is refused instead of wedging startup.
   const costly = { ...envelope, kdf: { ...envelope.kdf, N: 1 << 22 } }
   assert.throws(() => decryptSecrets(costly, PASS), error => error.code === 'secrets/format')
   assert.throws(() => encryptSecrets(payload, 'short'))
@@ -117,7 +116,6 @@ test('plaintext is still the default, and encrypting rewrites the same file as a
   const turned = await first.call('secret-encrypt', { passphrase: PASS })
   assert.equal(turned.ok, true, JSON.stringify(turned.error))
   assert.deepEqual(turned.value, { mode: 'encrypted', locked: false, source: 'user' })
-  // The same file is now an envelope: no key name, no value, no purpose in the clear.
   const envelope = rawSecrets(home)
   assert.equal(envelope.version, 2)
   assert.equal(envelope.encrypted, true)
@@ -138,7 +136,6 @@ test('a restart with no passphrase stays locked with a clear state, and the unlo
   assert.equal((await first.call('secret-encrypt', { passphrase: PASS })).ok, true)
   await first.stop({ keep: true })
 
-  // No passphrase anywhere: locked, empty list, and writes are refused with the way out.
   const locked = await withEnv({ [PASSPHRASE_ENV]: undefined, [PASSPHRASE_FILE_ENV]: undefined }, async () => {
     const host = start({ home })
     const view = await host.view()
@@ -154,7 +151,6 @@ test('a restart with no passphrase stays locked with a clear state, and the unlo
     return host
   })
 
-  // The same process can unlock with the typed passphrase; the file is unchanged.
   const unlocked = await locked.call('secret-unlock', { passphrase: PASS })
   assert.equal(unlocked.ok, true, JSON.stringify(unlocked.error))
   assert.deepEqual(unlocked.value, { mode: 'encrypted', locked: false, source: 'user' })
@@ -162,7 +158,6 @@ test('a restart with no passphrase stays locked with a clear state, and the unlo
   assert.deepEqual((await locked.view()).secrets.map(entry => entry.name), ['DEMO_TOKEN'])
   await locked.stop({ keep: true })
 
-  // An unattended start takes it from the environment and says it did.
   const envHost = await withEnv({ [PASSPHRASE_ENV]: PASS }, async () => {
     const host = start({ home })
     const view = await host.view()
@@ -172,7 +167,6 @@ test('a restart with no passphrase stays locked with a clear state, and the unlo
   })
   await envHost.stop({ keep: true })
 
-  // A wrong environment passphrase locks it and says which source failed.
   const wrongHost = await withEnv({ [PASSPHRASE_ENV]: 'wrong passphrase' }, async () => {
     const host = start({ home })
     const view = await host.view()
@@ -182,7 +176,6 @@ test('a restart with no passphrase stays locked with a clear state, and the unlo
   })
   await wrongHost.stop({ keep: true })
 
-  // A passphrase file works the same way and reports its source.
   const passFile = join(home, 'passphrase.txt')
   writeFileSync(passFile, `${PASS}\n`, { mode: 0o600 })
   const fileHost = await withEnv({ [PASSPHRASE_ENV]: undefined, [PASSPHRASE_FILE_ENV]: passFile }, async () => {
@@ -193,7 +186,6 @@ test('a restart with no passphrase stays locked with a clear state, and the unlo
   })
   await fileHost.stop({ keep: true })
 
-  // An unreadable passphrase file keeps the store locked and names the source.
   const brokenSource = await withEnv({ [PASSPHRASE_ENV]: undefined, [PASSPHRASE_FILE_ENV]: join(home, 'missing.txt') }, async () => {
     const host = start({ home })
     assert.deepEqual((await host.view()).secretStore, { mode: 'encrypted', locked: true, source: null, reason: 'passphrase-source' })
@@ -223,7 +215,6 @@ test('turning encryption off writes the plaintext file back, without losing a ke
   assert.equal(rawText(home).includes('encrypted'), false)
   await first.stop({ keep: true })
 
-  // The rollback survives a restart with no passphrase at all.
   const plainHost = await withEnv({ [PASSPHRASE_ENV]: undefined, [PASSPHRASE_FILE_ENV]: undefined }, async () => {
     const host = start({ home })
     assert.equal((await host.view()).secretStore.mode, 'plaintext')

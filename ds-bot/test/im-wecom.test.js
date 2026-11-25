@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import wecom from '../src/host/im/platforms/wecom.js'
+import wecom from '../src/host/im/platforms/wecom.ts'
 import { fakeWsServer } from './fake-ws.js'
 
 // A fake WeCom stream: aibot_subscribe gets an errcode 0 reply, callbacks get
@@ -216,8 +216,6 @@ test('a video message arrives as a file, and a text message still carries none',
   fake.push(ws, { cmd: 'aibot_msg_callback', headers: { req_id: 'req-v' }, body: { msgid: 'm-v', msgtype: 'video', chattype: 'single', from: { userid: 'u1' }, video: { url: 'https://cdn.invalid/v', aeskey: key.toString('base64') } } })
   fake.push(ws, { cmd: 'aibot_msg_callback', headers: { req_id: 'req-t' }, body: { msgid: 'm-t', msgtype: 'text', chattype: 'single', from: { userid: 'u1' }, text: { content: 'hi' } } })
   await until(() => messages.length === 2)
-  // A video has no name to find, so the message id stands in for one. Neither
-  // frame waits on the other, so the two are picked by id rather than by order.
   const video = messages.find(msg => msg.messageId === 'm-v')
   const plainText = messages.find(msg => msg.messageId === 'm-t')
   assert.equal(video.files.length, 1)
@@ -245,7 +243,6 @@ test('a decrypted PNG is declared image/png across every padding length', async 
   const key = randomBytes(32)
   const fake = await fakeWecom()
   const messages = []
-  // Send every residue on one connection, then check each PNG landed as image/png.
   const pngs = []
   for (let pad = 1; pad <= 32; pad += 1) {
     // Pad length `pad` in 1..32, with the filler making the total a whole number
@@ -254,7 +251,6 @@ test('a decrypted PNG is declared image/png across every padding length', async 
     const body = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), randomBytes(filler), Buffer.alloc(pad, pad)])
     const cipher = createCipheriv('aes-256-cbc', key, key.subarray(0, 16))
     cipher.setAutoPadding(false)
-    // What arrives is the message without its padding, not the padded buffer.
     pngs.push({ id: `m-png-${pad}`, encrypted: Buffer.concat([cipher.update(body), cipher.final()]), plain: body.subarray(0, body.length - pad) })
   }
   let current
@@ -307,18 +303,13 @@ test('a JPEG keeps image/jpeg, and unknown bytes fall back on the name', async (
   assert.equal(unknown.images[0].mediaType, 'image/webp')
 })
 
-// The cap has to bite before the body is in memory, or it guards nothing. A body
-// that reports how much was pulled proves the transfer stops early, and that a
-// declared length settles it before any chunk is read at all.
 test('an oversized file stops downloading early instead of buffering first', async (t) => {
-  // Only the key is used: the body is never decrypted, because it is refused first.
   const { randomBytes } = await import('node:crypto')
   const key = randomBytes(32)
   const fake = await fakeWecom()
   const messages = []
   const warnings = []
 
-  // 4 MB chunks: the 100 MB cap must be crossed after ~26 of them, not all 200.
   const CHUNK = 4 * 1024 * 1024
   const TOTAL = 200 * CHUNK
   let pulled = 0
@@ -350,7 +341,6 @@ test('an oversized file stops downloading early instead of buffering first', asy
   assert.ok(cancelled, 'the transfer was cancelled rather than drained')
   assert.ok(warnings.some(w => w.includes('over the')), 'the skip was logged')
 
-  // A declared length larger than the cap decides it before the first read.
   pulled = 0
   mediaEnv.fetch = async () => ({
     ok: true,
@@ -383,9 +373,6 @@ test('a body with no stream is still capped after it is read whole', async (t) =
   assert.equal(delivered.files.length, 0, 'the no-stream fallback still refused it')
 })
 
-// A mixed message carries its words as items, and they are the instruction: a
-// picture without its caption loses the request, and a text-only one would arrive
-// empty and be dropped entirely.
 test('a mixed message keeps its text items along with its images', async (t) => {
   const { createCipheriv, randomBytes } = await import('node:crypto')
   const key = randomBytes(32)
@@ -406,14 +393,12 @@ test('a mixed message keeps its text items along with its images', async (t) => 
   assert.equal(delivered.text, 'Summarize this chart\nin two lines')
   assert.equal(delivered.images.length, 1)
 
-  // A mixed message of text alone must still arrive rather than be dropped.
   fake.push(ws, { cmd: 'aibot_msg_callback', headers: { req_id: 'req-mixtext' }, body: { msgid: 'm-mixtext', msgtype: 'mixed', chattype: 'single', from: { userid: 'u1' }, mixed: { msg_item: [{ msgtype: 'text', text: { content: 'just words' } }] } } })
   const textOnly = await until(() => messages.find(msg => msg.messageId === 'm-mixtext'))
   assert.equal(textOnly.text, 'just words')
   assert.equal(textOnly.images.length, 0)
 })
 
-// A declared oversized length must stop the transfer, not leave it downloading.
 test('a declared oversized length cancels the response body', async (t) => {
   const { randomBytes } = await import('node:crypto')
   const key = randomBytes(32)

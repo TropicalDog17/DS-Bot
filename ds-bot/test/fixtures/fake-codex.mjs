@@ -1,21 +1,3 @@
-// A fake Codex app-server for tests: `codex app-server --listen stdio://`
-// dialect, newline JSON-RPC. The turn's first text picks the behavior:
-//   "ask"      -> an approval request the client must answer
-//   "elicit <server> <kind>" -> an MCP tool-call approval (mcpServer/elicitation/request)
-//                 from <server>, with _meta.codex_approval_kind <kind>; the answer
-//                 comes back as the agentMessage, as JSON
-//   "late-elicit <server> <kind>" -> the same request, sent before the turn completes:
-//                 the answer then arrives after the turn already ended
-//   "late-ask" -> an approval request whose answer likewise arrives after the turn ended
-//   "hold-ask" -> an approval request that keeps its turn alive, so the answer steers it
-//   otherwise  -> an activity item, an agentMessage, thread/tokenUsage/updated,
-//                 turn/completed
-// thread/compact/start condenses in a turn of its own. Usage and compaction take the
-// shapes Codex 0.166 sends (test/fixtures/recorded/codex-app-server-0.166.json).
-// `--exit-after-turn` exits once a turn completes, and `--text-only` sends no
-// activity items first: a test can then tell whether the one text event reached
-// the client. `--record <file>` appends the params of thread/start and thread/resume,
-// so a test can check the shape the client sent without a model call.
 import { appendFileSync } from 'node:fs'
 const exitAfterTurn = process.argv.includes('--exit-after-turn')
 const textOnly = process.argv.includes('--text-only')
@@ -49,7 +31,6 @@ const ask = (method, params) => new Promise((resolve) => {
   send({ jsonrpc: '2.0', id, method, params })
 })
 
-// The shape Codex sends before an MCP tool call when approval_policy is on-request.
 async function elicitTurn(thread, turnId, text) {
   const [, serverName, kind] = text.match(/elicit (\S+) (\S+)/)
   const answer = await ask('mcpServer/elicitation/request', {
@@ -66,7 +47,6 @@ async function elicitTurn(thread, turnId, text) {
 
 function runTurn(thread, turnId, text, effort, images = []) {
   if (/elicit \S+ \S+/.test(text)) return void elicitTurn(thread, turnId, text)
-  // An approval request whose turn stays alive: an answer has to steer this turn.
   if (text.includes('late-double')) {
     for (let i = 0; i < 2; i++) void ask('item/commandExecution/requestApproval', { threadId: thread.id, turnId, reason: `Action ${i}`, availableDecisions: ['accept', 'decline'] })
     thread.turn = undefined
@@ -77,7 +57,6 @@ function runTurn(thread, turnId, text, effort, images = []) {
     void ask('item/commandExecution/requestApproval', { threadId: thread.id, turnId, reason: 'hold approval', availableDecisions: ['accept', 'decline'] })
     return
   }
-  // The turn ends while the request is still open: the answer comes late.
   if (text.includes('late-ask')) {
     void ask('item/commandExecution/requestApproval', { threadId: thread.id, turnId, reason: 'late approval', availableDecisions: ['accept', 'decline'] })
     thread.turn = undefined
@@ -90,8 +69,6 @@ function runTurn(thread, turnId, text, effort, images = []) {
     notice('turn/completed', { threadId: thread.id, turn: { id: turnId, status: 'completed' } })
     return
   }
-  // What the thread was opened with, for a test that checks the fields.
-  // A turn that stays open until a steer lands on it.
   if (text.includes('hold')) return
   if (text.includes('show-thread')) {
     notice('item/completed', { threadId: thread.id, turnId, item: { id: 'i2', type: 'agentMessage', text: JSON.stringify(thread.params ?? {}) } })
@@ -213,14 +190,11 @@ process.stdin.on('data', (chunk) => {
         if (typeof params.expectedTurnId !== 'string') { replyError(id, 'missing field expectedTurnId'); break }
         if (thread?.turn === undefined || thread.turn !== params.expectedTurnId) { replyError(id, `no live turn ${params.expectedTurnId}`); break }
         const text = (params.input ?? []).map(item => item.text ?? '').join('\n')
-        // A late notice for an earlier turn: the turn this thread runs now stays live.
         if (text.startsWith('emit-stale ')) {
           notice('turn/completed', { threadId: thread.id, turn: { id: text.slice('emit-stale '.length), status: 'completed' } })
           reply(id, {})
           break
         }
-        // A steer can be refused while the turn ends at the same moment: the client
-        // must recover by starting a turn of its own.
         if (text === 'race') {
           replyError(id, `no live turn ${params.expectedTurnId}`)
           thread.turn = undefined

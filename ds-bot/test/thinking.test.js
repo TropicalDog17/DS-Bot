@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { install as installChannel } from '../src/host/channel.js'
-import { install as installThinking, pageThinkingMs, thinkingMs } from '../src/host/thinking.js'
+import { install as installChannel } from '../src/host/channel.ts'
+import { install as installThinking, pageThinkingMs, thinkingMs } from '../src/host/thinking.ts'
 
 const reasoningRun = (time0, gaps, texts) => ({ type: 'reasoning-chunks', time0, index: 0, dt: gaps, texts })
 const textRun = (time0, gaps, texts) => ({ type: 'text-chunks', time0, index: 0, dt: gaps, texts })
@@ -12,7 +12,6 @@ test('a Turn’s thinking time sums its steps’ reasoning spans', () => {
     message(1, 1, [reasoningRun(1000, [500, 200], ['a', 'b', 'c']), textRun(1800, [100], ['reply'])]),
     message(1, 2, [reasoningRun(3000, [900], ['x', 'y']), textRun(4000, [], ['done'])]),
   ]
-  // Step 1: 1000+500+200−1000 = 700; step 2: 3000+900−3000 = 900.
   assert.equal(thinkingMs(events, 1), 1600)
 })
 
@@ -63,7 +62,6 @@ test('thinkingOf caches only a closed turn', async () => {
     },
   }
   installThinking(rt)
-  // Open turn: computed each call.
   assert.equal(await rt.thinkingOf('s', 1), 1000)
   assert.equal(await rt.thinkingOf('s', 1), 1000)
   assert.equal(pages, 2)

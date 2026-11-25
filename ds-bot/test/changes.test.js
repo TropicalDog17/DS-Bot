@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { install } from '../src/host/changes.js'
+import { install } from '../src/host/changes.ts'
 
-// A Windows-style event record, as the Session log hands it over.
 const event = (seq, turn) => ({ seq, type: 'workspace/changes', data: { turn } })
 
 const summaryOf = (turn, files) => ({
@@ -85,7 +84,6 @@ test('the review can open only while the summary is still served', async () => {
   assert.equal(rt.changesAvailable('s2', 7), false)
   assert.equal(rt.changesAvailable('s1', undefined), false)
   assert.equal(rt.changesMounted(), true)
-  // A service that throws is a refusal, not a crash.
   assert.equal(harness({ service: { summary: () => { throw new Error('disposed') } } }).rt.changesAvailable('s1', 7), false)
 })
 

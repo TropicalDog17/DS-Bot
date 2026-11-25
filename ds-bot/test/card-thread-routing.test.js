@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { createRuntime } from '../index.js'
-import { install as installBoard } from '../src/board/plugin.js'
-import { install as installResume, RESUME_DELAY_MS } from '../src/host/resume.js'
+import { install as installBoard } from '../src/board/plugin.ts'
+import { install as installResume, RESUME_DELAY_MS } from '../src/host/resume.ts'
 import { fakeContext } from './fake-ctx.js'
 
 const tempHome = () => mkdtempSync(join(tmpdir(), 'ds-bot-card-routing-'))
@@ -209,7 +209,6 @@ test('the board filters by card id when showing live activity', async (t) => {
   }
   const { value } = await h.board.handle('state')
   assert.deepEqual(value.live[first].steps.map(step => step.tool), ['first_card_tool'])
-  // No note waits on the second card, but its thread is in a turn, so that shows too.
   assert.deepEqual(value.live[second].steps.map(step => step.tool), ['second_card_tool'])
   h.trace({ id: h.rt.cardSession('writer', second) }, { type: 'turn/end', time: 1400 })
   assert.equal((await h.board.handle('state')).value.live[second], undefined)

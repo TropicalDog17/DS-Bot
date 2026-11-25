@@ -1,12 +1,9 @@
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import { test } from 'node:test'
-import qq from '../src/host/im/platforms/qq.js'
+import qq from '../src/host/im/platforms/qq.ts'
 import { fakeWsServer } from './fake-ws.js'
 
-// A fake QQ open platform: /app/getAppAccessToken issues a token, /gateway the
-// fake socket URL, C2C and group @ events come from the test, and sends record
-// their msg_id/msg_seq.
 async function fakeQq() {
   const calls = []
   const replies = {}
@@ -97,7 +94,6 @@ test('C2C is direct, a group @ is a mention, heartbeats are answered', async (t)
   assert.equal(messages[1].chat.kind, 'group')
   assert.equal(messages[1].chat.key, 'g1')
   assert.equal(messages[1].mentioned, true)
-  // A heartbeat request from the server gets an op-1 reply.
   fake.push(ws, { op: 1, d: null })
   await until(() => fake.packets.filter(packet => packet.op === 1).length === 2)
 })
@@ -115,13 +111,11 @@ test('send replies passively with msg_id and a climbing msg_seq; a refusal is pe
   await handle.send({ key: 'u1', kind: 'direct' }, { text: 'two' })
   const posts = fake.calls.filter(call => call.path === '/v2/users/u1/messages')
   assert.equal(posts.length, 2)
-  // The reply is a markdown message; QQ renders it instead of showing the markers.
   assert.equal(posts[0].params.msg_type, 2)
   assert.deepEqual(posts[0].params.markdown, { content: 'one' })
   assert.equal(posts[0].params.msg_id, 'm1')
   assert.equal(posts[0].params.msg_seq, 1)
   assert.equal(posts[1].params.msg_seq, 2)
-  // A refusal outside the reply window is a permanent error with the reason.
   fake.replies['/v2/users/u1/messages'] = { error: 304023, message: 'reply time out' }
   await assert.rejects(() => handle.send({ key: 'u1', kind: 'direct' }, { text: 'late' }), error => error.permanent === true && /reply/.test(error.message))
 })
@@ -211,8 +205,6 @@ test('a gateway failure after the token is accepted is retried (#1119)', async (
   t.after(() => { handle.stop(); fake.close() })
   const failed = await until(() => statuses.find(status => status.state === 'retrying'))
   assert.match(failed.error, /fetch failed/)
-  // The token was accepted before the handshake, so this is the gateway path and
-  // not a second token failure.
   assert.equal(fake.calls.filter(call => call.path === '/app/getAppAccessToken').length, 1)
   assert.equal(fake.sockets.length, 0)
   down = false

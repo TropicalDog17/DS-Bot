@@ -4,10 +4,6 @@ import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
 
-// The group chat's Reply tool and the composer that receives its quote, bundled with a
-// minimal React: components run as plain functions and the effects they ask for run on
-// demand. #1343: a group whose public chat has split into a new Session keeps its room id,
-// so a reply quoting the room id never reached the composer the user was typing in.
 const { outputFiles } = await build({
   stdin: {
     contents: [
@@ -43,8 +39,6 @@ runInNewContext(outputFiles[0].text, {
   window: { addEventListener() {}, removeEventListener() {}, matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }), SpeechRecognition: undefined, webkitSpeechRecognition: undefined },
   document: { addEventListener() {}, removeEventListener() {}, querySelector: () => null, querySelectorAll: () => [], createElement: () => ({ style: {}, setAttribute() {}, appendChild() {} }), body: { appendChild() {} } },
   navigator: { userAgent: 'test', clipboard: {} },
-  // The composer focuses the shell's text box after it inserts, so the page has to know
-  // what an element is and what a selection is.
   HTMLElement: class HTMLElement {},
   getSelection: () => ({ selectAllChildren() {}, collapseToEnd() {} }),
   Intl, Date, Math, JSON, console,
@@ -52,7 +46,6 @@ runInNewContext(outputFiles[0].text, {
 })
 const { ChatRows, ComposerVoice } = module.exports
 
-// Components run as plain functions, so a tree expands until only host elements are left.
 function expand(node, out) {
   if (Array.isArray(node)) { for (const child of node) expand(child, out); return }
   if (node === null || typeof node !== 'object') return
@@ -61,7 +54,6 @@ function expand(node, out) {
   expand(node.props?.children, out)
 }
 
-// The elements a component draws, with its effects run once the expansion is done.
 function render(component, props) {
   effects = []
   const out = []
@@ -79,7 +71,6 @@ const writers = {
   bots: [{ id: 'writer', name: 'Writer', color: 'gray' }],
   prefs: {},
 }
-// A group whose public chat is still its first Session, and one that split into part 2.
 const INTACT = { id: 'group-a', sessionId: 'group-a', name: 'A', admin: null }
 const SPLIT = { id: 'group-b', sessionId: 'group-b-part2', name: 'B', admin: null }
 
@@ -87,7 +78,6 @@ function rosterWith(room, sessionId) {
   return { ...writers, roomsById: { [sessionId]: room } }
 }
 
-// What the composer set receives: the Session the group chat on screen draws into.
 function quotedFrom(room, sessionId) {
   const quoted = []
   const actions = { quote: (id, text) => quoted.push({ id, text }), openSession() {}, fileText: async () => '' }
@@ -103,7 +93,6 @@ function quotedFrom(room, sessionId) {
   return quoted[0]
 }
 
-// The composer's own side: a quote addressed to its Session inserts its line.
 function composerInserts(sessionId, quote) {
   const inserted = []
   const state = { quote }
@@ -119,7 +108,6 @@ function composerInserts(sessionId, quote) {
 
 test('a reply in a group that split its chat quotes into the Session on screen', () => {
   assert.deepEqual(quotedFrom(SPLIT, 'group-b-part2'), { id: 'group-b-part2', text: 'the plan is ready' })
-  // The bug: the row sent the stable room id, while the composer listens for the Session.
   const room = SPLIT
   assert.notEqual(room.id, room.sessionId)
 })

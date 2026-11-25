@@ -7,8 +7,6 @@ import { build } from 'esbuild'
 
 const PLUGIN = dirname(dirname(fileURLToPath(import.meta.url)))
 
-// The sidebar's row components run as plain functions over a minimal React stand-in,
-// as in sidebar-switch.test.js.
 const { outputFiles } = await build({
   stdin: { contents: "export { TeamSidebar } from './src/client/sidebar.js'", resolveDir: PLUGIN },
   bundle: true, format: 'cjs', platform: 'browser', write: false, logLevel: 'silent',
@@ -39,12 +37,10 @@ const walk = (node, match, out = []) => {
 }
 const classes = node => String(node.props?.className ?? '').split(' ')
 
-// The DSH Agent row as the sidebar draws it, run one level down into its own elements.
 function agentRow(wide) {
   const agent = { id: 'agent', sessions: ['session'], createdAt: 3 }
   const roster = { bots: [], rooms: [], agents: [agent], byId: {}, roomsById: {}, ready: true }
   const actions = Object.fromEntries(['openSession', 'openAgent', 'openAgentSession', 'newAgentSession', 'openMenu', 'toggleSidebar'].map(name => [name, () => {}]))
-  // The column's own preference decides rail or open; the viewport stays at 1280.
   const tree = TeamSidebar({
     actions, useSidebarPref: () => (wide ? 'open' : 'rail'),
     useRoster: pick => pick(roster), useUi: pick => pick({ unread: {} }), useRegistry: pick => pick({}),
@@ -63,7 +59,6 @@ test('on the rail the DSH Agent wrapper holds only the icon row, so the list can
   assert.equal(children.length, 1)
   assert.ok(classes(children[0]).includes('bt-row'))
   assert.deepEqual(walk(root, node => classes(node).includes('bt-agent-sub')), [])
-  // The hidden Session list also had buttons the keyboard could land on.
   assert.deepEqual(walk(root, node => node.type === 'button' && classes(node).includes('bt-agent-sub-row')), [])
 })
 
@@ -73,6 +68,5 @@ test('in the open column the DSH Agent row keeps its Session list under the row'
   assert.ok(sub !== undefined)
   const [newSession] = walk(sub, node => node.type === 'button' && classes(node).includes('bt-agent-new'))
   assert.ok(newSession !== undefined)
-  // Closed until the Agent is the open conversation.
   assert.equal(sub.props['data-open'], undefined)
 })

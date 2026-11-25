@@ -5,11 +5,10 @@ import { test } from 'node:test'
 import { build } from 'esbuild'
 
 const { outputFiles } = await build({
-  entryPoints: [fileURLToPath(new URL('../src/client/kept-private.js', import.meta.url))],
+  entryPoints: [fileURLToPath(new URL('../src/client/kept-private.ts', import.meta.url))],
   bundle: true, format: 'cjs', platform: 'browser', write: false, logLevel: 'silent',
   external: ['react', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives'],
 })
-// State survives between renders, as in a mounted component; effects never run.
 let slots = []
 let index = 0
 const react = {
@@ -64,7 +63,6 @@ test('each kept place is listed and is lifted by a second click', () => {
   assert.deepEqual(released, [])
   const asked = nodes()
   assert.match(asked.filter(node => node.type === 'Row')[0].props.hint, /Click again to remove/)
-  // Asking about one entry leaves the other as it was.
   assert.equal(asked.filter(node => node.type === 'Row')[1].props.hint, undefined)
 
   asked.filter(node => node.type === 'button')[0].props.onClick()

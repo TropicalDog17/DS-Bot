@@ -4,9 +4,8 @@ import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
-import { READ_LIMITS, READ_PAGE_SCRIPT, readPageScript } from '../src/client/read-page.js'
+import { READ_LIMITS, READ_PAGE_SCRIPT, readPageScript } from '../src/client/read-page.ts'
 
-// jsdom comes from the deepseek-harness checkout next to ds-bot, like the dsh packages.
 const PLUGIN = dirname(dirname(fileURLToPath(import.meta.url)))
 const harness = process.env.DSH_HARNESS ?? join(PLUGIN, '..', 'deepseek-harness')
 const { JSDOM } = createRequire(join(harness, 'package.json'))('jsdom')
@@ -76,7 +75,6 @@ function makePage() {
   return window
 }
 
-// As plain data from this realm, as executeJavaScript hands it over, without the timing.
 const read = (window, script = READ_PAGE_SCRIPT) => {
   const page = JSON.parse(JSON.stringify(window.eval(script)))
   delete page.stats.ms
@@ -108,7 +106,6 @@ test('the reader turns the visible page into Markdown with marked links and cont
   for (const hidden of ['HIDDEN', 'LIGHT-UNSLOTTED', 'nobody', 'SECRET', 'SCRIPT-TEXT', '.x{}']) {
     assert.ok(!JSON.stringify(page).includes(hidden), `${hidden} leaked`)
   }
-  // A text box's value is listed with the control, not repeated in the text.
   assert.ok(!text.includes('DRAFT'))
   assert.equal(page.items[11].value, 'DRAFT-IN-TEXTAREA')
   assert.deepEqual(page.items.map(item => [item.role, item.name]), [
@@ -144,14 +141,13 @@ test('the limits stop the walk and say why', () => {
 test('a big table is cut at the row limit with a note', () => {
   const window = makePage()
   const doc = window.document
-  // Narrow layouts often restyle a table as a block; it still reads as a table.
   doc.body.innerHTML = `<table style="display:block"><tr><th>n</th><th>v</th></tr>${Array.from({ length: 30 }, (_, i) => `<tr><td>${i}</td><td>v${i}</td></tr>`).join('')}</table>`
   const { text } = read(window, readPageScript({ ...READ_LIMITS, tableRows: 11 }))
   assert.match(text, /\| 10 \| v10 \|\n… \(table cut: 19 more rows\)$/)
 })
 
 test('the bundled reader reads the same as the source', async () => {
-  const result = await build({ absWorkingDir: PLUGIN, entryPoints: ['src/client/read-page.js'], bundle: true, format: 'esm', platform: 'browser', target: 'es2022', write: false, logLevel: 'silent' })
+  const result = await build({ absWorkingDir: PLUGIN, entryPoints: ['src/client/read-page.ts'], bundle: true, format: 'esm', platform: 'browser', target: 'es2022', write: false, logLevel: 'silent' })
   const bundled = await import(`data:text/javascript;base64,${Buffer.from(result.outputFiles[0].text).toString('base64')}`)
   assert.deepEqual(read(makePage(), bundled.READ_PAGE_SCRIPT), read(makePage()))
 })

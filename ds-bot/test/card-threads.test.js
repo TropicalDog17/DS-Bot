@@ -5,8 +5,8 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import { setTimeout as delay } from 'node:timers/promises'
 import { createRuntime } from '../index.js'
-import { AWAIT_MAX_MS } from '../src/board/cards.js'
-import { install as installBoard } from '../src/board/plugin.js'
+import { AWAIT_MAX_MS } from '../src/board/cards.ts'
+import { install as installBoard } from '../src/board/plugin.ts'
 import { fakeContext } from './fake-ctx.js'
 
 const team = () => ({
@@ -74,7 +74,6 @@ test('startCard opens a card thread beside the chat and sends the brief there; n
   assert.deepEqual(await notes.startCard({ botId: 'writer', cardId: 'c_1', text: '  ' }), { error: 'A card needs a brief.' })
   const started = await notes.startCard({ botId: 'writer', cardId: 'c_1', title: 'Newsletter', text: '[Card c_1] Write it.\n\nUnder 300 words.' })
   assert.equal(started.sessionId, 'card1')
-  // The Bot's chat stays where it was; the card thread is an open part with the card.
   const bot = rt.botOf('writer')
   assert.equal(bot.sessionId, 'writer')
   assert.deepEqual(bot.openParts.map(part => [part.sessionId, part.card]), [['card1', 'c_1']])
@@ -85,7 +84,6 @@ test('startCard opens a card thread beside the chat and sends the brief there; n
   assert.equal(prompts.at(-1).content[0].text, '[Card c_1] Write it.\n\nUnder 300 words.')
   assert.deepEqual(saved().bots.writer.openParts.map(part => part.card), ['c_1'])
 
-  // The same card again finds its thread.
   assert.equal((await notes.startCard({ botId: 'writer', cardId: 'c_1', text: 'again' })).sessionId, 'card1')
   assert.deepEqual((await notes.deliver({ botId: 'writer', cardId: 'c_1', text: 'shorter please', requestId: 'im:telegram:9' })), { sessionId: 'card1', where: 'card', requestId: 'im:telegram:9' })
   assert.equal(prompts.at(-1).requestId, 'im:telegram:9')
@@ -166,7 +164,6 @@ test('a finished card closes its thread, after the turn running in it ends; the 
   await notes.startCard({ botId: 'writer', cardId: 'c_2', text: 'two' })
   assert.deepEqual(await notes.closeCard({ botId: 'writer', cardId: 'c_9' }), { closed: false })
 
-  // The Bot finishes c_1 from inside its thread: the close waits for that turn.
   rt.live.set('card1', { turn: {} })
   assert.deepEqual(await notes.closeCard({ botId: 'writer', cardId: 'c_1' }), { closed: 'later' })
   assert.equal(saved().bots.writer.openParts[0].closing, true)
@@ -184,7 +181,6 @@ test('a finished card closes its thread, after the turn running in it ends; the 
   assert.deepEqual(rt.pastOwners.get('card1'), { botId: 'writer' })
   assert.deepEqual(saved().bots.writer.closedCards.map(closed => [closed.card, closed.sessionId]), [['c_1', 'card1']])
 
-  // An idle thread closes at once.
   assert.deepEqual(await notes.closeCard({ botId: 'writer', cardId: 'c_2' }), { closed: true })
   assert.deepEqual(rt.botOf('writer').openParts, [])
   assert.deepEqual(archived, ['card1', 'card2'])

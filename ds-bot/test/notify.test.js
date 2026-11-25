@@ -1,26 +1,20 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { NOTIFY_KEY, badgeOf, noticeText, notificationRows, notifyKind, readNotifyPrefs, writeNotifyPrefs } from '../src/client/notify.js'
+import { NOTIFY_KEY, badgeOf, noticeText, notificationRows, notifyKind, readNotifyPrefs, writeNotifyPrefs } from '../src/client/notify.ts'
 
-// #1504: a window the user is not looking at says a Bot answered, or a card waits on
-// them. What may leave the app is the conversation's name and one line, never the message.
 const base = { enabled: true, muted: false, group: false, viewing: false, focused: false }
 
 test('a reply notifies only when the conversation is not being watched', () => {
   const reply = { before: { completionUnread: false }, after: { completionUnread: true } }
   assert.equal(notifyKind({ ...base, ...reply }), 'reply')
-  // Looking at it in a focused window is enough on its own.
   assert.equal(notifyKind({ ...base, ...reply, viewing: true, focused: true }), undefined)
-  // Looking at it in a background window is not: the window may be behind another app.
   assert.equal(notifyKind({ ...base, ...reply, viewing: true }), 'reply')
-  // Unread already set: a second status update says nothing new.
   assert.equal(notifyKind({ ...base, before: { completionUnread: true }, after: { completionUnread: true } }), undefined)
 })
 
 test('a card waiting on the user notifies in a group too, and once', () => {
   const question = { before: {}, after: { pendingInteraction: { id: 'q1' } } }
   assert.equal(notifyKind({ ...base, group: true, ...question }), 'question')
-  // The same card still pending is not a second notification.
   assert.equal(notifyKind({ ...base, group: true, before: question.after, after: question.after }), undefined)
 })
 

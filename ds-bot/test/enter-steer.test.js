@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { enterSteers, steerable, steerQueued } from '../src/client/enter-steer.js'
+import { enterSteers, steerable, steerQueued } from '../src/client/enter-steer.ts'
 
 const input = (over = {}) => ({ phase: 'plain', draft: '', attachmentIds: [], queue: [{ id: 'm1', source: { kind: 'user' } }], ...over })
 const event = (over = {}) => ({ key: 'Enter', ...over })

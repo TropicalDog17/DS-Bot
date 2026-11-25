@@ -5,13 +5,12 @@ import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
 
 const bundle = await build({
-  entryPoints: [fileURLToPath(new URL('../src/client/feedback.js', import.meta.url))],
+  entryPoints: [fileURLToPath(new URL('../src/client/feedback.ts', import.meta.url))],
   bundle: true, format: 'cjs', platform: 'node', write: false,
   external: ['react', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives'],
 })
 const ISSUES = 'https://github.com/Fei2411/DS-Bot/issues/new'
 
-// Settings → Feedback in a window whose `open` is `open`, with every state change kept.
 function page(window) {
   const notes = []
   const react = {
@@ -52,9 +51,6 @@ function page(window) {
   }
 }
 
-// 公开#182: the Desktop hands only an http(s) address to the system browser and returns
-// null for every window.open. The blank window reserved for the issue got nothing, and
-// the page said the browser blocked the new window.
 test('on the Desktop, "Report on GitHub" hands the issue address to the system browser', async () => {
   const opened = []
   const window = { dshDesktop: { protocolVersion: 1 }, open: (url = '') => { opened.push(String(url)); return null } }

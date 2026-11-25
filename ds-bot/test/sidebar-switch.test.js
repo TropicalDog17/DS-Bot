@@ -5,15 +5,11 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
-import { createSource } from '../src/client/sources.js'
+import { createSource } from '../src/client/sources.ts'
 
-// jsdom comes from the harness that test/harness-resolve.mjs found, like the dsh packages.
 const PLUGIN = dirname(dirname(fileURLToPath(import.meta.url)))
 const { JSDOM } = createRequire(join(process.env.DSH_HARNESS ?? join(PLUGIN, '..', 'deepseek-harness'), 'package.json'))('jsdom')
 
-// The sidebar and its style sheets import the browser's React; bundle them with a minimal
-// stand-in, as the tool-cell tests do: components run as plain functions. Navigation
-// fixtures retain refs across commits and run their layout effects after each render.
 const { outputFiles } = await build({
   stdin: {
     contents: "export { SHELL_CSS } from './src/client/styles.js'\nexport { SIDEBAR_CSS, TeamSidebar, PluginsButton } from './src/client/sidebar.js'\nexport { dshCollapsed, installFrameWatch } from './src/client/frame-watch.js'",
@@ -131,8 +127,6 @@ test('a row picked outside the drawer leaves it alone', () => {
   assert.deepEqual(side.calls, [['openSession', 'picked']])
 })
 
-// A Bot working in its own chat previews what it is doing, the way a group row does
-// for members at work; an idle Bot keeps the last message preview.
 test('a running Bot\'s sidebar row shows what it is doing', () => {
   viewport.innerWidth = 1280
   const bot = { id: 'writer', name: 'Writer', createdAt: 1 }
@@ -156,8 +150,6 @@ test('a running Bot\'s sidebar row shows what it is doing', () => {
   })
   walk(tree)
   assert.equal(rows.length, 1)
-  // BotRow renders as a function component: run it, then flatten Shimmer and the
-  // other function children to read the preview line's text.
   const expand = (node) => {
     if (Array.isArray(node)) return node.map(expand)
     if (!node || typeof node !== 'object') return node
@@ -179,7 +171,6 @@ test('a running Bot\'s sidebar row shows what it is doing', () => {
   }
   collect(expand(rows[0].type(rows[0].props)))
   assert.equal(previews.length, 1)
-  // The row already says Writer, so the preview is the doing phrase alone.
   assert.match(textOf(previews[0]), /^.+…$/)
   assert.doesNotMatch(textOf(previews[0]), /^Writer ·/)
 })
@@ -223,8 +214,6 @@ test('an idle Bot\'s sidebar row keeps the message preview', () => {
   assert.equal(previews.length, 0)
 })
 
-// The rail shows avatars only, and a group's name can be 60 characters long: a row whose
-// name is not on screen in full shows it on hover.
 test('a sidebar row shows its name on hover when the name is hidden or cut', () => {
   viewport.innerWidth = 1280
   const bot = { id: 'writer', name: 'Writer', createdAt: 1 }
@@ -324,10 +313,6 @@ function shell({ platform, collapsed }) {
   return { document, hidden, switches }
 }
 
-// The switch is always ours. Under a Windows title bar it is the title-band
-// button and the shell's own is hidden (left to the shell, it would expand the
-// shell's sidebar before we pull it back, a flash); elsewhere it is the column's
-// top-row button, or the floating one while the column is hidden.
 for (const collapsed of [false, true]) {
   test(`${collapsed ? 'a collapsed' : 'an open'} shell sidebar under a Windows title bar shows only our switch`, () => {
     const { switches } = shell({ platform: 'windows', collapsed })
@@ -335,9 +320,6 @@ for (const collapsed of [false, true]) {
   })
 }
 
-// #1430: the shell's own switch drew a tooltip shadow across the rail's edge. It lives in the
-// logo row, or in the top strip in a macOS desktop window, and none of the team view's
-// switches may share the screen with it.
 const PLATFORMS = ['web', 'windows', 'mac', 'mac-frameless']
 for (const platform of PLATFORMS) {
   for (const collapsed of [false, true]) {
@@ -370,7 +352,6 @@ test('the team view\'s own switches keep the places they had on every platform',
       const title = document.querySelector('.bt-title-toggle')
       assert.equal(hidden(title), false, `${platform} title-band switch`)
       const side = document.querySelector('.bt-side-collapse')
-      // The column's top row exists while it is open; under a title bar the band's switch replaces it.
       if (side !== null) assert.equal(hidden(side), titlebar, `${platform} column switch`)
     }
   }
@@ -417,7 +398,6 @@ test('the wide shell\'s collapsed sidebar keeps no track while its right column 
   assert.match(frames[0].grid, /^0px\s+minmax\(0,\s*1fr\)\s+0px$/)
 })
 
-// A narrow host may place the conversation in its first track instead of its second.
 test('the collapsed shell grid override leaves layouts below 1024px to the host', () => {
   const frames = collapsedGridRules()
   assert.equal(frames.length, 1)
@@ -452,12 +432,10 @@ test('the column\'s top row hides it, on the rail too, and its edge is a drag gr
     assert.equal(typeof column.props.onGrip, 'function')
   }
   assert.deepEqual(calls, ['toggle', 'toggle'])
-  // Hidden, there is no column at all; the floating switch brings it back.
   const hidden = TeamSidebar(props('hidden'))
   assert.equal(find(hidden, node => node.type?.name === 'LeftColumn'), undefined)
   const toggle = find(hidden, node => node.type?.name === 'TitleToggle')
   assert.equal(toggle.props.hidden, true)
-  // Reduced motion disables both the column slide and the conversation margin transition.
   assert.match(SHELL_CSS, /@media\s*\(prefers-reduced-motion:reduce\)\{\.bt-leftcol\{animation:none\}\.bt-leftcol\[data-leaving\],\[class\*="_centerCol"\]\{transition:none\}\}/)
 })
 
@@ -478,8 +456,6 @@ test('the team view lays out the shell footer but never decides whether it shows
   assert.deepEqual(deciding.map(rule => rule.selector), [])
 })
 
-// 公开#164: the footer's grid gives other plugins' entries rows of their own; it holds
-// wherever the shell shows the footer, and stays out of the one place it hides it.
 test('the shell footer is a grid wherever the shell shows it', () => {
   for (const platform of ['web', 'windows', 'mac']) {
     for (const collapsed of [false, true]) {
@@ -490,8 +466,6 @@ test('the shell footer is a grid wherever the shell shows it', () => {
   }
 })
 
-// #452: the footer lost its Connect plugins button; the account menu and the
-// entries other plugins add keep the places they had.
 test('the Bot footer lays out the account, another plugin\'s entry and the settings trigger', () => {
   const html = `<!doctype html><html><body><div class="x_root"><div class="x_footArea">
     <div class="x_footerActions">
@@ -501,22 +475,16 @@ test('the Bot footer lays out the account, another plugin\'s entry and the setti
     <div class="x_settingsArea"><button class="x_trigger"><span class="x_label">Settings</span></button></div>
   </div></div></body></html>`
   const { document } = new JSDOM(html).window
-  // The last rule that places a node is the one that counts, as in the cascade.
   const columnOf = node => {
     const placed = rules.filter(rule => node.matches(rule.selector) && /grid-column:/.test(rule.body))
     assert.ok(placed.length > 0, `no grid placement for ${node.className}`)
     return placed[placed.length - 1].body.match(/grid-column:([^;]+)/)[1]
   }
-  // The account menu keeps the left of the row.
   assert.equal(columnOf(document.querySelector('.bt-foot-account')), '1')
-  // Another plugin's entry takes a row of its own, above the Bot row.
   assert.equal(columnOf(document.querySelector('.x_other-plugin')), '1/-1')
-  // The settings trigger keeps the right of the row.
   assert.equal(columnOf(document.querySelector('.x_settingsArea')), '3')
 })
 
-// The Plugins shortcut calls DSH's plugin page; a host without that navigation
-// face has no page to open, so the button stays out of the foot entirely.
 test('the Plugins shortcut stays out where the host has no plugin navigation', () => {
   assert.equal(PluginsButton({ actions: {} }), null)
   assert.equal(PluginsButton({ actions: { hasPlugins: () => false, openPlugins: () => { throw new Error('must not open') } } }), null)
@@ -532,9 +500,6 @@ test('the Plugins shortcut opens the plugin manager and names itself', () => {
   assert.deepEqual(calls, ['open'])
 })
 
-// The edge drag writes the column and the chat's margins straight into the page, so these
-// run it on a jsdom page with real timers. The sandbox gets the page and the timers only
-// while a drag runs; the release then re-renders the sidebar at the state it stored.
 async function edgeDrag({ start, reduced = false }, run) {
   const dom = new JSDOM('<!doctype html><body><div class="x_centerCol"></div><div class="bt-leftcol"><div class="bt-leftcol-grip"></div></div></body>')
   const { document } = dom.window
@@ -582,8 +547,6 @@ async function edgeDrag({ start, reduced = false }, run) {
   }
 }
 
-// After the drag ends the column's own width must be the one the sidebar renders for the
-// state it stored, or the edge sits at the CSS fallback (57px on the rail).
 test('a drag that ends on the rail leaves the column at the rail width', async () => {
   await edgeDrag({ start: { pref: 'open', width: 350 } }, async ({ column, leftColumn, press, move, release, settle }) => {
     press()
@@ -609,8 +572,6 @@ test('a reduced-motion drag that unfolds the rail lands at the dragged width', a
   })
 })
 
-// The spring rides the snap switch only: after it settles the same drag follows the cursor
-// frame by frame, and the chat's margin takes no transition of its own.
 test('after a snap the spring stops and the drag follows the cursor', async () => {
   await edgeDrag({ start: { pref: 'rail', width: 280 } }, async ({ column, center, leftColumn, press, move, release, settle }) => {
     press()
@@ -651,8 +612,6 @@ test('TeamSidebar subscribes to specific ui slices rather than the whole ui obje
 })
 
 
-// A Bot team that never started leaves nothing to use on the Bot surface; the hint
-// that says so carries the way back to the classic view, wide or on the rail (#1314).
 for (const wide of [true, false]) {
   test(`a Bot team that could not start offers the classic view (${wide ? 'open column' : 'rail'})`, () => {
     viewport.innerWidth = 1280

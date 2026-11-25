@@ -3,10 +3,10 @@ import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
-import { headerNavigation, installHeaderNavigation } from '../src/client/header-navigation.js'
+import { headerNavigation, installHeaderNavigation } from '../src/client/header-navigation.ts'
 
 const bundle = await build({
-  entryPoints: [fileURLToPath(new URL('../src/client/header.js', import.meta.url))],
+  entryPoints: [fileURLToPath(new URL('../src/client/header.ts', import.meta.url))],
   bundle: true, format: 'cjs', platform: 'node', write: false,
   external: ['react', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives'],
 })
@@ -51,8 +51,6 @@ const sideButton = (node) => {
   return null
 }
 
-// 公开#456: the Bot header carries no right-sidebar toggle — the drawer and the
-// column never share the window, and the way in sits in the drawer instead.
 test('the Bot header has no right sidebar button', () => {
   assert.equal(sideButton(header({ hasRightSidebar: () => true, toggleRightSidebar: () => {} })), null)
   assert.equal(sideButton(header({})), null)

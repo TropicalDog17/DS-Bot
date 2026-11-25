@@ -1,13 +1,3 @@
-// Search provider `auto` for dsh's web seam (`ctx.web`). Each query first tries native search
-// behind the asking Session's own model route, with that route's own key, on that route's own
-// origin. Native search is found by protocol, not by vendor: the route's wire protocol defines a
-// standard search tool (Anthropic Messages, OpenAI Responses, Gemini), and a host may also serve
-// a separate search API, declared as data (SEARCH_APIS, or `searchApis` in config). Whether an
-// endpoint supports either is only knowable by trying, so every outcome is remembered. It never
-// borrows another route's key: every key bills its own account. When native search is
-// unavailable, a keyless fallback parses a public results page fetched through ctx.web.fetch.
-// Every result says which path answered it; when both fail, the error tells the model not to
-// guess. Independent of the Bot team code in index.js.
 import { WebError } from '@deepseek-ai/dsh-web'
 
 export const name = 'web-search-auto'
@@ -28,14 +18,10 @@ const SNIPPET_CHARS = 500
 const PROMPT = query => `Perform a web search for the query: ${query}`
 
 const MINUTE = 60_000
-// How long one outcome keeps a candidate from being tried again.
 const SKIP_FOR = {
   absent: 24 * 60 * MINUTE,
-  // The query itself may be what was refused (length, content moderation).
   rejected: 30 * MINUTE,
-  // The user may enable search for the key right away.
   denied: 30 * MINUTE,
-  // Each retry of an endpoint that answers without searching costs a model call.
   ignored: 6 * 60 * MINUTE,
 }
 const STATUS_OUTCOMES = { 404: 'absent', 405: 'absent', 501: 'absent', 400: 'rejected', 415: 'rejected', 422: 'rejected', 401: 'denied', 402: 'denied', 403: 'denied' }
@@ -81,9 +67,6 @@ const CATALOG = {
 }
 const DSH_DEEPSEEK_ROUTES = new Set(['deepseek-official', 'deepseek-account'])
 
-// ---------------------------------------------------------------------------
-// Small helpers
-
 const str = value => (typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined)
 const clamp = (value, low, high) => Math.min(high, Math.max(low, Math.floor(value)))
 const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -111,7 +94,6 @@ export const decodeEntities = text => text.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/
   }
   return NAMED_ENTITIES[ref.toLowerCase()] ?? whole
 })
-// Inline tags vanish so "<strong>deep</strong>seek" stays one word; block ends become spaces.
 export const textOf = html => decodeEntities(html
   .replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, ' ')
   .replace(/<(br|\/p|\/div|\/li|\/h\d|\/td|\/tr)\b[^>]*>/gi, ' ')
@@ -125,7 +107,6 @@ const attrOf = (attrs, attr) => {
 
 const plain = value => (typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '')
 
-/** One portable source from plain-text fields; empty optional fields are omitted rather than invented. */
 const sourceOf = (url, title, snippet, publishedAt) => {
   const href = httpUrl(url)
   if (href === undefined) return undefined
@@ -150,12 +131,6 @@ const dedupe = (sources) => {
   return [...seen.values()]
 }
 
-// ---------------------------------------------------------------------------
-// Native search: response readers. Each returns `{ ran, sources, error? }`: whether the endpoint
-// actually ran a search, and only the structured sources it reported (URL, title, excerpt,
-// date), never the answer text a model wrote around them.
-
-/** Anthropic Messages with the `web_search_20250305` server tool. */
 export function readMessages(body) {
   const blocks = Array.isArray(body?.content) ? body.content : []
   const results = blocks.filter(block => block?.type === 'web_search_tool_result')
@@ -178,7 +153,6 @@ export function readMessages(body) {
   }
 }
 
-/** OpenAI Responses with the `web_search` tool. */
 export function readResponses(body) {
   const output = Array.isArray(body?.output) ? body.output : []
   const calls = output.filter(item => item?.type === 'web_search_call')
@@ -201,7 +175,6 @@ export function readResponses(body) {
   return { ran: calls.length > 0 || sources.length > 0, cut: body?.status === 'incomplete', sources }
 }
 
-/** Gemini `generateContent` with the `google_search` tool. */
 export function readGemini(body) {
   const candidates = Array.isArray(body?.candidates) ? body.candidates : []
   return {
@@ -217,12 +190,10 @@ const URL_KEYS = ['url', 'uri', 'link']
 const TITLE_KEYS = ['title', 'name', 'site_name']
 const SNIPPET_KEYS = ['snippet', 'summary', 'content', 'description', 'cited_text', 'text']
 const DATE_KEYS = ['published_date', 'publish_date', 'publish_time', 'page_age', 'date', 'last_updated']
-// Media links are not results, and a response that echoes the request's tools is not a search.
 const NOT_SOURCES = new Set(['image_url', 'images', 'image', 'icon', 'favicon', 'logo', 'logo_url', 'thumbnail', 'tools'])
 const SEARCH_MARK = /search|grounding|citation/i
 const firstText = (record, keys) => keys.map(key => record[key]).find(value => typeof value === 'string' && value.trim() !== '')
 
-/** Every object in a JSON body that carries an http(s) URL, as sources: the shape of any search API. */
 export function findSources(body) {
   const found = []
   const visit = (value, depth) => {
@@ -236,7 +207,6 @@ export function findSources(body) {
   return dedupe(found)
 }
 
-/** Whether a JSON body shows a search ran, read from its keys and `type` tags, never from prose. */
 export function showsSearch(body) {
   const visit = (value, depth) => {
     if (depth > 16 || value === null || typeof value !== 'object') return false
@@ -249,15 +219,10 @@ export function showsSearch(body) {
   return visit(body, 0)
 }
 
-/** A declared search API's response: any structured sources, wherever they sit. */
 export function readDeclared(body) {
   const sources = findSources(body)
   return { ran: sources.length > 0 || showsSearch(body), sources }
 }
-
-// ---------------------------------------------------------------------------
-// Native search: what to try for one route. Nothing here names a vendor except SEARCH_APIS,
-// which is data in the same shape as `searchApis` config.
 
 const bearer = key => ({ authorization: `Bearer ${key}` })
 export const AUTH_STYLES = { bearer, 'x-api-key': key => ({ 'x-api-key': key }), 'api-key': key => ({ 'api-key': key }) }
@@ -268,7 +233,6 @@ const messagesRoot = base => (new URL(base).pathname.replace(/\/+$/, '').endsWit
 // room to reach the search: dsh's own DeepSeek search uses the same cap.
 const OUTPUT_CAP = 4096
 
-/** The standard search tool of each wire protocol. */
 export const PROTOCOL_SEARCHES = {
   messages: {
     name: 'Anthropic Messages web_search tool',
@@ -376,11 +340,6 @@ function protocolCandidate(id, base, model) {
   return { id, name: shape.name, url: shape.url(base, model), model, auth: shape.auth, request: call => shape.request({ ...call, model }), read: shape.read }
 }
 
-/**
- * Everything worth trying for one route, cheapest first: search APIs declared for its host
- * (no model call), then the standard search tool of its protocol.
- * @returns `{ candidates }`, with `reason` when there is nothing to try.
- */
 export function planNative(route, searchApis = SEARCH_APIS) {
   const base = httpUrl(route.baseURL)
   if (base === undefined) return { candidates: [], reason: `route "${route.provider}" has no known endpoint` }
@@ -404,9 +363,6 @@ export function planNative(route, searchApis = SEARCH_APIS) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Keyless fallback: public results pages, parsed into sources.
-
 /** Bing wraps result links in `bing.com/ck/a?…&u=a1<base64url>`; recover the target. */
 export function decodeBingUrl(href) {
   const url = httpUrl(href)
@@ -418,7 +374,6 @@ export function decodeBingUrl(href) {
   try { return httpUrl(Buffer.from(target.slice(2), 'base64url').toString('utf8')) } catch { return undefined }
 }
 
-/** Bing results page → `{ sources }`, or `{ error }` when the page is not a results page. */
 export function parseBing(html) {
   const starts = [...html.matchAll(/<li\b[^>]*\bclass\s*=\s*"[^"]*\bb_algo\b[^"]*"[^>]*>/gi)].map(match => match.index)
   const sources = []
@@ -437,7 +392,6 @@ export function parseBing(html) {
   return { error: /id\s*=\s*"b_results"/i.test(html) ? 'results page had no parsable results' : 'not a results page (bot check or changed layout)' }
 }
 
-/** DuckDuckGo HTML results page → `{ sources }`, or `{ error }`. */
 export function parseDuckDuckGo(html) {
   if (/anomaly-modal|bots use DuckDuckGo too|challenge-form/i.test(html)) return { error: 'bot check page' }
   const links = [...html.matchAll(/<a\b([^>]*\bclass\s*=\s*"[^"]*\bresult__a\b[^"]*"[^>]*)>([\s\S]*?)<\/a>/gi)]
@@ -466,9 +420,6 @@ export const ENGINES = {
   bing: { name: 'Bing', url: query => `https://www.bing.com/search?q=${encodeURIComponent(query)}`, parse: parseBing, regional: /^https:\/\/([a-z0-9-]+\.)*bing\.com$/i },
   duckduckgo: { name: 'DuckDuckGo', url: query => `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, parse: parseDuckDuckGo },
 }
-
-// ---------------------------------------------------------------------------
-// The provider
 
 const aborted = signal => new WebError('web search aborted', 'WEB_ABORTED', { cause: signal?.reason })
 
@@ -539,7 +490,6 @@ const errorDetail = (text) => {
 export function createAutoSearchProvider(deps, config = {}) {
   const options = resolveConfig(config)
   const now = deps.now ?? Date.now
-  // route + endpoint + model → `{ works: true }` or `{ until, reason }`, for this process.
   const memory = new Map()
 
   async function credentialFor(route, endpoint) {
@@ -589,7 +539,6 @@ export function createAutoSearchProvider(deps, config = {}) {
     if (read.sources.length > 0) return { sources: read.sources }
     if (read.error !== undefined) return { reason: read.error, final: true }
     if (read.ran || known) return { reason: 'returned no results', final: true }
-    // The cap says nothing about support, so a cut-off answer is not remembered.
     if (read.cut) return { reason: 'stopped at the output cap before searching' }
     return { reason: 'answered without running a search, so it does not seem to support this one', skip: 'ignored' }
   }
@@ -664,7 +613,6 @@ export function createAutoSearchProvider(deps, config = {}) {
       const host = new URL(url).host
       const remaining = deadline - now()
       if (remaining <= 0) { attempts.push(`${host}: skipped, out of time`); continue }
-      // Leave later engines a share of the budget when an earlier one hangs.
       const { timeout, timer } = timeoutAfter(index === options.engines.length - 1 ? remaining : Math.min(remaining, Math.ceil(options.fallbackTimeoutMs / 2)))
       let fetched
       try {
@@ -715,9 +663,6 @@ export function createAutoSearchProvider(deps, config = {}) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Host wiring: read the asking Session's route through public dsh services only.
-
 const stringRecord = value => (isRecord(value) ? Object.fromEntries(Object.entries(value).filter(([, item]) => typeof item === 'string')) : {})
 
 // OpenCode's gateways turn away a request that does not name its conversation. DSH's
@@ -730,7 +675,6 @@ const withConversation = (provider, headers, sessionId) => (!OPENCODE_ROUTES.has
   ? headers
   : { ...headers, [OPENCODE_SESSION]: sessionId })
 
-/** The route of the Session that started the current tool call: protocol, endpoint, key name, and headers. */
 export function routeOf(ctx) {
   const session = ctx.get('agents')?.currentInitiator()?.session
   const request = session?.requestContext()
@@ -765,7 +709,6 @@ export function apply(ctx, config = {}) {
     route: () => routeOf(ctx),
     resolveKey: async (ref) => {
       const credentials = ctx.get('credentials')
-      // Without the seam the environment is the whole credential plane, as in dsh's own adapters.
       return credentials === undefined ? env(ref) : (await credentials.resolve(ref))?.value
     },
     resolveAccountToken: endpoint => ctx.get('deepseekAccount')?.resolveToken(endpoint),

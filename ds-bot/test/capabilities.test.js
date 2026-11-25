@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { createRuntime } from '../index.js'
-import { expandCapabilityNames, validateCapabilityName } from '../src/host/capabilities.js'
+import { expandCapabilityNames, validateCapabilityName } from '../src/host/capabilities.ts'
 import { fakeContext } from './fake-ctx.js'
 
 let rt
@@ -185,10 +185,7 @@ test('a deleted Bot drops only a pending local MCP it alone asked for', async t 
   t.after(() => env.dispose())
   const { rt } = env
   const { items } = rt.state.capabilities
-  // A local MCP the Bot asked for and nobody approved has no requester left.
   await rt.capabilitySave(mcp('pending-mine'), { botId: 'worker' })
-  // Everything else stays: an approved one it asked for, a pending one the Main
-  // Bot asked for, one the user saved in settings, and a skill.
   await rt.capabilitySave(mcp('approved-mine'), { botId: 'worker' })
   await rt.capabilityEndpoint('capability-approve', { name: 'approved-mine' })
   await rt.capabilitySave(mcp('pending-chief'), { botId: 'chief' })
@@ -201,7 +198,6 @@ test('a deleted Bot drops only a pending local MCP it alone asked for', async t 
     Object.keys(items).sort(),
     ['approved-mine', 'guide', 'pending-chief', 'shared'],
   )
-  // The kept pending request can still be approved.
   await rt.capabilityEndpoint('capability-approve', { name: 'pending-chief' })
   assert.equal(items['pending-chief'].approved, true)
   const saved = JSON.parse(await (await import('node:fs/promises')).readFile(join(env.home, 'state.json'), 'utf8'))
@@ -217,8 +213,6 @@ test('a deleted Bot leaves pack members and other packs untouched', async t => {
   const { items } = rt.state.capabilities
   await rt.capabilitySave(mcp('pending-pack'), { botId: 'worker' })
   await rt.capabilitySave({ name: 'guide', kind: 'skill', description: 'Guide', content: 'Do the work.' }, { botId: 'worker' })
-  // Two packs share the skill; only one was on the deleted Bot. The pending MCP
-  // the Bot asked for also sits in its pack, so it belongs to the pack.
   await rt.capabilitySave({ name: 'pack-p', kind: 'pack', items: ['guide', 'pending-pack'] }, { botId: 'worker' })
   await rt.capabilitySave({ name: 'pack-q', kind: 'pack', items: ['guide'] }, { botId: 'chief' })
   rt.state.bots.worker.capabilities = ['pack-p', 'pending-pack']

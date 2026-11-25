@@ -1,5 +1,3 @@
-// The result of work a Bot handed on, when it is longer than state.json keeps: the
-// whole result has to survive a restart, so the Bot that asked for it gets all of it.
 import assert from 'node:assert/strict'
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -8,8 +6,8 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { test } from 'node:test'
 import { createRuntime } from '../index.js'
 import { fakeContext } from './fake-ctx.js'
-import { SOURCE_KIND } from '../src/host/constants.js'
-import { install as installHandoffs } from '../src/host/handoffs.js'
+import { SOURCE_KIND } from '../src/host/constants.ts'
+import { install as installHandoffs } from '../src/host/handoffs.ts'
 import { scopeTarget } from '@deepseek-ai/dsh-scope'
 
 let rt
@@ -32,8 +30,6 @@ const seed = () => ({
   revision: 0,
 })
 
-// A host over the plugin's own folder. Starting the same folder again is a restart:
-// the first host is closed before the second one starts.
 async function startHost(home, team) {
   if (team !== undefined) writeFileSync(join(home, 'state.json'), JSON.stringify(team))
   const ctx = fakeContext()
@@ -108,13 +104,10 @@ async function startHost(home, team) {
   const call = async (endpoint, payload) => (await route.fetch(new Request('http://localhost/api/bot', {
     method: 'POST', body: JSON.stringify({ endpoint, payload }),
   }))).json()
-  // Loading once fills the Session-owner indexes turns.js filters events by.
   await tool('list_bots', {}, 'a')
   return { ctx, agents, agentOf, emit, emitScoped, tool, call, home, stop: () => ctx.dispose() }
 }
 
-// The plugin folder of a test, and the hosts over it. A second host over the same
-// folder is a restart. Everything is closed and removed when the test ends.
 function bench(t) {
   const home = mkdtempSync(join(tmpdir(), 'ds-bot-handoff-results-'))
   const hosts = []
@@ -133,7 +126,6 @@ const settled = async (check) => {
   for (let count = 0; count < 200 && !check(); count += 1) await delay(5)
 }
 
-// Each Session takes up the newest message it was sent as its next turn.
 function turnTaker(agents, emit) {
   const turns = new Map()
   const open = (id, message) => {
@@ -155,14 +147,12 @@ function turnTaker(agents, emit) {
   return { take, open, end, userTurn }
 }
 
-// The works the team file holds, once the saves made so far are done.
 const worksIn = async ({ call, home }) => {
   await call('set-prefs', {})
   return JSON.parse(readFileSync(join(home, 'state.json'), 'utf8')).works ?? {}
 }
 const keptIn = home => (existsSync(join(home, 'handoff-results')) ? readdirSync(join(home, 'handoff-results')) : [])
 
-// Chief asks Writer, which hands part of it on to Tester, which answers.
 async function handedOn({ start }, review) {
   const first = await start(seed())
   const { agents, emit, tool } = first
@@ -184,7 +174,6 @@ const LONG = '审查意见。'.repeat(1000)
 test('a result longer than 2,000 characters survives a restart before the Bot that asked for it answers', async (t) => {
   const { home, start } = bench(t)
   const { first, result } = await handedOn({ start }, LONG)
-  // The whole result is in a file of its own, and the team file names it.
   const works = await worksIn(first)
   const [work] = Object.values(works)
   assert.equal(work.results.length, 1)
@@ -193,7 +182,6 @@ test('a result longer than 2,000 characters survives a restart before the Bot th
   assert.deepEqual(keptIn(home), [`${work.results[0].id}.txt`])
   assert.equal(readFileSync(join(home, 'handoff-results', `${work.results[0].id}.txt`), 'utf8'), LONG)
 
-  // The host restarts before the Writer answers.
   await first.stop()
   const second = await start()
   const again = turnTaker(second.agents, second.emit)
@@ -239,7 +227,6 @@ test('a result inside a result survives a restart too', async (t) => {
   assert.equal(tester.results[0].length, LONG.length)
   assert.deepEqual(keptIn(home), [`${tester.results[0].id}.txt`])
 
-  // The host restarts before the Tester answers.
   await first.stop()
   const second = await start()
   const again = turnTaker(second.agents, second.emit)
@@ -248,11 +235,9 @@ test('a result inside a result survives a restart too', async (t) => {
   await settled(() => callsOf(second.agents, 'b').length === 1)
   const toWriter = callsOf(second.agents, 'b')[0][1]
   assert.ok(textOf(toWriter.content).includes(LONG), 'the result inside the result goes up')
-  // The old copy goes only after the replacement state has been saved.
   await settled(() => keptIn(home).length === 1 && keptIn(home)[0] === `${testerId}.txt`)
   assert.deepEqual(keptIn(home), [`${testerId}.txt`])
 
-  // The Writer picks that up and answers the Chief.
   const last = turnTaker(second.agents, second.emit)
   last.open('b', toWriter)
   last.end('b', 'all done')
@@ -299,7 +284,6 @@ test('a result file that was cut short is reported as well', async (t) => {
 
 test('a result that could not be written is not claimed, and is reported after a restart', async (t) => {
   const { home, start } = bench(t)
-  // A file where the folder of the results should be: the write cannot succeed.
   writeFileSync(join(home, 'handoff-results'), 'not a folder', 'utf8')
   const { first, result } = await handedOn({ start }, LONG)
   const works = await worksIn(first)
@@ -391,20 +375,16 @@ test('a subagent a Bot delegated to hands its result into the work the turn answ
   await tool('message_bot', { to: 'Writer', message: 'carry out the plan' }, 'a')
   turns.end('a', 'asked Writer')
   turns.take('b')
-  // Writer delegates part of the work to a subagent instead of another Bot.
   emit('b', 'tool/call', { callId: 'call1', name: 'subagent', arguments: JSON.stringify({ description: 'deep review', prompt: 'review the plan' }) })
   emitScoped('b', 'subagent/start', { runId: 'r1', provider: 'spawn', id: 'sub1', local: true })
   emitScoped('b', 'tools/result', { callId: 'call1', name: 'subagent', arguments: { description: 'deep review', prompt: 'review the plan' }, agent: agents.get('b') }, { isError: false, value: { kind: 'activation', subagentId: 'sub1' } })
   emit('b', 'tool/result', { callId: 'call1', message: { callId: 'call1', content: textBlock('started subagent sub1'), isError: false } })
   turns.end('b', 'subagent is on it')
-  // The answer waits while the sub-work is out, like a handed-on request.
   await delay(50)
   assert.equal(callsOf(agents, 'a').length, 0)
   const works = await worksIn(first)
   const [work] = Object.values(works).filter(entry => entry.to === 'b')
   assert.deepEqual(work.open, ['r1'])
-  // The child settles; its closing message is the sub-work's result. DSH opens
-  // the turn first, then records the notice that filled its inbox.
   emitScoped('b', 'subagent/end', { runId: 'r1', provider: 'spawn', id: 'sub1', local: true, stopReason: 'completed', lastAssistantMessage: textBlock('reviewed: three findings') })
   emit('b', 'turn/start', { turn: 2 })
   emit('b', 'user/message', { content: textBlock('Background subagent sub1 finished.\nIts closing message:\nreviewed: three findings'), source: { kind: 'subagent-settled', form: 'notice', summary: 'Background subagent sub1 finished.', senderSessionId: 'sub1' } })
@@ -419,9 +399,6 @@ test('a subagent a Bot delegated to hands its result into the work the turn answ
   assert.equal(Object.keys(after).length, 0)
 })
 
-// The user can give up the wait for a subagent run. When the run ends afterwards, its
-// closing text still reaches the Bot that waited, marked late, and settles nothing a
-// second time.
 test('a subagent that ends after its wait was given up still hands over its closing text', async (t) => {
   const { start } = bench(t)
   const first = await start(seed())
@@ -441,12 +418,10 @@ test('a subagent that ends after its wait was given up still hands over its clos
   const [parentId] = Object.entries(started).find(([, work]) => work.to === 'b')
   assert.deepEqual(started[parentId].open, ['r1'])
 
-  // The user gives up the wait for the run.
   assert.equal((await call('abandon-work', { id: 'r1' })).ok, true)
   await settled(() => callsOf(agents, 'b').length === before + 1)
   assert.match(textOf(callsOf(agents, 'b').at(-1)[1].content), /^\[Waiting given up · subagent deep review did not hand back this work/)
 
-  // The run finishes after that: its closing text arrives, marked late.
   emitScoped('b', 'subagent/end', { runId: 'r1', provider: 'spawn', id: 'sub1', local: true, stopReason: 'completed', lastAssistantMessage: textBlock('reviewed: three findings') })
   await settled(() => callsOf(agents, 'b').length === before + 2)
   const late = callsOf(agents, 'b').at(-1)[1]
@@ -454,7 +429,6 @@ test('a subagent that ends after its wait was given up still hands over its clos
   assert.match(body, /^\[Reply from subagent deep review\]\n\[Late answer: the user had already given up waiting for this work/)
   assert.match(body, /reviewed: three findings/)
   assert.equal(late.source.work, undefined)
-  // It settles nothing twice: the one given-up result stays, and no wait is back.
   const after = await worksIn(first)
   assert.equal(after.r1, undefined)
   assert.equal(after[parentId].results.length, 1)
@@ -490,8 +464,6 @@ for (const stopReason of ['aborted', 'error']) test(`a subagent ending with ${st
   emitScoped('b', 'tools/result', { callId: 'call1', name: 'subagent', arguments: { description: 'deep review', prompt: 'review the plan' }, agent: agents.get('b') }, { isError: false, value: { kind: 'activation', subagentId: 'sub1' } })
   emit('b', 'tool/result', { callId: 'call1', message: { callId: 'call1', content: textBlock('started subagent sub1'), isError: false } })
   turns.end('b', 'subagent is on it')
-  // The child was stopped with partial output: the result says so, it does not
-  // read like a finished answer.
   emitScoped('b', 'subagent/end', { runId: 'r1', provider: 'spawn', id: 'sub1', local: true, stopReason, lastAssistantMessage: textBlock('two of three findings') })
   emit('b', 'turn/start', { turn: 2 })
   emit('b', 'user/message', { content: textBlock('Background subagent sub1 was stopped before it finished.'), source: { kind: 'subagent-settled', form: 'notice', summary: 'Background subagent sub1 was stopped before it finished.', senderSessionId: 'sub1' } })
@@ -516,8 +488,6 @@ test('parallel delegations get each call\'s own description for its child', asyn
   emit('b', 'tool/call', { callId: 'call2', name: 'subagent_fork', arguments: JSON.stringify({ description: 'draft summary', prompt: 'summarize the plan' }) })
   emitScoped('b', 'subagent/start', { runId: 'r2', provider: 'spawn', id: 'sub2', local: true })
   emitScoped('b', 'subagent/start', { runId: 'r1', provider: 'spawn', id: 'sub1', local: true })
-  // Publication order differs from call order, and one child even settles before
-  // its call returns. Only the result's child id identifies the right description.
   emitScoped('b', 'subagent/end', { runId: 'r2', provider: 'spawn', id: 'sub2', local: true, stopReason: 'completed', lastAssistantMessage: textBlock('a summary') })
   emitScoped('b', 'tools/result', { callId: 'call2', name: 'subagent_fork', arguments: { description: 'draft summary', prompt: 'summarize the plan' }, agent: agents.get('b') }, { isError: false, value: { kind: 'activation', subagentId: 'sub2' } })
   emitScoped('b', 'tools/result', { callId: 'call1', name: 'subagent', arguments: { description: 'deep review', prompt: 'review the plan' }, agent: agents.get('b') }, { isError: false, value: { kind: 'activation', subagentId: 'sub1' } })
@@ -544,9 +514,6 @@ test('parallel delegations get each call\'s own description for its child', asyn
   assert.ok(answer.includes('subagent deep review:\nthree findings'), `second child's own name: ${answer}`)
 })
 
-// A child that finished can be sent more to do: DSH starts a fresh run on the
-// same child id, with a new runId. Each run's result is its own, so the first
-// one's is not lost to the second's.
 test('a continued subagent hands up each run\'s own result', async (t) => {
   const { start } = bench(t)
   const first = await start(seed())
@@ -561,15 +528,12 @@ test('a continued subagent hands up each run\'s own result', async (t) => {
   emitScoped('b', 'tools/result', { callId: 'call1', name: 'subagent', arguments: { description: 'checks', prompt: 'check the plan' }, agent: agents.get('b') }, { isError: false, value: { kind: 'activation', subagentId: 'sub1' } })
   emit('b', 'tool/result', { callId: 'call1', message: { callId: 'call1', content: textBlock('started subagent sub1'), isError: false } })
   turns.end('b', 'subagent is on it')
-  // The first run settles and the Bot reads its notice, then sends the same
-  // child more work: DSH opens a second run on the same child id.
   emitScoped('b', 'subagent/end', { runId: 'r1', provider: 'spawn', id: 'sub1', local: true, stopReason: 'completed', lastAssistantMessage: textBlock('COST: 42') })
   emit('b', 'turn/start', { turn: 2 })
   emit('b', 'user/message', { content: textBlock('Background subagent sub1 finished.\nIts closing message:\nCOST: 42'), source: { kind: 'subagent-settled', form: 'notice', summary: 'Background subagent sub1 finished.', senderSessionId: 'sub1' } })
   emitScoped('b', 'subagent/start', { runId: 'r2', provider: 'spawn', id: 'sub1', local: true })
   emit('b', 'assistant/message', assistantText('sent it the schedule too'))
   emit('b', 'turn/end', { turn: 2, reason: { kind: 'completed' } })
-  // The answer still waits while the second run is out.
   await delay(50)
   assert.equal(callsOf(agents, 'a').length, 0)
   emitScoped('b', 'subagent/end', { runId: 'r2', provider: 'spawn', id: 'sub1', local: true, stopReason: 'completed', lastAssistantMessage: textBlock('SCHEDULE: Monday') })

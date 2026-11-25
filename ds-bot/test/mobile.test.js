@@ -1,4 +1,4 @@
-import { fileChunks } from '../src/shared/file-chunks.js'
+import { fileChunks } from '../src/shared/file-chunks.ts'
 import assert from 'node:assert/strict'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
@@ -7,15 +7,12 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { test } from 'node:test'
 import { createRuntime } from '../index.js'
-import { API_VERSION, CAPABILITIES, roomItems } from '../src/host/mobile.js'
+import { API_VERSION, CAPABILITIES, roomItems } from '../src/host/mobile.ts'
 import { fakeAttachments, fakeContext } from './fake-ctx.js'
 import jpeg from 'jpeg-js'
 import { PNG } from 'pngjs'
-import { shrink } from '../src/host/preview-worker.js'
+import { shrink } from '../src/host/preview-worker.ts'
 
-// A team with no model: Sessions are made in memory, a group round runs on answers
-// played back through the session/event listeners, and `history` holds the events
-// each Session's page reads, oldest first.
 function start(config = {}) {
   const home = mkdtempSync(join(tmpdir(), 'ds-bot-mobile-'))
   const ctx = fakeContext({ services: { attachments: fakeAttachments() } })
@@ -129,9 +126,6 @@ async function team(call) {
 
 const user = (seq, text, time = seq) => ({ seq, time, type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text }] } })
 const relayCall = (seq, callId) => ({ seq, time: seq, type: 'tool/call', data: { callId, name: 'group_relay', arguments: '{}' } })
-// A settled round's result as the group's Session keeps it: the text group_relay
-// returned (where its rows are in the group's book), or the replies of a round from
-// before the ledger.
 const relayResult = (seq, callId, result) => ({ seq, time: seq, type: 'tool/result', data: { message: { role: 'tool', toolCallId: callId, content: [{ type: 'text', text: typeof result === 'string' ? result : JSON.stringify({ replies: result, passed: [] }) }] } } })
 
 test('hello names the API version both sides speak, the capabilities and the notice cursor', async (t) => {
@@ -147,11 +141,9 @@ test('hello names the API version both sides speak, the capabilities and the not
   assert.equal(hello.seq, 0)
   assert.equal(hello.readOnly, null)
   assert.equal(hello.feed, 'api/bot/feed')
-  // A client that speaks only a later version learns the range and that nothing matches.
   const later = (await call('hello', { api: [7] })).value
   assert.equal(later.api, null)
   assert.equal(later.apiMax, API_VERSION)
-  // A client that names no version gets the current one.
   assert.equal((await call('hello', {})).value.api, API_VERSION)
 })
 
@@ -166,8 +158,6 @@ test('roomItems turns a group Session into speaker-attributed items, oldest firs
       { kind: 'failed', botId: 'b3', name: 'Coder', code: 'HTTP', text: '429', time: 13 },
       { kind: 'unknown-later', botId: 'b3', name: 'Coder', time: 14 },
     ]),
-    // A Bot's post from outside the group shows as its message; one a running round
-    // logged, or a late event, shows inside a round instead.
     { seq: 4, time: 20, type: 'user/message', data: { source: { kind: 'bot', role: 'post', senderSessionId: 'b2', senderName: 'Writer' }, content: [{ type: 'text', text: '[Group post from Writer]\nDraft is ready' }] } },
     { seq: 5, time: 21, type: 'user/message', data: { source: { kind: 'bot', role: 'post', senderSessionId: 'b2', senderName: 'Writer', logged: 7 }, content: [{ type: 'text', text: '[Group post from Writer]\nlogged' }] } },
     { seq: 6, time: 22, type: 'user/message', data: { source: { kind: 'bot', role: 'post', senderSessionId: 'b2', senderName: 'Writer', done: true }, content: [{ type: 'text', text: 'done' }] } },
@@ -209,7 +199,6 @@ test('a group round logs notices a returning client reads back, and the feed say
   await answer(first.sessionId, first.message.source.exchangeId, 'Chief here.', 1)
   const second = await turnFor(sent, first)
 
-  // While the round runs, the newest page carries what was said, live, where the call sits.
   const live = (await call('room-chat', { roomId: room.id })).value
   assert.deepEqual(live.items.map(item => [item.id, item.kind, item.name ?? null, item.live ?? false]), [['1', 'user', null, false], ['call-1:0', 'bot', 'Chief', true]])
   assert.equal(live.running, true)
@@ -223,19 +212,16 @@ test('a group round logs notices a returning client reads back, and the feed say
   assert.equal(done.running, false)
   assert.equal(done.cursor, null)
 
-  // Each member's message is a notice, in order, named after the group.
   const caught = (await call('notices', { boot, since: 0 })).value
   assert.equal(caught.reset, false)
   const groupNotices = caught.notices.filter(notice => notice.kind === 'group')
   assert.deepEqual(groupNotices.map(notice => [notice.botId, notice.roomId, notice.title, notice.text]), [[chief, room.id, 'Launch', 'Chief here.'], [writer.id, room.id, 'Launch', 'Writer here.']])
   const latest = caught.seq
   assert.deepEqual((await call('notices', { boot, since: latest })).value.notices, [])
-  // A client from before a restart starts over.
   const other = (await call('notices', { boot: 'another-boot', since: latest })).value
   assert.equal(other.reset, true)
   assert.equal(other.notices.length, caught.notices.length)
 
-  // The feed carried the same notices and said the group changed.
   const seen = []
   for (let at = 0; at < 40 && !(seen.some(event => event.event === 'room') && seen.filter(event => event.event === 'notice' && event.data.kind === 'group').length === 2); at += 1) seen.push(await next())
   assert.ok(seen.some(event => event.event === 'room' && event.data.roomId === room.id))
@@ -369,7 +355,6 @@ test('a phone stages photos one by one, then send puts them in one message with 
     { type: 'image', mediaType: 'image/jpeg', data: pixel },
     { type: 'image', mediaType: 'image/png', data: pixel },
   ])
-  // A photo goes once: sending the same ids again is refused, and photos alone are a message.
   assert.equal((await call('send', { sessionId: chief, text: '', images: [first] })).error.code, 'bot/stale')
   const third = (await call('stage-image', { mediaType: 'image/jpeg', data: pixel })).value.id
   assert.equal((await call('send', { sessionId: chief, text: '', images: [third] })).ok, true)
@@ -766,7 +751,6 @@ test('markdown-image resolves archived part workspaces, returns rev, allows grou
   assert.equal(unchanged.value.bytes, undefined)
   assert.equal(unchanged.value.rev, fromNew.value.rev)
 
-  // Overwrite with the exact same byte length (9 bytes) to verify content hashing detects in-place edits.
   const updatedBytes = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 9])
   writeFileSync(join(newDir, 'charts', 'plot.png'), updatedBytes)
   const changed = await call('markdown-image', { sessionId: part2, path: './charts/plot.png', knownRev: fromNew.value.rev })

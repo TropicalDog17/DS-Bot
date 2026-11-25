@@ -1,14 +1,4 @@
 #!/usr/bin/env node
-// Prints, as JSON, what the Main Bot of a fixed team sees in its own chat at one version
-// of DS Bot: its prompt sections, its per-turn context (the routing digest) and the tools
-// it may call, with the board plugin installed. The routing eval (eval_routing.py in the
-// deploy scripts) runs the same requests through these at two versions and compares.
-// No model, no DSH profile and no user data: the team lives in a temporary folder.
-//
-//   node --import ./test/harness-resolve.mjs dev/routing-prompt.mjs [--root <ds-bot dir>]
-//
-// --root reads another checkout of ds-bot (a `git worktree` of an older commit), so one
-// copy of this script reads every version; what a version lacks is left out.
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -18,8 +8,6 @@ const at = process.argv.indexOf('--root')
 const root = resolve(at === -1 ? join(import.meta.dirname, '..') : process.argv[at + 1])
 const load = path => import(pathToFileURL(join(root, path)).href)
 
-// DSH's own tools, the same at every version: names and short schemas are enough for a
-// model to choose between them.
 const DSH_TOOLS = [
   ['read', 'Read a file.', { path: { type: 'string' } }],
   ['bash', 'Run a shell command.', { command: { type: 'string' } }],
@@ -74,13 +62,12 @@ async function main() {
   const rt = createRuntime(ctx, { home, github: false, diagnosticsFile: false })
   await rt.load()
 
-  // The board, as its own plugin would install beside DS Bot.
   const boardTools = []
   const boardSections = new Map()
   let board
-  if (existsSync(join(root, 'src/board/plugin.js'))) {
-    const { install } = await load('src/board/plugin.js')
-    const { openBoardStore } = await load('src/board/store.js')
+  if (existsSync(join(root, 'src/board/plugin.ts'))) {
+    const { install } = await load('src/board/plugin.ts')
+    const { openBoardStore } = await load('src/board/store.ts')
     const file = join(home, 'board', 'board.json')
     board = install({ on: () => () => {} }, { file, watchMs: 0 }, {
       identity: provided.get('botSessionIdentity') ?? { ownerOfSession: id => rt.ownerOfSession?.(id), subscribe: () => () => {} },
@@ -94,8 +81,6 @@ async function main() {
     })
   }
 
-  // The Main Bot's own chat Session, as DSH creates it: the team tools register on it
-  // and the Main Bot's mask (if this version has one) restricts it.
   const registered = []
   const denied = new Set()
   const agent = {

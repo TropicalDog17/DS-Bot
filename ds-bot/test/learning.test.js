@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { createRuntime } from '../index.js'
-import { agentsAnswer, agentsProblem, agentsRequest, applyEdits, LEARNING, parseJson, skillProblem, withoutReviewedAgentsRecords } from '../src/host/learning.js'
+import { agentsAnswer, agentsProblem, agentsRequest, applyEdits, LEARNING, parseJson, skillProblem, withoutReviewedAgentsRecords } from '../src/host/learning.ts'
 import { fakeContext } from './fake-ctx.js'
 
 const TEAM = {
@@ -183,7 +183,6 @@ test('agentsAnswer reads an edit written as the answer, an empty replacement, an
   assert.deepEqual(apart.edits.map(edit => [edit.old, edit.text]), [['- Use yarn.', '- Use pnpm.'], ['- Run `yarn test`.', '- Run `pnpm test`.']])
   assert.equal(applyEdits(current, apart.edits), '# Project\n- Use pnpm.\n- Do not edit vendor/.\n- Run `pnpm test`.\n')
   assert.equal(answer({ action: 'edit', edits: [{ op: 'remove', old: '- Use yarn.\n- Run `yarn test`.', why }] }).edits.length, 2)
-  // Lines apart with a different number of new lines stay one edit, and the check refuses it.
   const uneven = answer({ action: 'edit', edits: [{ op: 'replace', old: '- Use yarn.\n- Run `yarn test`.', text: '- Use pnpm.', why }] })
   assert.match(agentsProblem(uneven, current), /exactly once/)
   assert.deepEqual(answer({ action: 'none', reason: 'Routine work.' }), { action: 'none', reason: 'Routine work.' })
@@ -586,8 +585,6 @@ test('long turns ending during review remain pending for the next pass', async t
     config: { learningTimes: { tickMs: 100_000 } },
   })
   t.after(() => runtime.stop())
-  // Every load and save rebuilds the owner maps from the roster, and the startup model sync
-  // saves while the test runs: b3 is put back after each of them.
   const owned = () => { runtime.rt.chatOwners.set('b3', 'b2') }
   const load = runtime.rt.load
   runtime.rt.load = async (...args) => {
@@ -845,7 +842,6 @@ test('declined proposals are recorded and included in the next skill request', a
   assert.equal(runtime.teamState().capabilities.items['release-checks'], undefined)
   assert.equal(runtime.learningState().declined[0].name, 'release-checks')
   assert.match(runtime.requests[1].messages[0].content[0].text, /Proposals the user declined[\s\S]*- release-checks: Use when checking a release\./)
-  // The declined card stays in the chat part it was answered in, read-only.
   const view = (await runtime.call('state')).value
   assert.equal(view.learning.b2, undefined)
   assert.deepEqual(view.learningSettled.b2.map(entry => [entry.id, entry.name, entry.outcome, entry.sessionId]), [[proposal.id, 'release-checks', 'declined', 'b2']])

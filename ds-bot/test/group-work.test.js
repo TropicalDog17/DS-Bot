@@ -6,13 +6,12 @@ import { test } from 'node:test'
 import { afterRound } from './relay-rows.js'
 import { createRuntime } from '../index.js'
 import { fakeAttachments, fakeContext } from './fake-ctx.js'
-import { LONG_HEAD, MESSAGE_INLINE_MAX, ROOM_STEP_GAP_MS, ROOM_WORK_GRACE_MS } from '../src/host/constants.js'
+import { LONG_HEAD, MESSAGE_INLINE_MAX, ROOM_STEP_GAP_MS, ROOM_WORK_GRACE_MS } from '../src/host/constants.ts'
 import { scopeTarget } from '@deepseek-ai/dsh-scope'
-import { promisesWork } from '../src/host/turns.js'
+import { promisesWork } from '../src/host/turns.ts'
 
 let rt
 
-// Chief, the admin of group 'r1', speaks there from 'ga'; Writer from 'gb'; Tester from 'gc'.
 const seed = (room = {}, extraRooms = {}, bots = {}, top = {}) => ({
   version: 1,
   mainBotIds: ['a'],
@@ -89,7 +88,6 @@ async function start(t, room, services, extraRooms, bots, llm, top, files = {}) 
   }
   const tool = (name, args, sessionId, exec = {}) => rt.teamTools.find(d => d.name === name).execute(args, { agent: { id: sessionId }, ...exec })
   const call = async (endpoint, payload) => (await route.fetch(new Request('http://localhost/api/bot', { method: 'POST', body: JSON.stringify({ endpoint, payload }) }))).json()
-  // A Session takes up the newest message it was sent, as a new turn.
   const begin = (sessionId) => {
     const message = agentOf(sessionId).calls.at(-1)
     agentOf(sessionId).inbox.nextTurn.length = 0
@@ -104,8 +102,6 @@ async function start(t, room, services, extraRooms, bots, llm, top, files = {}) 
     emit(sessionId, 'assistant/message', { message: { content: [{ type: 'text', text: reply }] } })
     emit(sessionId, 'turn/end', { turn: turns.get(sessionId), reason: { kind: 'completed' } })
   }
-  // The user's message in the group, or a Bot's post the group Session took up, and the
-  // round it starts.
   const round = (callId, message, sessionId = 'r1') => {
     emit(sessionId, 'user/message', message)
     let result
@@ -125,7 +121,6 @@ async function start(t, room, services, extraRooms, bots, llm, top, files = {}) 
   return { home, ctx, agentOf, emit, emitScoped, tool, call, begin, finish, round, say, takePost, selected }
 }
 
-// The save before a group post runs on a timer; waiting with setImmediate starves it.
 const until = async (check, ms = 3000) => {
   const stop = Date.now() + ms
   while (!check() && Date.now() < stop) await new Promise(resolve => setTimeout(resolve, 20))
@@ -171,9 +166,6 @@ test('work past the grace lets the round go on, and the member that asked answer
   assert.deepEqual(host.agentOf('gc').calls, [])
 })
 
-// 公开#165: asked in a group to hand out work, Chief sent it with message_bot. Members
-// did it in their own chats, apart from the group (Bots outside the group too), and
-// again when called in the group.
 test('message_bot from a group to one of its members calls it there, as "@Name" would', async (t) => {
   const host = await start(t)
   const first = host.round('c1', host.say('@Chief 安排一下文档'))
@@ -198,12 +190,9 @@ test('a group Session made before the member\'s level applied gets it on the nex
     listModels: async () => [{ id: 'v4-flash', name: 'v4-flash', inputModalities: ['text'] }],
     resolveModelInfo: async () => ({ reasoning: { efforts: [{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }], defaultEffort: 'high' } }),
   }
-  // Saved state from before the fix: 'gb' already exists and the Bot-level record
-  // already says applied — the bot-wide check would never revisit the group Session.
   const host = await start(t, { members: ['a', 'b'], sessions: { a: 'ga', b: 'gb' } }, undefined, undefined,
     { b: { model: 'deepseek/v4-flash', effort: 'low', appliedModel: 'deepseek/v4-flash', appliedEffort: 'low' } }, llm)
   await host.call('state', {})
-  // The group Session gets the member's level once; the own chat is not re-selected.
   await settle(() => host.selected.length === 1)
   assert.deepEqual(host.selected, [{ sessionId: 'gb', provider: 'deepseek', model: 'v4-flash', reasoningEffort: 'low' }])
 })
@@ -217,7 +206,6 @@ test('a member\'s group Session runs on the member\'s model and thinking level',
   const host = await start(t, { members: ['a', 'b'], sessions: { a: 'ga' } }, undefined, undefined, { b: { model: 'deepseek/v4-flash', effort: 'low' } }, llm)
   const first = host.round('c1', host.say('@Writer 看一下'))
   await settle(() => host.agentOf('s1').calls.length === 1)
-  // The group Session was made for the turn: it got the member's route, level and all.
   assert.deepEqual(host.selected.at(-1), { sessionId: 's1', provider: 'deepseek', model: 'v4-flash', reasoningEffort: 'low' })
   host.begin('s1')
   host.finish('s1', '看过了。')
@@ -304,9 +292,6 @@ test('read_group_chat reads textless events among messages and keeps seq reads c
   }
 })
 
-// 公开#185: the result went out as the work's first step line, next to one last tool
-// call, and the turn then ended with an empty reply. Chief, which asked for the work,
-// was never called to answer it.
 const resultAsStep = async (t, ask) => {
   t.mock.timers.enable({ apis: ['setTimeout'] })
   const host = await start(t)
@@ -369,7 +354,6 @@ test('replies a post waits for are work handed on: the answer to the Bot that as
   const waiting = (await host.call('state', {})).value
   assert.equal(waiting.activity.a, 'waiting')
   assert.deepEqual([waiting.work.waiting.a.bots, waiting.work.waiting.a.rooms, waiting.work.waiting.a.for], [[], ['r1'], ['c']])
-  // The menu gives up the wait by its group's name.
   assert.deepEqual(waiting.work.waiting.a.waits.map(item => [item.room, item.name, typeof item.id]), [['r1', 'Ops', 'string']])
   const done = host.round('c1', host.takePost())
   await settle(() => host.agentOf('gb').calls.length === 1)
@@ -385,8 +369,6 @@ test('replies a post waits for are work handed on: the answer to the Bot that as
   assert.equal(text(host.agentOf('c').calls[0]), '[Reply from Chief]\nWriter 看过了，没问题。\n\n[Handed back to Chief for this work]\n\nGroup "Ops":\nReplies to your post (oldest first):\nWriter: 文档没问题。')
 })
 
-// A group post's report comes back even after the user gave up the wait: it is the
-// late answer it is, and it opens no work again.
 test('replies that arrive after the wait for a group was given up come back marked late', async (t) => {
   const host = await start(t)
   await host.tool('message_bot', { to: 'Chief', message: '让群里看一下文档' }, 'c')
@@ -397,13 +379,10 @@ test('replies that arrive after the wait for a group was given up come back mark
   assert.deepEqual(waiting.a.waits.map(item => [item.room, item.name]), [['r1', 'Ops']])
   const groupWork = waiting.a.waits[0].id
   const done = host.round('c1', host.takePost())
-  // The user gives up the wait by its group's name.
   assert.equal((await host.call('abandon-work', { id: groupWork })).ok, true)
   await settle(() => host.agentOf('a').calls.length === 2)
   assert.match(text(host.agentOf('a').calls.at(-1)), /^\[Waiting given up · Ops did not hand back this work/)
 
-  // The round ends afterwards: its replies still reach Chief, marked as the late
-  // answer they are.
   await settle(() => host.agentOf('gb').calls.length === 1)
   host.begin('gb')
   host.finish('gb', '文档没问题。')
@@ -413,17 +392,13 @@ test('replies that arrive after the wait for a group was given up come back mark
   assert.match(text(report), /^\[Group chat "Ops" · replies to your post\]\n\[Late answer: the user had already given up waiting for this work/)
   assert.match(text(report), /Writer: 文档没问题。/)
   assert.equal(report.source.work, undefined)
-  // The note that told the late answer apart is used up, and it stays that way.
   await host.call('set-prefs', {})
   const saved = JSON.parse(readFileSync(join(host.home, 'state.json'), 'utf8'))
   assert.equal(saved.works[groupWork], undefined)
   assert.deepEqual(saved.abandonedWorks ?? {}, {})
-  // Chief no longer waits for the group.
   assert.equal((await host.call('state', {})).value.work.waiting.a, undefined)
 })
 
-// Chief speaks in "Design" from 'da'; its post there came from "Ops" ('ga'), so the
-// replies to the post come back to 'ga', not to its own chat 'a'.
 test('a report-back post a Bot wrote from another group comes back to that conversation', async (t) => {
   const design = { id: 'r2', name: 'Design', members: ['a', 'b'], mode: 'admin', admin: 'b', named: true, sessions: { a: 'da', b: 'db' }, log: [], seq: 0, seen: {} }
   const host = await start(t, {}, undefined, { r2: design })
@@ -435,7 +410,6 @@ test('a report-back post a Bot wrote from another group comes back to that conve
   host.begin('db')
   host.finish('db', '文档没问题。')
   await settle(() => done() !== undefined)
-  // The report arrives in the "Ops" conversation the post was written from.
   await settle(() => host.agentOf('ga').calls.length === 1)
   assert.equal(host.agentOf('a').calls.length, 0)
   assert.match(text(host.agentOf('ga').calls[0]), /^\[Group chat "Design" · replies to your post\]/)
@@ -447,9 +421,7 @@ test('a member called while still at earlier work lets the round go on at once',
   const result = host.round('c1', host.say('@Writer 再看看这个'))
   await settle(() => result() !== undefined)
   assert.deepEqual(kinds(result()), [['working', 'Writer']])
-  // A member at work has not run its turn here, and an event is not a message.
   assert.equal(result().replies[0].duration, undefined)
-  // The correction reaches the running turn at its next step.
   assert.equal(host.agentOf('gb').inbox.nextTurn.length, 0)
   assert.equal(host.agentOf('gb').inbox.nextStep.length, 1)
   assert.match(text(host.agentOf('gb').inbox.nextStep[0]), /再看看这个/)
@@ -502,7 +474,6 @@ test('a quick team tool does not let the round go on', async (t) => {
   assert.deepEqual(kinds(result()), [['message', 'Writer']])
 })
 
-// Under PTC the model calls run_code, and the program dispatches the real tools.
 const dispatch = (emit, sessionId, parentCallId, n, name) => {
   const subCallId = `${parentCallId}:ptc:${n}`
   emit(sessionId, 'tool/ptc-dispatch-start', { rootCallId: parentCallId, parentCallId, subCallId, name, arguments: {} })
@@ -583,9 +554,6 @@ test('a late post that calls a member reaches it every time, with no count to st
   assert.equal(saved.paused, undefined)
 })
 
-// #198: a post during a running round waited for the round's own relay before
-// anyone could see it. It is written into the log and the running round at once,
-// and the relay it still opens shows it again nowhere.
 const logLines = host => JSON.parse(readFileSync(join(host.home, 'state.json'), 'utf8')).rooms.r1.log
 const busyRound = async (t, room, services) => {
   const host = await start(t, room, services)
@@ -604,7 +572,6 @@ test('a post during a running round is in the log at once, calls its members in 
   assert.deepEqual([logged.who, logged.botId, logged.text], ['Chief', 'a', '@Tester 看一下文档'])
   assert.deepEqual(host.agentOf('r1').calls, [], 'absorbed into the running round without polluting the room Session queue')
 
-  // The Tester starts in the running round at once, while the Writer still works.
   await settle(() => host.agentOf('gc').calls.length === 1)
   assert.equal(host.begin('gc').source.askedBy, 'a')
   assert.match(text(host.agentOf('gc').calls[0]), /Chief: @Tester 看一下文档/)
@@ -642,7 +609,6 @@ test('a late reply during a running round is logged at once, called in that roun
   await settle(() => host.agentOf('gb').calls.length === 1)
   host.begin('gb')
   host.emit('gb', 'tool/call', { callId: 'k1', name: 'pwsh', arguments: '{}' })
-  // The round moves on without Writer; its result lands while a second round runs.
   t.mock.timers.tick(ROOM_WORK_GRACE_MS)
   await settle(() => first() !== undefined)
   const second = host.round('c2', host.say('@Chief 再确认一下'))
@@ -652,7 +618,6 @@ test('a late reply during a running round is logged at once, called in that roun
   host.finish('gb', '整理好了，在 docs/ 下。')
   await settle(() => logLines(host).some(line => line.who === 'Writer' && line.text === '整理好了，在 docs/ 下。'))
   assert.deepEqual(host.agentOf('r1').calls, [])
-  // The Chief, which asked for it, answers the result in this round once its own turn ends.
   host.finish('ga', '确认过了。')
   await settle(() => host.agentOf('ga').calls.length === 3)
   host.begin('ga')
@@ -669,7 +634,6 @@ test('a member stopped during a running round is logged at once and not repeated
   await settle(() => host.agentOf('gb').calls.length === 1)
   host.begin('gb')
   host.emit('gb', 'tool/call', { callId: 'k1', name: 'pwsh', arguments: '{}' })
-  // The user stops Writer while its turn still runs inside the round.
   const stopped = await host.call('stop-member-work', { roomId: 'r1', botId: 'b' })
   assert.deepEqual([stopped.ok, stopped.value], [true, true])
   const last = logLines(host).at(-1)
@@ -695,7 +659,6 @@ test('a Main Bot outside the group posts into its running round, and a long post
   assert.equal(line.files?.length, 1)
   assert.match(line.text, /\[File "Post from Chief\.txt"/)
   assert.deepEqual(host.agentOf('r1').calls, [])
-  // The admin answers the post in the running round, once its own turn there ends.
   host.finish('gb', '整理好了。')
   await settle(() => host.agentOf('gb').calls.length === 2)
   host.begin('gb')
@@ -704,8 +667,6 @@ test('a Main Bot outside the group posts into its running round, and a long post
   assert.equal(logLines(host).filter(entry => entry.files?.length === 1).length, 1)
 })
 
-// #198: a post past MESSAGE_INLINE_MAX keeps its first LONG_HEAD characters and a file.
-// "@" past that opening is taken from the whole message, before the cut.
 const filler = count => '文'.repeat(count)
 const postBody = post => text(post).replace(/^\[Group post from [^\n]*\n/, '')
 const fileOf = (store, post) => {
@@ -904,7 +865,6 @@ test('a post with no round running keeps the old way: queued, no logged mark', a
   assert.equal(logLines(host).filter(line => line.text === '@Writer 看一下文档').length, 1)
 })
 
-// A member posts into a group it is in; nobody answers a post that names nobody.
 test('an ordinary member posts into its group from its own chat; nobody answers', async (t) => {
   const host = await start(t)
   const posted = await host.tool('post_to_group', { group: 'Ops', message: '文档有了新进展' }, 'b')
@@ -1004,7 +964,6 @@ test('a member post during a running round is logged at once and calls nobody ne
 test('a member post that calls nobody does not pick the speakers over a user message', async (t) => {
   const host = await start(t)
   await host.tool('post_to_group', { group: 'Ops', message: '让群里注意' }, 'b')
-  // Both land in the same relay; the user's message picks the speakers.
   host.emit('r1', 'user/message', host.takePost())
   const first = host.round('c1', host.say('检查一下文档'))
   await settle(() => host.agentOf('ga').calls.length === 1)
@@ -1025,7 +984,6 @@ test('a member cannot post into a group it is not in', async (t) => {
   assert.equal(logLines(host).length, 0)
 })
 
-// Such a message was sent before message_bot from a group stayed in that group.
 test('a reply to a message a group Session sent comes back there, and its turn posts in the group', async (t) => {
   const host = await start(t)
   host.emit('c', 'turn/start', { turn: 1 })
@@ -1057,17 +1015,13 @@ test('the user stops a member\'s work in a group, and the group shows it', async
   assert.deepEqual(log.map(line => [line.who, line.kind]), [['Writer', 'stopped']])
 })
 
-// #592: stopping only the round left a member the round moved on from working. The round
-// runs in DS Bot, not in the group's Session, so the Session has nothing to cancel.
 test('one press stops the group\'s round and every member at work there, and nothing elsewhere', async (t) => {
   const host = await start(t)
   assert.equal((await host.call('stop-room-work', { roomId: 'r1' })).value, false)
-  // Writer still works on what an earlier round asked; Chief speaks in the round that runs.
   host.emit('gb', 'turn/start', { turn: 1 })
   const first = host.round('c1', host.say('@Chief 看看进度'))
   await settle(() => host.agentOf('ga').calls.length === 1)
   host.begin('ga')
-  // Tester works in its own chat.
   host.emit('c', 'turn/start', { turn: 1 })
   const stopped = await host.call('stop-room-work', { roomId: 'r1' })
   assert.deepEqual([stopped.ok, stopped.value], [true, true])
@@ -1075,8 +1029,6 @@ test('one press stops the group\'s round and every member at work there, and not
   for (const id of ['r1', 'c', 'gc']) assert.deepEqual(host.agentOf(id).cancelled, [], id)
   host.emit('ga', 'turn/end', { turn: 1, reason: { kind: 'aborted' } })
   await settle(() => first() !== undefined)
-  // The round ended with the stop: Writer, which worked outside it, tells the group in a
-  // post of its own.
   const post = host.takePost()
   assert.deepEqual([post.source.stopped, post.source.senderSessionId], [true, 'b'])
   const after = host.round('c2', post)
@@ -1127,7 +1079,6 @@ test('stopping a member stops its subagents and leaves Sessions forked from it a
   assert.deepEqual(cancelled, ['sub-1'])
 })
 
-// An unhandled rejection here would end the Host.
 test('a stopped round warns when a member turn cannot be stopped', async (t) => {
   const host = await start(t)
   const warned = []
@@ -1149,8 +1100,6 @@ test('members still at work show in the team view and in the prompts of the othe
   host.emit('gb', 'tool/call', { callId: 'k1', name: 'pwsh', arguments: '{}' })
   const result = host.round('c1', host.say('@Tester 你怎么看'))
   await settle(() => host.agentOf('gc').calls.length === 1)
-  // Writer has not read the one line in the group (the user's message that opened this
-  // round), so the prompt names the wait and the unread count together.
   assert.match(text(host.agentOf('gc').calls[0]), /Still at work on what they were asked; each posts here when done: Writer \(1 min, with 1 group message\(s\) it has not read yet\)\./)
   host.begin('gc')
   const { value } = await host.call('state', {})
@@ -1159,11 +1108,8 @@ test('members still at work show in the team view and in the prompts of the othe
   await settle(() => result() !== undefined)
 })
 
-// #510: the member's read position moved before the delivery, so a delivery that
-// failed left the member past the round it missed, and that round never reached it.
 test('a member whose delivery failed sees the round it missed in its next prompt', async (t) => {
   const host = await start(t)
-  // The delivery to Writer fails once; the Session is there, the message did not land.
   let failed = false
   host.ctx.sessions.flush = async (session) => {
     if (session?.id === 'gb' && !failed) {
@@ -1177,10 +1123,8 @@ test('a member whose delivery failed sees the round it missed in its next prompt
   host.finish('ga', '@Writer 把文档整理好')
   await settle(() => first() !== undefined)
   assert.deepEqual(kinds(first()), [['message', 'Chief'], ['failed', 'Writer']])
-  // The failed delivery leaves the member where it was: it has read nothing yet.
   assert.equal(JSON.parse(readFileSync(join(host.home, 'state.json'), 'utf8')).rooms.r1.seen.b, undefined)
 
-  // Its next prompt carries the round it missed.
   const second = host.round('c2', host.say('@Writer 继续'))
   await settle(() => host.agentOf('gb').calls.length === 2)
   const prompt = text(host.agentOf('gb').calls[1])
@@ -1188,7 +1132,6 @@ test('a member whose delivery failed sees the round it missed in its next prompt
   assert.match(prompt, /Chief: @Writer 把文档整理好/)
   assert.match(prompt, /User: @Writer 继续/)
 
-  // The delivery that lands moves the position on, so those lines are not shown again.
   host.begin('gb')
   host.finish('gb', '整理好了。')
   await settle(() => second() !== undefined)
@@ -1199,7 +1142,6 @@ test('a member whose delivery failed sees the round it missed in its next prompt
   assert.doesNotMatch(later, /@Writer 继续/)
 })
 
-// A step that says something and calls a tool, as a model writes it while it works.
 const step = (host, sessionId, said, callId, name = 'pwsh', args = '{}') => {
   host.emit(sessionId, 'assistant/message', { message: { content: [{ type: 'text', text: said }, { type: 'tool-call', id: callId, name }] } })
   host.emit(sessionId, 'tool/call', { callId, name, arguments: args })
@@ -1207,8 +1149,6 @@ const step = (host, sessionId, said, callId, name = 'pwsh', args = '{}') => {
 const progress = async host => (await host.call('room-progress', { roomId: 'r1' })).value[0]
 
 test('room-progress answers for any part of the group\'s own Session', async (t) => {
-  // The group's own Session moved on once: 'r1' is the group's id and an earlier
-  // part, 's1' its current one; rounds are still keyed by the group's id.
   const host = await start(t, { sessionId: 's1', parts: [{ sessionId: 'r1', endedAt: 1 }] })
   host.round('c1', host.say('@Writer 整理文档'))
   await settle(() => host.agentOf('gb').calls.length === 1)
@@ -1222,7 +1162,6 @@ test('what a member writes while it works shows in the round at once, and its @ 
   await settle(() => host.agentOf('gb').calls.length === 1)
   host.begin('gb')
   step(host, 'gb', '收到，我先看看 docs/ 的结构。@Tester 你等下帮我验一下', 'k1', 'list_bots')
-  // The line calls the Tester at once, while the Writer still works.
   await settle(() => host.agentOf('gc').calls.length === 1)
   const live = await progress(host)
   assert.deepEqual(live.replies.map(reply => [reply.name, reply.text]), [['Writer', '收到，我先看看 docs/ 的结构。@Tester 你等下帮我验一下']])
@@ -1300,7 +1239,6 @@ test('after the round went on, lines a member writes close together reach the gr
   await settle(() => quiet() !== undefined)
   assert.deepEqual(quiet().replies, [])
 
-  // A line still held when the work ends opens the result.
   host.emit('gb', 'tool/result', { callId: 'k3' })
   step(host, 'gb', '索引也改完了。', 'k4')
   host.emit('gb', 'tool/result', { callId: 'k4' })
@@ -1390,7 +1328,6 @@ test('the team view says what a member is doing in the call\'s own words', async
   const { value } = await host.call('state', {})
   assert.deepEqual(value.work.rooms.r1.map(entry => [entry.botId, entry.tool, entry.note, entry.target]), [['b', 'pwsh', 'Download Ghidra 12.1.4 and check its hash', undefined], ['c', 'read', undefined, 'dump.py']])
   assert.equal(value.work.bots.b.note, 'Download Ghidra 12.1.4 and check its hash')
-  // What the Bot said in the step that made the call comes with it.
   host.emit('ga', 'turn/start', { turn: 1 })
   step(host, 'ga', '先把 JDK\n下下来。', 'k3', 'pwsh', JSON.stringify({ description: 'Download JDK 21' }))
   const later = (await host.call('state', {})).value
@@ -1411,14 +1348,11 @@ test('the team view says when each Session\'s running turn began, for the clock 
   assert.deepEqual((await host.call('state', {})).value.work.turns, {})
 })
 
-// 公开#124: a Bot deleted while it worked stayed "thinking" until DSH restarted, and the
-// Bot that had asked it something never heard back.
 test('deleting a working Bot clears its activity and tells the Bots waiting for its reply', async (t) => {
   const host = await start(t)
   host.emit('b', 'turn/start', { turn: 1 })
   host.emit('b', 'user/message', { content: [{ type: 'text', text: '[Message from Chief]\nwrite the docs' }], source: { kind: 'bot', role: 'request', senderSessionId: 'a', senderName: 'Chief', exchangeId: 'x1', hop: 1 } })
   host.emit('b', 'tool/call', { callId: 'k1', name: 'pwsh', arguments: '{}' })
-  // A second request that Writer has not read yet.
   host.agentOf('b').inbox.nextStep.push({ id: 'm2', source: { kind: 'bot', role: 'request', senderSessionId: 'c', senderName: 'Tester', exchangeId: 'x2', hop: 1 } })
   assert.equal((await host.call('state', {})).value.activity.b, 'working')
 
@@ -1431,14 +1365,11 @@ test('deleting a working Bot clears its activity and tells the Bots waiting for 
     assert.deepEqual([reply.source.role, reply.source.replyTo], ['reply', exchangeId])
     assert.equal(text(reply), '[Reply from Writer]\nWriter was deleted before it could answer your message.')
   }
-  // The stopped turn ends after the delete; it brings nothing back.
   host.emit('b', 'turn/start', { turn: 2 })
   host.emit('b', 'turn/end', { turn: 1, reason: { kind: 'aborted' } })
   assert.equal((await host.call('state', {})).value.activity.b, undefined)
 })
 
-// #619: a member that finishes tool work inside the 15s grace without writing @Caller
-// still hands the result back to the Bot that asked for it.
 test('in-round tool work that finishes before the grace without @Caller still wakes the caller (#619)', async (t) => {
   const host = await start(t)
   const first = host.round('c1', host.say('排查一下构建报错'))
@@ -1450,7 +1381,6 @@ test('in-round tool work that finishes before the grace without @Caller still wa
   host.begin('gb')
   host.emit('gb', 'tool/call', { callId: 'k1', name: 'read', arguments: JSON.stringify({ file_path: 'build.log' }) })
   host.emit('gb', 'tool/result', { callId: 'k1' })
-  // Finishes inside the round (< 15s) and forgets to write @Chief.
   host.finish('gb', '查清楚了，是缺少环境变量 FOO，需要决定用哪个默认值。')
 
   await settle(() => host.agentOf('ga').calls.length === 2)
@@ -1466,9 +1396,6 @@ test('in-round tool work that finishes before the grace without @Caller still wa
   ])
 })
 
-// #872: Chief calls Writer in a step line and goes on with its own part. Writer's
-// result lands while Chief is still in that turn, which cannot see it, so Chief
-// answers it in a turn of its own once the first one ends.
 test('a caller still in its own turn answers the batch result after that turn (#872)', async (t) => {
   const host = await start(t)
   const first = host.round('c1', host.say('全面检查一下构建'))
@@ -1493,8 +1420,6 @@ test('a caller still in its own turn answers the batch result after that turn (#
   assert.deepEqual(first().replies.map(reply => reply.name), ['Chief', 'Writer', 'Chief', 'Chief'])
 })
 
-// #872: a member the user called answers the user; asking the user to confirm does
-// not call the admin in.
 test('a member\'s reply to the user that asks for a confirmation does not call the admin (#872)', async (t) => {
   const host = await start(t)
   const first = host.round('c1', host.say('@Writer 把首页标题改成春季上新'))
@@ -1508,9 +1433,6 @@ test('a member\'s reply to the user that asks for a confirmation does not call t
   assert.deepEqual(first().replies.map(reply => reply.name), ['Writer'])
 })
 
-// Parallel fan-in barrier: when Chief calls @Writer @Tester in one message and both go
-// past the 15s grace, Writer's early result posts at once without waking Chief, and
-// Tester's final result wakes Chief once with both results.
 test('parallel batch barrier posts each late reply at once and wakes the caller once when all finish', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] })
   const host = await start(t)
@@ -1528,7 +1450,6 @@ test('parallel batch barrier posts each late reply at once and wakes the caller 
   await settle(() => first() !== undefined)
   assert.deepEqual(kinds(first()), [['message', 'Chief'], ['working', 'Writer'], ['working', 'Tester']])
 
-  // Writer finishes first while Tester is still working: its reply posts with quiet=true.
   host.emit('gb', 'tool/result', { callId: 'k1' })
   host.finish('gb', '文档检查完毕，没有断链。')
   await settle(() => host.agentOf('r1').calls.length === 1)
@@ -1539,7 +1460,6 @@ test('parallel batch barrier posts each late reply at once and wakes the caller 
   await settle(() => second() !== undefined)
   assert.equal(host.agentOf('ga').calls.length, 1, 'Chief was not woken prematurely')
 
-  // Tester finishes second: now the batch barrier releases and wakes Chief once.
   host.emit('gc', 'tool/result', { callId: 'k2' })
   host.finish('gc', '测试全部通过。')
   await settle(() => host.agentOf('r1').calls.length === 1)
@@ -1556,24 +1476,19 @@ test('parallel batch barrier posts each late reply at once and wakes the caller 
   await settle(() => third() !== undefined)
 })
 
-// #469: a member that replies only "收到，我现在开始排查" without calling any tool gets
-// one automatic continuation turn on the same exchange so the work actually runs.
 test('a member that only promises to start working without calling a tool gets one continuation turn (#469)', async (t) => {
   const host = await start(t)
   const first = host.round('c1', host.say('@Writer 排查一下构建失败的原因'))
   await settle(() => host.agentOf('gb').calls.length === 1)
   const initial = host.begin('gb')
-  // Ends the turn with a verbal promise only and 0 tool calls.
   host.finish('gb', '收到，我现在开始排查构建日志。')
 
-  // The host automatically nudges gb once on the same exchangeId.
   await settle(() => host.agentOf('gb').calls.length === 2)
   const retryMsg = host.begin('gb')
   assert.equal(retryMsg.source.exchangeId, initial.source.exchangeId)
   assert.equal(retryMsg.source.retried, true)
   assert.match(text(retryMsg), /stopped before calling any tool/)
 
-  // In the continuation turn the member calls its tool and gives the real answer.
   host.emit('gb', 'tool/call', { callId: 'k1', name: 'read', arguments: JSON.stringify({ file_path: 'build.log' }) })
   host.emit('gb', 'tool/result', { callId: 'k1' })
   host.finish('gb', '排查完毕：原因是端口冲突。')
@@ -1584,9 +1499,6 @@ test('a member that only promises to start working without calling a tool gets o
   ])
 })
 
-// #872: a verb with 过了/完了/完毕/好了 reports done work. A plan of several sentences,
-// or a target that starts with 过 or 完, is still a promise; a reply that also answers
-// may match, and its member passes on the retry.
 test('done work is no promise, and a plan of several sentences still is (#872)', () => {
   for (const said of ['收到，我现在开始排查构建日志。', '明白，我先排查一下日志，然后跑测试。', '收到，我现在开始排查。稍后给你结果。', '收到，我先查看过去的记录。', '好的，我先检查完成情况。', '我现在开始排查', '开工！', "I'll check the logs. Then I'll run the tests.", 'Let me look into it.']) {
     assert.equal(promisesWork(said), true, said)
@@ -1596,8 +1508,6 @@ test('done work is no promise, and a plan of several sentences still is (#872)',
   }
 })
 
-// #872: the opening already was the answer; the member passes on the retry and the
-// group sees it once.
 test('a member that passes on the promise retry is posted once (#872)', async (t) => {
   const host = await start(t)
   const first = host.round('c1', host.say('@Writer 方案 A 和 B 哪个好？'))
@@ -1612,11 +1522,8 @@ test('a member that passes on the promise retry is posted once (#872)', async (t
   assert.deepEqual(first().replies.map(reply => [reply.name, reply.text]), [['Writer', '好的，我看看。']])
 })
 
-// #872: a retried promise that a late turn passes on still tells the member that asked
-// the work is done, as a result that went out as a step line does.
 test('a late member that passes on the promise retry still hands the work back (#872)', async (t) => {
   const host = await start(t)
-  // A call the member reads after the round moved on: no round waits for this turn.
   host.agentOf('gb').followup({ content: [{ type: 'text', text: '[Group chat "Ops" · Chief mentioned you]\n看一下文档' }], source: { kind: 'bot', role: 'room', roomId: 'r1', exchangeId: 'x1', askedBy: 'a' } })
   host.begin('gb')
   host.finish('gb', '收到，我去看看文档。')
@@ -1629,9 +1536,6 @@ test('a late member that passes on the promise retry still hands the work back (
   assert.deepEqual([post.source.done, post.source.askedBy], [true, 'a'])
 })
 
-// Progress-based loop guard: consecutive 0-tool ack/repetitive relays pause after 6
-// turns and park the next call in room.paused, whereas tool calls reset the counter.
-// #872: the parked calls wait for the user, not for the next round of any kind.
 test('consecutive 0-tool ack ping-pong relays pause after 6 turns and go on only when the user writes', async (t) => {
   const host = await start(t)
   const first = host.round('c1', host.say('@Chief 开始'))
@@ -1657,13 +1561,11 @@ test('consecutive 0-tool ack ping-pong relays pause after 6 turns and go on only
   assert.match(await host.tool('read_group_chat', { group: 'Ops' }, 'a'),
     /\[Paused: Chief and Writer went back and forth 6 times without progress \(no tool used, only thanks or repeats\)\. The calls to @Writer wait until the user writes here; do not call them again\.\]/)
 
-  // A Bot's quiet late result opens a round, which leaves the parked call alone.
   const second = host.round('c2', { content: [{ type: 'text', text: '[Group post from Tester]\n测试跑完了' }], source: { kind: 'bot', form: 'relay', role: 'post', exchangeId: 'x2', senderSessionId: 'c', senderName: 'Tester', roomId: 'r1', late: true, quiet: true } })
   await settle(() => second() !== undefined)
   assert.equal(host.agentOf('gb').calls.length, 3)
   assert.equal(saved().paused.length, 1)
 
-  // The user's message brings the parked call back with the admin.
   const third = host.round('c3', host.say('好了，说正事'))
   await settle(() => host.agentOf('gb').calls.length === 4 && host.agentOf('ga').calls.length === 5)
   assert.match(text(host.begin('gb')), /Chief mentioned you/)
@@ -1674,9 +1576,6 @@ test('consecutive 0-tool ack ping-pong relays pause after 6 turns and go on only
   assert.equal(saved().paused, undefined)
 })
 
-// #701: when a group member spawns a DSH subagent and ends its own turn, the member
-// stays marked as working in the group, and stopping the group interrupts the subagent
-// and suppresses its late settlement notice.
 test('a group member with a running DSH subagent stays working and stop-room-work interrupts the subagent (#701)', async (t) => {
   const interrupted = []
   const host = await start(t, undefined, {
@@ -1693,24 +1592,19 @@ test('a group member with a running DSH subagent stays working and stop-room-wor
   await settle(() => first() !== undefined)
   assert.deepEqual(kinds(first()), [['message', 'Writer'], ['working', 'Writer']])
 
-  // Even though gb's own turn ended, Writer still shows as working on its subagent in r1.
   const stateDuring = (await host.call('state', {})).value
   assert.equal(stateDuring.activity.b, 'working')
   assert.deepEqual(stateDuring.work.rooms.r1, [{ botId: 'b', since: stateDuring.work.rooms.r1[0].since, tool: 'subagent', note: 'Run long benchmark' }])
 
-  // User clicks "Stop all" in the group: it interrupts sub-1 and logs Writer as stopped.
   const stopped = await host.call('stop-room-work', { roomId: 'r1' })
   assert.deepEqual([stopped.ok, stopped.value], [true, true])
   assert.deepEqual(interrupted, [{ childId: 'sub-1', opts: { kind: 'user', parentSessionId: 'gb' } }])
   assert.deepEqual((await host.call('state', {})).value.work.rooms.r1, undefined)
 
-  // Clear the stopped event post from r1's inbox.
   await settle(() => host.agentOf('r1').calls.length === 1)
   const stopPost = host.takePost()
   assert.equal(stopPost.source.stopped, true)
 
-  // Later, when the interrupted subagent emits its settlement notice to gb, gb is
-  // cancelled and suppressed so it does not speak in the group again.
   host.emit('gb', 'turn/start', { turn: 2 })
   host.emit('gb', 'user/message', {
     content: [{ type: 'text', text: 'Subagent sub-1 settled' }],
@@ -1733,7 +1627,6 @@ for (const noticeFirst of [true, false]) {
     host.finish('gb', '正在导出。')
     await settle(() => first() !== undefined)
     const revBefore = rt.state.revision
-    // An intermediate message from the running child must neither end it nor spend its label.
     host.emit('gb', 'user/message', {
       content: [{ type: 'text', text: 'Agent sub-1 sent a message: 进度 50%' }],
       source: { kind: 'agent-message', form: 'relay', senderSessionId: 'sub-1' },
@@ -1774,8 +1667,6 @@ for (const [reason, summary] of [['error', 'failed before it finished.'], ['max-
     host.emit('gb', 'subagent/catalog', { childId: 'sub-1', label: 'Export the deck' })
     host.finish('gb', '正在导出。')
     await settle(() => first() !== undefined)
-    // No subagent/end: an in-place plugin reload lost it, so the notice is the only
-    // ending this runtime sees. The child's own turn answers it with [PASS].
     const notice = {
       content: [
         { type: 'text', text: `Background subagent sub-1 ${summary}` },
@@ -1796,12 +1687,10 @@ for (const [reason, summary] of [['error', 'failed before it finished.'], ['max-
     assert.equal(shown[0].stopReason, reason)
     assert.equal(shown[0].helper, 'Export the deck')
     assert.equal(shown[0].text, `Export the deck — subagent ended (${reason})`)
-    // The same notice again, and the lifecycle ending arriving late, add no second row.
     host.emit('gb', 'user/message', notice)
     host.emitScoped('gb', 'subagent/end', { runId: 'run-1', provider: 'spawn', id: 'sub-1', local: true, stopReason: reason })
     assert.deepEqual(host.agentOf('r1').calls, [])
     assert.equal(rt.groupRows('r1', first().from).filter(row => row.kind === 'helper-failed').length, 1)
-    // A clean ending is not a failure: it adds no row and no post.
     host.emit('gb', 'subagent/catalog', { childId: 'sub-2', label: 'Check the slides' })
     host.emit('gb', 'user/message', {
       content: [{ type: 'text', text: 'Background subagent sub-2 finished.' }],
@@ -1827,11 +1716,9 @@ test('a child that runs again after settling gets its own failure row, and read-
   await until(() => rows().length === 1)
   assert.equal(rows()[0].helper, 'First run')
   assert.equal(rows()[0].stopReason, 'error')
-  // The same child takes a new run; the earlier row must not hide this ending.
   host.emitScoped('gb', 'subagent/start', { runId: 'run-2', provider: 'spawn', id: 'sub-1', local: true })
   host.emit('gb', 'user/message', failure)
   await until(() => rows().length === 2)
-  // A read-only window must never append to the ledger.
   const prevReadOnly = rt.readOnly
   rt.readOnly = () => ({ pid: 999 })
   try {
@@ -1912,8 +1799,6 @@ test('stopping a group before its callee starts clears the pending batch', async
   assert.equal(rt.roomBatchPending('r1'), false)
 })
 
-// A member that two Bots call is in both batches: each finished piece of work wakes
-// the Bot that asked for it, and only for that piece of work.
 const wakeNote = message => text(message).match(/^\[Group chat "Ops" · ([^\]]*)\]/)?.[1]
 const workStep = (host, sessionId, callId) => {
   host.emit(sessionId, 'tool/call', { callId, name: 'edit', arguments: '{}' })
@@ -1956,9 +1841,6 @@ test('a member two Bots called wakes each of them for its own call when it finis
   assert.equal(rt.roomBatchPending('r1'), false)
 })
 
-// Chief calls Writer and Tester together; Tester, at work in the background, calls Writer
-// as well. Writer's result for Chief waits for Tester, and Writer's result for Tester wakes
-// Tester, once.
 test('a member two Bots called wakes each of them for its own call when it finishes after the round went on', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] })
   const host = await start(t)
@@ -1974,7 +1856,6 @@ test('a member two Bots called wakes each of them for its own call when it finis
   t.mock.timers.tick(ROOM_WORK_GRACE_MS)
   await settle(() => first() !== undefined)
 
-  // Tester calls Writer for a log of its own while Writer reads the build log.
   step(host, 'gc', '@Writer 也帮我查一下磁盘空间', 'p1')
   await settle(() => host.agentOf('r1').calls.length === 1)
   const call = host.round('c2', host.takePost())
@@ -1986,7 +1867,6 @@ test('a member two Bots called wakes each of them for its own call when it finis
   inbox.remove(correction.id)
   host.emit('gb', 'user/message', { content: correction.content, source: correction.source })
 
-  // Writer's result for Chief waits for Tester, who is still at work.
   host.emit('gb', 'tool/result', { callId: 'k1' })
   host.finish('gb', 'R1：日志里缺环境变量 FOO。')
   await settle(() => host.agentOf('r1').calls.length === 1)
@@ -2012,7 +1892,6 @@ test('a member two Bots called wakes each of them for its own call when it finis
   await settle(() => wake() !== undefined)
   assert.equal(host.agentOf('gc').calls.length, 1, 'Tester is not woken for Chief\'s call')
 
-  // The turn that answers Tester's call is Writer's second, and wakes Tester.
   await settle(() => inbox.nextTurn.length === 1)
   const deferred = host.begin('gb')
   assert.equal(deferred.source.askedBy, 'c')
@@ -2032,12 +1911,9 @@ test('a member two Bots called wakes each of them for its own call when it finis
   assert.equal(rt.roomBatchPending('r1'), false)
 })
 
-// A batch wakes its caller once, and the wake carries the result of every member of the
-// batch, whatever the windows of earlier lines hold.
 const count = (haystack, needle) => haystack.split(needle).length - 1
 const RESULTS = 'Results of the work you asked for that the lines here leave out'
 
-// Chief calls Writer and Tester together and both go on in the background.
 async function batchInBackground(t, services) {
   t.mock.timers.enable({ apis: ['setTimeout'] })
   const host = await start(t, undefined, services)
@@ -2053,7 +1929,6 @@ async function batchInBackground(t, services) {
   t.mock.timers.tick(ROOM_WORK_GRACE_MS)
   await settle(() => first() !== undefined)
   let n = 1
-  // The group Session takes up the post a member made and relays it as a round.
   const relay = async () => {
     await settle(() => host.agentOf('r1').calls.length > 0)
     n += 1
@@ -2064,9 +1939,6 @@ async function batchInBackground(t, services) {
   return { host, relay }
 }
 
-// Codex on the change line: inside a parallel batch, a change-only completion line must not
-// wake the caller early. It carries `quiet`, the same as an early text result; the batch
-// end still wakes the caller exactly once.
 test('a late pass inside a parallel batch posts its change line quietly', async (t) => {
   const { host, relay } = await batchInBackground(t)
   const changes = { sessionId: 'gb', seq: 21, turn: 5, total: 1, added: 4, deleted: 1, files: [{ path: 'batch.md', added: 4, deleted: 1 }] }
@@ -2081,7 +1953,6 @@ test('a late pass inside a parallel batch posts its change line quietly', async 
   const read = host.round('late-pass-batch', post)
   await settle(() => read() !== undefined)
   assert.equal(host.agentOf('ga').calls.length, 1, 'the caller is not woken early')
-  // Tester finishes: the batch closes and the caller is woken once, not twice.
   host.emit('gc', 'tool/result', { callId: 'k2' })
   host.finish('gc', '测试全过。')
   await relay()
@@ -2095,7 +1966,6 @@ test('a batch wake names who finished and carries a result that rolled out of th
   host.finish('gb', 'R1-WRITER：日志结论是缺环境变量 FOO。')
   await relay()
   assert.equal(host.agentOf('ga').calls.length, 1, 'Tester is still at work')
-  // Tester narrates nine steps, each more than ROOM_STEP_GAP_MS apart.
   for (let i = 1; i <= 9; i += 1) {
     host.emit('gc', 'tool/result', { callId: i === 1 ? 'k2' : `p${i - 1}` })
     step(host, 'gc', `测试进度 ${i}/9`, `p${i}`)
@@ -2136,8 +2006,6 @@ test('a batch wake does not repeat a result that its prompt shows anyway', async
   host.finish('ga', '[PASS]')
 })
 
-// An answer that came inside the round is a result too, and a long wait lets it leave the
-// room's log (60 lines), which the group's own log still holds.
 async function resultBeforeLongWait(t, filler = 70, result = 'R2-TESTER：测试全过。') {
   t.mock.timers.enable({ apis: ['setTimeout'] })
   const host = await start(t)
@@ -2183,7 +2051,6 @@ test('a batch wake reads a result that left the room\'s log from the group\'s ow
 
 test('a batch wake names the message of a result it cannot read', async (t) => {
   const { host, seq } = await resultBeforeLongWait(t)
-  // Lose the group's book: only the room's own log is left to start it again from.
   await rt.ledger.flush()
   rt.ledger.drop('group-r1')
   await rt.ledger.flush('group-r1')
@@ -2211,8 +2078,6 @@ test('a batch wake brings the images and files of a result line along', async (t
   host.finish('ga', '[PASS]')
 })
 
-// Three Bots call one member: a call of another Bot stays a call of its own, answered by
-// its own turn, and wakes only the Bot that made it.
 test('a member three Bots called answers each call in a turn of its own and wakes each caller once', async (t) => {
   const host = await start(t, { members: ['a', 'b', 'c', 'd'], sessions: { a: 'ga', b: 'gb', c: 'gc', d: 'gd' } }, undefined, undefined, { d: {} })
   const first = host.round('c1', host.say('@Chief @Tester @Reviewer 各自给 Writer 安排一件事'))
@@ -2244,8 +2109,6 @@ test('a member three Bots called answers each call in a turn of its own and wake
   assert.equal(rt.roomBatchPending('r1'), false)
 })
 
-// Chief calls Writer and Tester. Tester finishes tool work in the round; Chief calls Writer
-// again, which takes Writer into a batch of its own, and Writer answers with no tool.
 test('a batch that takes over from an emptied one keeps its finished work', async (t) => {
   const host = await start(t)
   const first = host.round('c1', host.say('排查一下构建'))
@@ -2266,7 +2129,6 @@ test('a batch that takes over from an emptied one keeps its finished work', asyn
   assert.match(text(wake), /Tester: R2-TESTER：测试全过。/)
   host.begin('ga')
   host.finish('ga', '[PASS]')
-  // The second call still gets its turn.
   await settle(() => host.agentOf('gb').calls.length === 2)
   host.begin('gb')
   host.finish('gb', '[PASS]')
@@ -2304,7 +2166,6 @@ test('a result posted early is taken in after its batch finished, and the wake s
   host.finish('gc', 'R2-TESTER：测试全过。')
   await settle(() => host.agentOf('r1').calls.length === 1)
   const last = host.takePost()
-  // The group Session takes up the early post first, after the batch is already done.
   const quietRound = host.round('c8', early)
   await settle(() => quietRound() !== undefined)
   assert.equal(host.agentOf('ga').calls.length, 1)
@@ -2328,8 +2189,6 @@ test('a wake reads a long result that left the room\'s log whole', async (t) => 
   host.finish('ga', '[PASS]')
 })
 
-// A member that gave up its place in the round (it waits for an approval) works for the
-// call it answers once it goes on, though no round waits for it any more.
 test('work a member does after it gave up its place in the round still counts for its batch', async (t) => {
   const host = await start(t)
   const first = host.round('c1', host.say('检查文档和测试'))
@@ -2371,7 +2230,6 @@ test('tool work done for one Bot\'s call does not count as work for another Bot\
   await settle(() => host.agentOf('ga').calls.length === 2)
   host.begin('ga')
   host.finish('ga', '[PASS]')
-  // Tester's call is answered in words alone.
   await settle(() => host.agentOf('gb').calls.length === 2)
   host.begin('gb')
   host.finish('gb', '我觉得可以。')
@@ -2382,7 +2240,6 @@ test('tool work done for one Bot\'s call does not count as work for another Bot\
 
 test('a batch wake says which member finished with no closing message of its own', async (t) => {
   const { host, relay } = await batchInBackground(t)
-  // Writer reports in a step line and ends with nothing more to say.
   host.emit('gb', 'tool/result', { callId: 'k1' })
   step(host, 'gb', 'R1-WRITER：日志结论是缺环境变量 FOO。', 'p1')
   await relay()
@@ -2402,8 +2259,6 @@ test('a batch wake says which member finished with no closing message of its own
   host.finish('ga', '[PASS]')
 })
 
-// #977: a final reply that announces work while no tool, job or subagent runs is marked
-// for the reader, and a local file it links to is checked. Nothing is retried or reworded.
 test('a reply announcing work with nothing running is marked, with its missing linked file (#977)', async (t) => {
   const host = await start(t)
   const first = host.round('c1', host.say('@Writer 导出报告'))
@@ -2418,7 +2273,6 @@ test('a reply announcing work with nothing running is marked, with its missing l
   assert.equal(host.agentOf('gb').calls.length, 1, 'nothing is retried')
 })
 
-// A member that started real work or handed work to a peer is not marked, and an existing file in a spaced folder passes.
 test('work that did run, a peer handoff and an existing file in a spaced folder carry no marker (#977)', async (t) => {
   const root = mkdtempSync(join(tmpdir(), 'ds-bot-977-file-'))
   t.after(() => rmSync(root, { recursive: true, force: true }))
@@ -2443,9 +2297,6 @@ test('work that did run, a peer handoff and an existing file in a spaced folder 
   for (const reply of first().replies) assert.equal(reply.claims, undefined)
 })
 
-// #977 review: the check must use the Session's own folder, the one its header reports
-// or DS Bot gave it. A group's folder outranks the member's own, and neither is the team
-// folder the old code fell back to.
 test('a relative file link is checked in the group folder (#977)', async (t) => {
   const root = mkdtempSync(join(tmpdir(), 'ds-bot-977-room-'))
   const group = join(root, 'group')
@@ -2500,9 +2351,6 @@ test('a late reply and post_to_group keep missing-file claims when opening a gro
   assert.deepEqual(fromTool.source.claims, { missingFiles: [postedMissing] })
 })
 
-// Codex on the change line: a late turn that changed files and ended with [PASS] used to
-// read the summary and then post nothing on either return path. Its completion line now
-// carries the change card; a late pass that changed nothing still posts nothing.
 test('a late pass that changed files posts its completion line', async (t) => {
   const host = await start(t)
   const changes = { sessionId: 'gb', seq: 12, turn: 3, total: 1, added: 2, deleted: 0, files: [{ path: 'late.md', added: 2, deleted: 0 }] }
@@ -2535,7 +2383,6 @@ test('the first completed member of a parallel batch keeps its file claim', asyn
   assert.deepEqual(post.source.claims, { missingFiles: [missing] })
 })
 
-// A batch is saved with the team, so who still owes whom survives a restart.
 test('a call batch is saved with the team while its member works', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] })
   const host = await start(t)
@@ -2554,8 +2401,6 @@ test('a call batch is saved with the team while its member works', async (t) => 
   host.finish('gb', '文档好了')
 })
 
-// After a restart, a member that does not pick its work up again never answers: the batch
-// settles without it, and the Bot that asked is woken once with the result that came.
 test('after a restart a batch whose last member is gone wakes the caller with the results it has', async (t) => {
   const log = [{ seq: 1, who: 'User', text: '@Chief 安排' }, { seq: 2, who: 'Chief', botId: 'a', text: '@Writer @Tester 各做一半' }, { seq: 3, who: 'Tester', botId: 'c', text: 'TESTER-RESULT：测试全过。' }]
   const batch = { key: 'k-batch', roomId: 'r1', by: 'a', pending: ['b'], done: ['Tester'], results: [{ name: 'Tester', seq: 3 }], worked: true, answered: false, at: 1 }
@@ -2581,8 +2426,6 @@ test('after a restart a batch nobody finished is dropped without waking anyone',
   assert.equal(host.agentOf('r1').calls.length, 0)
 })
 
-// The round runs in DS Bot, not inside the group_relay call: the call returns at once, so
-// the group's Session is free and DSH cuts nothing short.
 test('the relay call returns at once and the round goes on without it', async (t) => {
   const host = await start(t)
   host.emit('r1', 'user/message', host.say('@Writer 整理文档'))
@@ -2597,15 +2440,12 @@ test('the relay call returns at once and the round goes on without it', async (t
   assert.deepEqual(rt.groupRows('r1', from).map(row => row.text), ['整理好了。'])
 })
 
-// A message the user sends while a round runs joins that round; what is said after it
-// shows under it.
 test('a message sent while a round runs joins it, and the rows after it show under it', async (t) => {
   const host = await start(t)
   const first = host.round('c1', host.say('@Chief 安排一下'))
   await settle(() => host.agentOf('ga').calls.length === 1)
   host.begin('ga')
   const second = host.round('c2', host.say('@Writer 你也看看'))
-  // One round in the group: the second message called Writer in it.
   await settle(() => host.agentOf('gb').calls.length === 1)
   assert.equal([...rt.roomProgress.values()].filter(round => round.roomId === 'r1').length, 1)
   host.begin('gb')
@@ -2617,8 +2457,6 @@ test('a message sent while a round runs joins it, and the rows after it show und
   assert.deepEqual(logLines(host).map(line => line.who), ['User', 'User', 'Writer', 'Chief'])
 })
 
-// While a round finishes (save, reports), the group is still taken: a message that comes
-// in then opens the next round once this one is done, never a second round beside it.
 test('a message that comes in while a round finishes waits for it, and no two rounds run', async (t) => {
   const host = await start(t)
   let release
@@ -2645,7 +2483,6 @@ test('a message that comes in while a round finishes waits for it, and no two ro
   assert.deepEqual(second().replies.map(row => row.text), ['看过了。'])
 })
 
-// Two calls with nothing said between them start at the same seq: each shows only its own rows.
 test('two calls that start at the same seq each show only their own rows', async (t) => {
   await start(t)
   rt.ledger.append('group-r1', { event: 'anchor', id: 'one', from: 1, time: 1 })
@@ -2655,7 +2492,6 @@ test('two calls that start at the same seq each show only their own rows', async
   assert.deepEqual(rt.groupRows('r1', 1, undefined, 'two').map(row => row.text), ['回答第二次'])
 })
 
-// The newest cell is read every second only while the group works.
 test('the rows of the newest call say whether the group is still at work', async (t) => {
   const host = await start(t)
   host.emit('r1', 'user/message', host.say('@Writer 写一句'))
@@ -2670,8 +2506,6 @@ test('the rows of the newest call say whether the group is still at work', async
   assert.deepEqual([quiet.open, quiet.active, quiet.rows.map(row => row.text)], [true, false, ['写好了。']])
 })
 
-// The member that finished was renamed before the restart: its result still wakes the
-// Bot that asked, carried by that member.
 test('after a restart a batch whose finished member was renamed still wakes the caller', async (t) => {
   const log = [{ seq: 1, who: 'User', text: '@Chief 安排' }, { seq: 2, who: 'Chief', botId: 'a', text: '@Writer @Tester 各做一半' }, { seq: 3, who: 'Tester', botId: 'c', text: 'TESTER-RESULT：测试全过。' }]
   const batch = { key: 'k-renamed', roomId: 'r1', by: 'a', pending: ['b'], done: ['Tester'], doneIds: ['c'], results: [{ name: 'Tester', seq: 3 }], worked: true, answered: false, at: 1 }
@@ -2681,8 +2515,6 @@ test('after a restart a batch whose finished member was renamed still wakes the 
   assert.deepEqual([post.source.senderSessionId, post.source.done, post.source.askedBy], ['c', true, 'a'])
 })
 
-// A member whose work a restart left is picked up again with a message its turn has not
-// taken yet: it still works for the batch, so the batch keeps waiting for it.
 test('after a restart a member whose pick-up is still queued keeps its batch waiting', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] })
   const batch = { key: 'k-queued', roomId: 'r1', by: 'a', pending: ['b'], done: ['Tester'], doneIds: ['c'], results: [], worked: true, answered: false, at: 1 }
@@ -2695,7 +2527,6 @@ test('after a restart a member whose pick-up is still queued keeps its batch wai
   assert.equal(host.agentOf('r1').calls.length, 0, 'the caller is not woken before the member answers')
 })
 
-// Stop all while a round finishes: what waited on it does not start once it is done.
 test('stopping a group while its round finishes starts nothing afterwards', async (t) => {
   const host = await start(t)
   let release
