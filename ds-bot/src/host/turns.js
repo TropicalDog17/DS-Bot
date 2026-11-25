@@ -109,7 +109,10 @@ export function answerSender(rt, id, source, text, long) {
       replyTo: source.exchangeId,
       imOrigin,
       ...(work ? { work } : {}),
-    }).catch(again => rt.warn('ds-bot: reply failure notice not delivered: %s', again))
+    }).catch((again) => {
+      rt.replyOrigin?.release(imOrigin)
+      rt.warn('ds-bot: reply failure notice not delivered: %s', again)
+    })
   })
 }
 

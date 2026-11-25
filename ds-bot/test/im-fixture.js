@@ -73,11 +73,11 @@ export const TEAM = () => ({
   revision: 0,
 })
 
-export async function startSwitchHarness(t, { tokens = new Map([['a', 1_000]]), cwd = () => undefined } = {}) {
-  const home = mkdtempSync(join(tmpdir(), 'dsb-im-switch-'))
+export async function startSwitchHarness(t, { tokens = new Map([['a', 1_000]]), cwd = () => undefined, stream, home: existingHome } = {}) {
+  const home = existingHome ?? mkdtempSync(join(tmpdir(), 'dsb-im-switch-'))
   const work = join(home, 'work')
   mkdirSync(work, { recursive: true })
-  writeFileSync(join(home, 'state.json'), JSON.stringify({ ...TEAM(), workspace: work }))
+  if (existingHome === undefined) writeFileSync(join(home, 'state.json'), JSON.stringify({ ...TEAM(), workspace: work }))
   let created = 0
   let failCreate = false
   let idleGate
@@ -142,6 +142,7 @@ export async function startSwitchHarness(t, { tokens = new Map([['a', 1_000]]), 
   }
   Object.assign(ctx, {
     llm: {
+      stream,
       listProviders: () => [],
       listModels: async () => [],
       resolveModelInfo: async () => ({ context: { contextWindow: 200_000 }, defaultMaxTokens: 0 }),
@@ -167,10 +168,20 @@ export async function startSwitchHarness(t, { tokens = new Map([['a', 1_000]]), 
     sessions: { flush: async () => {} },
   })
   const rt = createRuntime(ctx, { home })
+  const saves = new Set()
+  const save = rt.save
+  rt.save = (options) => {
+    const pending = save(options)
+    saves.add(pending)
+    const done = () => saves.delete(pending)
+    void pending.then(done, done)
+    return pending
+  }
+  let stopped
+  const stop = () => (stopped ??= ctx.dispose().finally(() => { adapters.telegram = real }))
   t.after(async () => {
-    adapters.telegram = real
-    await ctx.dispose()
-    rmSync(home, { recursive: true, force: true, maxRetries: 5 })
+    await stop()
+    if (existingHome === undefined) rmSync(home, { recursive: true, force: true, maxRetries: 5 })
   })
   let seq = 0
   const emitEvent = (sessionId, type, data) => {
@@ -198,10 +209,23 @@ export async function startSwitchHarness(t, { tokens = new Map([['a', 1_000]]), 
   })
   const fireApprovals = (request, next) => Promise.all((ctx.listeners.get('approval/request') ?? []).map(listener => listener(request, next)))
 
-  const conn = await rt.imEndpoint('im-add', { platform: 'telegram', botId: 'a', fields: { token: 'tok-1234' } })
-  rt.state.im.connections[conn.id].paired.push({ id: 'u1', name: 'U1', at: 1 })
-  await rt.save()
+  await rt.load()
+  const conn = existingHome === undefined
+    ? await rt.imEndpoint('im-add', { platform: 'telegram', botId: 'a', fields: { token: 'tok-1234' } })
+    : Object.values(rt.state.im.connections)[0]
+  if (existingHome === undefined) {
+    rt.state.im.connections[conn.id].paired.push({ id: 'u1', name: 'U1', at: 1 })
+    await rt.save()
+  } else {
+    for (let i = 0; !fake.handlers && i < 300; i += 1) await delay(10)
+    if (!fake.handlers) throw new Error('timed out waiting for Telegram after reloading')
+  }
 
+  const flush = async () => {
+    await delay(0)
+    while (saves.size > 0) await Promise.all(saves)
+    await delay(10)
+  }
   const waitHandoff = async (sessionIdOf) => {
     for (let i = 0; i < 300; i += 1) {
       const sid = sessionIdOf()
@@ -212,7 +236,7 @@ export async function startSwitchHarness(t, { tokens = new Map([['a', 1_000]]), 
   }
 
   return {
-    rt, fake, prompts, tokens, agentOf, emitEvent, preStep, fireRequestError, fireApprovals, waitHandoff, conn, work,
+    rt, fake, prompts, tokens, agentOf, emitEvent, preStep, fireRequestError, fireApprovals, waitHandoff, conn, work, home, stop, flush,
     setFailCreate: (value) => { failCreate = value },
     setIdleGate: (gate) => { idleGate = gate },
     setCreateGate: (gate) => { createGate = gate },

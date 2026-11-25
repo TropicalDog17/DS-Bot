@@ -447,6 +447,10 @@ export function install(rt) {
   const chatOfBot = botId => rt.botOf(botId) === undefined ? undefined : rt.chatOf(botId)
   const origin = createReplyOrigin({
     connections, runners, paired, bindingOf, chatOfBot,
+    savedCarries: () => (state.imReplyOrigins ??= {}),
+    save: () => rt.save({ required: true }),
+    warn: rt.warn,
+    botOfSession: rt.selfOf,
     roomOf: rt.roomOf,
     roomWorking: id => rt.roomActive?.(id) || (rt.roomWorkView?.()[id] ?? []).length > 0,
     isBotChat: id => rt.chatOwners.has(id),
@@ -504,6 +508,16 @@ export function install(rt) {
           continue
         }
         const job = queue.jobs[0]
+        // A restored Dispatch must be consumed on disk before any of its reply leaves.
+        if (job.canSend !== undefined) {
+          const allowed = await job.canSend()
+          if (runner.stopped) break
+          if (!allowed) {
+            queue.jobs.shift()
+            await Promise.resolve(job.onDrop?.()).catch(() => {})
+            continue
+          }
+        }
         queue.sending = true
         let sent
         try {
@@ -894,11 +908,12 @@ export function install(rt) {
     // Reserve pending chats synchronously before enqueueing so concurrent diffs cannot double-send.
     for (const { chatKey } of pending) entries.push({ chatKey, messageId: undefined, text: body })
     scheduleWrite(conn.id)
-    for (const { chatKey, chat } of pending) {
+    for (const { chatKey, chat, canSend } of pending) {
       enqueue(conn, chatKey, {
         chat: { key: chatKey, kind: chat.kind, title: chat.title },
         text: body,
         buttons,
+        canSend,
         after: (sent) => { void markCard(conn.id, cardKey, chatKey, sent?.messageId, body) },
         onDrop: () => unmarkCard(conn.id, cardKey, chatKey),
       })
@@ -918,18 +933,18 @@ export function install(rt) {
         const bot = rt.botOf(botId)
         if (bot === undefined) continue
         // A card follows its own turn: only the chat that asked for it gets one.
-        const reply = origin.of(sessionId)
+        const reply = origin.deliveryOf(sessionId)
         if (reply === undefined || reply.conn.id !== conn.id) continue
         const buttons = imPlatform(conn.platform)?.buttons === true ? cardButtons.question(question) : undefined
-        await sendCard(conn, cardKey, [{ chatKey: reply.chatKey, chat: reply.chat }], cardText.question(bot.name, question), buttons)
+        await sendCard(conn, cardKey, [reply], cardText.question(bot.name, question), buttons)
       }
       // Approvals: one card per open approval id, resent to chats whose earlier send dropped.
       for (const entry of rt.approvalsView?.() ?? []) {
         const cardKey = `a:${entry.id}`
         const bot = rt.botOf(entry.botId)
-        const reply = origin.of(entry.roomId !== undefined ? (rt.roomOf(entry.roomId)?.sessionId ?? entry.roomId) : chatOfBot(entry.botId))
+        const reply = origin.deliveryOf(entry.roomId !== undefined ? (rt.roomOf(entry.roomId)?.sessionId ?? entry.roomId) : chatOfBot(entry.botId))
         if (reply === undefined || reply.conn.id !== conn.id) continue
-        const targets = [{ chatKey: reply.chatKey, chat: reply.chat }]
+        const targets = [reply]
         const buttons = imPlatform(conn.platform)?.buttons === true ? cardButtons.approval(entry.id) : undefined
         await sendCard(conn, cardKey, targets, cardText.approval(bot?.name ?? '?', entry), buttons)
       }
@@ -940,9 +955,9 @@ export function install(rt) {
         for (const request of list) {
           const cardKey = `s:${request.id}`
           if (request.status !== 'pending') continue
-          const reply = origin.of(chatOfBot(botId))
+          const reply = origin.deliveryOf(chatOfBot(botId))
           if (reply === undefined || reply.conn.id !== conn.id) continue
-          await sendCard(conn, cardKey, [{ chatKey: reply.chatKey, chat: reply.chat }], text('secretAsk', { bot: bot.name, name: request.name }))
+          await sendCard(conn, cardKey, [reply], text('secretAsk', { bot: bot.name, name: request.name }))
         }
       }
       // Views awaiting a reply: text form only.
@@ -951,10 +966,10 @@ export function install(rt) {
         const botId = rt.chatOwners.get(sessionId)
         const bot = rt.botOf(botId)
         if (bot === undefined) continue
-        const reply = origin.of(sessionId)
+        const reply = origin.deliveryOf(sessionId)
         if (reply === undefined || reply.conn.id !== conn.id) continue
         const form = viewCardText({ title: view.title, view: view.view })
-        await sendCard(conn, cardKey, [{ chatKey: reply.chatKey, chat: reply.chat }], `${text('viewShow', { bot: bot.name })}${form !== '' ? `\n${form}` : view.title ? `\n${view.title}` : ''}`)
+        await sendCard(conn, cardKey, [reply], `${text('viewShow', { bot: bot.name })}${form !== '' ? `\n${form}` : view.title ? `\n${view.title}` : ''}`)
       }
     }
   }
@@ -1425,7 +1440,7 @@ export function install(rt) {
     // A group's own chat has no Bot of its own; its lines go out from onRoomLine.
     const botId = rt.chatOwners.get(session.id)
     if (botId === undefined) return
-    const reply = origin.of(session.id)
+    const reply = origin.deliveryOf(session.id)
     if (reply === undefined) return
     // A card thread answers on the Main Bot's chat, so its lines say whose and which card.
     const cardId = rt.cardOfSession?.(session.id)
@@ -1435,35 +1450,36 @@ export function install(rt) {
     for (const item of rt.displayItems(session.id, [event])) {
       if (item.kind !== 'bot' && item.kind !== 'view') continue
       const body = label + (item.kind === 'bot' ? item.text : viewCardText({ title: item.title, view: item.view }) || (item.title ?? ''))
-      sendTo(reply.conn, reply.chatKey, chat, body)
+      enqueue(reply.conn, reply.chatKey, { chat, text: body, canSend: reply.canSend })
     }
     // displayItems only folds presented files into the closing Bot row, so they are
     // taken from the event itself.
     if (event.type === 'deliverables/presented') {
       for (const file of Array.isArray(event.data?.files) ? event.data.files : []) {
         if (typeof file?.path !== 'string') continue
-        enqueue(reply.conn, reply.chatKey, { chat, file: { path: file.path, label, ...(card === '' ? {} : { caption: card }) } })
+        enqueue(reply.conn, reply.chatKey, { chat, canSend: reply.canSend, file: { path: file.path, label, ...(card === '' ? {} : { caption: card }) } })
       }
     }
   })
 
   rt.onRoomLine((room, line) => {
     if (line.botId === undefined || line.kind !== undefined || typeof line.text !== 'string' || line.text.trim() === '') return
-    const reply = origin.of(room.sessionId ?? room.id)
+    const reply = origin.deliveryOf(room.sessionId ?? room.id)
     if (reply === undefined) return
     const body = `**${line.who}**: ${line.text}`
-    sendTo(reply.conn, reply.chatKey, { key: reply.chatKey, kind: reply.chat.kind, title: reply.chat.title }, body)
+    const chat = { key: reply.chatKey, kind: reply.chat.kind, title: reply.chat.title }
+    enqueue(reply.conn, reply.chatKey, { chat, text: body, canSend: reply.canSend })
   })
 
   rt.onApproval((kind, data) => {
     if (kind === 'open') {
       void (async () => {
         const sessionId = data.roomId !== undefined ? (rt.roomOf(data.roomId)?.sessionId ?? data.roomId) : chatOfBot(data.botId)
-        const reply = origin.of(sessionId)
+        const reply = origin.deliveryOf(sessionId)
         if (reply === undefined) return
         const bot = rt.botOf(data.botId)
         const buttons = imPlatform(reply.conn.platform)?.buttons === true ? cardButtons.approval(data.id) : undefined
-        await sendCard(reply.conn, `a:${data.id}`, [{ chatKey: reply.chatKey, chat: reply.chat }], cardText.approval(bot?.name ?? '?', data), buttons)
+        await sendCard(reply.conn, `a:${data.id}`, [reply], cardText.approval(bot?.name ?? '?', data), buttons)
       })().catch(error => rt.warn('ds-bot: im approval card failed: %s', error))
       return
     }
@@ -1483,7 +1499,10 @@ export function install(rt) {
   let interval
   ctx.effect(() => {
     interval = setInterval(() => {
-      void rt.refresh().then(() => sync()).catch(() => {})
+      void rt.refresh().then(() => {
+        origin.prune()
+        return sync()
+      }).catch(() => {})
     }, RECONCILE_MS)
     interval.unref?.()
     void rt.load().then(() => sync()).catch(() => {})

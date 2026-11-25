@@ -3,16 +3,17 @@ import { REPLY_KIND, SOURCE_KIND } from './constants.js'
 
 // DSH context informs a turn without asking anything.
 const CONTEXT_FORMS = new Set(['snapshot', 'catalog', 'instructions', 'notice'])
-const MAX_TOKENS = 256
+const MAX_PENDING = 256
+const REQUEST_TTL_MS = 24 * 60 * 60 * 1000
 
-// An IM request lives until its message is admitted. A Bot's claim lasts until
-// its turn ends or another source joins it. A group's relay turn can end before
-// its members finish, so the group keeps its claim for their posts. Routes live
-// only in this process, even when a token is saved with pending work.
+// A Bot's claim lasts until its turn ends or another source joins it. A group's
+// relay turn can end before its members finish, so it keeps its claim for their
+// posts. Only the routes of pending Dispatch replies survive a restart.
 export function createReplyOrigin({
   now = Date.now, connections, runners, paired, bindingOf, chatOfBot,
   roomOf = () => undefined, roomWorking = () => false,
   isBotChat = () => true, sessionExists = () => true,
+  savedCarries, save, warn, botOfSession,
 }) {
   const origins = new Map()
   const mixed = new Set()
@@ -35,31 +36,70 @@ export function createReplyOrigin({
   }
 
   const of = sessionId => resolve(origins.get(sessionId))
-  const release = token => resumedOrigins.delete(token)
+  const deliveryOf = (sessionId) => {
+    const entry = origins.get(sessionId)
+    const route = resolve(entry)
+    if (route === undefined || entry.ready === undefined) return route
+    return { ...route, canSend: async () => await entry.ready && resolve(entry) !== undefined }
+  }
+  const durableOf = token => {
+    const entries = savedCarries?.()
+    return entries != null && Object.hasOwn(entries, token) ? entries[token] : undefined
+  }
+  const heldOf = token => resumedOrigins.get(token) ?? durableOf(token)
+  const heldEntries = () => [...resumedOrigins, ...Object.entries(savedCarries?.() ?? {})]
+
+  function persist(confirmed = () => true) {
+    return Promise.resolve().then(save).then(confirmed, error => {
+      warn?.('ds-bot: IM Dispatch origin could not be saved: %s', error)
+      return false
+    })
+  }
+
+  function release(token) {
+    resumedOrigins.delete(token)
+    if (durableOf(token) === undefined) return undefined
+    delete savedCarries()[token]
+    return persist(() => durableOf(token) === undefined)
+  }
+
+  function pruneRequests() {
+    const cutoff = now() - REQUEST_TTL_MS
+    for (const [id, entry] of requests) if (entry.at <= cutoff) forgetRequest(id)
+  }
 
   function prune() {
-    for (const [token, entry] of resumedOrigins) {
+    pruneRequests()
+    for (const [token, entry] of heldEntries()) {
       if (entry.issuedBy !== undefined && !sessionExists(entry.issuedBy)) release(token)
     }
   }
 
-  function holdToken(sessionId, dispatch) {
-    const entry = origins.get(sessionId)
-    if (entry === undefined || (dispatch && resolve(entry) === undefined)) return undefined
+  function holdToken(sessionId, dispatch, exchangeId) {
+    const origin = origins.get(sessionId)
+    if (origin === undefined || (dispatch && resolve(origin) === undefined)) return undefined
     prune()
-    if (resumedOrigins.size >= MAX_TOKENS) release(resumedOrigins.keys().next().value)
+    const held = heldEntries()
+    if (held.length >= MAX_PENDING) {
+      const [oldest] = held.reduce((first, next) => next[1].at < first[1].at ? next : first)
+      release(oldest)
+    }
+    const { connId, chatKey, senderId, binding, ready } = origin
     const token = randomUUID()
-    resumedOrigins.set(token, { ...entry, activeOn: sessionId, ...(dispatch ? { issuedBy: sessionId } : {}) })
+    const entry = { connId, chatKey, senderId, binding, activeOn: sessionId, at: now() }
+    if (dispatch) Object.assign(entry, { issuedBy: sessionId, exchangeId, botId: botOfSession?.(sessionId) })
+    if (dispatch && savedCarries !== undefined) savedCarries()[token] = entry
+    else resumedOrigins.set(token, { ...entry, ready })
     return token
   }
 
   const hold = sessionId => holdToken(sessionId, false)
-  const carry = sessionId => holdToken(sessionId, true)
+  const carry = (sessionId, exchangeId) => holdToken(sessionId, true, exchangeId)
 
   function matchesCarry(sessionId, token) {
     if (token === undefined) return of(sessionId) === undefined
     const entry = origins.get(sessionId)
-    const earlier = resumedOrigins.get(token)
+    const earlier = heldOf(token)
     return earlier !== undefined && sessionExists(earlier.issuedBy) && resolve(entry) !== undefined
       && sameChat(earlier, entry) && earlier.binding === entry.binding
   }
@@ -67,7 +107,7 @@ export function createReplyOrigin({
   function drop(sessionId) {
     origins.delete(sessionId)
     mixed.add(sessionId)
-    for (const [token, held] of resumedOrigins) if (held.activeOn === sessionId) release(token)
+    for (const [token, held] of heldEntries()) if (held.activeOn === sessionId) release(token)
   }
 
   function reset(sessionId) {
@@ -83,11 +123,12 @@ export function createReplyOrigin({
       drop(sessionId)
       return
     }
-    for (const [token, held] of resumedOrigins) {
+    for (const [token, held] of heldEntries()) {
       if (held.activeOn === sessionId && !sameChat(held, entry)) release(token)
     }
     const binding = Object.hasOwn(entry, 'binding') ? entry.binding : bindingOf(connection(connId), chatKey)
-    origins.set(sessionId, { connId, chatKey, senderId, binding })
+    const ready = entry.ready ?? previous?.ready
+    origins.set(sessionId, { connId, chatKey, senderId, binding, ready })
   }
 
   function claimChat(conn, chat, senderId) {
@@ -98,18 +139,27 @@ export function createReplyOrigin({
   }
 
   function peek(sessionId, token) {
-    const entry = resumedOrigins.get(token)
+    const entry = heldOf(token)
     if (entry === undefined) return
     claim(sessionId, entry)
     if (!mixed.has(sessionId)) entry.activeOn = sessionId
   }
 
   function detach(sessionId) {
-    for (const held of resumedOrigins.values()) if (held.activeOn === sessionId) held.activeOn = undefined
+    let changed = false
+    for (const [token, held] of heldEntries()) {
+      if (held.activeOn !== sessionId) continue
+      delete held.activeOn
+      if (durableOf(token) !== undefined) changed = true
+    }
+    if (changed) void persist()
   }
 
   function rememberRequest(requestId, conn, chatKey, senderId) {
     // Capture the binding on arrival, before a queued message is admitted.
+    pruneRequests()
+    requests.delete(requestId)
+    if (requests.size >= MAX_PENDING) requests.delete(requests.keys().next().value)
     requests.set(requestId, { connId: conn.id, chatKey, senderId, binding: bindingOf(conn, chatKey), at: now() })
   }
 
@@ -133,12 +183,19 @@ export function createReplyOrigin({
     if (pendingReset.delete(sessionId) && !carried && !groupPost) reset(sessionId)
     if (carried) {
       prune()
-      const entry = resumedOrigins.get(imOrigin)
-      release(imOrigin)
-      if (entry === undefined) drop(sessionId)
-      else claim(sessionId, entry)
+      const entry = heldOf(imOrigin)
+      const sameExchange = entry?.exchangeId === undefined
+        || (source.kind === SOURCE_KIND && source.role === 'reply' && source.replyTo === entry.exchangeId)
+      const sameBot = entry?.botId === undefined || botOfSession?.(sessionId) === entry.botId
+      if (entry === undefined || !sameExchange || !sameBot) {
+        drop(sessionId)
+        return
+      }
+      const ready = release(imOrigin)
+      claim(sessionId, { ...entry, ready: ready ?? entry.ready })
     } else if (typeof rpcId === 'string' && rpcId.startsWith('im:')) {
       markVia(sessionId, event.seq, rpcId.split(':')[1])
+      pruneRequests()
       const entry = requests.get(rpcId)
       forgetRequest(rpcId)
       if (entry === undefined) drop(sessionId)
@@ -180,5 +237,5 @@ export function createReplyOrigin({
     imVia.clear()
   }
 
-  return Object.freeze({ of, claim, claimChat, drop, reset, hold, peek, release, detach, carry, matchesCarry, prune, onEvent, viaView, rememberRequest, forgetRequest, clear })
+  return Object.freeze({ of, deliveryOf, claim, claimChat, drop, reset, hold, peek, release, detach, carry, matchesCarry, prune, onEvent, viaView, rememberRequest, forgetRequest, clear })
 }

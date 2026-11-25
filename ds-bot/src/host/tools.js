@@ -361,10 +361,18 @@ export function install(rt) {
         const working = rt.live.get(chat)?.turn !== undefined
         const steer = (args.when !== 'queue' && !toUser) || (joins && earlier.steered)
         const exchangeId = joins ? earlier.message.source.exchangeId : randomUUID()
+        const imOrigin = !joins && !toUser ? rt.replyOrigin?.carry(exec.agent?.id, exchangeId) : undefined
         if (joins) rt.forgetDelivery?.(exchangeId)
         else if (!toUser) {
-          const imOrigin = rt.replyOrigin?.carry(exec.agent?.id)
           rt.openWork(exchangeId, { from: sender.id, to: target.id, parent: work, fromPart, imOrigin })
+        }
+        if (imOrigin !== undefined) {
+          try {
+            await rt.save({ required: true })
+          } catch (error) {
+            rt.dropWork(exchangeId)
+            throw error
+          }
         }
         try {
           await rt.deliver({ fromId: sender.id, toId: target.id, ...(fromPart ? { fromPart } : {}), text: long.text, files: [...long.files, ...(joins ? before.files : [])], length: long.length, role: 'request', steer, exchangeId, ...(joins ? { merged: true } : {}), ...(toUser ? { audience: 'user' } : {}) })
