@@ -248,7 +248,11 @@ function turnsHost() {
     botOf: id => rt.bots[id],
     selfOf: id => id,
     save: async () => {},
-    deliver: async (args) => { delivered.push(args) },
+    dispatch: {
+      sendReply: async (args) => { delivered.push(args) },
+      sendNotice: async (args) => { delivered.push(args) },
+      forgetDelivery() {},
+    },
     noteFailure: entry => noted.push(entry),
     warn() {},
     switchJobs: () => [],

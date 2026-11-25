@@ -384,7 +384,7 @@ export function install(rt) {
 
   async function tell(botId, text) {
     if (rt.botOf(botId) === undefined) return
-    await rt.deliver({ toId: botId, role: 'secret', text })
+    await rt.dispatch.sendNotice({ toId: botId, role: 'secret', text })
       .catch(error => rt.warn('ds-bot: secret note to %s failed: %s', botId, error))
   }
   const savedNote = (name, lead) => [

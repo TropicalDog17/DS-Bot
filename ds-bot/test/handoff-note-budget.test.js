@@ -138,7 +138,6 @@ async function switchPart({ replies, info = {}, fallback, route = {}, oldNote, r
     renewMemory: () => {},
     moveSchedules: async () => {},
     sessionTitle: { rename: async () => {} },
-    deliver: async () => {},
     teamFolder: () => '/tmp/team',
     workDirOf: () => '/tmp/team',
     isFolder: async () => true,

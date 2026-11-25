@@ -326,7 +326,7 @@ export function install(rt, host) {
 
   const tell = async (botId, text) => {
     if (rt.botOf(botId) === undefined) return
-    await rt.deliver({ toId: botId, role: 'mail', text }).catch(error => rt.warn('ds-bot: mail note to %s failed: %s', botId, error))
+    await rt.dispatch.sendNotice({ toId: botId, role: 'mail', text }).catch(error => rt.warn('ds-bot: mail note to %s failed: %s', botId, error))
   }
 
   const applyRules = (patch) => {

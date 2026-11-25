@@ -3,11 +3,11 @@
 import { randomUUID } from 'node:crypto'
 import { defineTool, plainToolSchema } from './tool-schema.js'
 import { readAvatar } from './avatar.js'
-import { COLORS, EXTRA_COLORS, MESSAGE_INLINE_MAX, ROOM_MODES, SOURCE_KIND, TEXT_KEPT } from './constants.js'
+import { COLORS, EXTRA_COLORS, MESSAGE_INLINE_MAX, ROOM_MODES, TEXT_KEPT } from './constants.js'
 import { within } from './folders.js'
 import { missingFileRefs } from './claims.js'
 import { absoluteLinks } from './links.js'
-import { NAME_MAX } from './requests.js'
+import { NAME_MAX } from './dispatch.ts'
 import { cardFromArgs } from './question-card.js'
 import { unquote } from './text.js'
 import { isOpenPart, ownChatSessions } from './threads.js'
@@ -168,22 +168,6 @@ export function install(rt) {
     // conversation of that Bot, not its foreground chat.
     return isOpenPart(rt.botOf(rt.chatOwners.get(sessionId)), sessionId) ? 'another of its conversations' : 'its own chat'
   }
-  // A Bot request still in the inbox: no step or turn has taken it out yet.
-  const unreadRequest = (agent, senderId, toUser) => {
-    for (const [message, steered] of [...(agent.inbox?.nextStep ?? []).map(message => [message, true]), ...(agent.inbox?.nextTurn ?? []).map(message => [message, false])]) {
-      const source = message.source
-      if (source?.kind === SOURCE_KIND && source.role === 'request' && source.senderSessionId === senderId
-        && (source.audience === 'user') === toUser && !source.deferred && !source.resumed) return { message, steered }
-    }
-    return undefined
-  }
-  // A message's own words and files, without its header line.
-  const bodyOf = (message) => {
-    const content = Array.isArray(message.content) ? message.content : []
-    const first = content.find(block => block?.type === 'text')?.text ?? ''
-    return { text: first.slice(first.indexOf('\n') + 1), files: content.filter(block => block?.type === 'file' && block.attachment !== undefined).map(block => block.attachment) }
-  }
-
   // A tool that throws shows as failed in the chat, instead of as sent or stopped.
   const refuse = (message) => { throw new Error(message) }
 
@@ -293,36 +277,30 @@ export function install(rt) {
       if (name.length > NAME_MAX) return `The request_id is ${name.length} characters long; a request name is at most ${NAME_MAX}.`
       const text = absoluteLinks(String(args.message), rt.sessionFolder?.(exec.agent?.session ?? exec.agent))
       const room = rt.roomOf(rt.groupOwners.get(exec.agent?.id)?.roomId)
-      // The request the caller named: it is admitted once, and a repeat of it is not sent again.
-      const request = name === '' ? undefined : rt.requestIdentity({
-        caller: sender.id,
-        context: room === undefined ? 'chat' : `room:${room.id}`,
-        name,
-        payload: {
-          to: target.id,
-          message: String(args.message ?? '').replace(/\r\n?/g, '\n').trim(),
-          reply_to: args.reply_to === 'user' ? 'user' : 'me',
-          when: args.when === 'queue' ? 'queue' : 'now',
-        },
-      })
-      // What the caller gets for a request that was admitted before.
       const answer = (outcome) => {
         if (outcome.status === 'replay') return outcome.receipt
         if (outcome.status === 'conflict') refuse(`Not sent: request_id "${name}" was already used for a different request. A request_id names one request; send this one under a new name.`)
         if (outcome.status === 'uncertain') refuse(`Not sent again: the outcome of request_id "${name}" is not known (the delivery failed, or DS Bot restarted while it was in flight), so it was not sent again. Check whether ${target.name} got it before sending it under a new name.`)
         if (outcome.status === 'expired') return `Nothing was sent again: request_id "${name}" was admitted before, but its receipt is no longer kept, so only the fact that it was sent is left. Send the work under a new request_id if it must be done again.`
         if (outcome.status === 'readonly') refuse(`Not sent: this window cannot save the Bot team, so it cannot record the request_id "${name}". Send it from the window that owns the team, or leave the request_id out.`)
+        if (outcome.status === 'too_long') return tooLong(text)
         return outcome.receipt
-      }
-      if (request !== undefined) {
-        const seen = await rt.knownRequest(request)
-        if (seen !== undefined) return answer(seen)
       }
       if (room !== undefined) {
         const refusal = groupRefusal(room, sender, target)
         if (refusal !== undefined) refuse(refusal)
-        const send = () => callInGroup(exec, room, sender, target, text.trim())
-        return request === undefined ? await send() : answer(await rt.admitRequest(request, send))
+        const outcome = await rt.dispatch.admitGroupRequest({
+          caller: sender.id,
+          roomId: room.id,
+          name,
+          payload: {
+            to: target.id,
+            message: String(args.message ?? '').replace(/\r\n?/g, '\n').trim(),
+            reply_to: args.reply_to === 'user' ? 'user' : 'me',
+            when: args.when === 'queue' ? 'queue' : 'now',
+          },
+        }, () => callInGroup(exec, room, sender, target, text.trim()))
+        return answer(outcome)
       }
       const posted = calledInPosts.get(exec.agent?.id)
       const postedIn = posted !== undefined && posted.turn === turnOf(exec) ? posted.calls.get(target.id) : undefined
@@ -333,79 +311,46 @@ export function install(rt) {
       // bare error the Bot cannot act on.
       const works = worksOf(exec)
       if (rt.upstreamOf(works).has(target.id)) return upstreamRefusal(exec, sender, target, text.trim(), args)
-      const send = async () => {
-        const toUser = args.reply_to === 'user'
-        const work = toUser ? undefined : works[0]
-        // The part of the sender's own chat this request comes from: its answer goes back
-        // to that part's thread.
-        const fromPart = callerPart(exec).fromPart
-        const chat = rt.chatOf(target.id)
-        const agent = await rt.resolveAgent(chat)
-        const status = rt.statusOf(target.id)
-        // A request it has not read yet, sent for the same work, takes this one in, so
-        // messages to a Bot that cannot read them do not pile up. Two parts of the
-        // sender's own chat are two conversations, though: one answer could come back to
-        // only one of them, so their requests are sent and answered apart.
-        const earlier = unreadRequest(agent, sender.id, toUser)
-        // A merged answer has one destination, so requests from different chats stay apart.
-        const sameOrigin = exchangeId => rt.replyOrigin?.matchesCarry(exec.agent?.id, state.works?.[exchangeId]?.imOrigin) ?? true
-        const joinable = earlier !== undefined
-          && (toUser || ((earlier.message.source.senderPart ?? undefined) === fromPart && rt.sameWork(earlier.message.source.exchangeId, work) && sameOrigin(earlier.message.source.exchangeId)))
-        const before = joinable ? bodyOf(earlier.message) : undefined
-        let long = await rt.attachLong(before ? `${before.text}\n\n${text}` : text, `Message from ${sender.name}.txt`)
-        // Nothing went out, so a named request must not take this as a delivered
-        // receipt: admitRequest drops the pending record instead, and a retry can send.
-        if (long === undefined) { if (request !== undefined) request.unsent = true; return tooLong(text) }
-        const joins = before !== undefined && (toUser || sameOrigin(earlier.message.source.exchangeId)) && agent.inbox?.remove?.(earlier.message.id) === true
-        if (before !== undefined && !joins) long = await rt.attachLong(text, `Message from ${sender.name}.txt`) ?? long
-        const working = rt.live.get(chat)?.turn !== undefined
-        const steer = (args.when !== 'queue' && !toUser) || (joins && earlier.steered)
-        const exchangeId = joins ? earlier.message.source.exchangeId : randomUUID()
-        const imOrigin = !joins && !toUser ? rt.replyOrigin?.carry(exec.agent?.id, exchangeId) : undefined
-        if (joins) rt.forgetDelivery?.(exchangeId)
-        else if (!toUser) {
-          rt.openWork(exchangeId, { from: sender.id, to: target.id, parent: work, fromPart, imOrigin })
-        }
-        if (imOrigin !== undefined) {
-          try {
-            await rt.save({ required: true })
-          } catch (error) {
-            rt.dropWork(exchangeId)
-            throw error
-          }
-        }
-        try {
-          await rt.deliver({ fromId: sender.id, toId: target.id, ...(fromPart ? { fromPart } : {}), text: long.text, files: [...long.files, ...(joins ? before.files : [])], length: long.length, role: 'request', steer, exchangeId, ...(joins ? { merged: true } : {}), ...(toUser ? { audience: 'user' } : {}) })
-        } catch (error) {
-          // The delivery stays noted for the next start while its Bot exists
-          // (resume.js), and the resent request still answers up the tree, so the
-          // work it opened stays too. Only a target that is gone drops the work.
-          if (!joins && rt.botOf(target.id) === undefined) rt.dropWork(exchangeId)
-          throw error
-        }
-        const sent = toUser
-          ? `Delivered to ${target.name}. It will answer the user in its own chat; nothing comes back to you, so point the user to ${target.name}'s chat instead of relaying.`
-          : working && steer
-            ? `Delivered to ${target.name} while it is working: it reads your message at its next step and answers once that work is done. Its reply will arrive later as a new message; do not wait for it.`
-            : working
-              ? `Queued for ${target.name}: it reads your message after its current work. Its reply will arrive later as a new message; do not wait for it.`
-              : `Delivered to ${target.name}. Its reply will arrive later as a new message; do not wait for it.`
-        const asker = rt.ownsWork(sender.id, work) ? rt.botOf(state.works[work].from)?.name : undefined
-        const notes = [
-          joins ? `${target.name} had not read your earlier message yet, so this one was added to it, and it answers both at once.` : '',
-          status === 'idle' ? '' : `${target.name} now: ${status}.`,
-          asker ? `When you have handed on everything, end your turn: each reply brings you back to this work, and your answer goes to ${asker} once all of it is back.` : '',
-        ].filter(Boolean)
-        const out = [sent, ...(fromIm ? [`The user wrote to you from their phone and does not read ${target.name}'s chat, so its reply comes back to you: pass it on to the user in full.`] : []), ...notes].join(' ')
-        // A message reaches the part of the Bot's own chat it is delivered to only; work
-        // going on elsewhere (a group, or another live part of its own chat) goes on
-        // without it.
-        const elsewhere = activeSessions(target.id).running.filter(sessionId => sessionId !== chat)
-        if (elsewhere.length === 0) return out
-        const stop = rt.isMain(sender.id) ? ' If it must not go on there, use stop_bot.' : ''
-        return `${out} Your message does not reach its work in ${elsewhere.map(whereOf).join(' and ')}.${stop}`
-      }
-      return request === undefined ? await send() : answer(await rt.admitRequest(request, send))
+      const toUser = args.reply_to === 'user'
+      const work = toUser ? undefined : works[0]
+      const chat = rt.chatOf(target.id)
+      const status = rt.statusOf(target.id)
+      const outcome = await rt.dispatch.sendBotRequest({
+        fromId: sender.id,
+        fromPart: callerPart(exec).fromPart,
+        fromSessionId: exec.agent?.id,
+        toId: target.id,
+        rawMessage: String(args.message ?? ''),
+        text,
+        toUser,
+        when: args.when === 'queue' ? 'queue' : 'now',
+        requestName: name,
+        work,
+        formatReceipt({ joined, working, steered }) {
+          const sent = toUser
+            ? `Delivered to ${target.name}. It will answer the user in its own chat; nothing comes back to you, so point the user to ${target.name}'s chat instead of relaying.`
+            : working && steered
+              ? `Delivered to ${target.name} while it is working: it reads your message at its next step and answers once that work is done. Its reply will arrive later as a new message; do not wait for it.`
+              : working
+                ? `Queued for ${target.name}: it reads your message after its current work. Its reply will arrive later as a new message; do not wait for it.`
+                : `Delivered to ${target.name}. Its reply will arrive later as a new message; do not wait for it.`
+          const asker = rt.ownsWork(sender.id, work) ? rt.botOf(state.works[work].from)?.name : undefined
+          const notes = [
+            joined ? `${target.name} had not read your earlier message yet, so this one was added to it, and it answers both at once.` : '',
+            status === 'idle' ? '' : `${target.name} now: ${status}.`,
+            asker ? `When you have handed on everything, end your turn: each reply brings you back to this work, and your answer goes to ${asker} once all of it is back.` : '',
+          ].filter(Boolean)
+          const out = [sent, ...(fromIm ? [`The user wrote to you from their phone and does not read ${target.name}'s chat, so its reply comes back to you: pass it on to the user in full.`] : []), ...notes].join(' ')
+          // A message reaches the part of the Bot's own chat it is delivered to only; work
+          // going on elsewhere (a group, or another live part of its own chat) goes on
+          // without it.
+          const elsewhere = activeSessions(target.id).running.filter(sessionId => sessionId !== chat)
+          if (elsewhere.length === 0) return out
+          const stop = rt.isMain(sender.id) ? ' If it must not go on there, use stop_bot.' : ''
+          return `${out} Your message does not reach its work in ${elsewhere.map(whereOf).join(' and ')}.${stop}`
+        },
+      })
+      return answer(outcome)
     },
   }))
 
@@ -431,7 +376,7 @@ export function install(rt) {
         agent.cancel({ kind: 'hook', reason: 'ds-bot/stopped' })
       }
       const why = String(args.reason ?? '').trim() || 'Stop what you are doing; the previous turn was ended on purpose. Acknowledge briefly.'
-      await rt.deliver({ fromId: sender.id, toId: target.id, ...callerPart(exec), text: why, role: 'stopped', ...callerRoom(exec) })
+      await rt.dispatch.sendReply({ fromId: sender.id, toId: target.id, ...callerPart(exec), text: why, role: 'stopped', ...callerRoom(exec) })
       return `Stopped ${target.name} in ${running.map(whereOf).join(' and ')}. It is told why in a new turn, whose reply comes back to you.`
     },
   }))

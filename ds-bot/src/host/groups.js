@@ -768,7 +768,7 @@ export function install(rt) {
       signal.addEventListener('abort', () => finish(null), { once: true })
     })
     try {
-      await rt.deliver({ fromId: undefined, toId: member.id, sessionId, role: 'room', roomId: room.id, exchangeId, note, text, images, files, requests, steer: busy, ...(by ? { askedBy: by } : {}) })
+      await rt.dispatch.sendGroupTurn({ toId: member.id, sessionId, roomId: room.id, exchangeId, note, text, images, files, requests, steer: busy, ...(by ? { askedBy: by } : {}) })
       // The prompt reached the member: its read position moves on.
       room.seen[member.id] = seenAt
       // Still held by an earlier request: this turn cannot start until the user answers.
@@ -1937,7 +1937,7 @@ export function install(rt) {
     // The report goes back to the conversation the post was written from: its
     // Session in that group when the post came from one, else the own chat.
     const back = rt.roomOf(post.fromRoomId)?.sessions?.[post.botId]
-    await rt.deliver({ toId: post.botId, ...(back ? { sessionId: back } : {}), role: 'report', roomId: room.id, text: body, ...(work ? { work, replyTo: post.sub } : {}) })
+    await rt.dispatch.sendReply({ toId: post.botId, ...(back ? { sessionId: back } : {}), role: 'report', roomId: room.id, text: body, ...(work ? { work, replyTo: post.sub } : {}) })
       .catch(error => rt.warn('ds-bot: group report to %s failed: %s', post.name, error))
   }
 

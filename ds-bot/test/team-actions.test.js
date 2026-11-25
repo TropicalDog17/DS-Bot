@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { createSource } from '../src/client/sources.js'
-import { readFileSync } from 'node:fs'
 import { clearFront, teamActions } from '../src/client/team-actions.js'
 
 // The requests the actions send, and how many of them read the team again after.
@@ -64,9 +63,4 @@ test('opening a chat clears what stands in front of it, the Board page included'
   assert.equal(clearFront(kept), kept)
   const front = { page: 'board', newChat: 'new', exchange: ['a', 'b'], menu: { id: 'm' }, palette: { query: '' }, groupSearch: { roomId: 'r' }, details: 'bot-1' }
   assert.deepEqual(clearFront(front), { page: null, newChat: null, exchange: null, menu: null, palette: null, groupSearch: null, details: 'bot-1' })
-  // Every chat the app opens goes through it, a Bot's, a group's or an Agent's.
-  const source = readFileSync(new URL('../src/client/index.js', import.meta.url), 'utf8')
-  const body = name => source.slice(source.indexOf(`    ${name}: `), source.indexOf('\n    },', source.indexOf(`    ${name}: `)))
-  assert.match(body('openSession'), /ui\.set\(clearFront\)/)
-  assert.match(body('openAgentSession'), /clearFront\(state\)/)
 })

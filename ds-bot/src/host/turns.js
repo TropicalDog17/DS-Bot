@@ -79,7 +79,7 @@ export function answerSender(rt, id, source, text, long) {
   const body = marker === '' ? (long?.text ?? text) : `${marker}${long?.text ?? text}`
   const length = long === undefined ? undefined : late === undefined ? long.length : (long.length ?? text.length) + marker.length
   const exchangeId = randomUUID()
-  void rt.deliver({
+  void rt.dispatch.sendReply({
     fromId: rt.selfOf(id),
     toId: source.senderSessionId,
     ...(target ? { sessionId: target } : {}),
@@ -96,10 +96,10 @@ export function answerSender(rt, id, source, text, long) {
     // what it answered — the result kept with the work is marked, and the failure
     // reaches the asker the way the reply would have, so the work goes on and its
     // answer names it.
-    rt.forgetDelivery?.(exchangeId)
+    rt.dispatch.forgetDelivery(exchangeId)
     rt.answerMissed?.(source.exchangeId)
     const said = `${name} could not send its reply to you (${failureLine(turnFailure(error))}); what it had answered:\n`
-    void rt.deliver({
+    void rt.dispatch.sendReply({
       fromId: rt.selfOf(id),
       toId: source.senderSessionId,
       ...(target ? { sessionId: target } : {}),
@@ -213,7 +213,7 @@ export function install(rt) {
   // Bot's request keeps its exchange; anything else is a nudge in the Bot's own chat.
   const retryTurn = (id, info, note, text) => {
     const keeps = info !== undefined && (info.role === 'room' || expectsReply(info))
-    return rt.deliver({
+    return rt.dispatch.sendReply({
       ...(keeps && info.senderSessionId ? { fromId: info.senderSessionId } : {}),
       toId: rt.selfOf(id),
       sessionId: id,
@@ -812,7 +812,7 @@ export function install(rt) {
     if (await rt.releaseKickoff(bot)) return
     if (rt.greetingOut?.(bot.id) || live.get(rt.chatOf(bot.id))?.turn !== undefined) return
     const code = bot.blocked?.code
-    await rt.deliver({
+    await rt.dispatch.sendNotice({
       toId: bot.id,
       role: 'continue',
       text: `Your last turn failed${code ? ` (${code})` : ''} and the user has fixed it. Answer the user's last unanswered message.`,
@@ -1194,7 +1194,7 @@ export function install(rt) {
         for (const result of later) {
           const targetSessionId = laterTarget(id)
           if (targetSessionId === undefined && (rt.groupOwners.has(id) || rt.pastOwners?.has(id))) continue
-          void rt.deliver({
+          void rt.dispatch.sendReply({
             fromId: result.info.senderSessionId,
             toId: rt.selfOf(id),
             // A result handed back to the turn's own part, or to the successor part after a switch.
@@ -1347,7 +1347,7 @@ export function install(rt) {
             } else answer(request.info, '')
             continue
           }
-          void rt.deliver({
+          void rt.dispatch.sendReply({
             fromId: request.info.senderSessionId,
             toId: rt.selfOf(id),
             sessionId: id,

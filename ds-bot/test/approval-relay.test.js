@@ -27,7 +27,7 @@ function host({ info, works = {}, mainBotIds = ['chief'] } = {}) {
     botOf: id => bots[id],
     roomOf: id => (id === 'r1' ? { id: 'r1', name: 'Ops' } : undefined),
     workOf: entry => (entry.role === 'request' ? entry.exchangeId : entry.work),
-    deliver: async (args) => { sent.push(args) },
+    dispatch: { sendNotice: async (args) => { sent.push(args) } },
     warn() {},
   }
   install(rt)
@@ -52,7 +52,7 @@ test('a Bot that asked for the work hears that its delegate waits for approval, 
   await tick()
   assert.equal(sent.length, 1)
   const [notice] = sent
-  assert.deepEqual([notice.toId, notice.fromId, notice.role, notice.recordExchange], ['chief', 'maid', 'approval', false])
+  assert.deepEqual([notice.toId, notice.fromId, notice.role], ['chief', 'maid', 'approval'])
   assert.match(notice.text, /^TropMaid is waiting for the user's approval to run bash \(rm -rf build\)\. The user answers it in TropMaid's own chat\./)
   assert.match(notice.text, /Do not message TropMaid/)
 })

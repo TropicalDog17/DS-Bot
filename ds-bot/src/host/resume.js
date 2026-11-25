@@ -14,7 +14,6 @@
 // is settled from the Session's durable log: an answer that was produced goes to the Bot
 // that waits for it, and an outcome that cannot be read is said to be unknown. The
 // request itself is never sent again there.
-import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -193,23 +192,15 @@ export function install(rt) {
     }
   }
 
-  const deliver = rt.deliver
-  rt.deliver = async (args) => {
-    const noted = { ...args, exchangeId: args.exchangeId ?? randomUUID() }
-    const sessionId = noted.sessionId ?? reach(rt.botOf(noted.toId)).sessionId
-    // Noted before it is sent: a turn may take it up before the send returns. Notes
-    // are kept whole; nothing waits out a delivery silently.
-    queued = { ...queued, [sessionId]: [...(queued[sessionId] ?? []), { at: Date.now(), args: noted }] }
-    persist()
-    try {
-      return await deliver(noted)
-    } catch (error) {
-      // A delivery that never reached the inbox stays noted: the next start sends
-      // it again. One whose Bot is gone is dropped, since it can never be sent.
-      if (rt.botOf(noted.toId) === undefined) forgetQueued(noted.exchangeId)
-      throw error
-    }
-  }
+  rt.dispatch.attachOutbox({
+    queue(sessionId, args) {
+      // Noted before it is sent: a turn may take it up before the send returns. Notes
+      // are kept whole; nothing waits out a delivery silently.
+      queued = { ...queued, [sessionId]: [...(queued[sessionId] ?? []), { at: Date.now(), args }] }
+      persist()
+    },
+    forget: forgetQueued,
+  })
 
   // What a Session was sent and no turn has read yet.
   rt.unreadOf = sessionId => (queued[sessionId] ?? []).map(item => item.args)
@@ -305,7 +296,7 @@ export function install(rt) {
       // A turn already picked up once and cut off again stays stopped: a restart loop
       // must not run it forever.
       if (record.resumed) return
-      await rt.deliver({ toId: bot.id, sessionId: target.where === 'group' ? target.sessionId : sessionId, role: 'room', roomId: room.id, note: 'picking up after a restart', resumed: true, text, ...(record.trigger?.askedBy ? { askedBy: record.trigger.askedBy } : {}) })
+      await rt.dispatch.sendGroupTurn({ toId: bot.id, sessionId: target.where === 'group' ? target.sessionId : sessionId, roomId: room.id, note: 'picking up after a restart', resumed: true, text, ...(record.trigger?.askedBy ? { askedBy: record.trigger.askedBy } : {}) })
       return
     }
     if (record.resumed) return
@@ -317,11 +308,11 @@ export function install(rt) {
     const trigger = record.trigger
     if ((trigger?.role === 'request' || trigger?.role === 'stopped') && trigger.senderSessionId && trigger.audience !== 'user' && rt.botOf(trigger.senderSessionId)) {
       // The sender still waits for this turn's answer, so it goes on under the same exchange.
-      await rt.deliver({ fromId: trigger.senderSessionId, toId: bot.id, ...ownPart, ...(trigger.senderPart ? { fromPart: trigger.senderPart } : {}), role: trigger.role, ...(trigger.exchangeId ? { exchangeId: trigger.exchangeId } : {}), ...(trigger.senderRoomId ? { fromRoomId: trigger.senderRoomId } : {}), resumed: true, text })
+      await rt.dispatch.sendReply({ fromId: trigger.senderSessionId, toId: bot.id, ...ownPart, ...(trigger.senderPart ? { fromPart: trigger.senderPart } : {}), role: trigger.role, ...(trigger.exchangeId ? { exchangeId: trigger.exchangeId } : {}), ...(trigger.senderRoomId ? { fromRoomId: trigger.senderRoomId } : {}), resumed: true, text })
       return
     }
     // A turn that went on with work another Bot asked for still owes that Bot its answer.
-    await rt.deliver({ toId: bot.id, ...ownPart, role: 'resume', resumed: true, text, ...(trigger?.work ? { work: trigger.work } : {}) })
+    await rt.dispatch.sendNotice({ toId: bot.id, ...ownPart, role: 'resume', resumed: true, text, ...(trigger?.work ? { work: trigger.work } : {}) })
   }
 
   // Where a queued note goes now: its Session if it still is one, else the
@@ -354,7 +345,7 @@ export function install(rt) {
       // A request that waited through a restart reaches its target late: the work
       // it is for is marked, so the answer that comes back says so.
       if (args.role === 'request' || args.role === 'stopped') rt.lateWork?.(args.exchangeId)
-      await deliver({ ...args, sessionId: sessionFor(sessionId, args), steer: false, resent: true })
+      await rt.dispatch.resend({ ...args, sessionId: sessionFor(sessionId, args) })
         .catch(error => rt.warn('ds-bot: sending again what %s was sent failed: %s', sessionId, error))
     }
   }
@@ -566,7 +557,7 @@ export function install(rt) {
           : rt.selfOf(sessionId) === botId && rt.isBotSession(sessionId) ? { sessionId } : {}
         where = { ...ownPart, role: 'resume' }
       }
-      await rt.deliver({ toId: botId, ...where, resumed: true, text: jobsText(list) })
+      await rt.dispatch.sendNotice({ toId: botId, ...where, resumed: true, text: jobsText(list) })
         .catch(error => rt.warn('ds-bot: telling %s about its stopped jobs failed: %s', sessionId, error))
     }
     // What a group's members were asked for and will not pick up is settled now.

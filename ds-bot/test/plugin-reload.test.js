@@ -338,7 +338,7 @@ test('a new request joins a recovered turn and is answered in its own turn', asy
   cleanup(t, home, ctx)
   await settle(() => rt.live.get('b')?.turn !== undefined)
   const delivered = []
-  rt.deliver = async request => { delivered.push(request) }
+  rt.dispatch = { ...rt.dispatch, sendReply: async request => { delivered.push(request) } }
   const request = { kind: 'bot', role: 'request', exchangeId: 'new-request', senderSessionId: 'a' }
   const message = { source: request, content: [{ type: 'text', text: 'A separate new request' }] }
   emit(ctx, 'b', 'user/message', message)
@@ -403,7 +403,7 @@ test('a real DSH loop keeps post-reload input separate from the running task', a
   const second = await loadPlugin(dsh, home)
   active = second.ctx
   const delivered = []
-  second.rt.deliver = async request => { delivered.push(request) }
+  second.rt.dispatch = { ...second.rt.dispatch, sendReply: async request => { delivered.push(request) } }
   await settle(() => second.rt.live.get('b')?.turn !== undefined)
   const request = { kind: 'bot', role: 'request', exchangeId: 'new-request', senderSessionId: 'a' }
   const message = () => createUserMessage({ source: request, content: [{ type: 'text', text: 'A separate new request' }] })

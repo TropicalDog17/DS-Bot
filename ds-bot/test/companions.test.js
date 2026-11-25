@@ -22,7 +22,7 @@ const fixture = () => {
     isMain: id => id === 'a',
     findBot: ref => (Object.hasOwn(state.bots, ref) ? state.bots[ref] : undefined) ?? Object.values(state.bots).find(bot => bot.name.toLowerCase() === ref.toLowerCase()),
     onSaved: listener => { listeners.add(listener); return () => listeners.delete(listener) },
-    sendUser: async input => { sent.push(input) },
+    dispatch: { sendUser: async input => { sent.push(input) } },
   }
   return { rt, sent, listeners }
 }

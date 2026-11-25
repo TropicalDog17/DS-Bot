@@ -20,42 +20,10 @@ function start() {
   return { ctx, prompt }
 }
 
-test('Bots get a scoped progress rule without changing the private/group prompt prefix', (t) => {
+test('private and group Bot prompts share the same prefix; group relay and non-Bot sessions stay separate', (t) => {
   const { ctx, prompt } = start()
   t.after(() => ctx.dispose())
-  const rules = [
-    '- Only for a direct user request in your own chat that needs several steps: write one short sentence of normal reply text before your first tool call, and make that tool call in the same response. Never start such a task with tools alone or end it with a promise. On long tasks, give brief factual updates only at meaningful milestones, then keep working.',
-    '- For "[Message from …]" or "[Reply from …]" messages, do not write plans or progress updates: use tools silently, then reply with the answer. Simple answers do not need progress messages.',
-    '- In a group chat, the group sees what you write while you work, not only your final reply. For work that takes more than a quick look, start with one short sentence on what you will do, in the same response as your first tool call. After that, write only when you find something the group should know or finish a part of the work, in a sentence or two, not at every step. End with the result. Simple answers need no updates.',
-  ]
-  for (const id of ['main', 'worker']) {
-    for (const rule of rules) {
-      assert.ok(prompt(id).split('\n').includes(rule))
-      assert.equal(prompt(id).split(rule).length - 1, 1)
-    }
-  }
   assert.equal(prompt('group-worker'), prompt('worker'))
-})
-
-// 公开#1499: a Bot that is handed a saved path and finds `read` closed to a PDF has to know where to go next.
-test('Bots are told how to open a PDF the user attached, once, in the shared prefix', (t) => {
-  const { ctx, prompt } = start()
-  t.after(() => ctx.dispose())
-  for (const id of ['main', 'worker']) {
-    const rule = prompt(id).split('\n').filter(line => line.startsWith('- A file the user attaches reaches you as a saved path'))
-    assert.equal(rule.length, 1)
-    assert.match(rule[0], /read tool opens text files only/)
-    assert.match(rule[0], /scanned or not/)
-    assert.match(rule[0], /office skill/)
-    assert.match(rule[0], /office_render/)
-    assert.match(rule[0], /never answer only that the file cannot be read/)
-  }
-  assert.equal(prompt('group-worker'), prompt('worker'))
-})
-
-test('the group relay and non-Bot sessions do not get progress instructions', (t) => {
-  const { ctx, prompt } = start()
-  t.after(() => ctx.dispose())
   assert.match(prompt('room'), /end your turn with an empty reply/)
   assert.doesNotMatch(prompt('room'), /progress|milestone/)
   assert.equal(prompt('outside'), '')

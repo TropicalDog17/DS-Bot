@@ -38,8 +38,10 @@ function fakeTeam({ threads = true, load = async () => {} } = {}) {
     isMain: id => id === 'a',
     findBot: ref => (hasOwn(state.bots, ref) ? state.bots[ref] : Object.values(state.bots).find(bot => bot.name.toLowerCase() === ref.toLowerCase())),
     onSaved: () => () => {},
-    sendUser: async input => { sent.push([input.sessionId, input.content[0].text]); requests.push(input.requestId) },
-    deliver: async input => { delivered.push(input) },
+    dispatch: {
+      sendUser: async input => { sent.push([input.sessionId, input.content[0].text]); requests.push(input.requestId) },
+      sendNotice: async input => { delivered.push(input) },
+    },
     // Card threads as the host keeps them, named ct-<card id>.
     openCardThread: threads ? async (botId, cardId) => {
       const bot = state.bots[botId]

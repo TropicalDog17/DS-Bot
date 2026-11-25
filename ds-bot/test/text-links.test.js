@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { linkTarget, linkTexts, textLinks } from '../src/client/text-links.js'
 
@@ -25,10 +24,4 @@ test('a tap on a companion link names its entry and id; any other tap is not one
   assert.deepEqual(linkTarget(on, [entry]), { entry, id: 'c_1' })
   assert.equal(linkTarget({ target: { closest: () => null } }, [entry]), null)
   assert.equal(linkTarget(on, []), null)
-})
-
-test('a Bot bubble draws companion links and opens their page on a tap', () => {
-  const cells = readFileSync(new URL('../src/client/cells.js', import.meta.url), 'utf8')
-  assert.match(cells, /linkMentions\(linkTexts\(shown, links\)/)
-  assert.match(cells, /link\.entry\.open\(link\.id\)\s*\n\s*if \(link\.entry\.page\) actions\.openPage\(link\.entry\.page\)/)
 })

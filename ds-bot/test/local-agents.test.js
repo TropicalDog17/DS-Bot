@@ -893,7 +893,6 @@ test('a fresh part carries the deterministic handoff', async () => {
     renewMemory: () => {},
     moveSchedules: async () => {},
     sessionTitle: { rename: async () => {} },
-    deliver: async (message) => delivered.push(message),
     teamFolder: () => '/tmp/team',
     workDirOf: () => '/tmp/team',
     isFolder: async () => true,

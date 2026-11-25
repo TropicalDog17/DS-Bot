@@ -22,6 +22,8 @@ export async function bundleClient() {
     absWorkingDir: PLUGIN,
     entryPoints: ['src/client/index.js'],
     bundle: true,
+    // Client sources are plain JS; keep host tsconfig.json from altering the bundle.
+    tsconfigRaw: '{}',
     format: 'cjs',
     platform: 'browser',
     target: 'es2022',

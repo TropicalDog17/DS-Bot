@@ -130,7 +130,7 @@ export function notesService(rt) {
       const seed = opened && where === 'card' ? keepLines(brief, BRIEF_MAX) : ''
       const message = where === 'group' ? `@${bot.name} ${line}` : [seed, line].filter(Boolean).join('\n\n')
       const requestId = typeof given === 'string' && given !== '' ? given : randomUUID()
-      await rt.sendUser({ sessionId, content: [{ type: 'text', text: message }], requestId, ...(where === 'card' ? { steer: true } : {}) })
+      await rt.dispatch.sendUser({ sessionId, content: [{ type: 'text', text: message }], requestId, ...(where === 'card' ? { steer: true } : {}) })
       return { sessionId, where: where === 'own' ? 'chat' : where, requestId }
     },
     // { botId, cardId, title?, text } -> { sessionId, requestId } | { error }. Opens the
@@ -147,7 +147,7 @@ export function notesService(rt) {
       const sessionId = await open(botId, cardId, title, roomId, mayOpen)
       if (sessionId === undefined || !mayOpen()) return { error: 'Card threads are not available.' }
       const requestId = randomUUID()
-      await rt.sendUser({ sessionId, content: [{ type: 'text', text: brief }], requestId })
+      await rt.dispatch.sendUser({ sessionId, content: [{ type: 'text', text: brief }], requestId })
       return { sessionId, requestId }
     },
     // { botId, cardId } -> the Session of the card's open thread, or undefined.
@@ -174,7 +174,7 @@ export function notesService(rt) {
       if (body === '') return { error: 'Write a note first.' }
       const sessionId = threadOf(botId, cardId)
       if (sessionId === undefined) return { error: 'The card has no conversation.' }
-      await rt.deliver({ toId: bot.id, sessionId, role: 'wake', note: oneLine(note, 120) || `card ${cardId}`, text: body, ...(steer ? { steer: true } : {}) })
+      await rt.dispatch.sendNotice({ toId: bot.id, sessionId, role: 'wake', note: oneLine(note, 120) || `card ${cardId}`, text: body, ...(steer ? { steer: true } : {}) })
       return { where: 'card' }
     },
     // { botId } -> true while any conversation of the Bot is in a turn.
@@ -198,10 +198,10 @@ export function notesService(rt) {
       const card = typeof cardId === 'string' ? cardId : 'a card'
       const target = reach(bot, { roomId, room: roomOf(roomId) })
       if (target.where === 'group') {
-        await rt.deliver({ toId: bot.id, sessionId: target.sessionId, role: 'room', roomId, note: `card ${card} ended`, text: body })
+        await rt.dispatch.sendNotice({ toId: bot.id, sessionId: target.sessionId, role: 'room', roomId, note: `card ${card} ended`, text: body })
         return { where: 'group' }
       }
-      await rt.deliver({ toId: bot.id, role: quiet ? 'wake' : 'card', note: `Card ${card} ended in its own conversation`, text: body })
+      await rt.dispatch.sendNotice({ toId: bot.id, role: quiet ? 'wake' : 'card', note: `Card ${card} ended in its own conversation`, text: body })
       return { where: 'chat' }
     },
     // { botId, cardId, stop? } -> { closed: true | 'later' | false }. 'later': the thread's
@@ -213,7 +213,7 @@ export function notesService(rt) {
       const sessionId = threadOf(botId, cardId)
       const body = keepLines(stop, NOTE_MAX)
       if (body !== '' && sessionId !== undefined && inTurn(sessionId)) {
-        await rt.deliver({ toId: botId, sessionId, role: 'wake', note: `card ${cardId} ended`, text: body, steer: true })
+        await rt.dispatch.sendNotice({ toId: botId, sessionId, role: 'wake', note: `card ${cardId} ended`, text: body, steer: true })
           .catch(error => rt.warn?.('ds-bot: could not tell the thread of %s that it ended: %s', cardId, error))
       }
       return { closed: await rt.closeCardThread(botId, cardId) }
@@ -230,7 +230,7 @@ export function notesService(rt) {
       if (body === '') return { error: 'Write a note first.' }
       const note = `herdr pane ${oneLine(pane, 40) || '?'} · the wait you started is over`
       const { sessionId, where } = reach(bot, { cardId: typeof cardId === 'string' && cardOpen(botId, cardId) ? cardId : undefined, roomId, room: roomOf(roomId) })
-      await rt.deliver({
+      await rt.dispatch.sendNotice({
         toId: bot.id, note, text: body,
         ...(where === 'group' ? { sessionId, role: 'room', roomId }
           : { role: 'wake', ...(where === 'card' ? { sessionId } : {}) }),

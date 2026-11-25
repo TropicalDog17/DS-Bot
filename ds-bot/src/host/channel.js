@@ -621,7 +621,7 @@ export function install(rt) {
         case 'view-reply': {
           if (typeof body.sessionId !== 'string') return fail('Nothing to send', 'bot/invalid')
           await rt.load()
-          const sessionId = ownThreadTarget(body.sessionId) ?? body.sessionId
+          const sessionId = rt.dispatch.resolveOwnThread(body.sessionId) ?? body.sessionId
           const pending = rt.own(state.views, sessionId)
           if (pending === undefined || pending.id !== body.viewId) return fail('This view is no longer open', 'bot/stale')
           const checked = validateViewAnswer(pending.view, body.action, body.values)
@@ -661,7 +661,7 @@ export function install(rt) {
           const images = ids.map(id => staged.get(id))
           if (images.some(entry => entry === undefined)) return fail('A photo did not arrive. Send it again.', 'bot/stale')
           await rt.load()
-          await rt.sendUser({
+          await rt.dispatch.sendUser({
             sessionId: body.sessionId,
             content: [
               ...(text === '' ? [] : [{ type: 'text', text }]),
@@ -844,36 +844,10 @@ export function install(rt) {
   rt.channelCall = handle
   rt.phoneServe(handle)
 
-  // How a user message reaches a Session: a Bot id, a group chat's id, or an earlier
-  // part of either resolves to its current part. `content` is the prompt blocks DSH
-  // takes (text, image, file receipts); `requestId` lands on the message's source.
-  function ownThreadTarget(ref, past = rt.pastOwners.get(ref)) {
-    if (rt.botOf(ref)) return rt.chatOf(ref)
-    if (past !== undefined && past.roomId === undefined) return threadCurrentOfPart(rt.botOf(past.botId), ref) ?? rt.chatOf(past.botId)
-    return undefined
-  }
-
-  // steer: the message cuts into a turn that runs there at its next step, instead of
-  // waiting behind it; with no turn running it starts one, as a queued message does.
-  async function sendUser({ sessionId: ref, content, requestId = randomUUID(), steer = false }) {
-    const past = rt.pastOwners.get(ref)
-    const room = rt.roomOf(ref)
-    const sessionId = ownThreadTarget(ref, past)
-      ?? (room !== undefined ? rt.sessionOfRoom(room)
-        : past !== undefined ? rt.sessionOfRoom(rt.roomOf(past.roomId)) : ref)
-    await rt.ensureCapabilities(sessionId)
-    await ctx.sessionController.prompt({
-      requestId,
-      sessionId,
-      mode: steer ? 'steer' : 'queue',
-      content,
-    }, AbortSignal.timeout(30_000))
-  }
-
   // The user's answer to an ask_user card, from the web or an IM chat. A Bot id or an
   // earlier part of its own chat means the current one.
   async function answerQuestion(sessionRef, questionId, answer, requestId) {
-    const sessionId = ownThreadTarget(sessionRef) ?? sessionRef
+    const sessionId = rt.dispatch.resolveOwnThread(sessionRef) ?? sessionRef
     const question = rt.own(state.questions, sessionId)
     if (question === undefined || question.id !== questionId) throw Object.assign(new Error('This question is no longer open'), { code: 'bot/stale' })
     const reply = questionReply(question, answer)
@@ -893,7 +867,7 @@ export function install(rt) {
     return true
   }
 
-  Object.assign(rt, { sendUser, answerQuestion })
+  Object.assign(rt, { answerQuestion })
 
   // An exact Fetch route on the shared /api channel; the browser authenticates with its session cookie.
   ctx.effect(() => ctx.connection.fetch.register({
