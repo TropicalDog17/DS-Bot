@@ -65,6 +65,19 @@ Cards are kept in `<DSH_HOME>/bot-board/board.json`. To keep them elsewhere:
 - A card keeps its steps (`log`): every column and progress it moved to, with the time
   and who moved it, the last 40. The sheet shows the progress line and folds the earlier
   steps under History, so progress no longer overwrites how the work went.
+- A card is Done only when its code is in. When a Bot calls `board complete` on a card
+  with a GitHub pull request in its links (or the `link` it brings), the board asks
+  `gh pr view <url> --json state` first. If any PR is not reported `MERGED` (or gh can't
+  tell), the card goes to Review instead. It keeps the result, gets `need: Merge <the
+  PRs>`, and is marked `waitsMerge`. Its thread stays open, and the phone push says it
+  is ready for review. A Bot that moves a card into Review with a PR, or adds a PR to it
+  there, marks it the same way. Every 5 minutes (`config.mergePollMs`), the board asks
+  gh about the PRs of each card that waits, and moves the card to Done once all of them
+  are merged. Then it closes the card's thread, tells the Bot that opened the card, and
+  pushes "all merged". A card that leaves Review (the user drags it back, the Bot moves
+  it on) stops waiting. A PR closed without merging leaves the card in Review for the
+  user. gh is found at `config.gh`, else `/usr/bin/gh`, else on the PATH, and runs as
+  the user who runs dsh.
 - The sheet shows the card's brief under its links, folded to a few lines when long.
 - Work a Bot hands to a [herdr](https://herdr.dev) pane runs outside its turns, so the
   card's own trace goes quiet while the pane works. A card keeps the panes its work runs

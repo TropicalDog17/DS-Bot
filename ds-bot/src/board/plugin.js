@@ -13,6 +13,8 @@
 // Work a Bot hands to a herdr pane runs outside its turns; the card keeps the panes its
 // Bot drives and the page reads what they show (herdr.js). A Bot waits on a pane with
 // wait_pane: the board keeps the wait, polls the pane and wakes the Bot (waits.js).
+// A card finished while its GitHub PR is not merged waits in Review; the board asks gh
+// and moves it to Done once every PR on it is merged (prs.js).
 import { join } from 'node:path'
 import { defineTool } from '../host/tool-schema.js'
 import { dshHomeOf } from '../host/folders.js'
@@ -23,6 +25,7 @@ import { createHerdr, herdrBinary, panesIn } from './herdr.js'
 import { WATCH_MS, sweep } from './watch.js'
 import { createPaneWaits } from './waits.js'
 import { every } from './poller.js'
+import { createPrs, ghBinary, prsOf } from './prs.js'
 
 export const ROUTE = '/api/ds-bot-board'
 // After DS Bot's own identity section (640), so the board rules read as part of it.
@@ -31,6 +34,8 @@ const DIGEST_CARDS = 15
 // How often a card still without a card thread is tried again; the first try is this
 // long after start, when DS Bot has resumed the turns a restart cut off.
 const ADOPT_MS = 60_000
+// How often the PRs of cards that wait for a merge are asked about.
+const MERGE_POLL_MS = 5 * 60 * 1000
 const COLUMN_NAME = { todo: 'Todo', active: 'In progress', review: 'Review', blocked: 'Blocked' }
 const MAIN_BOARD_RULES = [
   '## The board',
@@ -44,7 +49,7 @@ const MAIN_BOARD_RULES = [
 const BOARD_RULES = [
   '## The board',
   '- Every task you take is a card. When the user asks you for one directly, open the card yourself (board open) with a brief: its work runs in a conversation of its own for the card, so tell the user in one line that you took it and stop there. Do not open a card for a step of the card you are working on.',
-  '- A card handed to you arrives in a conversation of its own that starts with "[Card …]". Do that card\'s work there: board update as it moves (when it waits on the user, review or blocked with need: what the user must do and the link to it), board ask when the user must choose, then board complete with a one-line result or board cancel with the reason. Notes on the card arrive in the same conversation.',
+  '- A card handed to you arrives in a conversation of its own that starts with "[Card …]". Do that card\'s work there: board update as it moves (when it waits on the user, review or blocked with need: what the user must do and the link to it), board ask when the user must choose, then board complete with a one-line result or board cancel with the reason. A card whose PR (a link on it) is not merged yet waits in Review after complete and moves to Done by itself once every PR on it is merged. Notes on the card arrive in the same conversation.',
   '- Work you run in a herdr pane shows on the card by itself when you drive the pane from the card\'s conversation. From anywhere else, board update with pane (its id, like w1:p1T) so the user can watch it.',
   '- To wait for work in a herdr pane, call wait_pane with the pane and end your turn: you are woken in this conversation when it gets there, also after a restart. Never wait with herdr agent wait, herdr agent prompt --wait or a background job: a restart or a new part of your chat stops those, and nothing wakes you.',
   '- On a card that runs long, board update progress in one line at each step (when you hand work to a pane, when you are woken, when a test or deploy ends): the user reads it on the card and on the phone instead of asking how it is going.',
@@ -69,13 +74,19 @@ export function commandOf(argumentsText) {
 
 export const boardFileOf = (config = {}, env = process.env) => config.file ?? join(dshHomeOf(env.DSH_HOME), 'bot-board', 'board.json')
 
-export function install(ctx, config, { identity, roster, notes, bridge, tools, connection, systemPrompt, store = openBoardStore(boardFileOf(config), { warn: (...args) => ctx.logger?.warn?.(...args) }), herdr = createHerdr({ binary: herdrBinary(config) }), now = Date.now }) {
+export function install(ctx, config, { identity, roster, notes, bridge, tools, connection, systemPrompt, store = openBoardStore(boardFileOf(config), { warn: (...args) => ctx.logger?.warn?.(...args) }), herdr = createHerdr({ binary: herdrBinary(config) }), prs = createPrs({ binary: ghBinary(config) }), now = Date.now }) {
   const warn = (...args) => ctx.logger?.warn?.(...args)
   const board = createBoard({ roster, now })
   const live = createLive({ identity, now })
   let disposed = false
   const cardOfSession = sessionId => identity.ownerOfSession(sessionId)?.cardId
   const delivering = new Map()
+
+  // A PR gh cannot tell about still counts as unmerged.
+  const unmergedOf = async (urls) => {
+    const states = await Promise.all(urls.map(url => prs.state(url).catch(() => undefined)))
+    return urls.filter((_url, index) => states[index] !== 'MERGED')
+  }
 
   const tool = defineTool({
     name: 'board',
@@ -94,7 +105,7 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
       need: { type: 'string', description: 'update to review or blocked: what the user must do (approve, merge, answer) with the link to it; Markdown' },
       link: { type: 'string', description: 'A URL to attach, e.g. the PR' },
       pane: { type: 'string', description: 'update: the herdr pane the work runs in (e.g. w1:p1T), so the card shows it' },
-      result: { type: 'string', description: 'complete: the result, one line' },
+      result: { type: 'string', description: 'complete: the result, one line. A card with a PR not merged yet waits in Review until it is' },
       reason: { type: 'string', description: 'cancel: why it stops' },
       question: { type: 'string', description: 'ask: what the user decides; Markdown' },
       options: { type: 'array', items: { type: 'string' }, description: 'ask: 2 to 6 short choices, each one line' },
@@ -107,7 +118,9 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
       // The tool schema has already refused an unknown action or status and a field
       // that is not text.
       if (args.action === 'show') return board.show(store.read().cards, owner.botId)
-      const result = await store.change(data => board.bot(data.cards, args.action, owner.botId, owner.roomId, args, exec?.agent?.id))
+      const sessionId = exec?.agent?.id
+      const unmerged = args.action === 'complete' ? await unmergedOf(board.prsFor(store.read().cards, args, owner.botId)) : []
+      const result = await store.change(data => board.bot(data.cards, args.action, owner.botId, owner.roomId, args, { sessionId, unmerged }))
       if (result.error !== undefined) return result.error
       const after = await run(result.card, result.effects)
       return [result.said, after?.said, board.line(result.card, owner.botId)].filter(Boolean).join('\n')
@@ -304,6 +317,7 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
     tools.register(waits.tool),
     bridge.share(waits.tool.name),
     waits.dispose,
+    mergePoller(),
     connection.fetch.register({
       path: ROUTE,
       methods: ['POST'],
@@ -365,6 +379,40 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
     }
     return { moved, waiting }
   }
+  // Each card that waits for a merge, once per poll: when gh reports every PR on it
+  // merged, it moves to Done, its thread closes and the Bot that opened it hears.
+  let merging = false
+  async function mergeOnce() {
+    if (disposed || merging || store.readOnly()) return []
+    merging = true
+    const done = []
+    try {
+      await roster.ready()
+      for (const card of Object.values(store.read().cards)) {
+        if (card.status !== 'review' || card.waitsMerge !== true) continue
+        const urls = prsOf(card.links)
+        if (urls.length === 0 || (await unmergedOf(urls)).length > 0) continue
+        if (disposed) break
+        const result = await store.change(data => {
+          if (disposed) return { error: 'The board is disposed.' }
+          const currentUrls = prsOf(data.cards[card.id]?.links)
+          if (currentUrls.some(url => !urls.includes(url))) return { error: 'The card has unchecked PRs.' }
+          return board.merged(data.cards, card.id)
+        })
+        if (result.error !== undefined) continue
+        await run(result.card, result.effects)
+        done.push(card.id)
+      }
+    } finally {
+      merging = false
+    }
+    return done
+  }
+  function mergePoller() {
+    const interval = config.mergePollMs ?? MERGE_POLL_MS
+    if (!(interval > 0)) return undefined
+    return every(interval, mergeOnce, { readOnly: () => store.readOnly(), onError: error => warn('ds-bot-board: checking merged PRs failed: %s', error) })
+  }
   async function watchOnce() {
     if (disposed || store.readOnly()) return []
     await roster.ready()
@@ -387,6 +435,7 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
     watchOnce,
     adoptOnce,
     waits,
+    mergeOnce,
     rulesFor,
     openCardsDigest,
     handle: async (endpoint, payload) => respond(await handle(endpoint, payload)),

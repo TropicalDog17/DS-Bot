@@ -11,6 +11,7 @@ import { PROGRESS_AFTER_MS, PROGRESS_PUSH_MS } from '../src/board/watch.js'
 import { herdrSkillProvider } from '../src/board/skill.js'
 import { KEPT_THINK_MAX, callAbout, keep, visibleThought } from '../src/board/live.js'
 import { createHerdr, herdrBinary, panesIn } from '../src/board/herdr.js'
+import { createPrs, ghBinary, prUrl, prsOf } from '../src/board/prs.js'
 import { commandOf } from '../src/board/plugin.js'
 import { ARM_MS, WAITS_PER_BOT, WAIT_MAX_MS, addWait, check, wakeText } from '../src/board/waits.js'
 import { bridgeService, notesService, rosterService } from '../src/host/companions.js'
@@ -78,7 +79,8 @@ function fakeTeam({ threads = true, load = async () => {} } = {}) {
 
 // threads: false is a host without card threads, where a card's notes reach the Bot in
 // its own chat or its group and the card waits for the answer there.
-function host(t, { file, notes, now = Date.now, config = {}, threads = true, herdr, load } = {}) {
+// prs: what gh reports for each PR address; a PR not named is merged.
+function host(t, { file, notes, now = Date.now, config = {}, threads = true, herdr, load, prs = {} } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'ds-bot-board-plugin-'))
   t.after(() => rmSync(dir, { recursive: true, force: true }))
   // threads: false leaves out openCardThread, so notes cannot open a thread and says so,
@@ -94,7 +96,8 @@ function host(t, { file, notes, now = Date.now, config = {}, threads = true, her
   const emit = (name, ...args) => listeners[name]?.(...args)
   const sections = new Map()
   const systemPrompt = { section: (section) => { sections.set(section.name, section); return () => { sections.delete(section.name) } } }
-  const handle = install(ctx, { file: boardFile, adoptMs: -1, waitPollMs: -1, ...config }, { ...team, ...(notes ? { notes } : {}), ...(herdr ? { herdr } : {}), tools, connection, systemPrompt, store: openBoardStore(boardFile), now })
+  const gh = { state: async url => (Object.hasOwn(prs, url) ? prs[url] : 'MERGED') }
+  const handle = install(ctx, { file: boardFile, adoptMs: -1, waitPollMs: -1, mergePollMs: -1, ...config }, { ...team, ...(notes ? { notes } : {}), ...(herdr ? { herdr } : {}), tools, connection, systemPrompt, store: openBoardStore(boardFile), prs: gh, now })
   t.after(() => handle.dispose())
   const tool = (args, sessionId = 'b') => registered.tools.find(entry => entry.name === 'board').execute(args, { agent: { id: sessionId } })
   const cards = () => Object.values(JSON.parse(readFileSync(boardFile, 'utf8')).cards)
@@ -1185,4 +1188,82 @@ test('the herdr-panes skill tells a Bot how to hand work to a pane without holdi
   assert.match(skill.content, /herdr agent prompt <pane> "<task>"`, without `--wait`/)
   assert.match(skill.content, /call `wait_pane` with the pane, and end your turn/)
   assert.match(skill.content, /Never close a pane/)
+})
+
+test('a card finished while its PR is open waits in Review and moves to Done once every PR is merged', async (t) => {
+  const prs = { 'https://github.com/o/r/pull/7': 'OPEN', 'https://github.com/o/r/pull/8': 'OPEN' }
+  const h = host(t, { prs })
+  await h.tool({ action: 'open', title: 'Draft the newsletter', assignee: 'Writer', brief: 'Write it.' }, 'a')
+  const [{ id }] = h.cards()
+  await h.tool({ action: 'update', id, link: 'https://github.com/o/r/pull/7/files' })
+  const said = await h.tool({ action: 'complete', id, result: 'Draft in docs/news.md', link: 'https://github.com/o/r/pull/8' })
+  assert.match(said, /waits in Review until o\/r#7, o\/r#8 are merged, then moves to Done by itself/)
+  let [card] = h.cards()
+  assert.deepEqual([card.status, card.result, card.waitsMerge, card.doneAt], ['review', 'Draft in docs/news.md', true, undefined])
+  assert.equal(card.need, 'Merge [o/r#7](https://github.com/o/r/pull/7), [o/r#8](https://github.com/o/r/pull/8).')
+  // The card thread stays open: the work may come back from review.
+  assert.deepEqual(h.team.state.bots.b.openParts.map(part => part.card), [id])
+  assert.match(h.team.pushes.at(-1).text, /is ready for review, merge o\/r#7, o\/r#8: Draft in docs\/news\.md/)
+
+  // One merged is not enough; gh failing to tell is not merged either.
+  prs['https://github.com/o/r/pull/7'] = 'MERGED'
+  prs['https://github.com/o/r/pull/8'] = undefined
+  assert.deepEqual(await h.handle.mergeOnce(), [])
+  assert.equal(h.cards()[0].status, 'review')
+
+  prs['https://github.com/o/r/pull/8'] = 'MERGED'
+  assert.deepEqual(await h.handle.mergeOnce(), [id]);
+  [card] = h.cards()
+  assert.deepEqual([card.status, card.result, card.waitsMerge, card.need, typeof card.doneAt], ['done', 'Draft in docs/news.md', undefined, undefined, 'number'])
+  assert.deepEqual(h.team.state.bots.b.openParts, [])
+  assert.match(h.team.pushes.at(-1).text, /done "Draft the newsletter", all merged: Draft in docs\/news\.md/)
+  // Chief opened it, so Chief hears how it ended.
+  assert.deepEqual([h.team.delivered.at(-1).toId, h.team.delivered.at(-1).text.split('\n')[0]], ['a', `Card ${id} "Draft the newsletter" is done: Draft in docs/news.md (merged) (https://github.com/o/r/pull/8)`])
+  assert.deepEqual(await h.handle.mergeOnce(), [])
+})
+
+test('a card whose PRs are already merged, or that has none, finishes at once', async (t) => {
+  const h = host(t)
+  await h.tool({ action: 'open', title: 'Fix CI', brief: 'Fix it.', progress: 'x' })
+  assert.match(await h.tool({ action: 'complete', result: 'Fixed', link: 'https://github.com/o/r/pull/9' }), /^Finished/)
+  assert.equal(h.cards()[0].status, 'done')
+  await h.tool({ action: 'open', title: 'Write notes', brief: 'Write them.' })
+  assert.match(await h.tool({ action: 'complete', result: 'Written', link: 'https://example.com/notes' }), /^Finished/)
+})
+
+test('a card moved into Review with a PR waits for the merge; leaving Review stops the wait', async (t) => {
+  const prs = { 'https://github.com/o/r/pull/7': 'OPEN' }
+  const h = host(t, { prs })
+  await h.tool({ action: 'open', title: 'Ship it', brief: 'Ship.' })
+  // Review without a PR, and a question, do not wait for a merge.
+  await h.tool({ action: 'update', status: 'review', need: 'Look at it.' })
+  assert.equal(h.cards()[0].waitsMerge, undefined)
+  await h.tool({ action: 'update', link: 'https://github.com/o/r/pull/7', need: 'Merge it.' })
+  assert.equal(h.cards()[0].waitsMerge, true)
+  const [{ id }] = h.cards()
+  await h.post('move', { id, status: 'active' })
+  assert.equal(h.cards()[0].waitsMerge, undefined)
+  prs['https://github.com/o/r/pull/7'] = 'MERGED'
+  assert.deepEqual(await h.handle.mergeOnce(), [])
+  assert.equal(h.cards()[0].status, 'active')
+  await h.tool({ action: 'update', status: 'review' })
+  assert.deepEqual(await h.handle.mergeOnce(), [id])
+  assert.deepEqual([h.cards()[0].status, h.cards()[0].result], ['done', 'Merged o/r#7'])
+})
+
+test('PR addresses and gh states', async () => {
+  assert.equal(prUrl(' https://github.com/o/r.js/pull/12/files?x=1 '), 'https://github.com/o/r.js/pull/12')
+  assert.equal(prUrl('https://github.com/o/r/issues/12'), undefined)
+  assert.equal(prUrl('https://github.com/o/r/pull/12x'), undefined)
+  assert.deepEqual(prsOf([{ url: 'https://github.com/o/r/pull/1' }, 'https://github.com/o/r/pull/1#top', undefined, { url: 'https://example.com' }]), ['https://github.com/o/r/pull/1'])
+  assert.equal(ghBinary({ gh: '/opt/gh' }), '/opt/gh')
+  const calls = []
+  const answers = [{ ok: true, stdout: '{"state":"MERGED"}' }, { ok: false, stdout: '' }, { ok: true, stdout: '{"state":"DRAFT"}' }]
+  const gh = createPrs({ binary: 'gh', exec: async (file, args) => { calls.push([file, ...args]); return answers.shift() } })
+  assert.equal(await gh.state('https://github.com/o/r/pull/3/files'), 'MERGED')
+  assert.deepEqual(calls[0], ['gh', 'pr', 'view', 'https://github.com/o/r/pull/3', '--json', 'state'])
+  assert.equal(await gh.state('https://github.com/o/r/pull/3'), undefined)
+  assert.equal(await gh.state('https://github.com/o/r/pull/3'), undefined)
+  assert.equal(await gh.state('https://example.com'), undefined)
+  assert.equal(calls.length, 3)
 })
