@@ -6,7 +6,7 @@ import { test } from 'node:test'
 import { apply, inject, name } from '../src/board/entry.js'
 import { ROUTE, boardFileOf, install } from '../src/board/plugin.js'
 import { READ_ONLY, openBoardStore } from '../src/board/store.js'
-import { ACTIONS, ticketKey, titleKey } from '../src/board/cards.js'
+import { ACTIONS, createBoard, ticketKey, titleKey } from '../src/board/cards.js'
 import { PROGRESS_AFTER_MS, PROGRESS_PUSH_MS } from '../src/board/watch.js'
 import { herdrSkillProvider } from '../src/board/skill.js'
 import { KEPT_THINK_MAX, callAbout, keep, visibleThought } from '../src/board/live.js'
@@ -770,6 +770,53 @@ test('a long card pushes a blocked card, and its progress at most every half hou
   ])
 })
 
+test('board outcomes carry their effects and clear the push stamp on close', () => {
+  const { roster } = fakeTeam()
+  const board = createBoard({ roster, now: () => 123 })
+  const cards = {}
+  const { card, effects: open } = board.bot(cards, 'open', 'a', undefined, { title: 'Fix CI', assignee: 'Writer', brief: 'Fix lint.' })
+  assert.deepEqual(open.map(effect => effect.kind), ['start'])
+  assert.equal(open[0].payload.cardId, card.id)
+  const { effects: update } = board.bot(cards, 'update', 'b', undefined, { id: card.id, status: 'review', progress: 'Tests passed' })
+  assert.deepEqual(update, [{ kind: 'push', text: `Writer · ${card.id}: "Fix CI" is ready for review: Tests passed` }])
+  assert.equal(card.pushedAt, 123)
+  const { effects: complete } = board.bot(cards, 'complete', 'b', undefined, { id: card.id, result: 'Merged' })
+  assert.deepEqual(complete.map(effect => effect.kind), ['close', 'report', 'push'])
+  assert.equal(complete[1].payload.botId, 'a')
+  assert.equal(card.pushedAt, undefined)
+
+  const { card: another, effects: add } = board.user.add(cards, { title: 'Book a room', assignee: 'b' })
+  assert.deepEqual(add.map(effect => effect.kind), ['start'])
+  assert.deepEqual(board.user.note(cards, another.id, 'For Friday').effects.map(effect => effect.kind), ['deliver'])
+  board.bot(cards, 'update', 'b', undefined, { id: another.id, status: 'blocked' })
+  assert.equal(another.pushedAt, 123)
+  assert.deepEqual(board.user.move(cards, another.id, 'done').effects.map(effect => effect.kind), ['close'])
+  assert.equal(another.pushedAt, undefined)
+})
+
+test('the progress push throttle survives a restart and is saved before sending', async (t) => {
+  let clock = 2 * PROGRESS_PUSH_MS
+  const dir = mkdtempSync(join(tmpdir(), 'ds-bot-board-throttle-'))
+  const file = join(dir, 'board.json')
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  const id = 'c_load'
+  const pushedAt = clock - 1_000
+  writeFileSync(file, JSON.stringify({ version: 1, cards: { [id]: {
+    id, title: 'Load test', assignee: 'b', openedBy: 'b', status: 'active',
+    createdAt: 0, updatedAt: pushedAt, progress: 'Started', pushedAt,
+  } } }))
+  const pushes = []
+  const h = host(t, { file, now: () => clock, notes: { push: push => {
+    pushes.push({ ...push, savedAt: JSON.parse(readFileSync(file, 'utf8')).cards[id].pushedAt })
+  } } })
+  assert.match(await h.tool({ action: 'update', id, progress: 'Half done' }), /^Updated c_load/)
+  assert.deepEqual(pushes, [])
+  assert.equal(h.cards()[0].pushedAt, pushedAt)
+  clock = pushedAt + PROGRESS_PUSH_MS
+  assert.match(await h.tool({ action: 'update', id, progress: 'Tested all runs' }), /^Updated c_load/)
+  assert.deepEqual(pushes, [{ cardId: id, botId: 'b', text: 'Writer · c_load: "Load test": Tested all runs', savedAt: clock }])
+})
+
 test('a card for a ticket takes its key from the title, and a second open card for it is refused', async (t) => {
   assert.equal(titleKey('LIFE-782: fix the redirect'), 'LIFE-782')
   assert.equal(titleKey('life-782 · step 2'), 'LIFE-782')
@@ -1013,9 +1060,9 @@ test('wait_pane keeps the wait on the board and wakes the Bot where it asked, al
   assert.deepEqual(saved.cards[card.id].panes.map(entry => entry.id), ['w1:p1T'])
 
   // Still idle right after the prompt, and still working: nobody is woken.
-  assert.deepEqual(await h.handle.pollWaits(), [])
+  assert.deepEqual(await h.handle.waits.poll(), [])
   statuses['w1:p1T'] = 'working'
-  assert.deepEqual(await h.handle.pollWaits(), [])
+  assert.deepEqual(await h.handle.waits.poll(), [])
   assert.equal(h.team.delivered.length, 0)
 
   // A restart: a new host on the same board keeps both waits.
@@ -1026,7 +1073,7 @@ test('wait_pane keeps the wait on the board and wakes the Bot where it asked, al
   statuses['w1:p1T'] = 'done'
   statuses['w1:p2'] = 'blocked'
   clock += 5000
-  assert.equal((await again.handle.pollWaits()).length, 2)
+  assert.equal((await again.handle.waits.poll()).length, 2)
   assert.deepEqual(again.team.delivered.map(entry => [entry.toId, entry.sessionId, entry.role, entry.note]), [
     ['b', thread, 'wake', 'herdr pane w1:p1T · the wait you started is over'],
     ['b', undefined, 'wake', 'herdr pane w1:p2 · the wait you started is over'],
@@ -1034,7 +1081,7 @@ test('wait_pane keeps the wait on the board and wakes the Bot where it asked, al
   assert.match(again.team.delivered[0].text, new RegExp(`^herdr pane w1:p1T is done\\.\\nIt is the work of card ${card.id}\\.\\nYour note when you started waiting: open the PR\\nWhat it shows last:\\n\`\`\`\\ntests passed in w1:p1T\\n`))
   assert.match(again.team.delivered[1].text, /^herdr pane w1:p2 is blocked\./)
   assert.equal(JSON.parse(readFileSync(file, 'utf8')).waits, undefined)
-  assert.deepEqual(await again.handle.pollWaits(), [])
+  assert.deepEqual(await again.handle.waits.poll(), [])
 })
 
 test('wait_pane stop ends a wait, and a pane that is gone wakes its Bot once', async (t) => {
@@ -1048,10 +1095,10 @@ test('wait_pane stop ends a wait, and a pane that is gone wakes its Bot once', a
   await wait({ pane: 'w1:p1' }, 'gb')
   delete statuses['w1:p1']
   h.team.state.rooms.r1.sessions = { a: 'ga', b: 'gb' }
-  await h.handle.pollWaits()
+  await h.handle.waits.poll()
   assert.deepEqual(h.team.delivered.map(entry => [entry.sessionId, entry.role, entry.roomId]), [['gb', 'room', 'r1']])
   assert.match(h.team.delivered[0].text, /^herdr pane w1:p1 is gone \(closed, or its agent left\)\.\nCheck the result/)
-  await h.handle.pollWaits()
+  await h.handle.waits.poll()
   assert.equal(h.team.delivered.length, 1)
 })
 
