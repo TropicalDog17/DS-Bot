@@ -144,12 +144,12 @@ export function install(rt) {
   // What the last run left; read before this run notes anything.
   let interrupted = readNotes(file)
 
-  /** @type {Record<string, {botId:string, roomId?:string, since:number, trigger?:any, approval?:{tool:string, reason:string}, resumed?:boolean}>} */
+  /** @type {Record<string, {botId:string, roomId?:string, cardId?:string, since:number, trigger?:any, approval?:{tool:string, reason:string}, resumed?:boolean}>} */
   let turns = {}
   // A new delivery can persist before recovery runs; it must keep the old queue.
   /** @type {Record<string, {at:number, args:any}[]>} deliveries no turn has taken up, by Session */
   let queued = interrupted.queued
-  /** @type {Record<string, {sessionId:string, botId:string, kind?:string, label?:string, since:number}>} background jobs still running, by job id */
+  /** @type {Record<string, {sessionId:string, botId:string, cardId?:string, roomId?:string, kind?:string, label?:string, since:number}>} background jobs still running, by job id */
   let jobs = interrupted.jobs
   let writing = Promise.resolve()
   let stopped = false
@@ -227,6 +227,13 @@ export function install(rt) {
   // picked up. A turn that ends, or still runs, before one starts here outlived the
   // last run: only DS Bot restarted (the plugin reloaded) and DSH went on.
   let firstTurn = Object.keys(interrupted.turns).length > 0 ? new Map() : undefined
+  function cardLocation(sessionId) {
+    const owner = rt.ownerOfSession?.(sessionId)
+    if (owner?.cardId === undefined) return {}
+    const { cardId, roomId } = owner
+    return { cardId, ...(roomId === undefined ? {} : { roomId }) }
+  }
+
   ctx.on('session/event', (session, event) => {
     const id = session?.id
     if (id === undefined) return
@@ -242,7 +249,7 @@ export function install(rt) {
       case 'job/registered': {
         const data = event.data ?? {}
         if (typeof data.jobId !== 'string') break
-        jobs = { ...jobs, [data.jobId]: { sessionId: id, botId: rt.selfOf(id), kind: data.kind, label: clip(data.label), since: data.startedAt ?? event.time ?? Date.now() } }
+        jobs = { ...jobs, [data.jobId]: { sessionId: id, botId: rt.selfOf(id), ...cardLocation(id), kind: data.kind, label: clip(data.label), since: data.startedAt ?? event.time ?? Date.now() } }
         persist()
         break
       }
@@ -260,7 +267,7 @@ export function install(rt) {
         const botId = owner?.botId ?? rt.chatOwners.get(id)
         // turns.js runs first and has already claimed or restored the trigger.
         const info = rt.live.get(id)?.info
-        update(id, () => ({ botId, ...(owner ? { roomId: owner.roomId } : {}), since: event.time ?? Date.now(), ...(info !== undefined ? { trigger: triggerOf(info) } : {}) }))
+        update(id, () => ({ botId, ...(owner ? { roomId: owner.roomId } : cardLocation(id)), since: event.time ?? Date.now(), ...(info !== undefined ? { trigger: triggerOf(info) } : {}) }))
         break
       }
       case 'user/message': {
@@ -289,14 +296,15 @@ export function install(rt) {
     const bot = rt.botOf(record.botId)
     if (bot === undefined) return
     const text = stopped.length === 0 ? resumeText(record) : `${resumeText(record)}\n\n${jobsText(stopped)}`
-    if (record.roomId !== undefined) {
-      const room = rt.roomOf(record.roomId)
+    const { cardId, roomId } = record
+    const room = roomId === undefined ? undefined : rt.roomOf(roomId)
+    const target = reach(bot, { cardId, roomId, room })
+    if (roomId !== undefined && (target.where === 'group' || cardId === undefined)) {
       if (room === undefined || !room.members.includes(bot.id)) return
       await rt.postToRoom(room, bot, '', { resumed: true, quiet: true, ...(record.resumed ? { again: true } : {}) })
       // A turn already picked up once and cut off again stays stopped: a restart loop
       // must not run it forever.
       if (record.resumed) return
-      const target = reach(bot, { roomId: room.id, room })
       await rt.deliver({ toId: bot.id, sessionId: target.where === 'group' ? target.sessionId : sessionId, role: 'room', roomId: room.id, note: 'picking up after a restart', resumed: true, text, ...(record.trigger?.askedBy ? { askedBy: record.trigger.askedBy } : {}) })
       return
     }
@@ -304,7 +312,8 @@ export function install(rt) {
     // The turn ran in a part that is still one of the Bot's: it goes on there, not in the
     // foreground chat when that part is a background one. A part gone since (archived and
     // dropped) falls back to the Bot's current chat.
-    const ownPart = rt.selfOf(sessionId) === bot.id && rt.isBotSession(sessionId) ? { sessionId } : {}
+    const ownPart = cardId !== undefined ? { sessionId: target.sessionId }
+      : rt.selfOf(sessionId) === bot.id && rt.isBotSession(sessionId) ? { sessionId } : {}
     const trigger = record.trigger
     if ((trigger?.role === 'request' || trigger?.role === 'stopped') && trigger.senderSessionId && trigger.audience !== 'user' && rt.botOf(trigger.senderSessionId)) {
       // The sender still waits for this turn's answer, so it goes on under the same exchange.
@@ -545,13 +554,18 @@ export function install(rt) {
     }
     // A Session whose turn had ended is told on its own; the job's Bot goes on there.
     for (const [sessionId, list] of stopped) {
-      const botId = list[0].botId
-      const room = rt.roomOf(rt.groupOwners.get(sessionId)?.roomId)
-      const target = reach(rt.botOf(botId), { roomId: room?.id, room })
-      const where = room !== undefined
-        ? (room.members.includes(botId) ? { sessionId: target.where === 'group' ? target.sessionId : sessionId, role: 'room', roomId: room.id, note: 'picking up after a restart' } : undefined)
-        : { ...(rt.selfOf(sessionId) === botId && rt.isBotSession(sessionId) ? { sessionId } : {}), role: 'resume' }
-      if (where === undefined) continue
+      const { botId, cardId, roomId = rt.groupOwners.get(sessionId)?.roomId } = list[0]
+      const room = roomId === undefined ? undefined : rt.roomOf(roomId)
+      const target = reach(rt.botOf(botId), { cardId, roomId, room })
+      let where
+      if (target.where === 'group' || (room !== undefined && cardId === undefined)) {
+        if (!room.members.includes(botId)) continue
+        where = { sessionId: target.where === 'group' ? target.sessionId : sessionId, role: 'room', roomId, note: 'picking up after a restart' }
+      } else {
+        const ownPart = cardId !== undefined ? { sessionId: target.sessionId }
+          : rt.selfOf(sessionId) === botId && rt.isBotSession(sessionId) ? { sessionId } : {}
+        where = { ...ownPart, role: 'resume' }
+      }
       await rt.deliver({ toId: botId, ...where, resumed: true, text: jobsText(list) })
         .catch(error => rt.warn('ds-bot: telling %s about its stopped jobs failed: %s', sessionId, error))
     }

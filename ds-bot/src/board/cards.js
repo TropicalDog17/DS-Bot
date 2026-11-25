@@ -472,11 +472,11 @@ export function createBoard({ roster, now = Date.now }) {
     note(cards, id, text) {
       const { card, error } = found(cards, id)
       if (error !== undefined) return { error }
-      if (!isOpen(card)) return { error: 'That card is already finished.' }
+      const bot = card.assignee === USER ? undefined : roster.bot(card.assignee)
+      if (!isOpen(card) && bot === undefined) return { error: 'That card is already finished.' }
       const said = oneLine(text, NOTE_MAX)
       if (said === '') return { error: 'Write a note first.' }
       say(card, USER, said)
-      const bot = card.assignee === USER ? undefined : roster.bot(card.assignee)
       const effects = bot === undefined ? [] : [{ kind: 'deliver', payload: { botId: bot.id, cardId: card.id, ...(card.roomId === undefined ? {} : { roomId: card.roomId }), text: `Note on card ${label(card)} "${card.title}": ${said}` } }]
       return outcome(card, undefined, effects)
     },
@@ -486,6 +486,7 @@ export function createBoard({ roster, now = Date.now }) {
     sent(cards, id, { botId, roomId, cardId, since, requestId }) {
       const { card, error } = found(cards, id)
       if (error !== undefined) return { error }
+      if (!isOpen(card)) return outcome(card)
       const same = card.awaiting?.botId === botId && card.awaiting?.roomId === roomId && card.awaiting?.cardId === cardId
       if (!same) card.awaiting = { botId, ...(roomId === undefined ? {} : { roomId }), ...(cardId === undefined ? {} : { cardId }), since }
       if (typeof requestId === 'string') card.awaiting.requests = [...(card.awaiting.requests ?? []), requestId].slice(-REQUESTS_MAX)
@@ -526,10 +527,7 @@ export function createBoard({ roster, now = Date.now }) {
     if (typeof cardId === 'string') {
       const card = own(cards, cardId)
       if (card === undefined || card.assignee !== botId) return { error: 'No card waits for this answer.' }
-      if (card.awaiting?.cardId === cardId) {
-        if (!heardNote(card)) return { error: 'No card waits for this answer.' }
-        delete card.awaiting
-      }
+      if (card.awaiting?.cardId === cardId && heardNote(card)) delete card.awaiting
       say(card, botId, said, trace === undefined ? {} : { trace })
       card.unread = true
       return outcome(card)

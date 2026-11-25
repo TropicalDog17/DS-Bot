@@ -66,8 +66,16 @@ export function rosterService(rt) {
 export function notesService(rt) {
   const listeners = new Set()
   const cardNotes = new Set()
+  const cardStatuses = new Set()
   const roomOf = roomId => typeof roomId === 'string' ? rt.roomOf(roomId) : undefined
-  const open = (botId, cardId, title, roomId) => rt.openCardThread?.(botId, cardId, oneLine(title, 80), roomId)
+  const open = (botId, cardId, title, roomId, mayOpen) => rt.openCardThread?.(botId, cardId, oneLine(title, 80), roomId, mayOpen)
+  function cardStatus(cardId) {
+    for (const status of cardStatuses) {
+      const known = status(cardId)
+      if (known !== undefined) return known
+    }
+  }
+  const cardOpen = (botId, cardId) => cardStatus(cardId) ?? !rt.cardThreads?.isClosed(botId, cardId)
   const threadOf = (botId, cardId) => {
     const target = reach(typeof botId === 'string' ? rt.botOf(botId) : undefined, { cardId })
     return target.where === 'card' ? target.sessionId : undefined
@@ -104,15 +112,16 @@ export function notesService(rt) {
       const line = oneLine(text, NOTE_MAX)
       if (line === '') return { error: 'Write a note first.' }
       let opened = false
-      if (typeof cardId === 'string' && cardId !== '' && reach(bot, { cardId }).where !== 'card') {
+      const mayOpen = () => typeof cardId === 'string' && cardId !== '' && cardOpen(botId, cardId)
+      if (mayOpen() && reach(bot, { cardId }).where !== 'card') {
         try {
-          opened = typeof await open(botId, cardId, title, roomId) === 'string'
+          opened = typeof await open(botId, cardId, title, roomId, mayOpen) === 'string'
         } catch (error) {
           rt.warn?.('ds-bot: could not open a card thread for %s: %s', botId, error)
         }
       }
       if (rt.botOf(botId) === undefined) return { error: 'No such Bot.' }
-      const { sessionId, where } = reach(rt.botOf(botId), { cardId, roomId, room: roomOf(roomId), user: true })
+      const { sessionId, where } = reach(rt.botOf(botId), { cardId: mayOpen() ? cardId : undefined, roomId, room: roomOf(roomId), user: true })
       const seed = opened && where === 'card' ? keepLines(brief, BRIEF_MAX) : ''
       const message = where === 'group' ? `@${bot.name} ${line}` : [seed, line].filter(Boolean).join('\n\n')
       const requestId = typeof given === 'string' && given !== '' ? given : randomUUID()
@@ -129,8 +138,9 @@ export function notesService(rt) {
       if (typeof cardId !== 'string' || cardId === '') return { error: 'A card thread needs a card id.' }
       const brief = keepLines(text, BRIEF_MAX)
       if (brief === '') return { error: 'A card needs a brief.' }
-      const sessionId = await open(botId, cardId, title, roomId)
-      if (sessionId === undefined) return { error: 'Card threads are not available.' }
+      const mayOpen = () => cardStatus(cardId) !== false
+      const sessionId = await open(botId, cardId, title, roomId, mayOpen)
+      if (sessionId === undefined || !mayOpen()) return { error: 'Card threads are not available.' }
       const requestId = randomUUID()
       await rt.sendUser({ sessionId, content: [{ type: 'text', text: brief }], requestId })
       return { sessionId, requestId }
@@ -185,7 +195,7 @@ export function notesService(rt) {
       const body = keepLines(text, BRIEF_MAX)
       if (body === '') return { error: 'Write a note first.' }
       const note = `herdr pane ${oneLine(pane, 40) || '?'} · the wait you started is over`
-      const { sessionId, where } = reach(bot, { cardId, roomId, room: roomOf(roomId) })
+      const { sessionId, where } = reach(bot, { cardId: typeof cardId === 'string' && cardOpen(botId, cardId) ? cardId : undefined, roomId, room: roomOf(roomId) })
       await rt.deliver({
         toId: bot.id, note, text: body,
         ...(where === 'group' ? { sessionId, role: 'room', roomId }
@@ -206,6 +216,11 @@ export function notesService(rt) {
     onCardNote(listener) {
       cardNotes.add(listener)
       return () => { cardNotes.delete(listener) }
+    },
+    // The board can tell whether a card is still open, including while its thread closes.
+    onCardStatus(read) {
+      cardStatuses.add(read)
+      return () => { cardStatuses.delete(read) }
     },
     // listener({ botId, sessionId?, roomId?, cardId?, text, since, heard? }) once per finished answer; since is
     // when its turn started, heard the request ids of the user's messages it answers.

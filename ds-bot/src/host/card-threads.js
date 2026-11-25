@@ -3,10 +3,11 @@ import * as threadStore from './threads.js'
 export function createCardThreads({ rt, threads = threadStore, freshRoute, selectRoute }) {
   // A card thread: a conversation of the Bot's own for one card's work, beside its chat
   // (threads.js). Opening one for a card that has it already returns that one.
-  async function open(botId, cardId, title = '', roomId) {
+  async function open(botId, cardId, title = '', roomId, mayOpen = () => true) {
     await rt.load()
     const bot = rt.botOf(botId)
     if (bot === undefined) throw Object.assign(new Error('Unknown Bot'), { code: 'bot/not-found' })
+    if (!mayOpen()) return undefined
     const known = threads.cardThreadSession(bot, cardId)
     if (known !== undefined) return known
     const agent = await rt.resolveAgent(rt.chatOf(botId))
@@ -17,11 +18,11 @@ export function createCardThreads({ rt, threads = threadStore, freshRoute, selec
       .catch(error => rt.warn('ds-bot: permission for a card thread of %s not applied: %s', bot.name, error))
     // The Bot went away, or another call opened the card's thread meanwhile.
     const raced = rt.botOf(botId) === bot ? threads.cardThreadSession(bot, cardId) : undefined
-    if (rt.botOf(botId) !== bot || raced !== undefined) {
+    if (rt.botOf(botId) !== bot || raced !== undefined || !mayOpen()) {
       await rt.ctx.workspaceRegistry.archiveSession(freshId, { stopActivity: true })
         .catch(error => rt.warn('ds-bot: unused card thread of %s not archived: %s', bot.name, error))
-      if (raced !== undefined) return raced
-      throw Object.assign(new Error('Unknown Bot'), { code: 'bot/not-found' })
+      if (rt.botOf(botId) !== bot) throw Object.assign(new Error('Unknown Bot'), { code: 'bot/not-found' })
+      return mayOpen() ? raced : undefined
     }
     threads.addCardThread(bot, freshId, cardId, undefined, roomId)
     rt.chatOwners.set(freshId, bot.id)
@@ -80,6 +81,12 @@ export function createCardThreads({ rt, threads = threadStore, freshRoute, selec
     return cardId === undefined ? undefined : { botId, cardId }
   }
   const roomOfSession = sessionId => threads.cardRoomOfThread(rt.botOf(rt.chatOwners.get(sessionId)), sessionId)
+  function isClosed(botId, cardId) {
+    const bot = rt.botOf(botId)
+    if (bot?.currentCard === cardId) return bot.currentCardClosing === true
+    const part = bot?.openParts?.find(entry => entry.card === cardId)
+    return part === undefined ? bot?.closedCards?.some(entry => entry.card === cardId) === true : part.closing === true
+  }
 
-  return { open, ofSession, sessionOf, roomOfSession, close, turnEnded }
+  return { open, ofSession, sessionOf, roomOfSession, isClosed, close, turnEnded }
 }

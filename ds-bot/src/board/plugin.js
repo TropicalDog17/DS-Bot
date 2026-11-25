@@ -266,6 +266,10 @@ export function install(ctx, config, { identity, roster, notes, bridge, tools, c
     },
   })
   const disposers = [
+    notes.onCardStatus?.(cardId => {
+      const cards = store.read().cards
+      return Object.hasOwn(cards, cardId) ? isOpen(cards[cardId]) : undefined
+    }),
     // The Bot answers a note in its chat, where the user reads it; the card gets a copy.
     notes.onReply?.(reply => {
       const cardId = cardOfSession(reply.sessionId)
