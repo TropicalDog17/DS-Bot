@@ -35,6 +35,7 @@ jobs:
       # The tests rebuild link.js from ../link, which has its own packages.
       - run: npm ci --no-fund --no-audit --prefix ../link
       - run: npm run harness
+      - run: npm run typecheck
       - run: npm test
       - run: node scripts/build-client.mjs --check
       - run: npm run lint
