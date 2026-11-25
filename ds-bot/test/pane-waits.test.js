@@ -49,6 +49,7 @@ function fixture({ wake, wakeAvailable = true, status, cardId } = {}) {
     writes: () => writeCount,
     card: () => store.read().cards.c_1,
     setClock: value => { clock = value },
+    setCardStatus: status => { data = { ...data, cards: { c_1: { ...data.cards.c_1, status } } } },
     setReadOnly: value => { readOnly = value },
   }
 }
@@ -267,4 +268,41 @@ test('a direct poll cannot overlap another pass', async () => {
   assert.deepEqual(await h.poll(), [])
   await first
   assert.deepEqual(h.statusCalls, ['w1:p1'])
+})
+
+test('a pane that runs no agent for two minutes wakes the Bot, and an agent that comes back resets the count', async () => {
+  const h = fixture()
+  await h.tool({ pane: 'w1:p1', until: ['done'] })
+  h.statuses.set('w1:p1', { status: 'unknown' })
+  h.setClock(1000)
+  assert.deepEqual(await h.poll(), [])
+  assert.deepEqual(h.storedWaits().map(wait => [wait.armed, wait.noAgentSince]), [[true, 1000]])
+  h.statuses.set('w1:p1', { status: 'working' })
+  h.setClock(2000)
+  assert.deepEqual(await h.poll(), [])
+  assert.equal(h.storedWaits()[0].noAgentSince, undefined)
+  h.statuses.set('w1:p1', { status: 'unknown' })
+  h.setClock(3000)
+  assert.deepEqual(await h.poll(), [])
+  h.setClock(3000 + ARM_MS - 1)
+  assert.deepEqual(await h.poll(), [])
+  h.setClock(3000 + ARM_MS)
+  const [id] = h.storedWaits().map(wait => wait.id)
+  assert.deepEqual(await h.poll(), [id])
+  assert.match(h.wakes[0].text, /^herdr pane w1:p1 runs no agent any more: it ended without getting to done, or it never started\./)
+  assert.match(h.wakes[0].text, /Tests passed\./)
+  assert.deepEqual(h.storedWaits(), [])
+})
+
+test('a wait whose card is finished or cancelled is dropped without a wake', async () => {
+  for (const status of ['done', 'cancelled']) {
+    const h = fixture({ cardId: 'c_1' })
+    await h.tool({ pane: 'w1:p1' })
+    h.statuses.set('w1:p1', { status: 'done' })
+    h.setClock(ARM_MS)
+    h.setCardStatus(status)
+    assert.deepEqual(await h.poll(), [])
+    assert.deepEqual(h.storedWaits(), [])
+    assert.deepEqual([h.wakes, h.statusCalls.length], [[], 1])
+  }
 })
