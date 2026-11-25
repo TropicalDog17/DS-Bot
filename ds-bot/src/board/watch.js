@@ -2,6 +2,7 @@
 // Telegram chat) and the watchdog that finds cards needing the user. Pure functions over
 // the cards object; plugin.js sends and saves.
 import { USER, isOpen, oneLine } from './cards.js'
+import { prName, prsOf } from './prs.js'
 
 // About a hundred words: the detail stays on the card.
 export const PUSH_MAX = 700
@@ -24,9 +25,9 @@ export function pushText(card, who, what) {
 }
 
 // The push a Bot's own board action makes, or undefined: a question, a card moved to
-// Review or Blocked, a card finished or given up, and on a long card new progress
-// (`lastPush`: when this card last pushed, if it did). The user's own changes on the page
-// push nothing.
+// Review or Blocked, a card finished (or its PRs merged) or given up, and on a long card
+// new progress (`lastPush`: when this card last pushed, if it did). The user's own
+// changes on the page push nothing.
 export function pushFor(action, before, card, nameOf, { now = Date.now(), lastPush, progressBefore } = {}) {
   if (card === undefined) return undefined
   const who = nameOf(card.assignee)
@@ -44,7 +45,10 @@ export function pushFor(action, before, card, nameOf, { now = Date.now(), lastPu
     && now - (card.createdAt ?? now) >= PROGRESS_AFTER_MS && (lastPush === undefined || now - lastPush >= PROGRESS_PUSH_MS)) {
     return pushText(card, who, `"${card.title}": ${card.progress}`)
   }
+  // A finished card whose PR is not merged yet waits in Review for it.
+  if (action === 'complete' && card.status === 'review') return pushText(card, who, `"${card.title}" is ready for review, merge ${prsOf(card.links).map(prName).join(', ')}: ${card.result ?? ''}`)
   if (action === 'complete') return pushText(card, who, `done "${card.title}": ${card.result ?? ''}`)
+  if (action === 'merged') return pushText(card, who, `done "${card.title}", all merged: ${card.result ?? ''}`)
   if (action === 'cancel') return pushText(card, who, `stopped "${card.title}"${card.reason ? `: ${card.reason}` : ''}`)
   return undefined
 }
