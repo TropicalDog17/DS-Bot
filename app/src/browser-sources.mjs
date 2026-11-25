@@ -1,9 +1,3 @@
-// Import cookies from a browser installed on this machine — ego-lite's idea adapted to an app
-// that is not its own Chromium: copy the profile's cookie files into a throwaway user-data-dir,
-// launch the source browser's own binary on that copy and let IT decrypt; the app only reads
-// plain cookies back over a debugging pipe. The real profile is never modified, and on Windows
-// a running source holds its cookie store locked, so it has to close (and is restarted with its
-// session) before the copy can happen. Firefox keeps cookies in plain sqlite, no launch needed.
 import { spawn, execFile } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { copyFile, mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
@@ -11,10 +5,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { homedir, platform, tmpdir } from 'node:os'
 import { basename, dirname, join, win32 } from 'node:path'
 
-// Kinds we can harvest: Chromium-family through their own exe, Firefox through its plain db.
 const KIND_ORDER = ['chrome', 'edge', 'brave', 'chromium', 'firefox']
-
-// ------------------------------------------------------------------ installed binaries
 
 const VERSION_DIR = /^\d+\.\d+\.\d+\.\d+$/
 
@@ -74,7 +65,6 @@ function exeCandidates() {
   ]
 }
 
-/** → Map<kind, { exe, version }> of installed browsers. */
 export async function findBrowserExes() {
   const candidates = exeCandidates()
   if (platform() === 'win32') {
@@ -98,8 +88,6 @@ export async function findBrowserExes() {
   }
   return found
 }
-
-// ------------------------------------------------------------------ profile enumeration
 
 function userDataRoots() {
   const local = process.env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local')
@@ -138,7 +126,6 @@ function readJson(path) {
   try { return JSON.parse(readFileSync(path, 'utf8')) } catch { return null }
 }
 
-/** Chromium profiles under one user-data root: `info_cache` names + a scan for Network/Cookies. */
 export async function chromiumProfiles(root) {
   const names = new Map()
   for (const [dir, info] of Object.entries(readJson(join(root, 'Local State'))?.profile?.info_cache ?? {})) {
@@ -159,7 +146,6 @@ export async function chromiumProfiles(root) {
   return profiles
 }
 
-/** Firefox profiles from profiles.ini (sections ProfileN with Path/IsRelative/Default). */
 export async function firefoxProfiles(root) {
   let text
   try { text = await readFile(join(root, 'profiles.ini'), 'utf8') } catch { return [] }
@@ -191,17 +177,12 @@ export async function firefoxProfiles(root) {
 
 const BROWSER_NAME = { chrome: 'Chrome', edge: 'Edge', brave: 'Brave', chromium: 'Chromium', firefox: 'Firefox' }
 
-/**
- * Every importable profile on this machine.
- * → [{ id, kind, label, engine:'chromium'|'firefox', profilePath, cookieDb, hasCookies, exe, exeVersion }]
- */
 export async function listSources() {
   const exes = await findBrowserExes()
   const roots = userDataRoots()
   const sources = []
   for (const kind of KIND_ORDER) {
     const exe = exes.get(kind)
-    // A Chromium profile without its browser cannot self-decrypt; Firefox's db is plain, so it can.
     if (!exe && kind !== 'firefox') continue
     for (const root of roots[kind] ?? []) {
       if (kind === 'firefox') {
@@ -228,11 +209,8 @@ export async function listSources() {
   return sources
 }
 
-// ------------------------------------------------------------------ the clone + harvest
-
 const LOCKED = (error) => error?.code === 'EBUSY' || error?.code === 'EPERM'
 
-/** Copy the files a harvest needs into workDir. Throws {code:'locked'} when the source is running. */
 export async function cloneCookieStore(source, workDir) {
   const jobs = []
   if (source.engine === 'firefox') {
@@ -261,7 +239,6 @@ export async function cloneCookieStore(source, workDir) {
   return copied
 }
 
-/** A fresh throwaway dir for a clone; remove() deletes it. */
 export async function cloneWorkDir() {
   const dir = await mkdtemp(join(tmpdir(), 'dsb-cookie-import-'))
   return { dir, remove: () => rm(dir, { recursive: true, force: true, maxRetries: 6, retryDelay: 200 }) }
@@ -318,7 +295,6 @@ function pipeConnection(child) {
   }
 }
 
-/** Harvest a Chromium clone: the source's own exe decrypts its cookies for us. */
 async function harvestChromium(source, workDir) {
   const child = spawn(source.exe, ['--remote-debugging-pipe', `--user-data-dir=${workDir}`, ...QUIET_ARGS, 'about:blank'],
     { stdio: ['ignore', 'ignore', 'pipe', 'pipe', 'pipe'], windowsHide: true })
@@ -348,7 +324,6 @@ function cdpCookie(c) {
   return cookie
 }
 
-/** Firefox: cookies.sqlite is plain — read the copied db directly. */
 function harvestFirefox(workDir, now = Date.now() / 1000) {
   const db = new DatabaseSync(join(workDir, 'cookies.sqlite'), { readOnly: true })
   try {
@@ -357,7 +332,6 @@ function harvestFirefox(workDir, now = Date.now() / 1000) {
     const skipped = []
     rows.forEach((row, index) => {
       if (row.expiry <= now) { skipped.push({ where: `entry ${index + 1}`, name: row.name, domain: row.host, code: 'expired', reason: 'already expired' }); return }
-      // nsICookie: SAMESITE_UNSET 0, LAX 1, STRICT 2, NONE 3 (sameSite column, rawSameSite as fallback)
       const ss = { 1: 'Lax', 2: 'Strict', 3: 'None' }[row.sameSite ?? row.rawSameSite] ?? undefined
       const cookie = { name: row.name, value: row.value ?? '', domain: row.host, path: row.path || '/', secure: !!row.isSecure, httpOnly: !!row.isHttpOnly, expires: row.expiry }
       if (ss) cookie.sameSite = ss
@@ -396,11 +370,6 @@ export function appBoundRows(dbPath) {
   } finally { db.close() }
 }
 
-/**
- * Cookies from one source profile. → { cookies, skipped } in the parser's normalized shape.
- * Throws {code:'locked'} when the source holds its store open (Windows), and
- * {code:'app-bound'} when every row is app-bound encrypted — there is nothing to harvest.
- */
 export async function harvestCookies(source, workDir) {
   await cloneCookieStore(source, workDir)
   if (source.engine === 'firefox') return harvestFirefox(workDir)
@@ -413,10 +382,6 @@ export async function harvestCookies(source, workDir) {
   return { cookies: await harvestChromium(source, workDir), skipped: census?.locked ?? [] }
 }
 
-/**
- * The whole live import: clone → (close the source on Windows when asked) → harvest → relaunch.
- * → { running: true } when the source must close first, { running: false, restarted, result }.
- */
 export async function importFromBrowser(source, { close = false } = {}) {
   const work = await cloneWorkDir()
   let closed = false
@@ -430,7 +395,7 @@ export async function importFromBrowser(source, { close = false } = {}) {
       }
       const pids = await closeBrowser(source.exe, source)
       closed = pids.length > 0
-      await cloneCookieStore(source, work.dir) // still locked → throws 'locked' again
+      await cloneCookieStore(source, work.dir)
     }
     const result = await harvestCookies(source, work.dir)
     return { running: false, restarted: closed, result }
@@ -440,8 +405,6 @@ export async function importFromBrowser(source, { close = false } = {}) {
   }
 }
 
-// ------------------------------------------------------------------ closing a running source (Windows)
-
 const powershell = (script) => new Promise((resolve, reject) => {
   execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8', windowsHide: true, timeout: 30_000 }, (err, stdout, stderr) => {
     if (err) reject(new Error(stderr?.trim() || err.message))
@@ -449,7 +412,6 @@ const powershell = (script) => new Promise((resolve, reject) => {
   })
 })
 
-/** Processes (pid + command line) of one exe, Windows only. */
 export async function browserProcesses(exe) {
   const name = basename(exe)
   const out = await powershell(
@@ -470,14 +432,13 @@ const userDataDirOf = (commandLine) => {
  */
 export function locksProfile(process, source) {
   const dir = userDataDirOf(process.commandLine)
-  if (dir === null) return true // standard invocation binds the standard root
+  if (dir === null) return true
   const norm = (p) => p.replace(/[\\/]+$/, '').replace(/\//g, '\\').toLowerCase()
   // Browser command lines are compared as Windows paths (the only platform that closes a
   // source); win32 splits on both separators, so the check reads the same on every host.
   return norm(dir) === norm(win32.dirname(source.profilePath))
 }
 
-/** Ask a running source browser to quit (graceful; its session comes back on relaunch). */
 export async function closeBrowser(exe, source) {
   if (platform() !== 'win32') return []
   const targets = (await browserProcesses(exe)).filter((p) => locksProfile(p, source))
@@ -494,7 +455,6 @@ export async function closeBrowser(exe, source) {
   }
 }
 
-/** Reopen a browser we closed, with its previous session. */
 export function relaunchBrowser(exe, kind) {
   const args = kind === 'firefox' ? [] : ['--restore-last-session']
   const child = spawn(exe, args, { detached: true, stdio: 'ignore', windowsHide: true })

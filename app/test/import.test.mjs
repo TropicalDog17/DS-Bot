@@ -15,7 +15,6 @@ const write = (path, text) => {
   writeFileSync(path, text)
 }
 const readJson = path => JSON.parse(readFileSync(path, 'utf8'))
-// The import's stage folders in a data location.
 const staged = to => readdirSync(to).filter(name => /^\.import-\d+$/u.test(name))
 
 function treeHash(dir) {
@@ -31,8 +30,6 @@ function treeHash(dir) {
   return hash.digest('hex')
 }
 
-// A user's DSH home: Chief in two parts, Writer, a group where Chief is in two parts and
-// which has its own Session, the team's own files, two profiles and one that DSH cannot read.
 const TEAM = {
   version: 1,
   workspaceId: 'w-old',
@@ -75,14 +72,11 @@ function oldHome(root) {
   return from
 }
 
-// What the Host's first start writes to the data location's .credentials.yaml: the connection
-// plugin's browser session grant, and nothing else.
 const HOST_CREDENTIALS = [
   'version: 1', 'records:', '  client-connection/browser-session:', '    kind: grant', '    payload:',
   '      version: 1', `      secret: ${'A'.repeat(43)}`, '',
 ].join('\n')
 
-// The app's data location after the Host's first start, and the folder chosen for the Bots' files.
 function newHome(root) {
   const to = join(root, 'ds-bot')
   write(join(to, 'bot', 'state.json'), JSON.stringify({ version: 1, mainBotIds: [], bots: {}, rooms: {} }))
@@ -129,7 +123,6 @@ describe('importTeam', () => {
     assert.equal(readFileSync(join(to, '.credentials.yaml'), 'utf8'), 'DEEPSEEK_API_KEY: fake\n')
     assert.equal(readFileSync(join(to, '.env'), 'utf8'), 'X=1\n')
     const patch = parse(readFileSync(join(to, 'profiles', 'ds-bot', 'cordis.patch.yml'), 'utf8'))
-    // The data location's other rows stay, such as the Settings page's own.
     assert.deepEqual(patch.map(row => row.id), ['webserver', 'ui-settings-general', 'llm-pi-ai', 'agent-default-model'])
     assert.deepEqual(patch[1].config, { welcomeNoticeVersion: 'seen' })
     assert.deepEqual(patch[2].config.providers, { moonshotai: { apiKeyEnv: 'MOONSHOTAI_API_KEY' } })
@@ -206,7 +199,6 @@ describe('a copy that stopped', () => {
 
   test('a copy that failed part way removes what it staged and leaves no Bot team', async () => {
     const { to } = newHome(join(root, 'failed'))
-    // The folder for the Bots' files is a file: the copy fails once the team is staged.
     const workspace = join(root, 'failed', 'a-file')
     write(workspace, 'not a folder')
     await assert.rejects(importTeam({ from, to, workspace }))
@@ -265,7 +257,6 @@ describe('Sessions an earlier import left out', () => {
     const home = newHome(root)
     to = home.to
     await importTeam({ from, to, workspace: home.workspace })
-    // An import before 0.2.3 did not copy the group's own Session.
     ownSession = join(to, 'sessions', '--team--', 'session-r1')
     rmSync(ownSession, { recursive: true, force: true })
   })
@@ -336,7 +327,6 @@ describe('JS expressions in profile patches', () => {
       '- id: sandbox-policy', '  config:', '    mode: !!js process.env.DSH_PERMISSION_MODE', '',
     ].join('\n'))
     const { to, workspace } = newHome(root)
-    // DSH writes the data location's own patch too, and it may hold a !!js value.
     write(join(to, 'profiles', 'ds-bot', 'cordis.patch.yml'), [
       '- id: webserver', '  config:', '    port: 0',
       '- id: ui-settings-general', '  config:', "    welcomeNoticeVersion: !!js process.env.NOTICE ?? 'seen'", '',
@@ -426,7 +416,6 @@ describe('finding the team', () => {
     assert.equal(teamInUse(from, { host: 'here' }), false)
   })
 
-  // #428: the pid of a holder that crashed long ago now belongs to another process.
   test('does not take a stale lock on this machine for in use, even when its pid is alive', () => {
     const lock = join(from, 'bot', 'state.lock')
     write(lock, JSON.stringify({ pid: process.pid, host: 'here' }))

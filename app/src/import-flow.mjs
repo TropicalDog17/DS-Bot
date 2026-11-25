@@ -1,30 +1,16 @@
-// The first run's import on the start page's cards (windows-onboarding §4, start-window §6): the
-// import card, the space and in-use cards, the check of the chats, the copy with its steps, its
-// stop and its failure. What touches the disk, the engine and the window comes in as `io`, so
-// that the order of the cards can be tested without any of them.
 import { REGENERABLE_DEFAULT_BYTES } from './import.mjs'
 import { formatBytes } from './place.mjs'
 
-// The first stage needs this much more room than it copies (windows-onboarding §4).
 export const SPARE_BYTES = 500e6
 const CARD_EVERY_MS = 200
-// The rate is not told before the copy has run this long.
 const ETA_AFTER_MS = 3000
-// The share of the ring's import arc that the check of the chats fills; the copy fills the rest.
 const CHECK_SHARE = 0.15
 
-/** How far the import arc is filled at a step of the copy (start-window §6). */
 export function arcShare(step, fraction) {
   const f = Math.max(0, Math.min(1, fraction || 0))
   return step <= 1 ? CHECK_SHARE * f : step === 2 ? CHECK_SHARE + (1 - CHECK_SHARE) * f : 1
 }
 
-/**
- * The model settings an import offers, best first: those of DSH Desktop, then DSH Web, then the
- * profile with the most rows.
- * @param {{ name: string, rows: any[] }[]} profiles
- * @returns {{ id: string, label: string }[]}
- */
 export function modelChoices(profiles) {
   const rank = name => ({ desktop: 0, web: 1 })[name] ?? 2
   const sorted = [...profiles].sort((a, b) => rank(a.name) - rank(b.name) || b.rows.length - a.rows.length)
@@ -39,26 +25,14 @@ function modelLabel({ name, rows }) {
   return typeof model === 'string' && model !== '' ? `${from} · ${model}` : from
 }
 
-/**
- * What the card counts and how much the copy takes with the options as they stand: the work files
- * without the regenerable folders when those are left out, and none when the work files wait.
- * @param {{ chats?: number, work?: number, regen?: number }} sizes
- * @param {{ regen: boolean, skipWork: boolean }} options
- */
 export function copySize(sizes, options) {
   if (sizes.chats === undefined || sizes.work === undefined) return undefined
   const work = options.skipWork ? 0 : sizes.work - (options.regen ? sizes.regen ?? 0 : 0)
   return { chats: sizes.chats, work, total: sizes.chats + work }
 }
 
-/** The options the card starts with: regenerable folders of 200 MB and more stay behind. */
 export const defaultOptions = sizes => ({ regen: (sizes.regen ?? 0) >= REGENERABLE_DEFAULT_BYTES, skipWork: false })
 
-/**
- * The time left, in whole minutes: it changes only once it is a full minute away from the one on
- * the card, and under a minute it is 0 ("under a minute"), never counted down to nothing.
- * @param {number | null} shown the minutes on the card, null before there was a rate
- */
 export function etaMinutes(shown, { done, total, elapsedMs }) {
   if (elapsedMs < ETA_AFTER_MS || done <= 0 || total <= 0) return shown
   const left = (Math.max(0, total - done) / done) * elapsedMs
@@ -67,32 +41,6 @@ export function etaMinutes(shown, { done, total, elapsedMs }) {
   return shown === null || shown === 0 || Math.abs(minutes - shown) >= 1 ? minutes : shown
 }
 
-/**
- * @typedef {{
- *   from: string, bots: number, rooms: number, names: string[], sessions: number,
- *   sizes: { chats?: number, work?: number, regen?: number }, profiles: { name: string, rows: any[] }[],
- * }} Offer
- * @typedef {{
- *   offer: Offer,
- *   ask: (card: object, options?: { settle?: Promise<unknown> }) => Promise<string | undefined>,
- *   show: (card: object) => void,
- *   room: () => { free?: number, drive?: string },
- *   inUse: () => boolean,
- *   until: (check: () => boolean, signal: AbortSignal) => Promise<void>,
- *   check: (signal: AbortSignal, onProgress: (done: number, total: number) => void) => Promise<number>,
- *   warmed: () => Promise<unknown>,
- *   copy: (options: { profile?: string, leaveRegenerable: boolean, skipWork: boolean, signal: AbortSignal, onProgress: (bytes: number) => void }) => Promise<any>,
- *   reasonOf: (error: unknown) => string,
- *   progress?: (fraction: number) => void,
- *   now?: () => number,
- *   signal: AbortSignal,
- * }} ImportIo
- */
-
-/**
- * One import, from the card to the copied team. `act()` takes the card's acts that are not an
- * answer (a model, an option, the stop and its confirmation) while `run()` waits.
- */
 export class ImportFlow {
   #io
   #now
@@ -100,16 +48,13 @@ export class ImportFlow {
   #profile
   #options
   #sizes
-  // The check of the chats, started while the card is up (stale once a holder came meanwhile).
   #check
   #checkAbort
-  // The copying card as it stands.
   #copyCard
   #shownAt = 0
   #timer
   #lastStep = 0
 
-  /** @param {ImportIo} io */
   constructor(io) {
     this.#io = io
     this.#now = io.now ?? Date.now
@@ -119,7 +64,6 @@ export class ImportFlow {
     this.#options = defaultOptions(this.#sizes)
   }
 
-  /** The import card as the options stand. */
   card() {
     const { offer } = this.#io
     const size = copySize(this.#sizes, this.#options)
@@ -134,10 +78,6 @@ export class ImportFlow {
     }
   }
 
-  /**
-   * The acts of the import and copying cards that do not answer them.
-   * @param {string} name @param {any} value
-   */
   act(name, value) {
     if (name === 'importModel' && this.#models.some(entry => entry.id === value)) {
       this.#profile = value
@@ -148,11 +88,6 @@ export class ImportFlow {
     }
   }
 
-  /**
-   * @returns {Promise<{ outcome: 'copied', summary: any } | { outcome: 'skipped' | 'pick' | 'gone', newer?: true }>}
-   *   'skipped': the start goes on with a new team; 'pick': another place is to be picked;
-   *   'gone': the app quits, another start replaced this one, or the failure page took over
-   */
   async run() {
     const io = this.#io
     try {
@@ -172,7 +107,6 @@ export class ImportFlow {
     }
   }
 
-  // The space the first stage needs and the drive has, when it has too little.
   #short() {
     const size = copySize(this.#sizes, this.#options)
     const { free, drive } = this.#io.room()
@@ -183,8 +117,6 @@ export class ImportFlow {
     return { need: text(need), free: text(free), short: text(need - free), drive: drive ?? '' }
   }
 
-  // The chats are checked while the card is up, unless DSH holds the team: a check of chats that
-  // are being written would say nothing. A holder that turns up meanwhile makes it stale.
   #startCheck() {
     this.#checkAbort?.abort()
     this.#check = undefined
@@ -198,7 +130,6 @@ export class ImportFlow {
       state.progress = { done, total }
       state.listener(done, total)
     })
-    // A rejected check that nobody waits for yet must not go unhandled.
     state.result.catch(() => {})
     void this.#io.until(() => this.#io.inUse(), signal).then(() => {
       if (signal.aborted) return
@@ -207,7 +138,6 @@ export class ImportFlow {
     })
   }
 
-  // "DeepSeek Harness is still using this team": looks again every 2 s and goes on by itself once DSH lets go.
   async #waitFree() {
     const io = this.#io
     const free = new AbortController()
@@ -247,7 +177,6 @@ export class ImportFlow {
         this.#setCopy({ step: 3, steps: [checkedStep, { ...this.#copyCard.steps[1], a: of === '…' ? this.#copyCard.steps[1].a : of }, {}], fraction: 0, eta: null }, true)
         return { outcome: 'copied', summary }
       } catch (error) {
-        // A quit or another start: the copy stopped at a safe point and nothing of it stays.
         if (io.signal.aborted) return { outcome: 'gone' }
         const message = error instanceof Error ? error.message : String(error)
         const next = await io.ask({ kind: 'importFailed', reason: io.reasonOf(error), log: message.split('\n') })
@@ -257,8 +186,6 @@ export class ImportFlow {
     }
   }
 
-  // Step 1, the check: the one the card started while it is still good, else a new one, once DSH
-  // has let go of the team. The unreadable chats, or the outcome when the user would not wait.
   async #checked(signal) {
     const step1 = (done, total) => {
       this.#setCopy({ step: 1, steps: [{ a: done, b: total }, {}, {}], fraction: total > 0 ? done / total : 0, eta: null })
@@ -286,7 +213,6 @@ export class ImportFlow {
     this.#showCopy(now)
   }
 
-  // The copying card goes out at most every 200 ms; a new step or the stop goes at once.
   #showCopy(now) {
     const card = this.#copyCard
     if (card === undefined) return
@@ -308,7 +234,6 @@ export class ImportFlow {
   }
 }
 
-// Rejects once `signal` stops.
 function aborted(signal) {
   return new Promise((resolve, reject) => {
     const away = () => { reject(signal.reason ?? new Error('stopped')) }

@@ -1,5 +1,3 @@
-// The cookie-file parser: format detection by content, decoding variants, normalization,
-// and per-entry skip reporting. Fixtures are the P0 sample set (fake data only).
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -10,8 +8,6 @@ import { parseCookieFile } from '../src/cookie-parse.mjs'
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'cookies')
 const parse = (name) => parseCookieFile(readFileSync(join(fixtures, name)))
 
-// Every file carries the same eight fake cookies in a different spelling; all of them
-// must parse to 8 entries with none skipped, and carry the warnings the spelling costs.
 const CASES = [
   ['cookies.txt', 'netscape', 'utf-8', []],
   ['cookie-editor.json', 'cookie-editor', 'utf-8', []],
@@ -73,7 +69,6 @@ test('malformed lines are skipped with reasons; the good ones still parse', () =
   for (const code of ['field-count', 'bad-expiry', 'missing-domain', 'bad-char-name', 'prefix', 'expired']) {
     assert.ok(codes.includes(code), `missing skip code ${code}`)
   }
-  // A skipped entry names where it was and why; never the value.
   for (const item of parsed.skipped) {
     assert.ok(item.where)
     assert.ok(item.reason)

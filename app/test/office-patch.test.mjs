@@ -8,7 +8,6 @@ import { OFFICE_PATCH_NAME, officeCli, officeRuntime, reconcileOfficeRuntime } f
 
 let home
 let runtimeDir
-// A stand-in payload: the manifest and the standalone Node are what the Host checks.
 function makePayload() {
   const source = join(runtimeDir, 'primary-runtime')
   const node = join(source, 'dependencies', 'node', 'bin', process.platform === 'win32' ? 'node.exe' : 'node')
@@ -18,7 +17,6 @@ function makePayload() {
   mkdirSync(join(runtimeDir, 'office-skills', 'office'), { recursive: true })
   writeFileSync(join(runtimeDir, 'office-skills', 'office', 'SKILL.md'), '---\ndescription: office\n---\n')
 }
-// A stand-in profile under a throwaway DSH_HOME.
 function profile() {
   const dir = join(home, 'profiles', 'ds-bot')
   mkdirSync(dir, { recursive: true })
@@ -123,8 +121,6 @@ describe('reconcileOfficeRuntime', () => {
   })
 })
 
-// The first-run check reads chats without the team or the Office payload: the Host asks for
-// the overlay only for the main profile.
 test('the check profile boots without the Office overlay', () => {
   const source = readFileSync(new URL('../src/host.mjs', import.meta.url), 'utf8')
   assert.match(source, /check === undefined \? reconcileOfficeRuntime\(profile\) : \{ patchFiles: \[\] \}/u)

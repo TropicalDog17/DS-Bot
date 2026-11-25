@@ -17,9 +17,6 @@ test('free space is read at the nearest existing ancestor of a folder that is no
   const free = freeSpace(join(dir, 'not', 'yet'))
   assert.equal(typeof free, 'number')
   assert.ok(free > 0)
-  // Other tests write to the same disk, so the free space can move by a block between two reads:
-  // the folder's own reads on both sides bound the nested read. A write and a delete in between
-  // can still leave it outside, so a few tries.
   const between = () => {
     const before = freeSpace(dir)
     const nested = freeSpace(join(dir, 'not', 'yet'))
@@ -35,7 +32,6 @@ test('sizes read as Explorer shows them', () => {
   assert.equal(formatBytes(10 * 2 ** 30), '10 GB')
   assert.equal(formatBytes(1.26 * 2 ** 30), '1.2 GB')
   assert.equal(formatBytes(900 * 2 ** 20), '900 MB')
-  // Under 1 MB, never "0 MB".
   assert.equal(formatBytes(2 ** 20), '1 MB')
   assert.equal(formatBytes(12_000), 'under 1 MB')
   assert.equal(formatBytes(0), 'under 1 MB')
@@ -70,7 +66,6 @@ test('the place line names the drive and its free space, or the folder', () => {
 
 test('a drive runs low at a fifth of the free space it had when the data went there', () => {
   assert.equal(LOW_SHARE, 0.2)
-  // 412 GB at the start: the line comes back at 82.4 GB.
   assert.equal(runningLow(82 * 2 ** 30, 412 * 2 ** 30), true)
   assert.equal(runningLow(83 * 2 ** 30, 412 * 2 ** 30), false)
   assert.equal(runningLow(20, 100), true)
@@ -86,7 +81,6 @@ test('the picker opens in the data folder\'s parent', (t) => {
 test('the current root is the parent of a data and a workspace folder that are siblings', (t) => {
   const dir = temp(t)
   assert.equal(currentRootOf(join(dir, 'R', DATA_DIR), join(dir, 'R', WORKSPACE_DIR)), join(dir, 'R'))
-  // The default places are not under one root.
   assert.equal(currentRootOf(join(dir, '.ds-bot'), join(dir, 'DS Bot')), undefined)
   assert.equal(currentRootOf(join(dir, 'R', DATA_DIR), undefined), undefined)
 })
@@ -100,7 +94,6 @@ test('an empty tree holds nothing but empty folders', (t) => {
   assert.equal(isEmptyTree(join(dir, 'missing')), false)
 })
 
-// The root rule of windows-onboarding §3 (一个位置), without the write probe.
 const noProbe = { env: {}, probe: false }
 
 test('a new or empty folder is the root itself', (t) => {
@@ -151,10 +144,8 @@ test('the place the data is in now is no change, and a place inside it is refuse
   const inside = rootOf(join(current.dataDir, 'old'), { ...noProbe, current })
   assert.equal(inside.reason, 'nested')
   assert.equal(inside.at, join(current.dataDir, 'old'))
-  // The team workspace with something in it is a place too; an empty one, just made, is free.
   writeFileSync(join(current.workspace, 'notes.md'), '')
   assert.equal(rootOf(join(current.workspace, 'sub'), { ...noProbe, current }).reason, 'nested')
-  // The default places: picking the home puts the root on the workspace the start made.
   const home = join(dir, 'home')
   mkdirSync(join(home, 'DS Bot'), { recursive: true })
   writeFileSync(join(home, 'other.txt'), '')
@@ -164,7 +155,6 @@ test('the place the data is in now is no change, and a place inside it is refuse
   assert.equal(atHome.root, join(home, 'DS Bot'))
   assert.equal(atHome.added, true)
   assert.equal(rootOf(join(home, 'DS Bot'), { ...noProbe, current: defaults }).added, false)
-  // Once the workspace holds files, the layer the home pick would add is a used folder.
   writeFileSync(join(home, 'DS Bot', 'theirs.txt'), '')
   assert.equal(rootOf(home, { ...noProbe, current: defaults }).reason, 'foreign')
   assert.equal(rootOf(join(home, 'DS Bot', 'sub'), { ...noProbe, current: defaults }).reason, 'nested')
@@ -184,7 +174,6 @@ test('OneDrive, the DSH home and the program folder are refused, through links t
   assert.equal(rootOf(cloud, noProbe).at, cloud)
   assert.equal(rootOf(join(dir, 'OneDrive - Contoso', 'Docs'), noProbe).reason, 'onedrive')
   assert.equal(rootOf(join(dir, 'Library', 'CloudStorage', 'OneDrive-Personal', 'Docs'), noProbe).reason, 'onedrive')
-  // A folder that only has OneDrive in its name is not the cloud.
   assert.equal(rootOf(join(dir, 'OneDrive-old', 'Docs'), noProbe).reason, undefined)
   const synced = join(dir, 'Synced')
   assert.equal(rootOf(synced, { ...noProbe, env: { OneDrive: join(dir, 'Synced') } }).reason, 'onedrive')
@@ -195,7 +184,6 @@ test('OneDrive, the DSH home and the program folder are refused, through links t
   assert.equal(inDsh.at, join(dsh, 'bots'))
   assert.equal(rootOf(dir, { ...noProbe, dshHome: join(dir, 'missing-dsh') }).reason, undefined)
   assert.equal(rootOf(join(dir, 'app', 'data'), { ...noProbe, program: join(dir, 'app') }).reason, 'program')
-  // A link into the DSH home leads there.
   const link = join(dir, 'link')
   try {
     symlinkSync(dsh, link, 'junction')

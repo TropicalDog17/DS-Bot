@@ -1,4 +1,3 @@
-// The system tray: the icon, its menu and the way it goes away.
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
 import { describe, test } from 'node:test'

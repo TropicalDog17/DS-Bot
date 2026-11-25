@@ -1,7 +1,3 @@
-// The Host: the shell runs this file in plain Node on Linux and Electron's Node mode elsewhere.
-// It boots the app's own `ds-bot` profile
-// on a loopback port and reports the launch URL over IPC. With DS_BOT_CHECK, the path of a JSON list
-// of Session ids, it boots the first-run check's profile instead and reports which of them it cannot read.
 // Follows DeepSeek Harness apps/desktop-host/src/index.ts (MIT); see NOTICE.
 import { readFileSync } from 'node:fs'
 import { inspect } from 'node:util'
@@ -26,10 +22,7 @@ async function main() {
   const check = process.env.DS_BOT_CHECK || undefined
   const profile = check === undefined ? loadAppProfile() : loadCheckProfile()
   reportSkippedBundles('dsh', profile)
-  // The Office payload is the app's own, for the team profile; the first-run check reads
-  // chats without it.
   const office = check === undefined ? reconcileOfficeRuntime(profile) : { patchFiles: [] }
-  // ds-bot reads the payload's Node for the Office commands it runs itself.
   if (office.node !== undefined) process.env.DS_BOT_OFFICE_NODE = office.node
   const application = runProfile({
     environment: loadLayeredEnv('dsh'),
@@ -43,7 +36,6 @@ async function main() {
   })
   let stopping
   const stop = () => stopping ??= (async () => {
-    // A Host that failed to boot has nothing to shut down; the shell already has the failure.
     const running = await application.catch(() => undefined)
     await running?.shutdown.shutdown(0)
     await send({ type: 'shutdown-complete' })
@@ -59,16 +51,10 @@ async function main() {
     return
   }
   const [webServer, connection] = [ctx.get('webServer'), ctx.get('connection')]
-  // A profile patch can turn these rows off; then the window has nothing to talk to.
   if (webServer === undefined || connection === undefined) throw new Error(`The profile in ${profile.dir} does not start the engine's web server and connection`)
-  // ds-bot waits on these before it registers its API. A Session-store failure
-  // must reach the shell's error box here, not read as an endless
-  // "Setting up your Main Bot…" in a window that looks ready (#516). The Host
-  // process attaches the engine log tail — the real cause — to this message.
   const missing = ['sessionController', 'workspaceRegistry'].filter(name => ctx.get(name) === undefined)
   if (missing.length > 0) throw new Error(`The profile in ${profile.dir} did not start ${missing.join(', ')}; the engine log has the cause`)
   const url = connection.authenticatedUrl(`http://127.0.0.1:${String(webServer.port)}`)
-  // The window is the owner's page; DSH 0.2.2 builds the injections for the Peer they serve.
   await send({ type: 'ready', url, injections: webServer.collectIndexInjections(connection.browserPeer) })
 }
 

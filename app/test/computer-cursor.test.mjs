@@ -31,7 +31,6 @@ function fakeElectron() {
   class BrowserWindow { constructor(options) { const win = fakeWindow(); win.options = options; windows.push(win); return win } }
   return { windows, BrowserWindow }
 }
-// A fake point-checker child that answers from a list.
 function fakeSpawn(answers = ['y']) {
   return () => {
     const child = new EventEmitter()
@@ -73,7 +72,6 @@ test('a covered point draws nothing and hides a live cursor', async () => {
   const cursor = createComputerCursor({ BrowserWindow, screen, platform: 'darwin', spawn: fakeSpawn(['n']), log: { warn: () => {} } })
   await update(cursor)
   assert.equal(windows.length, 0)
-  // then visible once, then covered again → the window is destroyed
   const cursor2 = createComputerCursor({ BrowserWindow, screen, platform: 'darwin', spawn: fakeSpawn(['y', 'n']), log: { warn: () => {} } })
   await update(cursor2)
   assert.equal(windows.length, 1)

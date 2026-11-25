@@ -4,11 +4,6 @@ import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
 
-// The app's composer shares the Enter preference with the plugin's: the voice
-// buttons read it from the roster, and a plain Enter submits only while it says
-// Enter sends; off, the field's own newline stands and the send button submits.
-// Parts of the page outside the composer are stubbed: this checks the wiring
-// from the chat's hooks down to the textarea and the plugin's voice buttons.
 const stubs = {
   'cells.ts': 'export const Bubbles = ({ texts }) => texts.join(" ")\nexport const ChatRows = () => null\nexport const Shimmer = () => null\n',
   'model-menu.ts': 'export const ModelChoiceDock = () => null\n',
@@ -37,8 +32,6 @@ const effect = (make, deps) => {
     current.effects.push(() => { cell.stop?.(); cell.stop = make(); cell.deps = deps })
   }
 }
-// Null refs get a field stand-in: the composer's own effects touch its style,
-// focus and caret before the browser would have attached the real textarea.
 const field = {
   style: {}, scrollHeight: 0, selectionStart: 0, selectionEnd: 0,
   focus() {}, closest: () => null, contains: () => false,
@@ -75,9 +68,6 @@ runInNewContext(outputFiles[0].text, {
 })
 const { Chat } = module.exports
 
-// Function children stay inert in the React stand-in, so the tree is expanded by
-// calling them: Composer, ComposerPlus and ComposerVoice really run, in order,
-// sharing the hook slots the way React would.
 const expand = (node) => {
   if (Array.isArray(node)) return node.map(expand)
   if (!node || typeof node !== 'object') return node
@@ -114,8 +104,6 @@ const enter = (extra = {}) => ({
 const tick = () => new Promise(resolve => setImmediate(resolve))
 const plain = value => JSON.parse(JSON.stringify(value))
 
-// Mounts a Bot's chat with `prefs` in the roster, types a draft, and returns the
-// send log plus the rendered tree accessor.
 const view = (prefs, ready = true, question, { ui = {}, partsRunning } = {}) => {
   const listeners = new Set()
   const sent = []
@@ -147,8 +135,6 @@ const view = (prefs, ready = true, question, { ui = {}, partsRunning } = {}) => 
   return { sent, answered, stopped, emit: (event, data) => { for (const listener of listeners) listener(event, data) }, tree: () => instance.render() }
 }
 
-// #1501: a part the user opened while its turn runs is read-only until it ends or the
-// user stops it. The Bot views take no input and offer the plugin's own Stop control.
 test('a running part the user opened takes no input, and its Stop action is the plugin\'s', async () => {
   const { sent, stopped, tree } = view({ enterToSend: true }, true, undefined, { ui: { readOnlyPart: 'b1' }, partsRunning: { b1: true } })
   const input = textarea(tree())
@@ -161,7 +147,6 @@ test('a running part the user opened takes no input, and its Stop action is the 
   stop.props.onClick()
   await tick()
   assert.deepEqual(plain(stopped), ['b1'])
-  // Nothing goes out from a locked composer.
   input.props.onKeyDown(enter())
   sendButton(tree()).props.onClick()
   await tick()
@@ -195,7 +180,6 @@ test('with Enter sending off, a plain Enter is a newline and the send button sen
   assert.equal(event.prevented, false)
   assert.deepEqual(plain(sent), [])
   assert.equal(textarea(tree()).props.value, 'hi')
-  // The explicit send control carries the same send.
   sendButton(tree()).props.onClick()
   await tick()
   assert.deepEqual(plain(sent), [['b1', 'hi']])
@@ -211,8 +195,6 @@ test('a roster without the flag keeps the default: Enter sends', async () => {
   assert.deepEqual(plain(sent), [['b1', 'hi']])
 })
 
-// The Bot's ask_user card shares the composer preference: off, a plain Enter in
-// the own-answer field is the field's newline and the card's Submit answers.
 test('the ask_user own-answer field honors the Enter preference', async () => {
   const question = { id: 'q1', question: 'Pick?', options: ['Alpha', 'Beta'], allowCustom: true }
   const sending = view({ enterToSend: true }, true, question)

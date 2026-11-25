@@ -1,7 +1,3 @@
-// The first start of an app whose user has a team in their own DSH: the start page offers it on
-// the import card instead of message boxes, the copy shows its steps on the copying card, and the
-// engine starts on the copied team. The home and the DSH home are throwaway folders, so the test
-// never sees the user's own; the Electron parts and the Host are test doubles.
 import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -40,17 +36,14 @@ test('the first start offers the DSH team on the import card, copies it on cards
   await import('../src/main.mjs')
   await waitFor(() => startState()?.card?.kind === 'import', 'offer the team on the import card')
   const offer = startState().card
-  // The ring has three arcs while the card asks; the copy brings a fourth (checked below).
   assert.deepEqual(startState().phases, ['data', 'engine', 'team'])
   assert.deepEqual([offer.bots, offer.groups, offer.sessions, offer.names], [2, 0, 2, 'Chief, Writer'])
   assert.equal(offer.path, dsh)
   assert.equal(existsSync(join(paths.userData, 'locations.json')), false, 'the places wait for the answer')
-  // The engine warms up on the new data location while the card is up.
   hostState.release()
   await waitFor(() => startState().done.includes('engine'), 'warm the engine up')
   assert.equal(startState().view, 'card', 'the card stays up')
 
-  // "Skip folders that can be regenerated", ticked on the card.
   const start = startWindows()[0]
   start.webContents.mainFrame.url = start.url
   state.ipc.get('ds-bot:start-act')({ sender: start.webContents, senderFrame: start.webContents.mainFrame }, 'importOption', { option: 'regen', value: true })
@@ -67,7 +60,6 @@ test('the first start offers the DSH team on the import card, copies it on cards
   assert.equal(JSON.parse(readFileSync(join(paths.userData, 'locations.json'), 'utf8')).dataDir, join(home, '.ds-bot'))
   assert.deepEqual(messageBoxes(), [], 'no message box on the way')
   assert.equal(hostState.starts, 3, 'the warm engine, the chats\' check and the team\'s engine')
-  // On Linux the check's Host runs from the runtime folder, as the team's does.
   const runtime = fileURLToPath(new URL('../build/runtime', import.meta.url))
   const check = hostState.envs.find(env => env.DS_BOT_CHECK)
   assert.equal(check.DS_BOT_RUNTIME_DIR, runtime)

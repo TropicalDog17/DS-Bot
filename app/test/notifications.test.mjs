@@ -1,4 +1,3 @@
-// A window that is not in front says a Bot answered, without taking focus (#1504).
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
 import { describe, test } from 'node:test'

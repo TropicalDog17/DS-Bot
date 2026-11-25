@@ -1,14 +1,3 @@
-// Writes the generated blocks of the start page in src/start from the plugin's client modules
-// in ../ds-bot (read only, as scripts/icon.mjs does):
-// - start.html, between <!-- whale --> markers: the Main Bot's whale from characterMarkup('whale',
-//   'deepseek'), cut at the tail stock into two copies so the tail can move on its own. The mask
-//   is st-eyes, the clips st-tail-cut and st-torso-cut; the fill stays var(--bt-ink-deepseek).
-// - start.css, between /* tokens */ markers: the DeepSeek theme's light and dark colors.
-// - start.css, between /* springs */ markers: motion.js's springs as linear() curves.
-// - ../page-card.css, between the same two markers: the same colors and springs, scoped to the
-//   card that the team window shows in place of a message box, so that the page's own are kept.
-// Usage: node scripts/start-assets.mjs [--check]   (--check exits 1 when a block is stale and
-// writes nothing)
 import { readFileSync, writeFileSync } from 'node:fs'
 import { stripTypeScriptTypes } from 'node:module'
 import { CHARACTERS, characterMarkup, MASK_ID } from '../../ds-bot/src/client/characters.ts'
@@ -19,13 +8,10 @@ const client = new URL('../../ds-bot/src/client/', import.meta.url)
 const page = new URL('../src/start/', import.meta.url)
 
 const THEME_TOKENS = ['--bt-main', '--bt-card', '--bt-ink', '--bt-ink-2', '--bt-line', '--bt-line-2', '--bt-hover', '--bt-accent', '--bt-accent-ink']
-// The status colors are the same in both modes; the plugin's base sheet defines them.
 const BASE_TOKENS = ['--bt-green', '--bt-danger']
 const SPRINGS = ['shape', 'tap', 'pop', 'stretch', 'list']
-// The layer of the team window's card (preload.cjs).
 const CARD_SCOPE = '.dsb-card-layer'
 
-// Wraps the one self-closing element that starts with `start` in <g id>.
 function wrap(markup, id, start) {
   const at = markup.indexOf(start)
   if (at < 0 || markup.indexOf(start, at + 1) >= 0) throw new Error(`${id}: expected exactly one match`)
@@ -51,8 +37,6 @@ function rig() {
   const mask = raw.slice(raw.indexOf('<mask'), raw.indexOf('</mask>') + 7)
     .replace('<g class="bt-gaze">', '<g id="gaze" class="bt-gaze">')
     .replace('<g class="bt-eyes" fill="#000">', '<g id="eye-pair" class="bt-eyes" fill="#000">')
-  // The start whale keeps the highlight layer and the stronger shade it was designed
-  // with; the runtime characters draw the body without them.
   let layers = `<g fill-rule="evenodd"><path d="${whale.body}" fill="var(--bt-ink-deepseek)"/>`
     + (whale.paints ?? []).map(([d, fill, opacity]) => `<path d="${d}" fill="${fill}" fill-opacity="${opacity}"/>`).join('')
     + `<path d="${whale.shade}" fill="#000" fill-opacity=".14"/>`
@@ -62,9 +46,6 @@ function rig() {
   layers = wrap(layers, 'w-shade', `<path d="${whale.shade}"`)
   layers = wrap(layers, 'w-light', `<path d="${whale.light}"`)
   layers = layers.replace('<g fill-rule="evenodd">', '<g id="whale-layers" fill-rule="evenodd">')
-  // The cut runs from the notch behind the upper fluke down through the bottom contour at the
-  // pivot (27.9, 61.1), where the tail turns. The tail copy reaches 4 units past the cut under
-  // the torso, so tipping the flukes opens no gap; at rest the two copies draw the plain whale.
   const top = [32.45, 52.05]
   const bottom = [23.35, 70.15]
   const pivot = [27.9, 61.1]
@@ -81,8 +62,6 @@ function rig() {
 }
 
 const rules = css => [...css.matchAll(/\{([^}]*)\}/gu)].map(([, body]) => new Map(body.split(';').filter(Boolean).map(item => item.split(/:(.*)/su).slice(0, 2))))
-// The start page carries no skin variables, so a surface color that the app writes as
-// `var(--bt-skin-main, #fcfcfc)` is copied at its theme fallback here.
 const themeFallback = value => {
   const wrapped = /^var\(\s*--[\w-]+\s*,\s*([\s\S]+)\)$/u.exec(value)
   return wrapped === null ? value : wrapped[1].trim()
@@ -106,8 +85,6 @@ function tokens(scope = ':root') {
   ]
 }
 
-// motion.js imports React for its hooks; its springs are plain arithmetic, so the module runs
-// here with the React names stubbed out.
 async function motion() {
   const source = readFileSync(new URL('motion.ts', client), 'utf8')
   const imports = source.match(/^import .*$/gmu) ?? []

@@ -40,7 +40,6 @@ test('the indicator window is frameless, unfocusable, protected and centered', (
   assert.equal(win.options.focusable, false)
   assert.equal(win.protection, true)
   assert.equal(win.workspaces, true)
-  // top center of the primary display
   assert.equal(win.options.width, 1440 - 64)
   assert.equal(win.options.x, Math.round((1440 - (1440 - 64)) / 2))
   assert.equal(win.options.y, 8)
@@ -105,7 +104,6 @@ test('button actions go over the dedicated channel and only from the indicator',
   assert.equal(win.options.webPreferences.preload, '/tmp/preload.cjs')
   const handler = listeners['ds-bot:computer-indicator:act']
   assert.equal(typeof handler, 'function')
-  // another window's webContents may not send
   handler({ sender: {} }, 'stop', 'w1')
   assert.deepEqual(calls, [])
   handler({ sender: win.webContents }, 'stop', 'w1')

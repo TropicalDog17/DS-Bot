@@ -1,6 +1,3 @@
-// The main process of the app: the window hides instead of closing, the tray is the way
-// back to it, and a window that is gone for good is built anew and talks to the Host that
-// runs. The Electron parts are test doubles: no display, no DSH, no data of the user.
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -24,7 +21,6 @@ test('the app starts with a window and a tray', async () => {
 test('places saved before the free space at the start was kept keep it from this start on', async () => {
   const saved = () => JSON.parse(readFileSync(join(paths.userData, 'locations.json'), 'utf8'))
   await waitFor(() => saved().freeAtStart > 0, 'keep the free space of the data\'s drive')
-  // Kept from now on: this start shows no place line.
   assert.ok(startWindows()[0].webContents.sent.every(([channel, snapshot]) => channel !== 'ds-bot:start-state' || snapshot.place === undefined))
 })
 
@@ -34,7 +30,6 @@ test('the first window trades the launch URL for the Host\'s cookie', async () =
   await waitFor(() => win.loaded.some(url => url.includes('token=')), 'reach the Host')
   assert.equal(win.loaded.filter(url => url.includes('token=')).length, 1, 'the token is used once')
   assert.equal(state.cookies.length, 1, 'the Host left a cookie for its address')
-  // The team view is ready: the start window hands over to the team window.
   await handOff()
 })
 

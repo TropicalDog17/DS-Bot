@@ -1,6 +1,3 @@
-// electron-builder's beforePack hook. The native modules go into the package as npm installed them
-// (npmRebuild: false), so they fit only the architecture of the Node that ran npm. An app built for
-// another architecture would carry them and not start, so such a build stops here.
 import { Arch } from 'electron-builder'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -10,7 +7,6 @@ const WHERE = {
   darwin: { x64: 'on an Intel Mac, or under Rosetta with an x64 Node', arm64: 'on a Mac with Apple silicon' },
 }
 
-/** @returns {string | undefined} why this Node cannot build an app for `target` */
 export function archProblem({ target, platform, host = process.arch, targets = [] }) {
   // electron-builder packs a universal app one architecture at a time: the hook only sees the
   // inner x64/arm64 builds, so a universal request is known from the requested targets.
@@ -20,17 +16,9 @@ export function archProblem({ target, platform, host = process.arch, targets = [
   return `This Node runs on ${host}, so npm installed ${host} native modules, and an ${target} app with them would not start. Install the dependencies and build ${where}.`
 }
 
-/**
- * The Office payload the package ships next to the asar through extraResources; it must
- * match the package's own platform and architecture, which the arch check guarantees.
- * @param {*} context - electron-builder's beforePack context.
- * @returns {{ target: string, output: string, cache: string, version: string }}
- */
 export function officeRuntimeRequest(context) {
   const target = runtimeTarget(context.electronPlatformName, Arch[context.arch])
   if (target === undefined) throw new Error(`No Office runtime payload for ${context.electronPlatformName} ${Arch[context.arch]}.`)
-  // The context's packager is the PlatformPackager; the app directory lives on its Packager
-  // (.info), exposed directly as projectDir. For this one-package app they are the same.
   const appDir = context.packager.appDir ?? context.packager.projectDir
   return {
     target,

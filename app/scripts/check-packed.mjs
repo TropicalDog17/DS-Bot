@@ -1,9 +1,3 @@
-// Check a packaged app: copy files that end in .asar with its copy of a user's folders, process an image with its sharp, convert a Word document with its LibreOffice engine, then start it on throwaway folders with the ds-bot mock model, choose a model,
-// send a message, wait for the reply, then close the window the way a user does: the window hides
-// and the app goes on. The window comes back when the app is started again, and the app ends the
-// way the tray's Quit ends it. Fails on a page error or a non-zero exit.
-// Usage: node scripts/check-packed.mjs [app executable] [screenshot.png]
-// The executable defaults to the one that `npm run pack` or `npm run dist` writes into dist-pack/.
 import { spawn, spawnSync } from 'node:child_process'
 import { connect, createServer } from 'node:net'
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
@@ -21,7 +15,6 @@ const executable = given || packedExecutable()
 function packedExecutable() {
   const out = join(root, 'dist-pack')
   if (process.platform === 'win32') return join(out, 'win-unpacked', 'DS Bot.exe')
-  // executableName in electron-builder.yml.
   if (process.platform === 'linux') return join(out, 'linux-unpacked', 'dsbot')
   const dir = ['mac-arm64', 'mac'].find(name => existsSync(join(out, name))) ?? 'mac'
   return join(out, dir, 'DS Bot.app', 'Contents', 'MacOS', 'DS Bot')
@@ -32,8 +25,6 @@ if (!existsSync(executable)) {
   process.exit(2)
 }
 
-// The Office payload sits next to the asar as extraResources, and the LibreOffice Kit CLI is a
-// plain file in the unpacked tree; without them the app's Office skills and tools cannot run.
 {
   const resources = process.platform === 'darwin' ? join(dirname(executable), '..', 'Resources') : join(dirname(executable), 'resources')
   const windows = process.platform === 'win32'
@@ -47,8 +38,6 @@ if (!existsSync(executable)) {
     join(unpacked, 'node_modules', 'ds-bot', 'office.js'),
   ]
   const missing = required.filter((entry) => !existsSync(join(resources, entry)))
-  // macOS carries the signed "DSH Computer Use" helper outside the asar, in a
-  // hash-named folder; find it by its name rather than the changing hash.
   if (process.platform === 'darwin') {
     const rootDir = join(resources, unpacked, 'node_modules', '@deepseek-ai', 'dsh-experimental-cua-macos', 'native', 'bin')
     const dirs = existsSync(rootDir) ? readdirSync(rootDir) : []
@@ -67,8 +56,6 @@ if (!existsSync(executable)) {
 const work = realpathSync.native(mkdtempSync(join(realpathSync.native(tmpdir()), 'ds-bot-packed-')))
 mkdirSync(join(work, 'home'))
 mkdirSync(join(work, 'shell'))
-// CDP cannot answer the native first-close dialog. The notice has its own tests; this check
-// exercises hiding and reopening a window after the user has acknowledged it.
 writeFileSync(join(work, 'shell', 'tray-close-acknowledged'), '')
 const children = []
 
@@ -81,15 +68,12 @@ function stopChildren() {
   }
 }
 
-// An app that hangs, for example behind its error box, must not hold up CI.
 setTimeout(() => {
   console.error('check-packed: FAILED: gave up after 8 minutes')
   stopChildren()
   process.exit(1)
 }, 8 * 60_000).unref()
 
-// Run from inside this checkout, the app would find a module that the build left out in the
-// checkout's own node_modules, so the check runs a copy of the app from the throwaway folder.
 function outsideCheckout(file) {
   const fromCheckout = relative(resolve(root, '..'), file)
   if (fromCheckout.startsWith('..') || isAbsolute(fromCheckout)) return file
@@ -100,8 +84,6 @@ function outsideCheckout(file) {
   return join(copy, relative(appDir, file))
 }
 
-// The copy that the import and the data move share, in Electron's own fs, which plain Node and so
-// the tests do not have: a user's files that end in .asar arrive as they are and can be removed.
 function checkAsarCopy(app) {
   const resources = process.platform === 'darwin' ? resolve(app, '..', '..', 'Resources') : join(dirname(app), 'resources')
   const tree = join(resources, process.platform === 'linux' ? 'app' : 'app.asar', 'src', 'copy-tree.mjs')
@@ -135,8 +117,6 @@ function checkAsarCopy(app) {
   console.log(result.stdout.trim())
 }
 
-// Run a script with the Host's runtime and the app's dependencies as the Host loads them,
-// outside the checkout and not with the CI runner's Node.
 function runInHost(app, what, script, timeout) {
   const resources = process.platform === 'darwin' ? resolve(app, '..', '..', 'Resources') : join(dirname(app), 'resources')
   const linux = process.platform === 'linux'
@@ -168,7 +148,6 @@ function checkSharp(app) {
   `, 30_000)
 }
 
-// A zip archive of stored (uncompressed) files.
 function zip(files) {
   const records = []
   const directory = []
@@ -176,7 +155,6 @@ function zip(files) {
   for (const [path, text] of Object.entries(files)) {
     const name = Buffer.from(path)
     const data = Buffer.from(text)
-    // The fields that the local header and the directory entry share: zip 2.0, stored, dated 1980-01-01.
     const shared = Buffer.alloc(26)
     shared.writeUInt16LE(20, 0)
     shared.writeUInt16LE(0x21, 8)
@@ -239,8 +217,6 @@ function checkOffice(app) {
   `, 180_000)
 }
 
-// The browser plugins drive the app's own browser through Playwright; without it in the package
-// every browser tool failed before it did anything.
 function checkPlaywright(app) {
   runInHost(app, 'Playwright', `
     const { chromium } = createRequire(appRequire.resolve('ds-bot/package.json'))('playwright-core')
@@ -251,7 +227,6 @@ function checkPlaywright(app) {
 
 // Computer use on Windows loads the Cua Driver SDK's DLL by a path that the SDK derives from its
 // own module; a module inside the asar gives a path that Windows' loader cannot open (#1025).
-// The SDK is found the way the provider's import finds it, then asked for its tools.
 function checkComputerUse(app) {
   runInHost(app, 'computer use driver', `
     const { existsSync } = require('node:fs')
@@ -290,7 +265,6 @@ function startMock() {
   })
 }
 
-// Let the OS avoid occupied and reserved ports instead of guessing a fixed range.
 async function freePort() {
   const server = createServer()
   await new Promise((done, reject) => {
@@ -316,7 +290,6 @@ async function appPage(port, deadline, main = false) {
   throw new Error('the app window did not appear')
 }
 
-// The Host goes on while the window is hidden: its port answers.
 async function hostAlive() {
   const { port } = JSON.parse(readFileSync(join(work, 'shell', 'host-port.json'), 'utf8'))
   await new Promise((done, reject) => {
@@ -326,8 +299,6 @@ async function hostAlive() {
   })
 }
 
-// The tray's Quit ends the app. The check cannot click the tray icon, so it asks the browser
-// target of the debugging port to close, which ends the app gracefully.
 async function browserClose(port) {
   const version = await (await fetch(`http://127.0.0.1:${String(port)}/json/version`)).json()
   const socket = new WebSocket(version.webSocketDebuggerUrl)
@@ -371,11 +342,6 @@ function devtools(url, problems) {
   return { opened, call, close: () => { socket.close() } }
 }
 
-// material.css and macos.css style DSH's own page, which can change with a DSH upgrade; every
-// rule must still find an element, on every platform, so the change shows here and not as a
-// broken window. The page is not in fullscreen here, so a rule's html:not([data-fullscreen])
-// is dropped before the look. DSH draws its session tree only in the classic Agent view, which
-// the check does not open, so the rules for the tree are not looked for.
 const frameSheets = ['material.css', 'macos.css']
 function frameRules(file) {
   const css = readFileSync(join(root, 'src', file), 'utf8').replace(/\/\*[\s\S]*?\*\//gu, '')
@@ -395,7 +361,6 @@ async function chat(cdp) {
     }
     throw new Error(`timed out waiting for ${label}`)
   }
-  // DSH shows a preview notice once per profile; it would keep the focus away from the composer.
   const dismissNotice = () => evaluate("[...document.querySelectorAll('[role=dialog] button')].find(node => /^(Continue|继续)$/u.test(node.textContent.trim()))?.click()")
   const text = needle => `document.body.innerText.includes(${JSON.stringify(needle)})`
   await cdp.call('Runtime.enable')
@@ -410,17 +375,10 @@ async function chat(cdp) {
   await evaluate(`document.querySelector(${JSON.stringify(`[data-bot-id="${main}"]`)}).click()`)
   await until("document.querySelector('.bt-model-chip:not(.bt-model-chip-quiet)')", 'the model choice')
   await evaluate("document.querySelector('.bt-model-chip:not(.bt-model-chip-quiet)').click()")
-  // The mock model's greeting for a new team.
   await until(text('先让团队帮你做哪块'), 'the greeting')
   await dismissNotice()
-  // Click the composer through the input pipeline. A bare focus() is not enough where no window
-  // manager gives the window focus (xvfb in CI): the text and the Enter would go nowhere.
   const box = "[...document.querySelectorAll('[role=textbox][contenteditable=true], textarea')].at(-1)"
   const focusCheck = "document.hasFocus() && ((document.activeElement?.isContentEditable ?? false) || document.activeElement?.tagName === 'TEXTAREA')"
-  // A greeting that just arrived leaves the composer rebinding: for a moment the field is
-  // not editable, so a click lands on it but does not focus it. The probe and the click are
-  // separate round trips, so keep probing and click only where the field itself is on top
-  // until the field holds focus.
   const probe = `(() => {
     const el = ${box}
     if (el === undefined) return null
@@ -435,8 +393,6 @@ async function chat(cdp) {
   let shot = null
   let clicked = false
   const deadline = Date.now() + 30_000
-  // Even if the page's own JS focus() already flipped activeElement and document.hasFocus(), click
-  // at least once through CDP's input pipeline so Xvfb / Aura routes keyboard focus to the widget.
   while (Date.now() < deadline && (!clicked || !(await evaluate(`Boolean(${focusCheck})`)))) {
     const point = await evaluate(probe)
     if (point !== null && point !== undefined) {
@@ -448,7 +404,6 @@ async function chat(cdp) {
     } else await sleep(250)
   }
   if (!(await evaluate(`Boolean(${focusCheck})`))) {
-    // Say what was under the cursor, what held the focus and how large the window was.
     const state = await evaluate(`(() => {
       const el = ${box}
       const rect = el === undefined ? null : el.getBoundingClientRect().toJSON()
@@ -468,9 +423,6 @@ async function chat(cdp) {
   }
   await cdp.call('Input.insertText', { text: 'packaged app check' })
   await until(text('packaged app check'), 'the typed message', 10_000)
-  // DSH's composer drops an Enter while it cannot send: while it is busy, or before it has taken
-  // in the inserted text. Its send button is disabled under the same conditions, so press Enter
-  // once a user could click the button, as a user who sees it greyed out would wait.
   const send = `(() => {
     let node = ${box}
     while (node && !node.querySelector?.('button[aria-busy]')) node = node.parentElement
@@ -488,7 +440,6 @@ async function chat(cdp) {
   })()`
   const composerState = () => evaluate(`JSON.stringify({ ...${snapshot}, enter: window.__packedEnter ?? null, tail: document.body.innerText.slice(-300) })`)
   try {
-    // Capture readiness in the existing probe: an extra CDP round trip before Enter can hide a race.
     await until(`(() => {
       const button = ${send}
       if (button === null || button.disabled) return false
@@ -523,8 +474,6 @@ async function chat(cdp) {
       if (shown !== previousDraft) break
       if (state.send === null || state.send.disabled) break
       if (!state.editable) break
-      // When the previous press never reached the page at all under Xvfb, re-prime focus through
-      // Page.bringToFront and a real click on the composer before pressing Enter again.
       if (state.enterCount === 0) {
         await cdp.call('Page.bringToFront').catch(() => {})
         const point = await evaluate(probe)
@@ -545,7 +494,6 @@ async function chat(cdp) {
     }
   }
   if (!sent) throw new Error(`timed out waiting for Enter to send the message; composer: ${await composerState()}`)
-  // The mock model starts its reply with 收到： and the message.
   try {
     await until(text('收到：packaged app check'), 'the reply')
   } catch (error) {
@@ -564,7 +512,6 @@ async function checkComputerHelper(evaluate, until) {
   }).then(r => r.json()).then(r => r.value)`
   const provider = `${call('state')}.then(state => state.computer.provider)`
 
-  // A file at the copy location forces a real filesystem error without touching the bundle.
   writeFileSync(helperHome, '')
   await evaluate(call('computer-set-enabled', { enabled: true }))
   await until(`${provider}.then(provider => provider.state !== 'loading')`, 'the computer-use provider error')
@@ -579,7 +526,6 @@ async function checkComputerHelper(evaluate, until) {
   }
   console.log('check-packed: retry prepared the computer-use helper outside the app')
 
-  // The hosted macOS 26 Intel runner hangs in IconServices when the DSH helper starts.
   if (process.arch === 'x64' && process.env.GITHUB_ACTIONS === 'true') {
     console.log('check-packed: skipping the native permission query on the hosted Intel runner')
   } else {
@@ -625,8 +571,6 @@ try {
     if (answer.exceptionDetails) throw new Error(answer.exceptionDetails.exception?.description ?? answer.exceptionDetails.text)
     return answer.result?.value
   }
-  // Wait until the start window finishes its cross-fade and closes before driving the team window;
-  // otherwise the splash teardown on Xvfb drops window focus after the composer was clicked.
   const revealEnd = Date.now() + 120_000
   while (Date.now() < revealEnd) {
     if (await windowState('BrowserWindow.getAllWindows().length === 1 && win !== undefined && !win.isDestroyed() && win.isVisible()') === true) break
@@ -644,16 +588,12 @@ try {
     console.log(`check-packed: saved ${resolve(shotFile)}`)
   }
   if (chatError) throw chatError
-  // Close the native window: a renderer-initiated close can stop page CDP evaluations even
-  // when Electron prevents the close. Read visibility from the main process as well.
   await windowState('win.close()')
   await sleep(4000)
   if (app.exitCode !== null) throw new Error('the app ended with its window')
   if (await windowState('win !== undefined && !win.isDestroyed() && !win.isVisible()') !== true) throw new Error('the window is not hidden')
   await hostAlive()
   console.log('check-packed: the window is hidden and the Host goes on')
-  // Starting the app again brings the window back; the second copy ends at once, because the
-  // first one holds the lock.
   const second = spawn(packedApp, [`--remote-debugging-port=${String(await freePort())}`], { stdio: 'ignore', env })
   children.push(second)
   const secondExit = await Promise.race([new Promise((done) => { second.once('exit', (code) => { done(code) }) }), sleep(30_000).then(() => undefined)])
@@ -661,9 +601,6 @@ try {
   if (app.exitCode !== null) throw new Error('the app ended when it was started again')
   if (await windowState('win !== undefined && !win.isDestroyed() && win.isVisible()') !== true) throw new Error('the window did not come back')
   console.log('check-packed: the window came back when the app was started again')
-  // The tray's Quit is the way out; the check cannot click the tray, so it asks the browser
-  // target to close, which ends the app gracefully.
-  // Stopping the Host closes its event stream; that expected shutdown is not a page failure.
   if (problems.length > 0) throw new Error(`page problems:\n  ${problems.join('\n  ')}`)
   cdp.close()
   main.close()

@@ -7,10 +7,8 @@ import { after, before, describe, test } from 'node:test'
 import { composeEntries } from '@deepseek-ai/dsh-app-boot'
 import { BUNDLES, claimBundles, loadAppProfile } from '../src/profile.mjs'
 
-// Packages of DSH's own Web front end and its browser runtime, which the window shows.
 const DSH_WEB_FRONT_END = /^@deepseek-ai\/dsh-(client-ui-|web-app|web-frontend|client-modules|host-frontend-static|cordis-client-runner|client-hmr)/u
 
-// Every row of an entry list, with the rows inside groups and agent presets.
 function rows(entries) {
   return entries.flatMap((entry) => [
     entry,

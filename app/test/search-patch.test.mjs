@@ -7,9 +7,6 @@ import { reconcileSearchSelector, SEARCH_PATCH_NAME, searchSelectorPatch } from 
 
 const DSH_WEB = '@deepseek-ai/dsh-web'
 
-// A stand-in profile: dsh-base supplies the web row, ds-bot adds the auto
-// provider and points the selector at it, and `user` rows model the profile's
-// own cordis.patch.yml.
 function profile(user = [], { auto = true } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'ds-bot-search-patch-'))
   return {
@@ -55,7 +52,6 @@ describe('reconcileSearchSelector', () => {
     const p = profile([disabledAuto])
     try {
       const [file] = reconcileSearchSelector(p)
-      // Outside the profile directory itself, so DSH only reads it through patchFiles.
       assert.equal(file, join(p.dir, '..', SEARCH_PATCH_NAME))
       assert.notEqual(file, p.patchPath)
     } finally {
@@ -69,7 +65,6 @@ describe('reconcileSearchSelector', () => {
       const [file] = reconcileSearchSelector(p)
       assert.ok(existsSync(file))
       assert.match(readFileSync(file, 'utf8'), /searchProvider: deepseek-official/)
-      // The user re-enables web-search-auto: no profile patch rows, nothing to do.
       p.patches = []
       assert.deepEqual(reconcileSearchSelector(p), [])
       assert.equal(existsSync(file), false)

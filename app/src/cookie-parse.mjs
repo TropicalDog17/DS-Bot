@@ -1,21 +1,3 @@
-// Parse an exported cookie file into normalized cookie objects. Node built-ins only; no values
-// ever go into skipped/warning entries or logs (an exported file is a sign-in credential).
-//
-// parseCookieFile(bufferOrString, opts) detects the format from the CONTENT (not the file name):
-//   netscape       cookies.txt: 7 tab-separated fields, '#HttpOnly_' prefix, '# Netscape HTTP Cookie File' header
-//                  (curl / wget / yt-dlp / "Get cookies.txt" / Cookie-Editor "Netscape" export)
-//   cookie-editor  JSON array of browser-extension cookie objects (Cookie-Editor, EditThisCookie, raw chrome.cookies
-//                  objects). The same parser tolerates Selenium arrays (`expiry`) and CDP / Puppeteer arrays (`expires`).
-//   playwright     Playwright storageState JSON: { cookies: [...], origins: [...] }
-// and returns
-//   { ok, format, flavor, error, encoding, bom, lineEndings, entries, cookies: CookieParam[], skipped, warnings, info }
-//
-// CookieParam = { name, value, domain, path, secure, httpOnly, sameSite?: 'Strict'|'Lax'|'None', expires?: seconds,
-//                 partitionKey?: { topLevelSite, hasCrossSiteAncestor } }
-//   - domain: host without a dot = host-only cookie; '.host' = domain cookie (also sent to subdomains).
-//   - expires is omitted for session cookies (CDP treats expires 0 as 1970-01-01, i.e. already expired).
-// `skipped` / `warnings` entries carry { where, name, domain, path, code, reason|message } only — never cookie values.
-
 import { domainToASCII } from 'node:url';
 import { isIP } from 'node:net';
 
@@ -26,12 +8,9 @@ const CTL_EXCEPT_TAB = /[\x00-\x08\x0a-\x1f\x7f]/;
 const MAX_NAME_VALUE_BYTES = 4096; // Chrome limit for name + value
 const MAX_ATTR_BYTES = 1024;       // Chrome limit for an attribute value (path, domain)
 const DAY = 86400;
-const CHROME_MAX_AGE_DAYS = 400;   // Chrome stores at most 400 days of lifetime
+const CHROME_MAX_AGE_DAYS = 400;
 const WEBKIT_EPOCH_OFFSET = 11644473600; // seconds between 1601-01-01 and 1970-01-01
 
-// ------------------------------------------------------------------ decoding
-
-/** Buffer | string → { text, encoding, bom }. Handles UTF-8 BOM, UTF-16 LE/BE (with or without BOM). */
 export function decodeInput(input) {
   if (typeof input === 'string') {
     const bom = input.charCodeAt(0) === 0xfeff;
@@ -47,7 +26,6 @@ export function decodeInput(input) {
   if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) {
     return { text: swap16(buf.subarray(2)).toString('utf16le'), encoding: 'utf-16be', bom: true };
   }
-  // UTF-16 without BOM: ASCII text has a zero in every second byte.
   if (buf.length >= 4 && buf[0] !== 0 && buf[1] === 0 && buf[2] !== 0 && buf[3] === 0) {
     return { text: buf.toString('utf16le'), encoding: 'utf-16le', bom: false };
   }
@@ -75,9 +53,6 @@ function lineEndingsOf(text) {
   return kinds.length === 0 ? 'none' : kinds.length === 1 ? kinds[0] : `mixed (${kinds.join('+')})`;
 }
 
-// ------------------------------------------------------------------ detection
-
-/** → { format, flavor?, data?, error? }. format: one of FORMATS, or 'header-string' | 'invalid-json' | 'unknown-json' | 'empty' | 'unknown'. */
 export function detectFormat(text) {
   const t = text.replace(/^\uFEFF/, '').trim();
   if (!t) return { format: 'empty', error: 'the file is empty' };
@@ -109,9 +84,6 @@ function jsonFlavor(arr) {
   return 'generic';
 }
 
-// ------------------------------------------------------------------ entry point
-
-/** Detect the format from the content and parse. opts: { now (seconds), sameSiteNoneInsecure: 'drop-samesite'|'skip'|'keep' } */
 export function parseCookieFile(input, opts = {}) {
   const dec = decodeInput(input);
   const det = detectFormat(dec.text);
@@ -128,8 +100,6 @@ export function parseCookieFile(input, opts = {}) {
   return res;
 }
 
-// ------------------------------------------------------------------ Netscape cookies.txt
-
 export function parseNetscape(text, opts = {}) {
   const ctx = newCtx('netscape', opts);
   ctx.info.commentLines = 0;
@@ -143,10 +113,9 @@ export function parseNetscape(text, opts = {}) {
     const m = line.match(/^\s*#HttpOnly_/i);
     if (m) { httpOnly = true; line = line.slice(m[0].length); } else if (line.trimStart().startsWith('#')) { ctx.info.commentLines++; return; }
 
-    ctx.buffer = []; // warnings of this line; dropped if the line is skipped
+    ctx.buffer = [];
     let fields = line.split('\t');
     if (fields.length < 6) {
-      // Tabs turned into spaces (copy-paste): accept only if the fixed columns still look right.
       const ws = line.trim().split(/\s+/);
       const looksLikeCookie = (ws.length === 7 || ws.length === 6) && toBool(ws[1]) !== undefined && toBool(ws[3]) !== undefined && /^-?\d+(\.\d+)?$/.test(ws[4]);
       if (looksLikeCookie) {
@@ -179,8 +148,6 @@ export function parseNetscape(text, opts = {}) {
   return finish(ctx);
 }
 
-// ------------------------------------------------------------------ JSON cookie array (Cookie-Editor & co.)
-
 export function parseCookieEditor(input, opts = {}) {
   const ctx = newCtx('cookie-editor', opts);
   let data = input;
@@ -203,8 +170,6 @@ export function parseCookieEditor(input, opts = {}) {
   ctx.info.storeIds = [...storeIds];
   return finish(ctx);
 }
-
-// ------------------------------------------------------------------ Playwright storageState
 
 export function parsePlaywright(input, opts = {}) {
   const ctx = newCtx('playwright', opts);
@@ -231,11 +196,7 @@ export function parsePlaywright(input, opts = {}) {
   return finish(ctx);
 }
 
-// ------------------------------------------------------------------ shared normalization
-
-/** One JSON cookie object (any of the known spellings) → raw fields for normalizeCookie(). */
 function rawFromObject(e) {
-  // Cookie-Editor / chrome.cookies: expirationDate (s); CDP / Puppeteer / Playwright: expires (s, -1 = session); Selenium: expiry (s)
   let expires; let expiresField;
   for (const k of ['expirationDate', 'expires', 'expiry']) {
     if (e[k] !== undefined && e[k] !== null && e[k] !== '') { expires = e[k]; expiresField = k; break; }
@@ -289,7 +250,6 @@ function finish(ctx, error = null) {
 }
 
 function warn(ctx, where, raw, code, message) {
-  // While an entry is being read, warnings go to ctx.buffer and are kept only if the entry is imported.
   (ctx.buffer || ctx.warnings).push({ where, name: strOrNull(raw?.name), domain: strOrNull(raw?.domain), code, message });
 }
 
@@ -311,7 +271,7 @@ function normalizeCookie(raw, ctx, where) {
   const W = (code, msg) => warn(ctx, where, raw, code, msg);
   const missing = (k) => (raw.hasField ? !raw.hasField(k) : false);
 
-  // --- name / value (Chrome rejects the WHOLE Storage.setCookies call if one cookie is invalid)
+  // Chrome rejects the whole Storage.setCookies call if one cookie is invalid.
   if (typeof raw.name !== 'string') return { skip: ['bad-name', 'name is missing or not a string'] };
   let name = raw.name;
   if (name !== name.trim()) { name = name.trim(); W('trimmed-name', 'whitespace around the name was removed'); }
@@ -323,7 +283,6 @@ function normalizeCookie(raw, ctx, where) {
   if (value.includes(';') || CTL_EXCEPT_TAB.test(value)) return { skip: ['bad-char-value', 'value contains ";" or a control character (Chrome would reject the whole import call)'] };
   if (Buffer.byteLength(name) + Buffer.byteLength(value) > MAX_NAME_VALUE_BYTES) return { skip: ['too-long', 'name + value is longer than 4096 bytes'] };
 
-  // --- domain and host-only / domain cookie
   let rawDomain = typeof raw.domain === 'string' ? raw.domain.trim() : '';
   let url = null;
   if (!rawDomain && typeof raw.url === 'string' && raw.url) {
@@ -343,7 +302,6 @@ function normalizeCookie(raw, ctx, where) {
     host = ascii;
   }
   const ip = ipv6 || isIP(host) !== 0;
-  // Domain cookie (also sent to subdomains) if ANY signal says so; host-only only if none does.
   const domainSignals = [dotted && 'leading dot', raw.includeSubdomains === true && 'include-subdomains TRUE', raw.hostOnly === false && 'hostOnly false'].filter(Boolean);
   const hostSignals = [raw.includeSubdomains === false && 'include-subdomains FALSE', raw.hostOnly === true && 'hostOnly true'].filter(Boolean);
   let domainCookie = domainSignals.length > 0;
@@ -354,7 +312,6 @@ function normalizeCookie(raw, ctx, where) {
   if (domainCookie && !host.includes('.')) return { skip: ['domain-tld', `domain cookie for the top-level name ".${host}" (Chrome would keep it only for the host "${host}"; no site can use it)`] };
   const domain = domainCookie ? `.${host}` : host;
 
-  // --- path
   let path = raw.path;
   if (url && (path === undefined || path === null || path === '')) path = defaultPath(url.pathname);
   if (path === undefined || path === null || path === '') { path = '/'; W('missing-path', 'no path; using "/"'); } else if (typeof path !== 'string') return { skip: ['bad-path', 'path is not a string'] };
@@ -363,7 +320,6 @@ function normalizeCookie(raw, ctx, where) {
   if (path.includes(';') || CTL_ANY.test(path)) return { skip: ['bad-char-path', 'path contains ";" or a control character'] };
   if (Buffer.byteLength(path) > MAX_ATTR_BYTES) return { skip: ['too-long-path', 'path is longer than 1024 bytes'] };
 
-  // --- flags
   let secure = toBool(raw.secure);
   if (secure === undefined) {
     if (url) secure = url.protocol === 'https:';
@@ -382,19 +338,17 @@ function normalizeCookie(raw, ctx, where) {
     if (ctx.sameSiteNoneInsecure === 'drop-samesite') { sameSite = undefined; W('samesite-none-insecure', 'SameSite=None without Secure: Chrome refuses to store it, so it was imported without SameSite (Chrome default: Lax)'); }
   }
 
-  // --- cookie name prefixes (Chrome rejects violations, which fails the whole import call)
+  // Chrome rejects a cookie-prefix violation, which fails the whole import call.
   const lname = name.toLowerCase();
   if (lname.startsWith('__secure-') && !secure) return { skip: ['prefix', '__Secure- cookie without Secure'] };
   if (lname.startsWith('__host-') && (!secure || domainCookie || path !== '/')) return { skip: ['prefix', '__Host- cookie needs Secure, host-only (no domain) and path "/"'] };
   if ((lname.startsWith('__http-') || lname.startsWith('__host-http-')) && (!secure || !httpOnly)) return { skip: ['prefix', '__Http- / __Host-Http- cookie needs Secure and HttpOnly'] };
 
-  // --- expiry
   const ex = normExpiry(raw, W);
   if (ex.skip) return { skip: ex.skip };
   if (!ex.session && ex.expires <= ctx.now) return { skip: ['expired', `expired on ${isoDay(ex.expires)}`] };
   if (!ex.session && ex.expires > ctx.now + CHROME_MAX_AGE_DAYS * DAY) W('over-400-days', `expires ${isoDay(ex.expires)}; Chrome keeps at most 400 days`);
 
-  // --- partition key (CHIPS)
   let partitionKey;
   if (raw.partitionKey !== undefined && raw.partitionKey !== null && raw.partitionKey !== '') {
     const pk = raw.partitionKey;
@@ -432,7 +386,7 @@ function normExpiry(raw, W) {
     W('expiry-date-string', 'expiry was a date string; converted to seconds');
   } else return { skip: ['bad-expiry', `${raw.expiresField || 'expiry'} "${clip(String(v))}" is not a number or a date`] };
   if (!Number.isFinite(n)) return { skip: ['bad-expiry', `${raw.expiresField || 'expiry'} is not a finite number`] };
-  if (n <= 0) return { session: true }; // Netscape 0, Playwright / CDP -1, some extension exports 0
+  if (n <= 0) return { session: true };
   if (n >= 1e14) {
     n = n >= 1.1e16 ? n / 1e6 - WEBKIT_EPOCH_OFFSET : n / 1e6;
     W('expiry-microseconds', 'expiry looked like microseconds; converted to seconds');
@@ -477,9 +431,6 @@ function strOrNull(x) { return typeof x === 'string' ? x : null; }
 function clip(s, n = 40) { s = String(s ?? ''); return s.length > n ? `${s.slice(0, n)}…` : s; }
 function isoDay(sec) { try { return new Date(sec * 1000).toISOString().slice(0, 10); } catch { return String(sec); } }
 
-// ------------------------------------------------------------------ helpers for reports (no values)
-
-/** Value-free view of a CookieParam or a CDP Network.Cookie. */
 export function describeCookie(c) {
   const d = { name: c.name, domain: c.domain ?? null, path: c.path ?? null };
   if (!c.domain && c.url) d.url = c.url;
@@ -492,7 +443,6 @@ export function describeCookie(c) {
   return d;
 }
 
-/** Group cookies by site (domain without the leading dot) for a user-facing summary. */
 export function summarizeBySite(result) {
   const sites = new Map();
   const get = (domain) => {

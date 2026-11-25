@@ -1,8 +1,3 @@
-// A Bot runs inside the desktop app, so a plain `npm test` inherits the app's own runtime
-// environment: its port, its profile and the packaged runtime it ships. The suite has to answer
-// the same everywhere, and CI has none of these, so they are removed before any test file loads.
-// A test that needs one sets it itself; DS_BOT_PORT alone used to break the first-run check, and
-// DS_BOT_RUNTIME_DIR alone broke the Office overlay tests.
 const APP_RUNTIME_ENVIRONMENT = [
   'DS_BOT_APP',
   'DS_BOT_COMPUTER_HELPER_HOME',

@@ -1,4 +1,3 @@
-// An update prompt waits for the window: a hidden window has no box to show it in.
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import { createDeferredPrompt } from '../src/update-prompt.mjs'

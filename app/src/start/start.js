@@ -1,8 +1,3 @@
-// The start page: binds window.dsBotStart and applies each full snapshot to the page (the
-// whale's line and the hint row, which speak only when the user is needed, the sheet and its
-// cards, focus and the live region). The whale, the ring of arcs that is the progress and the
-// hidden stage list belong to the director in whale.js. Text is set only through textContent
-// (and text nodes), never as markup.
 import { fill as fillIn, t } from './text.mjs'
 import { createDirector, reduced, reducedFx, play, spring, sleep, clamped } from './whale.js'
 
@@ -10,18 +5,12 @@ const root = document.documentElement
 const asked = new URLSearchParams(location.search).get('start')
 const START = ['first', 'later', 'moving'].includes(asked) ? asked : 'first'
 const resume = performance.getEntriesByType('navigation')[0]?.type === 'reload'
-// The main process shows the window by itself after PAINT_WAIT_MS (3 s) and OPEN_MS.
 const HELD_MAX_MS = 3500
 const bridge = window.dsBotStart
 if (resume) root.dataset.resume = ''
-// The page shows nothing but the empty band (html:not([data-start])) without the preload's bridge.
 if (bridge) root.dataset.start = START
 const first = START === 'first'
 root.dataset.sheet = 'none'
-// The window shows see-through once this page has painted and turns opaque a moment later
-// (start-window.mjs OPEN_MS); the snapshot then says `shown`. Until then the whale's entrance
-// waits: its CSS animations hold their first frame (start.css html[data-held]) and the
-// director's clock has not started.
 let onScreen = () => {}
 const begin = bridge && !resume ? new Promise((resolve) => { onScreen = resolve }) : Promise.resolve()
 if (bridge && !resume) {
@@ -42,11 +31,9 @@ const CODE = new Set(['path', 'dataDir', 'workspace'])
 let s = null
 const say = t
 
-// ---- text ----
 const sigs = new WeakMap()
 function render(el, vars = {}) {
   const key = el.dataset.t.replace(/\{(\w+)\}/gu, (all, name) => vars[name] ?? '')
-  // Odd parts are placeholders: {name}, or {name|one|many} for an English count.
   const parts = say(key).split(/\{(\w+(?:\|[^}]*)?)\}/u)
   const valueOf = (part) => {
     const value = vars[part.split('|')[0]]
@@ -69,12 +56,7 @@ function renderStatic() {
   for (const st of document.querySelectorAll('.station')) st.querySelector('.sr').textContent = say(`status.state.${st.dataset.state}`)
   if (s) { fillBlock(shown); placeUI(s.place); timeUI() }
 }
-// Where the data goes, centred in the footer with a grey [Change the location…]: on a first start (the main
-// process sends no place on a reinstall or once a copied team lives there), and on a later start
-// whose drive is down to a fifth of its room at the start. The drive and its free space on
-// Windows, the folder elsewhere.
 function placeUI(place) {
-  // The failure page has its own buttons; the 180 s question still lets the place change.
   const on = START !== 'moving' && place !== null && typeof place === 'object' && !['failed', 'viewFailed'].includes(s?.view)
   placeEl.hidden = !on
   if (!on) return
@@ -93,14 +75,8 @@ function varsOf(snap) {
 }
 function announce(text) { if (text) live.textContent = text }
 
-// ---- the whale's line ----
-// One short line under the ring, and only when something went wrong: the 180 s question or a
-// failure. A slow start is told by the whale's pose alone. A card speaks with its own first line,
-// so the whale's line is empty while a card is up (the 180 s question is the exception: its card
-// holds only the buttons). A new line fades in once the old one has faded out.
 const VOICES = { failed: 'voice.failed', viewFailed: 'voice.viewFailed', watchdog: 'voice.watchdog' }
 const FADE_MS = 160
-// key/text: the line chosen (on screen, or coming in once the old one has faded out).
 const v = { key: '', text: '', swap: 0 }
 function voiceWant() {
   return VOICES[s.view] ?? ''
@@ -112,7 +88,6 @@ function speak() {
   if (key === v.key) { if (text !== v.text) { v.text = text; if (!v.swap) voiceText.textContent = text } return }
   v.key = key
   v.text = text
-  // The old line is already fading out: the new choice simply takes its place.
   if (v.swap) return
   if (!voiceEl.hasAttribute('data-on')) { put(); return }
   delete voiceEl.dataset.on
@@ -125,9 +100,6 @@ function put() {
   if (v.key === 'voice.failed' || v.key === 'voice.viewFailed') announce(v.text)
 }
 
-// ---- the hint row ----
-// Empty unless room runs short: a short drive's one-line note for the first 10 s. Nothing shows
-// while a card, the 180 s question or a failure is up.
 function hintWant() {
   if (s.view !== 'boot' && s.view !== 'moving') return ['', {}]
   return [s.hint && bootMs() < 10000 ? 'hint.space' : '', { ...s.hint }]
@@ -135,10 +107,8 @@ function hintWant() {
 let shimmerReady = false
 if (!first) setTimeout(() => { shimmerReady = true; if (s) shimmer() }, resume ? 0 : 1000)
 const shimmer = () => root.toggleAttribute('data-shimmer', root.dataset.effects !== 'reduced' && root.dataset.effects !== 'off' && shimmerReady && (s.view === 'boot' || s.view === 'moving'))
-// The main process's boot clock: ms at the wall time `at`, paused while a card waits on the user.
 const bootMs = () => { const c = s?.clock; if (!c) return 0; return c.running ? c.ms + Math.max(0, Date.now() - c.at) : c.ms }
 let tick = 0
-// Runs on every snapshot and on each second of the boot clock: the 10 s and 45 s marks.
 function timeUI() {
   clearTimeout(tick)
   if (!s) return
@@ -165,7 +135,6 @@ function caption(key, vars) {
   } else if (key && captionText.textContent !== text) captionText.textContent = text
 }
 
-// ---- the sheet: one surface that every card morphs in and out of ----
 const blockEl = name => (name ? $(`.card[data-kind="${name}"]`) : null)
 let shown = ''
 let edgeH = 0
@@ -173,12 +142,9 @@ let sheetRun = 0
 function blockFor(snap) {
   if (snap.view === 'handoff') return shown
   if (snap.view === 'failed' || snap.view === 'viewFailed' || snap.view === 'watchdog') return snap.view
-  // The copy has no card: it is the ring's import arc (start-window §6).
   if (snap.view === 'card') return snap.card?.kind === 'copying' ? '' : snap.card?.kind ?? ''
   return ''
 }
-// The edge and fill layers are pre-sized to the sheet; only their clip-path moves, so a card
-// morph never lays anything out per frame.
 function morph(target, jump) {
   const h = Math.max(0, Math.min(Math.round(target), sheet.clientHeight))
   if (h === edgeH) return
@@ -197,7 +163,6 @@ function morph(target, jump) {
     if (jump || root.dataset.effects === 'off') return
     if (reduced()) { if (appear || vanish) play(layer, [{ opacity: fromOpacity }, { opacity: vanish ? 0 : 1 }], { duration: vanish ? 160 : 120, fill: 'none' }); return }
     const shape = spring('shape')
-    // A collapse is clamped at zero height: overshooting past it would only empty the clip.
     play(layer, [{ clipPath: fromClip }, { clipPath: clips[k] }], { duration: shape.duration, easing: vanish ? clamped(shape.easing) : shape.easing, fill: 'none' })
     if (appear) play(layer, [{ opacity: fromOpacity }, { opacity: 1 }], { duration: 220, easing: 'ease-out', fill: 'none' })
     // The fade-out ends before the clip area reaches zero (about half-way along the spring).
@@ -216,9 +181,6 @@ function leave(el, jump) {
   const a = play(el, frames, { duration: 160, easing: 'ease-in' })
   exits.set(el, a)
   el.inert = true
-  // The faded card stays in layout until the edges have collapsed (100 + 420 ms after the
-  // exit starts): unhiding or hiding a block mid-morph would knock the edge layers off the
-  // compositor.
   a.done.then(() => sleep(380)).then(() => { if (exits.get(el) !== a) return; exits.delete(el); if (blockEl(shown) !== el) el.hidden = true; el.inert = false; a.cancel() })
 }
 function enter(el) {
@@ -227,11 +189,7 @@ function enter(el) {
   el.inert = false
   el.hidden = false
 }
-// The whale's line fades and veils in on CSS; shift() cancels only its scripted rise.
 const rises = el => el.getAnimations().filter(a => !(a instanceof CSSTransition) && !(a instanceof CSSAnimation))
-// The stage rises to make room for the sheet; the pond (the whale and its ring) shrinks and
-// rises with it on the same spring, so the ring ends above the card, and the whale's line rises
-// with them so that it stays under the ring (start.css html[data-up]).
 function shift(up, jump) {
   const from = getComputedStyle(stage).translate
   const pondFrom = { scale: getComputedStyle(pond).scale, translate: getComputedStyle(pond).translate }
@@ -278,10 +236,6 @@ async function showBlock(name, jump) {
   }
 }
 
-// [Copy them over], [Continue copying] or a retry: the card does not fold away. Its surface shrinks to a drop
-// that turns the whale's blue and jumps up into the import's arc, which lights up as it lands and
-// then fills with the copy; the pond comes back down after it (start-window §6). Reduced motion
-// folds the card as usual and turns the arc on at once.
 const FLIGHT_MS = 520
 const ARRIVE = 0.8
 async function flyIn(mine) {
@@ -291,14 +245,12 @@ async function flyIn(mine) {
     const box = sheet.getBoundingClientRect()
     const target = importPoint()
     const cx = box.width / 2, cy = edgeH / 2
-    // The surface is leaving: a card that comes meanwhile morphs in from nothing.
     edgeH = 0
     await sleep(60)
     if (mine !== sheetRun) return
     const dot = (r, k) => `inset(${cy - r + k}px ${cx - r + k}px ${box.height - cy - r + k}px ${cx - r + k}px round ${r}px)`
     const dx = target.x - (box.left + cx), dy = target.y - (box.top + cy)
     const blue = 'var(--bt-ink-deepseek)'
-    // Shrink and rise, then the hop onto the arc; the arc lights as the drop arrives, under its fade.
     const flights = [edge, fill].map((layer, k) => {
       const from = getComputedStyle(layer)
       const frames = [
@@ -327,16 +279,12 @@ async function flyIn(mine) {
     land()
   }
 }
-// Where the import's arc is, as the page shows it now (the pond may be shrunk): the middle of the
-// arc on a ring of four, else the gap after the data folder's arc that it grows out of.
 function importPoint() {
   const ring = $('.ring')
   const a = ((ring.dataset.n === '4' ? 135 : 120) * Math.PI) / 180
   return new DOMPoint(110 + 106 * Math.sin(a), 110 - 106 * Math.cos(a)).matrixTransform(ring.getScreenCTM())
 }
 
-// What a new card says to a screen reader: its first line and its first visible sentence (the
-// 180 s card has only buttons; the whale's line asks its question).
 function cardWords(el, name) {
   if (name === 'watchdog') return say('voice.watchdog')
   const title = el.querySelector('.card-title')
@@ -344,13 +292,10 @@ function cardWords(el, name) {
   return [title?.textContent, lead?.textContent].filter(Boolean).join(' ')
 }
 
-// ---- card contents ----
 function fillBlock(name) {
   const el = blockEl(name)
   if (!el || !s) return
   const vars = varsOf(s)
-  // A card with variants shows the parts of its own (data-why) only; the others stay empty, so
-  // that a screen reader does not read them.
   for (const node of el.querySelectorAll('[data-why]')) {
     node.hidden = node.dataset.why !== s.card?.why
     if (node.hidden && node.dataset.t) { node.textContent = ''; sigs.delete(node) }
@@ -377,10 +322,6 @@ function missing(el) {
     a.done.then(() => { line.hidden = true; a.cancel(); resize() })
   }, 4000)
 }
-// The recommended-drive card: the question and [Put it on drive D] only with a drive to recommend,
-// [Keep it on drive C] only when the default place works but its drive is short on space. A
-// rejected pick keeps the buttons of the card it came from (card.keep says whether it had
-// [Keep it on drive C]).
 function recommend(el) {
   const card = s.card
   const rec = Boolean(card.rec)
@@ -428,8 +369,6 @@ function bar(el, fraction, keep) {
   el.style.scale = `${f} 1`
   if (!reduced()) play(el, [{ scale: from }, { scale: `${f} 1` }], { ...spring('list'), fill: 'none' })
 }
-// The recovery card. [Change the location…] and [Start with a new blank team…] show only when the main process can
-// carry them out (failure.places).
 function failed(el) {
   for (const node of el.querySelectorAll('[data-places]')) node.hidden = !s.failure?.places
   const update = s.update
@@ -449,7 +388,6 @@ function toggleDetails(button) {
   log.hidden = !open
   resize()
   if (!open) return
-  // The redacted log fills in after the morph, so the surface never reflows while it moves.
   setTimeout(() => {
     pre.textContent = (s.failure?.log ?? s.card?.log ?? []).slice(-200).join('\n')
     pre.parentElement.scrollTop = 1e6
@@ -462,7 +400,6 @@ function copiedLabel(button) {
   setTimeout(() => { button.classList.remove('copied'); sigs.delete(button); render(button) }, 1600)
 }
 
-// ---- input ----
 document.addEventListener('click', (event) => {
   const button = event.target.closest?.('button[data-act]')
   if (!button) return
@@ -484,7 +421,6 @@ document.addEventListener('visibilitychange', () => root.toggleAttribute('data-h
 matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', () => director.refresh())
 new MutationObserver(() => director.refresh()).observe(root, { attributes: true, attributeFilter: ['data-motion', 'data-effects'] })
 
-// ---- snapshots ----
 const director = createDirector({ start: START, resume, begin, act: (name, detail) => bridge?.act(name, detail), label: say, announce })
 let applied = false
 function apply(next) {
@@ -494,21 +430,18 @@ function apply(next) {
   if (root.dataset.motion !== motion) root.dataset.motion = motion
   const effects = next.effects ?? 'full'
   if (root.dataset.effects !== effects) root.dataset.effects = effects
-  // Linux draws a system title bar, so the page has no band of its own.
   if (next.frame === 'system') root.dataset.frame = 'system'
   else delete root.dataset.frame
   root.dataset.view = next.view
   shimmer()
   placeUI(next.place)
   const name = blockFor(next)
-  // The import card comes once the data folder's arc has filled (start-window §6).
   if (name === 'import' && name !== shown && !jump) director.through(0).then(() => { if (blockFor(s) === 'import') showBlock('import', false) })
   else if (name !== shown) showBlock(name, jump)
   else { fillBlock(name); resize() }
   timeUI()
   director.update(next)
   if (next.shown) release()
-  // The window shows once this first state is on screen (start-window.mjs 'painted').
   if (!applied) requestAnimationFrame(() => requestAnimationFrame(() => { bridge?.act('painted') }))
   applied = true
 }

@@ -1,30 +1,7 @@
-// Every string of the app shell that the user sees, in one table: the start page and the system
-// dialogs of the main process (choosing a folder, moving the data, the import, updates). Product
-// names in dialog titles (DS Bot, DSH Desktop, DSH Web) are constants, not copy. The copy is
-// English only. docs/plans/2026-10-29-start-copy.md decides the keys and the layers.
-//
-// A key is <layer>.<thing>[.<part>]; the layer says where the line is on screen:
-//   voice   the whale's line: one short line, no full stop (a question mark is fine)
-//   say     a card's first line: short, no full stop
-//   hint    the hint row: the one thing to know next, short, no full stop
-//   card    card text: whole sentences ending in . or ?; card.<card>.<part>
-//   reason  reasons reused in card text: whole sentences end in . (reason.place.*,
-//           reason.start.*), fragments set into a sentence have no punctuation (reason.copy.*)
-//   btn     buttons: short, a verb first; one that opens a system picker or leaves the card
-//           ends in …; no full stop
-//   note    card footnotes: one sentence ending in . that says where to change it later
-//   foot    the footer row: no full stop
-//   status  screen readers only: no full stop
-//   dialog  system dialogs: sentences ending in . or ?, picker titles without a full stop
-//
-// Placeholders are {name}; paths, sizes, names and versions come from the snapshot or the
-// caller, never from here. {name|one|many} picks the singular or plural by the value.
 export const TEXT = {
-  // voice
   'voice.watchdog': 'This is taking too long. Try again?',
   'voice.failed': 'DS Bot couldn’t start',
   'voice.viewFailed': 'The team view didn’t load',
-  // say
   'say.space': 'Drive {drive} is a bit full',
   'say.permission': 'I’m not allowed to put things here',
   'say.rejected': 'That place won’t work',
@@ -37,9 +14,7 @@ export const TEXT = {
   'say.newer': 'These chats are newer than me',
   'say.move': 'Move the data here?',
   'say.moveFailed': 'The data didn’t move',
-  // hint
   'hint.space': 'Only {free} left on drive {drive}',
-  // card
   'card.recommend.ask': 'Put it on drive {rec} ({recFree} free)?',
   'card.missing.lead': 'Can’t find the data folder {path}. The external drive may be unplugged, or the folder was moved or deleted. The old data won’t be changed.',
   'card.missing.retryMissed': 'Still can’t find this folder.',
@@ -67,7 +42,6 @@ export const TEXT = {
   'card.update.installing': 'Installing; it reopens when done.',
   'card.update.failed': 'The download failed.',
   'card.update.slow': 'Download too slow?',
-  // reason
   'reason.place.space': 'Only {free} left on drive {drive}.',
   'reason.place.permission': 'DS Bot can’t write files in {path}.',
   'reason.place.onedrive': '{path} is in OneDrive; syncing interrupts chats while they are being written.',
@@ -93,7 +67,6 @@ export const TEXT = {
   'reason.copy.permission': 'no permission to read',
   'reason.copy.full': 'the disk is full',
   'reason.copy.other': 'something unexpected happened',
-  // btn
   'btn.retry': 'Try again',
   'btn.wait': 'Keep waiting',
   'btn.freshStart': 'Start with a new blank team…',
@@ -127,16 +100,13 @@ export const TEXT = {
   'btn.notNowRestart': 'Not now',
   'btn.notNowDownload': 'Not now',
   'btn.ok': 'OK',
-  // note
   'note.changeLater': 'You can change this later in Settings → General → Location.',
   'note.copyLater': 'You can also copy the team in Settings → General → Location.',
   'note.copyAgain': 'You can copy the team later in Settings → General → Location.',
-  // foot
   'foot.place.drive': 'Data on drive {drive}, {free} free',
   'foot.place.driveOnly': 'Data on drive {drive}',
   'foot.place.path': 'Data in {path}, {free} free',
   'foot.place.pathOnly': 'Data in {path}',
-  // status
   'status.track': 'Start progress',
   'status.phase.data': 'Prepare the data folder',
   'status.phase.import': 'Copy your old team',
@@ -148,7 +118,6 @@ export const TEXT = {
   'status.state.failed': 'Not finished',
   'status.sr.active': '{phase}: in progress',
   'status.sr.done': '{phase}: done',
-  // dialog
   'dialog.pickRoot': 'Choose where DS Bot keeps its data',
   'dialog.pickMove': 'Choose a new folder for DS Bot’s data',
   'dialog.pickCookies': 'Choose a cookie file',
@@ -207,7 +176,6 @@ export const TEXT = {
 
 const PLACEHOLDER = /\{(\w+)(?:\|([^|}]*)\|([^}]*))?\}/gu
 
-/** Fill {name} and {name|one|many} from vars; a placeholder without a value stays as it is. */
 export function fill(text, vars) {
   return text.replace(PLACEHOLDER, (all, name, one, many) => {
     if (!(name in vars)) return all

@@ -1,5 +1,3 @@
-// A packaged macOS start in the test harness must never fetch GitHub Releases from the
-// network or pop an update card over unrelated main-process tests.
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { app, state } from './helpers/fake-electron.mjs'

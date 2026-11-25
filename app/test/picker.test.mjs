@@ -1,5 +1,3 @@
-// The app's own picker in place of the system's: what main lists and checks (folder-picker.mjs),
-// and the IPC that only the page showing a picker may use (picker-host.mjs). Temp folders only.
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -42,7 +40,6 @@ test('a folder that is gone, a file and a missing drive are answers, not throws'
   assert.equal((await list(join(top, 'nowhere'))).error, 'missing')
   assert.equal((await list(file(join(folder('plain'), 'note.txt')))).error, 'notFolder')
   if (process.platform === 'win32') {
-    // A letter that no machine of the tests has: the drive is gone, not the folder.
     const free = [...'QRSTUVWXYZ'].map(letter => `${letter}:\\`).reverse()
     const { drives } = await roots({ getPath: () => top, platform: 'win32' })
     const missing = free.find(path => !drives.some(drive => drive.path === path))
@@ -98,7 +95,6 @@ test('a picker opens in the nearest folder that exists', async () => {
   assert.equal(await startIn(undefined, at), at)
 })
 
-// The IPC: the page that shows the picker lists, makes folders and answers; nobody else.
 function host() {
   const handlers = new Map()
   const ipcMain = { handle: (channel, run) => { handlers.set(channel, run) }, on: (channel, run) => { handlers.set(channel, run) } }
@@ -168,8 +164,6 @@ test('a page that does not show the picker in time gets no answer to wait for', 
   assert.equal(await pickers.ask(loading, { mode: 'folder', title: 'Pick', labels: {} }), undefined)
 })
 
-// A long drive or folder name in the side column ends in an ellipsis: the name is its own box,
-// for an ellipsis does not reach bare text beside the glyph in the button's flex row.
 test('a place or drive with a long name is cut with an ellipsis, and its title keeps the whole path', () => {
   const src = new URL('../src/', import.meta.url)
   const preload = readFileSync(new URL('preload.cjs', src), 'utf8')

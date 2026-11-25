@@ -1,6 +1,3 @@
-// Where a first start puts the data: the line on the start page that says so (and when a later
-// start shows it again), and the root rule of "Change the location…" (windows-onboarding §3, one location;
-// start-window §6). No Electron here, so the tests run without it.
 import { homedir } from 'node:os'
 import { basename, dirname, join, parse, resolve, sep } from 'node:path'
 import { disk, real, within } from './copy-tree.mjs'
@@ -9,10 +6,8 @@ const { existsSync, mkdirSync, readdirSync, rmdirSync, rmSync, statfsSync, statS
 
 export const DATA_DIR = 'data'
 export const WORKSPACE_DIR = 'workspace'
-// The layer the app adds inside a drive or a folder that is someone else's.
 export const LAYER = 'DS Bot'
 
-/** Free bytes on the volume that holds `path`, measured at its nearest existing ancestor. */
 export function freeSpace(path) {
   let at = resolve(path)
   for (;;) {
@@ -30,10 +25,6 @@ export function freeSpace(path) {
   }
 }
 
-/**
- * Bytes as the page shows them, in Explorer's units of 1024: whole GB from 10 up, else one
- * decimal, whole MB under 1 GB, and "under 1 MB" under that (never "0 MB").
- */
 export function formatBytes(bytes) {
   if (typeof bytes !== 'number' || !Number.isFinite(bytes) || bytes < 0) return undefined
   const gb = bytes / 2 ** 30
@@ -43,22 +34,17 @@ export function formatBytes(bytes) {
   return `${String(Math.floor(bytes / 2 ** 20))} MB`
 }
 
-// A later start shows the place line again once the drive is down to this share of the free
-// space it had when the data went there (start-window §5).
 export const LOW_SHARE = 0.2
 
-/** Whether `free` is down to LOW_SHARE of `freeAtStart`; an unknown size is not low. */
 export function runningLow(free, freeAtStart) {
   return Number.isFinite(free) && Number.isFinite(freeAtStart) && freeAtStart > 0 && free <= freeAtStart * LOW_SHARE
 }
 
-/** The drive letter of a Windows path ('C'), or undefined. */
 export function driveOf(path) {
   const match = /^([A-Za-z]):[\\/]/u.exec(resolve(path))
   return match ? match[1].toUpperCase() : undefined
 }
 
-/** A path with the home folder written as ~, for the page. */
 export function shortPath(path, home = homedir()) {
   const full = resolve(path)
   const base = resolve(home)
@@ -66,12 +52,6 @@ export function shortPath(path, home = homedir()) {
   return within(full, base) ? `~${sep}${full.slice(base.length).replace(/^[\\/]+/u, '')}` : full
 }
 
-/**
- * What the start page says about the place of the data: the drive and its free space on
- * Windows, the folder elsewhere.
- * @param {{ home?: string, free?: number }} what `free` from freeSpace(); none leaves it out
- * @returns {{ drive?: string, path?: string, free?: string }}
- */
 export function placeOf(dataDir, { home = homedir(), free } = {}) {
   const drive = driveOf(dataDir)
   const place = drive === undefined ? { path: shortPath(dataDir, home) } : { drive }
@@ -79,7 +59,6 @@ export function placeOf(dataDir, { home = homedir(), free } = {}) {
   return text === undefined ? place : { ...place, free: text }
 }
 
-/** The root R of places made by the root rule (R\data beside R\workspace); the default places have none. */
 export function currentRootOf(dataDir, workspace) {
   if (typeof dataDir !== 'string' || typeof workspace !== 'string') return undefined
   const root = dirname(resolve(dataDir))
@@ -87,10 +66,8 @@ export function currentRootOf(dataDir, workspace) {
   return root
 }
 
-/** The picker starts from the current data folder's parent (windows-onboarding §3). */
 export const pickFrom = dataDir => dirname(resolve(dataDir))
 
-/** A folder with nothing but empty folders in it. */
 export function isEmptyTree(folder) {
   try {
     if (!statSync(folder).isDirectory()) return false
@@ -100,13 +77,8 @@ export function isEmptyTree(folder) {
   }
 }
 
-// A folder that holds nothing but what the app itself puts into an empty root (the two
-// folders of a start that never got further).
 const ownEmpty = folder => readdirSync(folder).every(name => [DATA_DIR, WORKSPACE_DIR].includes(name) && isEmptyTree(join(folder, name)))
 
-// OneDrive's folders: the roots it names in the environment, a folder called OneDrive or
-// "OneDrive - <organisation>", and macOS's Library/CloudStorage/OneDrive-<name>. A folder that
-// only has OneDrive in its name (OneDrive-old) is not the cloud.
 function inOneDrive(path, env) {
   const roots = ['OneDrive', 'OneDriveConsumer', 'OneDriveCommercial'].map(name => env[name]).filter(value => typeof value === 'string' && value !== '')
   if (roots.some(root => within(path, real(root)))) return true
@@ -116,25 +88,10 @@ function inOneDrive(path, env) {
 
 const sameFolder = (a, b) => within(a, b) && within(b, a)
 
-/**
- * The root R that a picked folder gives (windows-onboarding §3, one location): the folder itself
- * when it is new, empty, or an empty root of the app's own; otherwise `DS Bot` inside it,
- * as inside a drive. The data goes to R\data and the Bots' files to R\workspace.
- * @param {string} picked
- * @param {{ dshHome?: string, program?: string, env?: NodeJS.ProcessEnv, probe?: boolean, current?: { dataDir: string, workspace?: string } }} where
- *   `probe` writes a file into R\data to see that the place can be written (default true);
- *   `current` names the places the data is in now
- * @returns {{ same: true } | { root: string, dataDir: string, workspace: string, added: boolean, reason?: 'permission' | 'onedrive' | 'foreign' | 'nested' | 'dsh' | 'program', at?: string }}
- *   `same`: the place the data is in now was picked, which is no change; `reason` says why R
- *   cannot be used, with the path `at` that the card names
- */
 export function rootOf(picked, { dshHome, program, env = process.env, probe = true, current } = {}) {
   const chosen = resolve(picked)
   const places = root => ({ root, dataDir: join(root, DATA_DIR), workspace: join(root, WORKSPACE_DIR) })
   try {
-    // The places the data is in now: the data folder, and the team workspace once something
-    // is in it (an empty one, just made, can become the new root, as a pick of the home folder
-    // proposes with the default places).
     const data = typeof current?.dataDir === 'string' ? real(current.dataDir) : undefined
     const workspace = typeof current?.workspace === 'string' && existsSync(current.workspace) && !isEmptyTree(current.workspace) ? real(current.workspace) : undefined
     const now = [data, workspace].filter(path => path !== undefined)
@@ -157,9 +114,7 @@ export function rootOf(picked, { dshHome, program, env = process.env, probe = tr
     }
     const result = { ...places(root), added }
     const reject = (reason, at = root) => ({ ...result, reason, at })
-    // An added layer that is already someone else's folder cannot be used either.
     if (added && existsSync(root) && (!statSync(root).isDirectory() || (readdirSync(root).length > 0 && !ownEmpty(root)))) return reject('foreign')
-    // The checks look through links and junctions at the folder as the file system has it.
     const physical = real(root)
     if (now.some(path => within(physical, path) || within(path, physical))) return reject('nested', chosen)
     if (inOneDrive(physical, env)) return reject('onedrive', chosen)
@@ -171,12 +126,10 @@ export function rootOf(picked, { dshHome, program, env = process.env, probe = tr
     if (probe && !canWrite(result.dataDir)) return reject('permission', chosen)
     return result
   } catch {
-    // A folder that cannot be read (another user's, the system's) cannot be written either.
     return { ...places(chosen), added: false, reason: 'permission', at: chosen }
   }
 }
 
-// Makes only the missing layers, writes and removes a file, and removes what it made.
 function canWrite(folder) {
   const made = []
   try {

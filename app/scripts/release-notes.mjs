@@ -1,16 +1,9 @@
-// Writes what a release offers for download: the "Download / 下载" table at the top of its notes,
-// SHA256SUMS.txt, and a copy of each package without the version in its name, which a fixed
-// releases/latest/download/ link can name.
-// Usage: node scripts/release-notes.mjs <version> <folder with the packages> <folder for the files to attach> [<current notes>]
-// It prints the notes with the table on top. MIRROR_BASE, when set, is a URL that holds the
-// packages under the same names; GITHUB_REPOSITORY names the repository (default Fei2411/DS-Bot).
 import { createHash } from 'node:crypto'
 import { copyFileSync, createReadStream, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const REPO = 'Fei2411/DS-Bot'
-// The order of the table: Windows first, where most downloads are; the phone app last.
 export const PACKAGES = [
   { file: 'win-x64.exe', system: '**Windows 10/11 (64-bit / 64 位)**', note: 'Double-click to install / 双击安装' },
   { file: 'mac-arm64.zip', system: 'macOS, Apple chip / Apple 芯片' },
@@ -20,14 +13,12 @@ export const PACKAGES = [
   { file: 'android.apk', system: 'Android (phone app / 手机 App)' },
 ]
 export const SUMS = 'SHA256SUMS.txt'
-// The table sits between these, so a second run replaces it instead of adding another.
 const START = '<!-- downloads -->'
 const END = '<!-- /downloads -->'
 
 export const packageName = (version, entry) => `DS-Bot-${version}-${entry.file}`
 export const copyName = entry => `DS-Bot-${entry.file}`
 
-/** @returns {string[]} the packages of `version` that are not among `names` */
 export function missingPackages(version, names) {
   const have = new Set(names)
   return PACKAGES.map(entry => packageName(version, entry)).filter(name => !have.has(name))
@@ -45,7 +36,6 @@ function mirrorUrl(mirror, name) {
   return `${mirror.replace(/\/+$/u, '')}/${encodeURIComponent(name)}`
 }
 
-/** `sizes`: bytes by package name. Without `mirror` each package has its GitHub link only. */
 export function downloadBlock({ version, sizes, repo = REPO, mirror }) {
   const links = (name) => {
     const github = releaseUrl({ repo, version, name })
@@ -74,7 +64,6 @@ export function downloadBlock({ version, sizes, repo = REPO, mirror }) {
   ].join('\n')
 }
 
-/** `hashes`: SHA-256 hex by package name. Each package is listed under both of its names. */
 export function checksums(version, hashes) {
   const lines = PACKAGES.flatMap((entry) => {
     const hash = hashes[packageName(version, entry)]
@@ -83,7 +72,6 @@ export function checksums(version, hashes) {
   return `${lines.join('\n')}\n`
 }
 
-/** The release notes with `block` on top, in place of a table from an earlier run. */
 export function withDownloads(notes, block) {
   const start = notes.indexOf(START)
   const end = notes.indexOf(END, start)

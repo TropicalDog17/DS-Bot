@@ -1,5 +1,3 @@
-// The window and the tray in a real Electron, with a fake Host: no DSH, no model, no data.
-// The check script drives it over stdin and reads the answers on stdout.
 import { app, BrowserWindow, Menu, nativeImage, powerMonitor, Tray } from 'electron'
 import { randomBytes } from 'node:crypto'
 import { mkdirSync, writeFileSync } from 'node:fs'
@@ -11,8 +9,6 @@ import { createShell } from '../../src/shell.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const assets = join(here, '..', '..', 'assets')
-// The data of this run is the folder the check script names, so that the check never writes
-// into the data of the user. The path is set before the app is ready.
 if (process.env.DS_BOT_SHELL_DATA !== undefined) app.setPath('userData', process.env.DS_BOT_SHELL_DATA)
 const token = randomBytes(16).toString('hex')
 const cookie = `dsh-auth=${token}`
@@ -20,8 +16,6 @@ let origin
 let requests = 0
 let hosts = 0
 
-// The Host of the app, as far as the window is concerned: the launch URL trades its token for
-// a cookie, and the plain address is served to whoever carries that cookie.
 const host = createServer((request, response) => {
   requests += 1
   const url = new URL(request.url, 'http://127.0.0.1')
@@ -53,7 +47,6 @@ const shell = createShell({
   window: () => mainWindow,
   build: () => {
     const win = createWindow()
-    // The Host runs already: the plain address is enough, the cookie carries the session.
     void win.loadURL(`${origin}/`).catch(() => {})
     return win
   },
@@ -64,8 +57,6 @@ const shell = createShell({
   notice: { marker: () => join(app.getPath('userData'), 'tray-close-acknowledged'), show: async () => ({ response: 0 }) },
 })
 
-// The app is on its way out: the window may close for good. The app of the real desktop
-// does the same in its before-quit.
 app.on('before-quit', () => { shell.beginQuit() })
 
 function createWindow() {
@@ -102,8 +93,6 @@ async function handle(command) {
   return state()
 }
 
-// The check script talks to the app over this socket: the main process of Electron does not
-// read its standard input.
 const commands = net.createServer((socket) => {
   socket.setEncoding('utf8')
   let buffer = ''
@@ -124,14 +113,12 @@ app.whenReady().then(async () => {
   await new Promise(resolve => host.listen(0, '127.0.0.1', resolve))
   origin = `http://127.0.0.1:${String(host.address().port)}`
   hosts += 1
-  // The one-time notice is answered in advance: the check is about the window and the tray.
   const folder = app.getPath('userData')
   mkdirSync(folder, { recursive: true })
   writeFileSync(join(folder, 'tray-close-acknowledged'), '')
   shell.install()
   await new Promise(resolve => commands.listen(0, '127.0.0.1', resolve))
   const win = createWindow()
-  // The launch URL trades its token for the cookie of the Host.
   void win.loadURL(`${origin}/?token=${token}`).catch(() => {})
   await new Promise(resolve => setTimeout(resolve, 1200))
   answer({ ready: true, port: commands.address().port, ...state() })

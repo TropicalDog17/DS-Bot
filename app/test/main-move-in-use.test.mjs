@@ -1,6 +1,3 @@
-// A move that finds another DSH on the data says so on a card on the moving page instead of a
-// message box, and goes on by itself once that DSH is closed (start-window §5). The Electron
-// parts are test doubles: no display, no DSH, no data of the user.
 import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { hostname, tmpdir } from 'node:os'
@@ -10,7 +7,6 @@ import { paths, state } from './helpers/fake-electron.mjs'
 import { messageBoxes, moveFromStart, startState, waitFor } from './helpers/app-harness.mjs'
 import { installHooks } from './helpers/register.mjs'
 
-// The user makes the folder in the picker first, so a copy shows as what is in it.
 const copied = path => existsSync(path) && readdirSync(path).length > 0
 
 await installHooks()

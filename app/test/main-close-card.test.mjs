@@ -1,6 +1,3 @@
-// The first close of the team window tells, once, that the app stays in the tray: on a card in
-// the window's page, not in a message box. Only the card's answer lets the window go, and the
-// answer is kept. The Electron parts are test doubles: no display, no DSH, no data of the user.
 import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
@@ -36,7 +33,6 @@ test('the close asks on a card in the window and hides it once the card is answe
   const win = window()
   trayMenu()[0].click()
   await waitFor(() => win.visible === true, 'show the window')
-  // The window was pushed down behind another one: the close still asks where the user looks.
   win.minimize()
   const focused = win.focused
   win.close()
@@ -48,7 +44,6 @@ test('the close asks on a card in the window and hides it once the card is answe
   assert.deepEqual(card.buttons, [{ label: 'OK', primary: true }])
   assert.equal(card.cancel, undefined, 'only the answer lets the window go')
   assert.equal(win.visible, true, 'the window stays until the answer')
-  // A second close while the card is up asks nothing more; it brings the card to the front.
   const again = win.focused
   win.close()
   assert.equal(windowCards(win).length, 1)

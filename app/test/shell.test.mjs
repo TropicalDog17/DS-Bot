@@ -1,5 +1,3 @@
-// The window and the tray share one life: the close hides the window, the tray is the way
-// back to it, and only the app itself ends the app.
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
@@ -8,7 +6,6 @@ import { join } from 'node:path'
 import { describe, test } from 'node:test'
 import { createShell } from '../src/shell.mjs'
 
-/** A window like Electron's: the shell shows, hides, focuses and minimizes it. */
 class FakeWindow extends EventEmitter {
   constructor() {
     super()
@@ -31,7 +28,6 @@ class FakeWindow extends EventEmitter {
   minimize() { this.minimized = true }
 }
 
-// The notice answers in its own turn; the tests wait for it.
 const settle = () => new Promise(resolve => setImmediate(resolve))
 
 function harness({ platform = 'win32', trayFails = false, busy = false, ready = true, answer = 0, acknowledged = true, fallbackAnswer = 1 } = {}) {
@@ -84,7 +80,6 @@ function harness({ platform = 'win32', trayFails = false, busy = false, ready = 
       marker: () => marker,
       show: async (options) => { asked.push(options); return { response: answer } },
     },
-    // Without a tray the close asks whether the app should end.
     fallback: { show: async (options) => { questions.push(options); return { response: fallbackAnswer } } },
     log: { warn: () => {} },
   })
@@ -137,7 +132,6 @@ describe('the window and the tray', () => {
     await settle()
     assert.equal(app.window().visible, false, 'the window is hidden')
     assert.equal(existsSync(app.marker), true, 'the answer is kept')
-    // The next close hides the window without another box.
     app.close()
     await settle()
     assert.equal(app.asked.length, 1, 'the notice is not shown again')
@@ -260,7 +254,6 @@ describe('the window and the tray', () => {
     t.after(app.cleanup)
     app.powerMonitor.emit('shutdown')
     assert.equal(app.close(), false, 'the window closes for good')
-    // Another application called the shutdown off; the user comes back to the window.
     app.window().emit('focus')
     assert.equal(app.close(), true, 'the window hides again')
     assert.equal(app.window().visible, false)
@@ -298,7 +291,6 @@ describe('the window and the tray', () => {
     window.deferFullScreen = true
     app.close()
     assert.equal(window.visible, true, 'the window waits for the fullscreen to end')
-    // The tray opens the window again before the fullscreen has ended.
     app.menus.at(-1)[0].click()
     assert.equal(window.visible, true, 'the window is back')
     window.emit('leave-full-screen')

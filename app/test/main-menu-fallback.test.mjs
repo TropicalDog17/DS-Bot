@@ -1,5 +1,3 @@
-// Without a system tray the app has no ordinary way out, so the application menu of macOS
-// carries a Quit of its own. It is the only case in which the menu has one.
 import assert from 'node:assert/strict'
 import { before, test } from 'node:test'
 import { state } from './helpers/fake-electron.mjs'
@@ -8,11 +6,9 @@ import { installHooks } from './helpers/register.mjs'
 
 await installHooks()
 
-// The menu of macOS is the menu of the app on macOS.
 Object.defineProperty(process, 'platform', { value: 'darwin' })
 
 before(async () => {
-  // The desktop has no tray.
   state.trayFails = true
   await startApp({ packaged: false })
 })

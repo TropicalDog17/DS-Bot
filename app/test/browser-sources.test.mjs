@@ -1,5 +1,3 @@
-// Browser profile enumeration (Chromium user-data roots, Firefox profiles.ini), the clone
-// layout a harvest needs, and the process match for closing a running source on Windows.
 import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
@@ -21,7 +19,7 @@ test('chromiumProfiles reads info_cache names and skips profiles without cookies
     await writeFile(join(root.dir, 'Default', 'Network', 'Cookies'), 'x')
     await mkdir(join(root.dir, 'Profile 1', 'Network'), { recursive: true })
     await writeFile(join(root.dir, 'Profile 1', 'Network', 'Cookies'), 'x')
-    await mkdir(join(root.dir, 'Profile 2'), { recursive: true }) // no cookie db: not listed
+    await mkdir(join(root.dir, 'Profile 2'), { recursive: true })
     await mkdir(join(root.dir, 'System Profile', 'Network'), { recursive: true })
     await writeFile(join(root.dir, 'System Profile', 'Network', 'Cookies'), 'x')
     await writeFile(join(root.dir, 'Local State'), JSON.stringify({

@@ -1,7 +1,3 @@
-// The import's copy has no stop button (start-window §6): quitting the app, or closing the start
-// window, is how a copy is stopped. The quit waits for the copy to stop at a safe point, then
-// goes through, and nothing of the copy is left. The home and the DSH home are throwaway
-// folders, so the test never sees the user's own; the Electron parts and the Host are test doubles.
 import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -29,7 +25,6 @@ await installHooks()
 test('quitting during the copy stops it, then quits, and leaves no team behind', async () => {
   mkdirSync(paths.userData, { recursive: true })
   writeFileSync(join(paths.userData, 'tray-close-acknowledged'), '')
-  // The Host waits: the chats' check, and with it the copy, stays under way until the quit.
   hold()
   await import('../src/main.mjs')
   await waitFor(() => startState()?.card?.kind === 'import', 'offer the team on the import card')
@@ -44,7 +39,6 @@ test('quitting during the copy stops it, then quits, and leaves no team behind',
 
   const data = join(home, '.ds-bot')
   assert.equal(existsSync(join(data, 'bot', 'imported.json')), false, 'no copied team')
-  // The check's folder goes once its Host, held until now, has stopped.
   const left = () => (existsSync(data) ? readdirSync(data).filter(name => name.startsWith('.import-')) : [])
   await waitFor(() => left().length === 0, `leave no copy or check folder behind (${left().join(', ')})`)
 })

@@ -1,9 +1,3 @@
-// A later start whose drive is down to a fifth of the free space it had when the data went there
-// shows the place line (start-window §5), and its [Change the location…] moves the data as Settings does,
-// asked on the start page's cards instead of message boxes: the folder picker, then "That place won’t work"
-// or "Move the data here?" [Move and restart]; the start window becomes the move's, the Host stops, the
-// data is copied and the app starts again on the new folder. The Electron parts are test
-// doubles: no display, no DSH, no data of the user.
 import assert from 'node:assert/strict'
 import { existsSync, mkdtempSync, readFileSync, readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -14,7 +8,6 @@ import { HostProcess, state as hostState } from './helpers/fake-host-process.mjs
 import { startApp, startWindows, waitFor, window } from './helpers/app-harness.mjs'
 import { installHooks } from './helpers/register.mjs'
 
-// The user makes the folder in the picker first, so a copy shows as what is in it.
 const copied = path => existsSync(path) && readdirSync(path).length > 0
 
 await installHooks()
@@ -25,8 +18,6 @@ test('a later start on a drive that runs low shows the place line, and its butto
   const start = startWindows()[0]
   const last = () => start.webContents.sent.filter(([channel]) => channel === 'ds-bot:start-state').at(-1)?.[1]
   const act = async (name, value) => {
-    // On a later task than the one that drew the card, as a click is: the pick that drew it
-    // finishes first.
     await new Promise((resolve) => { setImmediate(resolve) })
     start.webContents.mainFrame.url = start.url
     return state.ipc.get('ds-bot:start-act')({ sender: start.webContents, senderFrame: start.webContents.mainFrame }, name, value === undefined ? undefined : { value })
@@ -35,12 +26,10 @@ test('a later start on a drive that runs low shows the place line, and its butto
   await waitFor(() => last()?.place !== undefined, 'show the place line')
   assert.equal(last().start, 'later')
 
-  // A folder inside the data: "That place won’t work" with the reason.
   state.openAnswer = { canceled: false, filePaths: [join(home, 'inside')] }
   assert.equal(await act('pick', 'changePlace'), true)
   await waitFor(() => last().card?.kind === 'rejected', 'say why the folder cannot be used')
   assert.deepEqual(last().card, { kind: 'rejected', reason: 'nested', path: join(home, 'inside') })
-  // A folder the checks cannot read is refused for want of permission; the start goes on.
   const unreadable = 'C:\\System Volume Information'
   if (process.platform === 'win32' && existsSync(unreadable)) {
     state.openAnswer = { canceled: false, filePaths: [unreadable] }
@@ -48,12 +37,10 @@ test('a later start on a drive that runs low shows the place line, and its butto
     await waitFor(() => last().card?.reason === 'permission', 'refuse a folder it cannot read')
     assert.equal(last().view, 'card')
   }
-  // [Choose again…] and a cancelled picker: back to the start.
   state.openAnswer = { canceled: true, filePaths: [] }
   await act('pick')
   await waitFor(() => last().view === 'boot' && last().card === undefined, 'go back to the start')
 
-  // A new folder: "Move the data here?", then [Cancel].
   const to = join(mkdtempSync(join(tmpdir(), 'ds-bot-move-')), 'data')
   state.openAnswer = { canceled: false, filePaths: [to] }
   await act('pick', 'changePlace')
@@ -62,12 +49,9 @@ test('a later start on a drive that runs low shows the place line, and its butto
   assert.equal(await act('answer', 'cancel'), true)
   await waitFor(() => last().view === 'boot' && last().card === undefined, 'go back to the start')
   assert.equal(state.relaunches.length, 0)
-  // The boot goes on: the engine comes up and the team view loads (no ready(), so the start
-  // window stays for the rest).
   hostState.release()
   await waitFor(() => window().loaded.some(url => url.startsWith('http://127.0.0.1:')), 'go on with the boot')
 
-  // Whether the copy had begun when the Host stopped.
   const copiedAtStop = []
   const stop = HostProcess.prototype.stop
   HostProcess.prototype.stop = async function (...args) {
@@ -75,7 +59,6 @@ test('a later start on a drive that runs low shows the place line, and its butto
     return stop.apply(this, args)
   }
 
-  // Again, and [Move and restart].
   await act('pick', 'changePlace')
   await waitFor(() => last().card?.kind === 'move', 'ask about the move again')
   await act('answer', 'move')

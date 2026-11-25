@@ -79,8 +79,6 @@ test('Linux leaves the Host and its dependencies readable by plain Node', () => 
   assert.notEqual(config.win.asar, false)
 })
 
-// A release is tagged with the version of ds-bot, and the installed apps compare their own
-// version with the one in the release's latest.yml.
 test('the app has the version of ds-bot', () => {
   const version = file => JSON.parse(readFileSync(new URL(file, import.meta.url), 'utf8')).version
   assert.equal(version('../package.json'), version('../../ds-bot/package.json'))

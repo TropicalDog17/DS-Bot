@@ -48,7 +48,6 @@ export class BotViews {
   #active = new Map()
   #held = new Set()
   #covered = false
-  // The tabs whose view waits for a window to belong to.
   #waiting = new Set()
 
   constructor({ window, WebContentsView, guests, origin, devTools = false, onChange = () => {}, statePath }) {
@@ -297,7 +296,6 @@ export class BotViews {
     }
     this.#views.delete(tabId)
     this.#dropSaved(botId, tabId)
-    // The view leaves the window too: only closing its contents would keep the child view.
     this.#window()?.contentView.removeChildView(entry.view)
     entry.view.webContents.close()
     entry.sessions.clear()
@@ -339,11 +337,6 @@ export class BotViews {
     return `ws://127.0.0.1:${this.#address.port}/devtools/browser/${token}`
   }
 
-  /**
-   * The app's card is up in the window (main.mjs askInWindow). The views are drawn above the
-   * page, so they stay hidden until it goes, or they would cover the card.
-   * @param {boolean} covered
-   */
   cover(covered) {
     this.#covered = covered
     for (const entry of this.#views.values()) {
@@ -355,10 +348,6 @@ export class BotViews {
     return [...this.#views.values()].filter(entry => entry.botId === botId).map(entry => this.#state(entry))
   }
 
-  /**
-   * The window that owned the views is gone. The views that went with it are dropped; the
-   * ones that are still alive wait for the window that comes next.
-   */
   release() {
     for (const [tabId, entry] of [...this.#views]) {
       if (!entry.view.webContents.isDestroyed()) { this.#waiting.add(tabId); continue }
@@ -368,7 +357,6 @@ export class BotViews {
     }
   }
 
-  /** The views that waited for a window join it, so that the tabs go on. */
   attach(window) {
     if (window === undefined || window === null) return
     for (const [tabId, entry] of [...this.#views]) {
