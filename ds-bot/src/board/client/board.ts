@@ -340,14 +340,22 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
     const node = composer.current
     if (node === null || typeof ResizeObserver !== 'function') return undefined
     let width = node.getBoundingClientRect().width
+    let frame: number | undefined
     const observer = new ResizeObserver(() => {
       const next = node.getBoundingClientRect().width
       if (next === width) return
       width = next
-      fitComposer(node)
+      if (frame !== undefined) cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => {
+        frame = undefined
+        fitComposer(node)
+      })
     })
     observer.observe(node, { box: 'border-box' })
-    return () => observer.disconnect()
+    return () => {
+      observer.disconnect()
+      if (frame !== undefined) cancelAnimationFrame(frame)
+    }
   }, [open])
   useEffect(() => {
     const node = scroller.current

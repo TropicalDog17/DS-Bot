@@ -42,6 +42,7 @@ function composer(boardNote = () => {}, prefs = {}, dom) {
   const module = { exports: {} }
   runInNewContext(bundle.outputFiles[0].text, {
     module, exports: module.exports, require: name => modules[name], Promise, ResizeObserver: dom?.ResizeObserver,
+    requestAnimationFrame: dom?.requestAnimationFrame, cancelAnimationFrame: dom?.cancelAnimationFrame,
   })
   const { CardDetail } = module.exports
   const card = { id: 'card', title: 'Release notes', status: 'active', assignee: 'user', notes: [] }
@@ -225,32 +226,55 @@ test('the box measures itself again when the width changes', () => {
     observe(target, options) { assert.equal(target, node); assert.equal(options.box, 'border-box') }
     disconnect() { disconnected = true }
   }
-  const message = composer(undefined, {}, { node, ResizeObserver })
+  const frames = new Map()
+  let frameId = 0
+  const requestAnimationFrame = callback => { frames.set(++frameId, callback); return frameId }
+  const cancelAnimationFrame = id => frames.delete(id)
+  const paint = () => {
+    const callbacks = [...frames.values()]
+    frames.clear()
+    for (const callback of callbacks) callback()
+  }
+  const message = composer(undefined, {}, { node, ResizeObserver, requestAnimationFrame, cancelAnimationFrame })
   message.render()
   assert.deepEqual(writes, ['62px'])
   assert.equal(reads, 1)
 
-  width = 390
+  width = 420
   content = 100
   notify()
+  assert.deepEqual(writes, ['62px'])
+  const [firstFrame] = frames.keys()
+  width = 390
+  notify()
+  assert.equal(frames.has(firstFrame), false)
+  assert.equal(frames.size, 1)
+  paint()
   assert.deepEqual(writes, ['62px', '102px'])
   notify()
   message.render()
+  paint()
   assert.equal(reads, 2)
 
   width = 380
   notify()
+  paint()
   assert.equal(reads, 3)
   assert.deepEqual(writes, ['62px', '102px'])
 
   width = 440
   content = 60
   notify()
+  paint()
   assert.deepEqual(writes, ['62px', '102px', '62px'])
   assert.equal(node.style.maxHeight, '')
   assert.equal(node.style.overflowY, '')
+  width = 390
+  notify()
+  assert.equal(frames.size, 1)
   message.unmount()
   assert.equal(disconnected, true)
+  assert.equal(frames.size, 0)
 })
 
 test('a pasted note over the limit is kept whole', () => {
