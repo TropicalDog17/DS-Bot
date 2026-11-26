@@ -87,7 +87,23 @@ export function boardWatch(pages, { first, call, openMs = POLL_MS, liveMs = LIVE
     source.set(view)
     if (waits(view) !== waiting) { waiting = !waiting; pace() }
   }
-  const refresh = () => Promise.resolve().then(() => call('state')).then(value => { if (value) take(value) }, () => {})
+  const refresh = () => {
+    const current = source.getSnapshot()
+    const payload = current?.revision !== undefined ? { since: current.revision, liveKey: current.liveKey } : undefined
+    return Promise.resolve().then(() => call('state', payload)).then((value) => {
+      if (!value) return
+      if (value.unchanged === true) {
+        if (value.live !== undefined) {
+          const latest = source.getSnapshot()
+          const next = { ...latest, live: value.live, liveKey: value.liveKey }
+          source.set(next)
+          if (waits(next) !== waiting) { waiting = !waiting; pace() }
+        }
+        return
+      }
+      take(value)
+    }, () => {})
+  }
   let timer
   const pace = () => {
     clearTimer(timer)

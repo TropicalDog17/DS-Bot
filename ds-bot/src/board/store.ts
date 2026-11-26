@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { copyFileSync, mkdirSync, readFileSync, statSync } from 'node:fs'
-import { open, rename, unlink } from 'node:fs/promises'
+import { rename, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { homeLock } from '../host/home-lock.ts'
 
@@ -48,14 +48,8 @@ const clean = (parsed) => {
 
 export async function writeAtomic(file, text) {
   const temp = `${file}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`
-  const handle = await open(temp, 'w', 0o600)
   try {
-    await handle.writeFile(text, 'utf8')
-    await handle.sync()
-  } finally {
-    await handle.close()
-  }
-  try {
+    await writeFile(temp, text, { encoding: 'utf8', mode: 0o600 })
     await rename(temp, file)
   } catch (error) {
     await unlink(temp).catch(() => {})

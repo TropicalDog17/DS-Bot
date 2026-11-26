@@ -357,10 +357,17 @@ export function apply(ctx) {
     let releaseTokens = null
     let activeTheme = null
     const skin = writeSkinSurfaceVars(document, () => (activeTheme === null ? {} : readSkinSurfaceVars(document, activeTheme)))
-    const offTheme = ctx.on('theme/change', () => skin.apply())
+    let skinRaf = 0
+    const scheduleSkin = (records?: MutationRecord[]) => {
+      if (records !== undefined && records.every(record => record.target instanceof Element && record.target.closest('style[data-ds-bot]') !== null)) return
+      if (typeof requestAnimationFrame !== 'function') { skin.apply(); return }
+      if (skinRaf !== 0) return
+      skinRaf = requestAnimationFrame(() => { skinRaf = 0; skin.apply() })
+    }
+    const offTheme = ctx.on('theme/change', () => scheduleSkin())
     // A skin may write the tokens itself (some set them straight on the document); the
     // composed value is what counts, so re-read whenever the tokens may have moved.
-    const observer = typeof MutationObserver === 'function' ? new MutationObserver(() => skin.apply()) : null
+    const observer = typeof MutationObserver === 'function' ? new MutationObserver(records => scheduleSkin(records)) : null
     if (observer !== null) {
       observer.observe(document.body, { attributes: true, attributeFilter: ['style', 'data-ds-dark-theme'] })
       observer.observe(document.documentElement, { attributes: true, attributeFilter: ['style', 'class'] })
@@ -402,6 +409,7 @@ export function apply(ctx) {
       offRoster()
       offRegistry()
       offTheme()
+      if (skinRaf !== 0 && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(skinRaf)
       observer?.disconnect()
       skin.clear()
       try {

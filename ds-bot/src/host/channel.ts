@@ -623,7 +623,11 @@ export function install(rt) {
         }
         case 'update-check': {
           const fresh = body.fresh === true
-          return ok({ ...(await rt.updateCheck({ fresh })), dsh: (await rt.dshUpdateCheck?.({ fresh })) ?? null })
+          const [botUpdate, dshUpdate] = await Promise.all([
+            rt.updateCheck({ fresh }),
+            Promise.resolve(rt.dshUpdateCheck?.({ fresh })),
+          ])
+          return ok({ ...botUpdate, dsh: dshUpdate ?? null })
         }
         case 'update-install':
           return ok(rt.updateStart())

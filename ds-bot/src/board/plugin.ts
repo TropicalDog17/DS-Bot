@@ -184,7 +184,11 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
     const turn = live.current({ botId: card.assignee, cardId: card.id, since: 0 }, trace)
     return turn === undefined || turn.endedAt !== undefined ? undefined : turn
   }
-  const view = () => {
+  let viewCache: { json: string; key: string } | undefined
+  let liveCache: { json: string; key: string } | undefined
+  let viewSeq = 0
+  let liveSeq = 0
+  const viewSnapshot = () => {
     const { cards } = store.read()
     const trace = level()
     const working = {}
@@ -193,14 +197,26 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
       const now = (card.awaiting === undefined ? undefined : live.current(card.awaiting, trace)) ?? running(card, trace)
       if (now !== undefined) working[card.id] = now
     }
-    return { cards, bots: roster.bots(), readOnly: store.readOnly(), live: working, trace }
+    const base = { cards, bots: roster.bots(), readOnly: store.readOnly(), trace }
+    const baseJson = JSON.stringify(base)
+    if (viewCache?.json !== baseJson) viewCache = { json: baseJson, key: `b:${++viewSeq}` }
+    const liveJson = JSON.stringify(working)
+    if (liveCache?.json !== liveJson) liveCache = { json: liveJson, key: `l:${++liveSeq}` }
+    return { ...base, live: working, revision: viewCache.key, liveKey: liveCache.key }
   }
+  const view = () => viewSnapshot()
   async function handle(endpoint, payload) {
     const body = payload !== null && typeof payload === 'object' ? payload : {}
     await roster.ready()
     switch (endpoint) {
-      case 'state':
-        return { value: view() }
+      case 'state': {
+        const snapshot = viewSnapshot()
+        if (typeof body.since === 'string' && body.since === snapshot.revision) {
+          if (body.liveKey === snapshot.liveKey) return { value: { unchanged: true, revision: snapshot.revision, liveKey: snapshot.liveKey } }
+          return { value: { unchanged: true, revision: snapshot.revision, liveKey: snapshot.liveKey, live: snapshot.live } }
+        }
+        return { value: snapshot }
+      }
       case 'add':
         return runUser(await store.change(data => board.user.add(data.cards, { title: body.title, key: body.key, url: body.url, assignee: body.assignee, status: body.status, brief: body.brief })))
       case 'move':

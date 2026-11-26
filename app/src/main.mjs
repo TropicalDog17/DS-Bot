@@ -63,7 +63,7 @@ const frameFile = join(app.getPath('userData'), 'start-frame.json')
 let BotBrowserGuests, partitionOf, BotViews, isBotId, importFromBrowser, listSources, applyCookies, CookieImports, parseCookieFile
 let downloadSaver, chooseLocations, defaultPlaces, pickerLabels, pickRoot, programFolder, saveLocations, teamIn, teamsAt, tx, HostProcess
 let copySessions, findTeam, importTeam, restoreSessions, teamInUse, teamSizes, userDshHome, copyData, copyReason, moveProblem, BUNDLES, CHECK_PROFILE, PROFILE, ImportFlow
-let watchReleases, watchUpdates, RELEASE_PAGE, getDshRuntimeVersion, electronUpdater
+let watchReleases, watchUpdates, RELEASE_PAGE, getDshRuntimeVersion
 
 let mainWindow
 let mainCreated
@@ -214,11 +214,11 @@ async function prepare() {
 }
 
 async function loadModules() {
-  const [browser, views, sources, cookies, cookieFiles, downloads, firstRun, hostProcess, imports, flows, moves, profile, updatesModule, boot, updater] = await Promise.all([
+  const [browser, views, sources, cookies, cookieFiles, downloads, firstRun, hostProcess, imports, flows, moves, profile, updatesModule, boot] = await Promise.all([
     import('./bot-browser.mjs'), import('./bot-views.mjs'), import('./browser-sources.mjs'), import('./cookie-import.mjs'),
     import('./cookie-parse.mjs'), import('./downloads.mjs'), import('./first-run.mjs'), import('./host-process.mjs'),
     import('./import.mjs'), import('./import-flow.mjs'), import('./move-data.mjs'), import('./profile.mjs'), import('./updates.mjs'),
-    import('@deepseek-ai/dsh-app-boot'), import('electron-updater'),
+    import('@deepseek-ai/dsh-app-boot'),
   ])
   ;({ BotBrowserGuests, partitionOf } = browser)
   ;({ BotViews, isBotId } = views)
@@ -234,7 +234,6 @@ async function loadModules() {
   ;({ BUNDLES, CHECK_PROFILE, PROFILE } = profile)
   ;({ watchReleases, watchUpdates, RELEASE_PAGE } = updatesModule)
   ;({ getDshRuntimeVersion } = boot)
-  electronUpdater = updater.default
   browserGuests = new BotBrowserGuests({ session, origin: () => origin, devTools: !app.isPackaged })
   botViews = new BotViews({
     window: () => mainWindow, WebContentsView, guests: browserGuests, origin: () => origin, devTools: !app.isPackaged,
@@ -473,9 +472,10 @@ async function startEngine(mine) {
   }
   if (!updatesStarted) {
     updatesStarted = true
-    updates = startUpdates()
-    updates?.subscribe((state) => { mainWindow?.webContents.send(IPC.appUpdateChanged, state) })
-
+    void startUpdates().then((controller) => {
+      updates = controller
+      updates?.subscribe((state) => { mainWindow?.webContents.send(IPC.appUpdateChanged, state) })
+    }, (error) => { console.error(error) })
   }
   if (warm === undefined) {
     await restoreSessions(places.dataDir).then(({ copied, newer }) => {
@@ -942,7 +942,7 @@ async function runMove(to, workspace) {
   app.quit()
 }
 
-function startUpdates() {
+async function startUpdates() {
   const feed = process.env.DS_BOT_UPDATE_URL || undefined
   const throwaway = Boolean(process.env.DS_BOT_HOME)
   if (!app.isPackaged || (throwaway && feed === undefined)) return undefined
@@ -962,6 +962,7 @@ function startUpdates() {
     })
   }
   if (process.platform === 'win32' || process.platform === 'linux') {
+    const { default: electronUpdater } = await import('electron-updater')
     return watchUpdates({
       updater: electronUpdater.autoUpdater, feed, ask: throwaway ? undefined : (version) => restartPrompt.prompt(version),
       beforeInstall: () => { shell.beginQuit(); return stopHost() },

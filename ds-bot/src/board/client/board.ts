@@ -201,7 +201,7 @@ function Thread({ notes, roster, awaiting, worker, live, pick, busy }) {
     notes.map((note, index) => {
       const bot = note.by === undefined || note.by === USER ? undefined : roster.byId?.[note.by]
       const fromBot = note.by !== undefined && note.by !== USER
-      return h('li', { key: index, className: 'bt-board-msg', 'data-by': fromBot ? 'bot' : 'user' },
+      return h('li', { key: note.pendingId ?? index, className: 'bt-board-msg', 'data-by': fromBot ? 'bot' : 'user', 'data-pending': note.pending ? true : undefined },
         fromBot ? (bot ? h(BotMark, { bot, size: 24 }) : h('span', { className: 'bt-board-msg-mark', 'aria-hidden': true })) : null,
         h('div', { className: 'bt-board-msg-body' },
           fromBot ? h(TraceFold, { trace: note.trace, open }) : null,
@@ -295,15 +295,23 @@ function Brief({ text, cards }) {
 export function CardDetail({ card, roster, actions, live, onOpenCard }) {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
+  const [pending, setPending] = useState([])
   const [confirming, setConfirming] = useState(false)
   const [error, setError] = useState('')
   const scroller = useRef(null)
-  const said = (card.notes ?? []).length
+  const pendingSeq = useRef(0)
+  const mountedCard = useRef(card.id)
+  const notes = card.notes ?? []
+  const shownNotes = pending.length > 0 ? [...notes, ...pending] : notes
+  const said = shownNotes.length
   const steps = live?.steps?.length ?? 0
   const waiting = card.awaiting !== undefined || steps > 0
   useEffect(() => {
     const node = scroller.current
-    if (node && typeof node.scrollTo === 'function') node.scrollTo({ top: node.scrollHeight })
+    if (!node || typeof node.scrollTo !== 'function') return
+    const switched = mountedCard.current !== card.id
+    mountedCard.current = card.id
+    node.scrollTo({ top: node.scrollHeight, behavior: switched ? 'instant' : 'smooth' })
   }, [card.id, said, waiting])
   useEffect(() => {
     const node = scroller.current
@@ -324,17 +332,31 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
       (failure) => { setBusy(false); setError(String(failure?.message ?? failure)) },
     )
   }
+  const sendNote = (line, restore = false) => {
+    const pendingId = `pending-${++pendingSeq.current}`
+    const optimistic = { pendingId, pending: true, at: Date.now(), by: USER, text: line }
+    setError('')
+    setPending(list => [...list, optimistic])
+    Promise.resolve(actions.boardNote(card.id, line)).then(
+      () => { setPending(list => list.filter(entry => entry.pendingId !== pendingId)) },
+      (failure) => {
+        setPending(list => list.filter(entry => entry.pendingId !== pendingId))
+        if (restore) setText(current => (current === '' ? line : current))
+        setError(String(failure?.message ?? failure))
+      },
+    )
+  }
   const send = () => {
     const line = text.trim()
-    if (line === '' || busy) return
-    run(actions.boardNote(card.id, line), () => setText(''))
+    if (line === '') return
+    setText('')
+    sendNote(line, true)
   }
   const cancel = () => {
     if (!confirming) { setConfirming(true); return }
     setConfirming(false)
     run(actions.boardCancel(card.id))
   }
-  const notes = card.notes ?? []
   const links = [...(card.url && !card.key ? [{ url: card.url }] : []), ...(card.links ?? [])]
   const allCards = roster.board?.cards ?? {}
   const waitsOnUser = card.status === 'review' || card.status === 'blocked'
@@ -378,9 +400,9 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
         type: 'button', className: 'bt-board-cancel', 'data-confirm': confirming || undefined, disabled: busy,
         'aria-label': confirming ? t('Click again to cancel') : t('Cancel card'), onClick: cancel,
       }, t('Cancel card')) : null,
-      notes.length > 0 || (open && steps > 0) ? h(Thread, {
-        notes, roster, awaiting: open ? card.awaiting : undefined, worker: card.assignee, live: open ? live : undefined, busy,
-        pick: open ? option => run(actions.boardNote(card.id, option)) : undefined,
+      shownNotes.length > 0 || (open && steps > 0) ? h(Thread, {
+        notes: shownNotes, roster, awaiting: open ? card.awaiting : undefined, worker: card.assignee, live: open ? live : undefined, busy,
+        pick: open ? option => sendNote(option) : undefined,
       }) : null,
       error ? h('div', { className: 'bt-error', role: 'alert' }, error) : null),
     open ? h('div', { className: 'bt-board-sheet-foot bt-board-write' },
@@ -389,7 +411,7 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
         onChange: event => setText(event.target.value),
         onKeyDown: (event) => { if (event.key === 'Enter' && !event.nativeEvent?.isComposing) { event.preventDefault(); send() } },
       }),
-      h('button', { type: 'button', className: 'bt-send', disabled: text.trim() === '' || busy, onClick: send }, t('Send'))) : null)
+      h('button', { type: 'button', className: 'bt-send', disabled: text.trim() === '', onClick: send }, t('Send'))) : null)
 }
 
 const LEVELS = [['off', 'Off'], ['tools', 'Tool calls'], ['thinking', 'Thinking'], ['all', 'All']]
@@ -575,7 +597,8 @@ a.bt-board-key:hover{color:var(--bt-ink)}
 .bt-board-option:disabled{cursor:default;opacity:.55}
 .bt-board-option[data-picked]{opacity:1;border-color:var(--bt-accent);background:var(--bt-accent-soft);font-weight:500}
 .bt-board-thread{list-style:none;margin:8px 0 0;padding:16px 0 0;border-top:.5px solid var(--bt-line);display:flex;flex-direction:column;gap:12px}
-.bt-board-msg{display:flex;align-items:flex-end;gap:8px;max-width:100%}
+.bt-board-msg{display:flex;align-items:flex-end;gap:8px;max-width:100%;transition:opacity .16s ease}
+.bt-board-msg[data-pending]{opacity:.68}
 .bt-board-msg[data-by=user]{justify-content:flex-end}
 .bt-board-msg>.bt-board-msg-mark{flex:none;width:24px;height:24px}
 .bt-board-msg-body{display:flex;flex-direction:column;gap:4px;min-width:0;max-width:85%}

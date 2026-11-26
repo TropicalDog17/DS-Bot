@@ -164,10 +164,12 @@ export function install(rt) {
     if (!fresh && Date.now() - catalogCache.at < CATALOG_TTL_MS && catalogCache.value.length > 0) return answerable(catalogCache.value)
     const service = llm()
     if (service === undefined) return answerable(catalogCache.value)
+    const providers = service.listProviders()
+    const lists = await Promise.all(providers.map(async (provider) => {
+      try { return { provider, models: await service.listModels(provider.id) } } catch { return { provider, models: [] } }
+    }))
     const entries = []
-    for (const provider of service.listProviders()) {
-      let models = []
-      try { models = await service.listModels(provider.id) } catch { continue }
+    for (const { provider, models } of lists) {
       for (const model of models) {
         entries.push({
           ref: `${provider.id}/${model.id}`,
@@ -240,15 +242,22 @@ export function install(rt) {
   async function resolveModel(text) {
     const wanted = String(text ?? '').trim()
     if (isLocal(wanted)) return resolveLocalModel(wanted)
+    const matchIn = (list) => {
+      const exact = list.find(entry => entry.ref === wanted)
+      if (exact) return { ref: exact.ref }
+      const key = normalize(wanted)
+      const named = list.filter(entry => normalize(entry.id) === key || normalize(entry.name) === key)
+      return named.length === 1 ? { ref: named[0].ref } : { named }
+    }
+    const cached = (await catalog()).filter(entry => !isLocal(entry.ref))
+    const hit = matchIn(cached)
+    if (hit.ref !== undefined) return hit.ref
     const entries = (await catalog({ fresh: true })).filter(entry => !isLocal(entry.ref))
-    const exact = entries.find(entry => entry.ref === wanted)
-    if (exact) return exact.ref
-    const key = normalize(wanted)
-    const named = entries.filter(entry => normalize(entry.id) === key || normalize(entry.name) === key)
-    if (named.length === 1) return named[0].ref
+    const freshHit = matchIn(entries)
+    if (freshHit.ref !== undefined) return freshHit.ref
     const known = entries.map(entry => entry.ref).join(', ') || 'none'
-    throw new Error(named.length > 1
-      ? `Model ${wanted} is served by more than one provider; use one of ${named.map(entry => entry.ref).join(', ')}`
+    throw new Error(freshHit.named.length > 1
+      ? `Model ${wanted} is served by more than one provider; use one of ${freshHit.named.map(entry => entry.ref).join(', ')}`
       : `Model ${wanted} is not available. Available models: ${known}`)
   }
 
