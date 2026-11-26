@@ -76,17 +76,18 @@ export function notesService(rt) {
     // A roomId the Bot is not (or no longer) a member of falls back to its own chat.
     // requestId is the note's id as a user message: an answer in the Bot's own chat or
     // in the group lists it in `heard` once a turn read the note.
-    // A note with a cardId opens the thread if needed and goes there (where: 'card').
+    // A note with a cardId keeps its text intact and goes to the card's thread if open (where: 'card').
     // A requestId of the caller's (an IM message's) takes the place of a new one, so the
     // Bot's answer also goes back where that message came from.
     async deliver({ botId, roomId, cardId, title, brief, text, requestId: given }: Record<string, any> = {}) {
       await rt.load()
       const bot = typeof botId === 'string' ? rt.botOf(botId) : undefined
       if (bot === undefined) return { error: 'No such Bot.' }
-      const line = oneLine(text, NOTE_MAX)
-      if (line === '') return { error: 'Write a note first.' }
+      const cardNote = typeof cardId === 'string' && cardId !== ''
+      const body = cardNote ? String(text ?? '') : oneLine(text, NOTE_MAX)
+      if (body.trim() === '') return { error: 'Write a note first.' }
       let opened = false
-      const mayOpen = () => typeof cardId === 'string' && cardId !== '' && cardOpen(botId, cardId)
+      const mayOpen = () => cardNote && cardOpen(botId, cardId)
       if (mayOpen() && reach(bot, { cardId }).where !== 'card') {
         try {
           opened = typeof await open(botId, cardId, title, roomId, mayOpen) === 'string'
@@ -97,7 +98,7 @@ export function notesService(rt) {
       if (rt.botOf(botId) === undefined) return { error: 'No such Bot.' }
       const { sessionId, where } = reach(rt.botOf(botId), { cardId: mayOpen() ? cardId : undefined, roomId, room: roomOf(roomId), user: true })
       const seed = opened && where === 'card' ? keepLines(brief, BRIEF_MAX) : ''
-      const message = where === 'group' ? `@${bot.name} ${line}` : [seed, line].filter(Boolean).join('\n\n')
+      const message = where === 'group' ? `@${bot.name} ${body}` : [seed, body].filter(Boolean).join('\n\n')
       const requestId = typeof given === 'string' && given !== '' ? given : randomUUID()
       await rt.dispatch.sendUser({ sessionId, content: [{ type: 'text', text: message }], requestId, ...(where === 'card' ? { steer: true } : {}) })
       return { sessionId, where: where === 'own' ? 'chat' : where, requestId }

@@ -3,7 +3,7 @@ import { defineTool } from '../host/tool-schema.ts'
 import { dshHomeOf } from '../host/folders.ts'
 import { textOf } from '../host/text.ts'
 import { ACTIONS, BOT_STATUSES, createBoard, isOpen } from './cards.ts'
-import { USER } from './card-fields.ts'
+import { NOTE_MAX, USER } from './card-fields.ts'
 import { LEVELS, createLive, levelOf } from './live.ts'
 import { openBoardStore } from './store.ts'
 import { createHerdr, createdPane, herdrBinary, paneCreation, panesIn } from './herdr.ts'
@@ -78,7 +78,7 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
       url: { type: 'string', description: 'Ticket URL' },
       assignee: { type: 'string', description: 'open or update: exact Bot name, or "user"; default you on open. On update it moves the card to that Bot (Main Bot or the current assignee only)' },
       brief: { type: 'string', description: 'open for another Bot: everything it needs (goal, context, limits, what done looks like); it cannot see your conversation' },
-      text: { type: 'string', description: 'note: what to pass on to the card\'s assignee' },
+      text: { type: 'string', description: `note: what to pass on to the card's assignee. Up to ${NOTE_MAX.toLocaleString('en-US')} characters, with line breaks preserved.` },
       status: { type: 'string', enum: BOT_STATUSES, description: 'todo, active (in progress), review (waits for the user), blocked' },
       progress: { type: 'string', description: 'Latest progress, one line' },
       need: { type: 'string', description: 'update to review or blocked: what the user must do (approve, merge, answer) with the link to it; Markdown' },

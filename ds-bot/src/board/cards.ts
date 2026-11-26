@@ -1,16 +1,14 @@
 import { randomBytes } from 'node:crypto'
 import { prName, prsOf } from './prs.ts'
 import { pushFor, pushText } from './watch.ts'
-import { OPEN_STATUSES, USER, isOpen, oneLine } from './card-fields.ts'
+import { NOTE_MAX, REPLY_MAX, OPEN_STATUSES, USER, charCount, isOpen, noteText, oneLine } from './card-fields.ts'
 
-export { OPEN_STATUSES, USER, isOpen, oneLine } from './card-fields.ts'
+export { NOTE_MAX, REPLY_MAX, OPEN_STATUSES, USER, isOpen, oneLine } from './card-fields.ts'
 
 export const CARD_STATUSES = ['todo', 'active', 'review', 'blocked', 'done', 'cancelled']
 export const TITLE_MAX = 200
 export const PROGRESS_MAX = 300
 export const RESULT_MAX = 2000
-export const NOTE_MAX = 500
-export const REPLY_MAX = 20_000
 export const THREAD_MAX = 200
 export const AWAIT_MAX_MS = 12 * 60 * 60 * 1000
 export const REQUESTS_MAX = 20
@@ -32,8 +30,13 @@ export const MERGE_MISSES = 3
 const ADOPT_NOTE_MAX = 300
 const ACCEPT_NEED = 'Review the result, then move the card to Done if you accept it.'
 
-export const replyText = (text, max) => String(text ?? '').replace(/\r\n?/g, '\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, max)
+export const replyText = (text, max) => noteText(text).slice(0, max)
 export const newCardId = () => `c_${randomBytes(4).toString('hex')}`
+
+function noteLengthError(text) {
+  const count = charCount(text)
+  return count > NOTE_MAX ? `The note is ${count} characters; the limit is ${NOTE_MAX}. Shorten it and send it again.` : undefined
+}
 
 export function ticketKey(text) {
   const key = String(text ?? '').trim().toUpperCase()
@@ -407,8 +410,10 @@ export function createBoard({ roster, now = Date.now }) {
       if (!isOpen(card)) return { error: `${label(card)} is already finished.` }
       if (card.assignee === self) return { error: `${label(card)} is yours; just do it.` }
       if (!mayChange(card, self)) return { error: `${label(card)} belongs to ${nameOf(card.assignee)}.` }
-      const said = oneLine(args.text, NOTE_MAX)
+      const said = noteText(args.text)
       if (said === '') return { error: 'note needs the text to pass on.' }
+      const error = noteLengthError(said)
+      if (error !== undefined) return { error }
       say(card, self, said)
       const bot = card.assignee === USER ? undefined : roster.bot(card.assignee)
       const effects = bot === undefined ? [] : [{ kind: 'deliver', payload: { botId: bot.id, cardId: card.id, ...(card.roomId === undefined ? {} : { roomId: card.roomId }), text: `Note on card ${label(card)} "${card.title}" from ${nameOf(self)}: ${said}` } }]
@@ -552,8 +557,10 @@ export function createBoard({ roster, now = Date.now }) {
       if (error !== undefined) return { error }
       const bot = card.assignee === USER ? undefined : roster.bot(card.assignee)
       if (!isOpen(card) && bot === undefined) return { error: 'That card is already finished.' }
-      const said = oneLine(text, NOTE_MAX)
+      const said = noteText(text)
       if (said === '') return { error: 'Write a note first.' }
+      const lengthError = noteLengthError(said)
+      if (lengthError !== undefined) return { error: lengthError }
       say(card, USER, said)
       delete card.idle
       const effects = bot === undefined ? [] : [{ kind: 'deliver', payload: { botId: bot.id, cardId: card.id, ...(card.roomId === undefined ? {} : { roomId: card.roomId }), text: `Note on card ${label(card)} "${card.title}": ${said}` } }]

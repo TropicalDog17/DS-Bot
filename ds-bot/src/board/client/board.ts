@@ -6,6 +6,7 @@ import { clockLabel, elapsedLabel, relativeShort } from '../../client/text.ts'
 import { workPhrase } from '../../client/cells.ts'
 import { mdLabels, t } from '../../client/i18n.ts'
 import { MarkdownText } from '../../client/dsh-primitives.ts'
+import { NOTE_MAX, charCount, noteText } from '../card-fields.ts'
 import { LinkIcon, StepsIcon } from './icons.ts'
 import { CARD_LINK_ORIGIN, linkCards, nameCards } from './card-tag.ts'
 
@@ -15,6 +16,8 @@ const DONE_DAYS = 7
 const DONE_SHOWN = 10
 const USER = 'user'
 const DRAG_TYPE = 'text/x-ds-bot-card'
+const NOTE_COUNT_FROM = 18_000
+const noteCountFormat = new Intl.NumberFormat('en-US')
 
 export function boardColumns(cards, now = Date.now()) {
   const all = Object.values<any>(cards ?? {}).filter(card => card && typeof card.id === 'string').sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0))
@@ -306,6 +309,10 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
   const said = shownNotes.length
   const steps = live?.steps?.length ?? 0
   const waiting = card.awaiting !== undefined || steps > 0
+  const line = noteText(text)
+  const count = charCount(line)
+  const excess = count - NOTE_MAX
+  const sendDisabled = count === 0 || busy || pending.length > 0 || excess > 0
   useEffect(() => {
     const node = scroller.current
     if (!node || typeof node.scrollTo !== 'function') return
@@ -347,8 +354,7 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
     )
   }
   const send = () => {
-    const line = text.trim()
-    if (line === '') return
+    if (sendDisabled) return
     setText('')
     sendNote(line, true)
   }
@@ -406,12 +412,21 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
       }) : null,
       error ? h('div', { className: 'bt-error', role: 'alert' }, error) : null),
     open ? h('div', { className: 'bt-board-sheet-foot bt-board-write' },
-      h('input', {
-        className: 'bt-input', value: text, placeholder: t('Message'), 'aria-label': t('Message'), maxLength: 500,
+      h('textarea', {
+        className: 'bt-input', value: text, placeholder: t('Message'), 'aria-label': t('Message'), rows: 1, 'aria-invalid': excess > 0 || undefined,
         onChange: event => setText(event.target.value),
-        onKeyDown: (event) => { if (event.key === 'Enter' && !event.nativeEvent?.isComposing) { event.preventDefault(); send() } },
+        onKeyDown: (event) => {
+          if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent?.isComposing) return
+          event.preventDefault()
+          send()
+        },
       }),
-      h('button', { type: 'button', className: 'bt-send', disabled: text.trim() === '', onClick: send }, t('Send'))) : null)
+      h('button', { type: 'button', className: 'bt-send', disabled: sendDisabled, onClick: send }, t('Send')),
+      h('div', { className: 'bt-board-write-status', 'data-over-limit': excess > 0 || undefined },
+        count > NOTE_COUNT_FROM ? h('span', { className: 'bt-board-write-count' },
+          t('{count} / {limit}', { count: noteCountFormat.format(count), limit: noteCountFormat.format(NOTE_MAX) })) : null,
+        h('span', { className: 'bt-board-write-error', 'aria-live': 'polite' },
+          excess > 0 ? t('Too long by {count} characters', { count: noteCountFormat.format(excess) }) : ''))) : null)
 }
 
 const LEVELS = [['off', 'Off'], ['tools', 'Tool calls'], ['thinking', 'Thinking'], ['all', 'All']]
@@ -654,7 +669,11 @@ a.bt-board-key:hover{color:var(--bt-ink)}
 .bt-board-cancel{align-self:flex-start;margin-top:8px;height:32px;padding:0;border:0;background:none;color:var(--bt-ink-3);font:inherit;font-size:13px;cursor:pointer}
 .bt-board-cancel:hover,.bt-board-cancel[data-confirm]{color:var(--bt-danger)}
 .bt-board-cancel[data-confirm]{font-weight:600}
-.bt-board-write>.bt-input{flex:1;min-width:0;height:40px;font-size:14px}
+.bt-board-write{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:0 8px;align-items:end}
+.bt-board-write>.bt-input{height:auto;min-height:40px;max-height:180px;field-sizing:content;padding:9px 11px;line-height:20px;font-size:14px;resize:none;overflow-y:auto}
+.bt-board-write-status{grid-column:1/-1;text-align:right;color:var(--bt-ink-2);font-size:12px}
+.bt-board-write-status[data-over-limit]{color:var(--bt-danger)}
+.bt-board-write-count,.bt-board-write-error:not(:empty){display:block;margin-top:4px}
 @media (max-width:640px){
   .bt-board-page{top:0}
   .bt-board-head{padding:12px 8px 8px 16px}
