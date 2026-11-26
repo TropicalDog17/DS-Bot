@@ -8,6 +8,7 @@ import { mdLabels, t } from '../../client/i18n.ts'
 import { MarkdownText } from '../../client/dsh-primitives.ts'
 import { LinkIcon, StepsIcon } from './icons.ts'
 import { CARD_LINK_ORIGIN, linkCards, nameCards } from './card-tag.ts'
+import { FILE_LINK_ORIGIN, fileLinkTarget, fileName, linkFiles } from './file-link.ts'
 
 export const COLUMNS = [['todo', 'Todo'], ['active', 'In progress'], ['review', 'Review'], ['blocked', 'Blocked'], ['done', 'Done']]
 const OPEN = ['todo', 'active', 'review', 'blocked']
@@ -47,7 +48,7 @@ export function plainLine(text) {
 
 function BotText({ text, cards, className }) {
   return h('div', { className: `bt-board-md ${className}` },
-    h(MarkdownText, { text: linkCards(text ?? '', cards), labels: mdLabels(), variant: 'compact' }))
+    h(MarkdownText, { text: linkCards(linkFiles(text ?? ''), cards), labels: mdLabels(), variant: 'compact' }))
 }
 
 export function linkLabel(href) {
@@ -74,12 +75,42 @@ function Options({ options, picked, pick, busy }) {
     }, option)))
 }
 
-const cardLinkTap = openCard => (event) => {
-  const anchor = typeof event.target?.closest === 'function' ? event.target.closest(`a[href^="${CARD_LINK_ORIGIN}"]`) : null
+const linkTap = ({ openCard, openFile }) => (event) => {
+  const anchor = typeof event.target?.closest === 'function' ? event.target.closest(`a[href^="${CARD_LINK_ORIGIN}"], a[href^="${FILE_LINK_ORIGIN}"]`) : null
   if (anchor === null) return
   event.preventDefault()
   event.stopPropagation()
-  openCard?.(anchor.getAttribute('href').slice(CARD_LINK_ORIGIN.length))
+  const href = anchor.getAttribute('href')
+  if (href.startsWith(CARD_LINK_ORIGIN)) openCard?.(href.slice(CARD_LINK_ORIGIN.length))
+  else {
+    const target = fileLinkTarget(href)
+    if (target !== undefined) openFile(target)
+  }
+}
+
+function FileView({ cardId, target, actions, onClose }) {
+  const [shown, setShown] = useState(null)
+  useEscape(onClose)
+  useEffect(() => {
+    let stopped = false
+    setShown(null)
+    Promise.resolve(actions.boardFile(cardId, target))
+      .then(value => value ?? { error: t('Could not open the file') }, failure => ({ error: String(failure?.message ?? failure) }))
+      .then((value) => { if (!stopped) setShown(value) })
+    return () => { stopped = true }
+  }, [cardId, target])
+  const name = shown?.name ?? fileName(target)
+  const body = shown === null ? h('span', { className: 'bt-board-dots', 'aria-label': t('Loading') }, h('i'), h('i'), h('i'))
+    : shown.error !== undefined ? h('div', { className: 'bt-error', role: 'alert' }, shown.error)
+      : /\.(md|markdown)$/i.test(name) ? h('div', { className: 'bt-board-file-md' }, h(MarkdownText, { text: shown.text, labels: mdLabels() }))
+        : h('pre', { className: 'bt-board-file-text' }, shown.text)
+  return h('div', { className: 'bt-board-file', role: 'region', 'aria-label': name },
+    h('div', { className: 'bt-board-sheet-head' },
+      h('button', { type: 'button', className: 'bt-icon-btn', 'aria-label': t('Back'), onClick: onClose }, h(ChevronLeftIcon)),
+      h('h3', { className: 'bt-board-file-name', title: shown?.path ?? target }, name)),
+    h('div', { className: 'bt-board-file-body' },
+      body,
+      shown?.truncated ? h('div', { className: 'bt-board-age' }, t('Only the start of the file is shown.')) : null))
 }
 
 const Dot = ({ status }) => h('span', { className: 'bt-board-dot', 'data-status': status, 'aria-hidden': true })
@@ -298,6 +329,7 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
   const [pending, setPending] = useState([])
   const [confirming, setConfirming] = useState(false)
   const [error, setError] = useState('')
+  const [file, setFile] = useState(null)
   const scroller = useRef(null)
   const pendingSeq = useRef(0)
   const mountedCard = useRef(card.id)
@@ -363,7 +395,7 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
   const need = waitsOnUser ? card.need || card.progress || '' : ''
   const progress = need !== '' && !card.need ? '' : card.progress
   return h('div', { className: 'bt-board-sheet-body', 'data-status': card.status },
-    h('div', { className: 'bt-board-detail', ref: scroller, onClick: cardLinkTap(onOpenCard) },
+    h('div', { className: 'bt-board-detail', ref: scroller, onClick: linkTap({ openCard: onOpenCard, openFile: setFile }) },
       card.key ? (card.url
         ? h('a', { className: 'bt-board-key', href: card.url, target: '_blank', rel: 'noreferrer noopener' }, card.key)
         : h('span', { className: 'bt-board-key' }, card.key)) : null,
@@ -411,7 +443,8 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
         onChange: event => setText(event.target.value),
         onKeyDown: (event) => { if (event.key === 'Enter' && !event.nativeEvent?.isComposing) { event.preventDefault(); send() } },
       }),
-      h('button', { type: 'button', className: 'bt-send', disabled: text.trim() === '', onClick: send }, t('Send'))) : null)
+      h('button', { type: 'button', className: 'bt-send', disabled: text.trim() === '', onClick: send }, t('Send'))) : null,
+    file !== null && actions.boardFile ? h(FileView, { cardId: card.id, target: file, actions, onClose: () => setFile(null) }) : null)
 }
 
 const LEVELS = [['off', 'Off'], ['tools', 'Tool calls'], ['thinking', 'Thinking'], ['all', 'All']]
@@ -585,6 +618,15 @@ a.bt-board-key:hover{color:var(--bt-ink)}
 .bt-board-pane-tab[aria-selected=true]{border-color:var(--bt-ink-2);color:var(--bt-ink)}
 .bt-board-term{align-self:stretch;margin:0;padding:8px 10px;border-radius:8px;background:var(--bt-hover);font:12px/17px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--bt-ink);white-space:pre-wrap;overflow-wrap:anywhere;max-height:360px;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}
 .bt-board-pane-gone{color:var(--bt-ink-3)}
+.bt-board-md a[href^="${FILE_LINK_ORIGIN}"] svg{display:none}
+.bt-board-file{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;background:var(--bt-main);animation:bt-veil-in .16s ease-out}
+.bt-board-file-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-board-file-body{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:12px;padding:8px 24px 32px}
+.bt-board-file-md{min-width:0;font-size:14px;line-height:22px;overflow-wrap:anywhere}
+.bt-board-file-md :is(pre,table){max-width:100%;overflow-x:auto}
+.bt-board-file-md table{display:block}
+.bt-board-file-md :is(img,video){max-width:100%;height:auto}
+.bt-board-file-text{margin:0;font-family:var(--bt-mono,ui-monospace,SFMono-Regular,Menlo,monospace);font-size:12px;line-height:18px;white-space:pre-wrap;overflow-wrap:anywhere}
 .bt-board-brief{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding-top:12px;border-top:1px solid var(--bt-line)}
 .bt-board-brief[data-folded] .bt-board-md{max-height:84px;overflow:hidden;mask-image:linear-gradient(to bottom,#000 60%,transparent)}
 .bt-board-links{display:flex;flex-direction:column;gap:4px}
@@ -679,6 +721,7 @@ a.bt-board-key:hover{color:var(--bt-ink)}
   .bt-board-sheet{width:100%;border-left:0}
   .bt-board-sheet-head{padding:0 8px}
   .bt-board-form,.bt-board-detail{padding:8px 16px 24px}
+  .bt-board-file-body{padding:8px 16px 32px}
   .bt-board-sheet-foot{padding:8px 16px calc(8px + env(safe-area-inset-bottom,0px))}
 }
 `

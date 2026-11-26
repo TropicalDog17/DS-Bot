@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -76,7 +76,7 @@ async function boardFixture(t, { sendNote, beforeCreate } = {}) {
     await settle()
   }
   const trace = boardCtx.listeners.get('session/event')[0]
-  return { rt, board, prompts, deliveries, archived, created: () => created, add, openInGroup, note, reply, settle, trace, card: id => board.store.read().cards[id] }
+  return { rt, home, board, prompts, deliveries, archived, created: () => created, add, openInGroup, note, reply, settle, trace, card: id => board.store.read().cards[id] }
 }
 
 test('closed card never opens a fresh thread for a note or wake', async (t) => {
@@ -431,4 +431,27 @@ test('a note heard in a card thread is not taken by a reply from the Bot\'s own 
   await h.settle()
   assert.equal(h.card(id).notes.at(-1).text, 'I added the date.')
   assert.equal(h.card(id).awaiting, undefined)
+})
+
+test('a card opens a text file a Bot linked on it, and nothing else', async (t) => {
+  const h = await boardFixture(t)
+  const outside = mkdtempSync(join(tmpdir(), 'ds-bot-card-file-'))
+  t.after(() => rmSync(outside, { recursive: true, force: true }))
+  const spec = join(outside, 'spec v2.md')
+  const other = join(outside, 'other.md')
+  const binary = join(outside, 'shot.png')
+  const data = join(h.home, 'secret.md')
+  writeFileSync(spec, '# Spec\n\nDevice trust.')
+  writeFileSync(other, 'not linked')
+  writeFileSync(binary, Buffer.from([0x89, 0x50, 0, 0x47]))
+  writeFileSync(data, 'team data')
+  const id = await h.add()
+  const { sessionId } = await h.note(id)
+  await h.reply({ sessionId, cardId: id, text: `Spec v2 is in [spec v2.md](<${spec}#L3>); see also \`${binary}\` and \`${data}\`.` })
+  const file = link => h.board.handle('file', { id, link })
+  assert.deepEqual((await file(`${spec}#L3`)).value, { name: 'spec v2.md', path: realpathSync(spec), text: '# Spec\n\nDevice trust.', size: 21, truncated: false })
+  assert.equal((await file(other)).ok, false)
+  assert.match((await file(binary)).error.message, /Not a text file/)
+  assert.match((await file(data)).error.message, /team's data/)
+  assert.equal((await h.board.handle('file', { id: 'c_00000000', link: spec })).ok, false)
 })
