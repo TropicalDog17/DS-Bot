@@ -1863,6 +1863,39 @@ test('a push reply over the limit is refused and reported', async (t) => {
   assert.deepEqual(board.store.read().cards[cardId].notes, [])
 })
 
+test('a reply to a finished card still reaches the Main Bot', async (t) => {
+  const s = await start()
+  t.after(s.stop)
+  const boardCtx = fakeContext()
+  const board = installBoard(boardCtx, { file: join(s.home, 'board.json'), adoptMs: -1, waitPollMs: -1, watchMs: -1, mergePollMs: -1 }, {
+    ...s.rt.companions, identity: { ownerOfSession: s.rt.ownerOfSession }, tools: boardCtx.tools, connection: boardCtx.connection,
+  })
+  t.after(() => board.dispose())
+  const added = await board.handle('add', { title: 'Fix CI', assignee: 'b', brief: 'Check the build.' })
+  assert.equal(added.ok, true)
+  const [cardId] = Object.keys(added.value.cards)
+  const conn = await add(s)
+  s.rt.state.im.connections[conn.id].paired.push({ id: 'u1', name: 'U1', at: 1 })
+  await s.rt.save()
+  await dm(s, 'u1', 'hi')
+  assert.equal(await s.rt.imPush({ text: 'Writer finished the build.', cardId, botId: 'b' }), 1)
+  await s.flush()
+  const replyTo = s.fake.sent.length
+  const done = await board.handle('move', { id: cardId, status: 'done' })
+  assert.equal(done.value.cards[cardId].status, 'done')
+  await s.flush()
+  const outgoing = s.fake.sent.length
+  const prompts = s.prompts.length
+
+  await dm(s, 'u1', 'Thanks, ship it tomorrow.', { replyTo })
+  const [received] = s.prompts.slice(prompts)
+  assert.equal(s.prompts.length, prompts + 1)
+  assert.equal(received.sessionId, 'a')
+  assert.equal(received.content[0].text, `[A reply to your message about card ${cardId}] Thanks, ship it tomorrow.`)
+  assert.equal(s.fake.sent.length, outgoing)
+  assert.deepEqual(board.store.read().cards[cardId].notes, [])
+})
+
 test('no Main Bot, no push', async (t) => {
   const seed = TEAM()
   seed.mainBotIds = []

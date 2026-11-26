@@ -1,14 +1,12 @@
 import { randomUUID } from 'node:crypto'
-import { isBlankNote, noteLengthError, noteText } from '../board/card-fields.ts'
+import { CARD_NOTE_MAX, isBlankNote, noteLengthError, noteText, oneLine } from './note-text.ts'
 import { ownChatSessions, reach } from './threads.ts'
 
 export const NOTE_MAX = 2000
-// Matches the board's NOTE_MAX. The board rejects oversized notes before calling deliver.
-export const CARD_NOTE_MAX = 20_000
+export { CARD_NOTE_MAX } from './note-text.ts'
 export const BRIEF_MAX = 8000
 export const PUSH_MAX = 700
 
-const oneLine = (text, max) => String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, max)
 const keepLines = (text, max) => String(text ?? '').replace(/\r\n?/g, '\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, max)
 
 export function rosterService(rt) {

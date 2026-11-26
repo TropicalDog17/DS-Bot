@@ -3,7 +3,7 @@ import { defineTool } from '../host/tool-schema.ts'
 import { dshHomeOf } from '../host/folders.ts'
 import { textOf } from '../host/text.ts'
 import { ACTIONS, BOT_STATUSES, createBoard, isOpen } from './cards.ts'
-import { NOTE_MAX, USER } from './card-fields.ts'
+import { NOTE_MAX, USER, isBlankNote, noteLengthError, noteText } from './card-fields.ts'
 import { LEVELS, createLive, levelOf } from './live.ts'
 import { openBoardStore } from './store.ts'
 import { createHerdr, createdPane, herdrBinary, paneCreation, panesIn } from './herdr.ts'
@@ -346,9 +346,14 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
     }),
     ctx.on?.('agent/assistant-stream', ({ agent, frame }: any = {}) => live.onFrame(agent?.id, frame)),
     notes.onCardNote?.(async ({ cardId, text, requestId }) => {
-      if (typeof cardId !== 'string' || !Object.hasOwn(store.read().cards, cardId)) return false
-      const result = await userNote(cardId, text, requestId)
-      return result?.error === undefined ? true : { error: result.error }
+      const cards = store.read().cards
+      if (typeof cardId !== 'string' || !Object.hasOwn(cards, cardId) || !isOpen(cards[cardId])) return false
+      const line = noteText(text)
+      if (isBlankNote(line)) return { error: 'Write a note first.' }
+      const error = noteLengthError(line)
+      if (error !== undefined) return { error }
+      const result = await userNote(cardId, line, requestId)
+      return result.error === undefined
     }),
     roster.addRoutingPart?.(() => openCardsDigest()),
     systemPrompt?.section?.({ name: 'ds-bot-board-rules', order: RULES_ORDER, interpolate: false, text: context => rulesFor(context?.agent?.id) }),

@@ -151,6 +151,23 @@ test('a note of only spaces or zero-width characters is empty', async (t) => {
   assert.equal(h.prompts.length, before)
 })
 
+test('invisible characters alone are an empty note', async (t) => {
+  const h = await host(t, 'writer')
+  const before = h.prompts.length
+  for (const text of ['\u2060', '\u3164', '\u00ad', '\u115f\u1160', ' \u2060\u3164\u00ad\n']) {
+    assert.equal((await h.userNote(text)).error.message, 'Write a note first.')
+    assert.equal(await h.botNote(text), 'note needs the text to pass on.')
+    assert.deepEqual(await h.rt.companions.notes.deliver({ botId: 'writer', cardId: h.id, text }), { error: 'Write a note first.' })
+  }
+  assert.deepEqual(h.notes(), [])
+  assert.equal(h.prompts.length, before)
+
+  const text = 'use\u2060real\u00adtext\u3164'
+  assert.equal((await h.userNote(text)).ok, true)
+  assert.deepEqual(h.notes(), [text])
+  assert.equal(h.prompts.at(-1).content[0].text, `Note on card ${h.id} "Release notes": ${text}`)
+})
+
 test('a bot note over the limit is refused by the tool', async (t) => {
   const h = await host(t, 'writer')
   const before = h.prompts.length

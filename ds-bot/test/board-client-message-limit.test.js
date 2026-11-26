@@ -11,9 +11,11 @@ const bundle = await build({
   external: ['react', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives'],
 })
 
-function composer(boardNote = () => {}, prefs = {}) {
+function composer(boardNote = () => {}, prefs = {}, dom) {
   let hook = 0
   const state = []
+  const effects = new Map()
+  const scheduled = []
   const react = {
     createElement: (type, props, ...children) => ({ type, props: props ?? {}, children: children.flat(Infinity) }),
     createContext: () => ({}), useContext: () => undefined,
@@ -23,11 +25,24 @@ function composer(boardNote = () => {}, prefs = {}) {
       return [state[slot], value => { state[slot] = typeof value === 'function' ? value(state[slot]) : value }]
     },
     useRef(current) { return react.useState({ current })[0] },
-    useEffect: () => {}, useLayoutEffect: () => {}, useCallback: fn => fn,
+    useEffect: () => {},
+    useLayoutEffect(effect, deps) {
+      const slot = hook++
+      if (!dom) return
+      const previous = effects.get(slot)
+      if (previous && deps.every((dep, index) => Object.is(dep, previous.deps[index]))) return
+      scheduled.push(() => {
+        previous?.cleanup?.()
+        effects.set(slot, { deps, cleanup: effect() })
+      })
+    },
+    useCallback: fn => fn,
   }
   const modules = { react, 'react-dom': {}, '@deepseek-ai/dsh-client-ui-primitives': {} }
   const module = { exports: {} }
-  runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports, require: name => modules[name], Promise })
+  runInNewContext(bundle.outputFiles[0].text, {
+    module, exports: module.exports, require: name => modules[name], Promise, ResizeObserver: dom?.ResizeObserver,
+  })
   const { CardDetail } = module.exports
   const card = { id: 'card', title: 'Release notes', status: 'active', assignee: 'user', notes: [] }
   const render = () => {
@@ -35,6 +50,8 @@ function composer(boardNote = () => {}, prefs = {}) {
     const tree = CardDetail({ card, roster: { byId: {}, bots: [], prefs }, actions: { boardNote } })
     const footer = tree.children.find(node => node?.props.className?.includes('bt-board-write'))
     const [box, send, status] = footer.children
+    if (dom) box.props.ref.current = dom.node
+    for (const effect of scheduled.splice(0)) effect()
     const [count, error] = status.children
     const thread = tree.children[0].children.find(node => node?.props?.notes)
     const pending = thread?.type(thread.props).children.filter(node => node?.props['data-pending']).map(node => (
@@ -50,7 +67,8 @@ function composer(boardNote = () => {}, prefs = {}) {
     if (!prevented && !isComposing && !keys.ctrlKey && !keys.altKey && !keys.metaKey && keys.keyCode !== 229) type(props.value + '\n')
     return prevented
   }
-  return { render, type, enter }
+  const unmount = () => { for (const effect of effects.values()) effect.cleanup?.() }
+  return { render, type, enter, unmount }
 }
 
 test('the card message box is a textarea with no maxlength', () => {
@@ -150,10 +168,89 @@ test('a refused note comes back into the box', async () => {
     message.type(draft)
     response.reject(new Error('Try again'))
     await Promise.resolve()
-    assert.equal(message.render().box.props.value, draft || text)
+    assert.equal(message.render().box.props.value, draft === '' ? text : `${draft}\n\n${text}`)
     assert.equal(message.render().send.props.disabled, false)
     assert.deepEqual(Array.from(message.render().pending), [])
   }
+})
+
+test('two refused notes keep both drafts', async () => {
+  for (const [currentDraft, editAfterRejection] of [['', false], ['C', false], ['C', true]]) {
+    for (const order of [['A', 'B'], ['B', 'A']]) {
+      const responses = { A: Promise.withResolvers(), B: Promise.withResolvers() }
+      const sent = []
+      const message = composer((_id, text) => { sent.push(text); return responses[text].promise })
+      message.type('A')
+      assert.equal(message.enter(), true)
+      message.type('B')
+      assert.equal(message.enter(), true)
+      if (!editAfterRejection) message.type(currentDraft)
+      const sending = message.render()
+      assert.deepEqual(Array.from(sending.pending), ['A', 'B'])
+
+      const [first, second] = order
+      responses[first].reject(new Error('Try again'))
+      await Promise.resolve()
+      if (editAfterRejection) sending.box.props.onChange({ target: { value: currentDraft } })
+      assert.equal(message.render().box.props.value, [currentDraft, first].filter(Boolean).join('\n\n'))
+      responses[second].reject(new Error('Try again'))
+      await Promise.resolve()
+      assert.equal(message.render().box.props.value, [currentDraft, 'A', 'B'].filter(Boolean).join('\n\n'))
+      assert.deepEqual(Array.from(message.render().pending), [])
+      assert.deepEqual(sent, ['A', 'B'])
+    }
+  }
+})
+
+test('the box measures itself again when the width changes', () => {
+  let width = 440
+  let content = 60
+  let height = ''
+  let reads = 0
+  let notify
+  let disconnected = false
+  const writes = []
+  const node = {
+    style: {
+      maxHeight: '', overflowY: '',
+      get height() { return height },
+      set height(value) { height = value; writes.push(value) },
+    },
+    offsetHeight: 40, clientHeight: 38, scrollTop: 0,
+    get scrollHeight() { reads++; return content },
+    getBoundingClientRect: () => ({ width }),
+  }
+  class ResizeObserver {
+    constructor(callback) { notify = callback }
+    observe(target, options) { assert.equal(target, node); assert.equal(options.box, 'border-box') }
+    disconnect() { disconnected = true }
+  }
+  const message = composer(undefined, {}, { node, ResizeObserver })
+  message.render()
+  assert.deepEqual(writes, ['62px'])
+  assert.equal(reads, 1)
+
+  width = 390
+  content = 100
+  notify()
+  assert.deepEqual(writes, ['62px', '102px'])
+  notify()
+  message.render()
+  assert.equal(reads, 2)
+
+  width = 380
+  notify()
+  assert.equal(reads, 3)
+  assert.deepEqual(writes, ['62px', '102px'])
+
+  width = 440
+  content = 60
+  notify()
+  assert.deepEqual(writes, ['62px', '102px', '62px'])
+  assert.equal(node.style.maxHeight, '')
+  assert.equal(node.style.overflowY, '')
+  message.unmount()
+  assert.equal(disconnected, true)
 })
 
 test('a pasted note over the limit is kept whole', () => {

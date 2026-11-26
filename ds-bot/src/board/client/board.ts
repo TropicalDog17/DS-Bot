@@ -296,8 +296,23 @@ function Brief({ text, cards }) {
       open ? t('Show less') : t('Show more')) : null)
 }
 
+function fitComposer(node: HTMLTextAreaElement) {
+  const scrollTop = node.scrollTop
+  const { maxHeight, overflowY } = node.style
+  node.style.maxHeight = '0px'
+  node.style.overflowY = 'hidden'
+  const border = node.offsetHeight - node.clientHeight
+  const height = `${Math.min(180, Math.max(40, node.scrollHeight + border))}px`
+  node.style.maxHeight = maxHeight
+  node.style.overflowY = overflowY
+  if (node.style.height !== height) node.style.height = height
+  if (node.scrollTop !== scrollTop) node.scrollTop = scrollTop
+}
+
+const EMPTY_DRAFT = { typed: '', refused: [] as { seq: number; text: string }[] }
+
 export function CardDetail({ card, roster, actions, live, onOpenCard }) {
-  const [text, setText] = useState('')
+  const [draft, setDraft] = useState(EMPTY_DRAFT)
   const [busy, setBusy] = useState(false)
   const [pending, setPending] = useState([])
   const [confirming, setConfirming] = useState(false)
@@ -311,6 +326,7 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
   const said = shownNotes.length
   const steps = live?.steps?.length ?? 0
   const waiting = card.awaiting !== undefined || steps > 0
+  const text = [draft.typed, ...draft.refused.map(entry => entry.text)].filter(part => part !== '').join('\n\n')
   const line = noteText(text)
   const count = charCount(line)
   const excess = count - NOTE_MAX
@@ -318,13 +334,21 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
   const open = OPEN.includes(card.status)
   useLayoutEffect(() => {
     const node = composer.current
-    if (node === null) return
-    const scrollTop = node.scrollTop
-    node.style.height = 'auto'
-    const border = node.offsetHeight - node.clientHeight
-    node.style.height = `${Math.min(180, Math.max(40, node.scrollHeight + border))}px`
-    node.scrollTop = scrollTop
+    if (node !== null) fitComposer(node)
   }, [open, text])
+  useLayoutEffect(() => {
+    const node = composer.current
+    if (node === null || typeof ResizeObserver !== 'function') return undefined
+    let width = node.getBoundingClientRect().width
+    const observer = new ResizeObserver(() => {
+      const next = node.getBoundingClientRect().width
+      if (next === width) return
+      width = next
+      fitComposer(node)
+    })
+    observer.observe(node, { box: 'border-box' })
+    return () => observer.disconnect()
+  }, [open])
   useEffect(() => {
     const node = scroller.current
     if (!node || typeof node.scrollTo !== 'function') return
@@ -350,8 +374,15 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
       (failure) => { setBusy(false); setError(String(failure?.message ?? failure)) },
     )
   }
-  const sendNote = (line, draft?: string) => {
-    const pendingId = `pending-${++pendingSeq.current}`
+  const editDraft = (typed: string) => {
+    setDraft(current => ({
+      typed,
+      refused: current.refused.filter(entry => !draft.refused.includes(entry)),
+    }))
+  }
+  const sendNote = (line, original?: string) => {
+    const seq = ++pendingSeq.current
+    const pendingId = `pending-${seq}`
     const optimistic = { pendingId, pending: true, at: Date.now(), by: USER, text: line }
     setError('')
     setPending(list => [...list, optimistic])
@@ -359,14 +390,17 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
       () => { setPending(list => list.filter(entry => entry.pendingId !== pendingId)) },
       (failure) => {
         setPending(list => list.filter(entry => entry.pendingId !== pendingId))
-        if (draft !== undefined) setText(current => (current === '' ? draft : current))
+        if (original !== undefined) setDraft(current => ({
+          typed: current.typed,
+          refused: [...current.refused, { seq, text: original }].sort((a, b) => a.seq - b.seq),
+        }))
         setError(String(failure?.message ?? failure))
       },
     )
   }
   const send = () => {
     if (sendDisabled) return
-    setText('')
+    editDraft('')
     sendNote(line, text)
   }
   const cancel = () => {
@@ -425,7 +459,7 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
     open ? h('div', { className: 'bt-board-sheet-foot bt-board-write' },
       h('textarea', {
         ref: composer, className: 'bt-input', value: text, placeholder: t('Message'), 'aria-label': t('Message'), rows: 1, 'aria-invalid': excess > 0 || undefined,
-        onChange: event => setText(event.target.value),
+        onChange: event => editDraft(event.target.value),
         onKeyDown: (event) => {
           if (event.key !== 'Enter' || !sendsOnEnter(roster.prefs) || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey
             || event.keyCode === 229 || event.nativeEvent?.isComposing) return
