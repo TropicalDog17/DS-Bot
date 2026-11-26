@@ -2,6 +2,7 @@ import { openSessions } from './threads.ts'
 import { randomUUID } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import { MAX_AVATAR_IMAGE, ROOM_MAX_MEMBERS, ROOM_MODES, ROOM_NAME_MAX, ROOM_NOTICE_MAX, SECTION_COLORS, SECTION_NAME_MAX } from './constants.ts'
+import { ensureSessionIndex } from './session-index.ts'
 import { currentColor, isColor, normalize, unquote } from './text.ts'
 import { nameProblem } from '../shared/mentions.ts'
 
@@ -235,7 +236,7 @@ export function install(rt) {
     } catch (error) {
       delete state.bots[id]
       state.mainBotIds = state.mainBotIds.filter(other => other !== id)
-      rt.chatOwners.delete(id)
+      ensureSessionIndex(rt).removeChat(id)
       void rt.save().catch(() => {})
       await ctx.workspaceRegistry.archiveSession(id)
         .catch(archiveError => rt.warn('ds-bot: archiving the Session for %s failed: %s', cleanName, archiveError))

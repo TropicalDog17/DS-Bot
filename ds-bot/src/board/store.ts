@@ -5,7 +5,19 @@ import { dirname, join } from 'node:path'
 import { homeLock } from '../host/home-lock.ts'
 
 export const READ_ONLY = 'The board is open in another dsh on this data; it is read-only here.'
-const EMPTY = (): { version: number; cards: Record<string, any>; settings?: any; waits?: Record<string, any> } => ({ version: 1, cards: {} })
+type PaneEvidence = { text: string; session?: string; agent?: string; status?: string }
+export type OwnedPane = {
+  pane: string
+  botId: string
+  cardId?: string
+  sessionId: string
+  at: number
+  terminal?: string
+  released?: boolean
+  evidence?: PaneEvidence
+  closed?: PaneEvidence & { at: number }
+}
+const EMPTY = (): { version: number; cards: Record<string, any>; settings?: any; waits?: Record<string, any>; owned?: Record<string, OwnedPane> } => ({ version: 1, cards: {} })
 
 const clean = (parsed) => {
   const data = EMPTY()
@@ -21,6 +33,14 @@ const clean = (parsed) => {
   if (waits !== null && typeof waits === 'object' && !Array.isArray(waits)) {
     for (const [id, wait] of Object.entries<any>(waits)) {
       if (wait !== null && typeof wait === 'object' && wait.id === id && typeof wait.pane === 'string' && typeof wait.botId === 'string' && Array.isArray(wait.until)) (data.waits ??= {})[id] = wait
+    }
+  }
+  const owned = parsed?.owned
+  if (owned !== null && typeof owned === 'object' && !Array.isArray(owned)) {
+    for (const [id, entry] of Object.entries<any>(owned)) {
+      if (entry !== null && typeof entry === 'object' && entry.pane === id && typeof entry.botId === 'string') {
+        (data.owned ??= Object.create(null))[id] = entry
+      }
     }
   }
   return data

@@ -240,6 +240,15 @@ test('a card thread mirrors progress when it never heard the pending note', asyn
   assert.equal(h.card(id).notes.at(-1).text, 'I added the date.')
 })
 
+test('a long answer reaches the card whole', async (t) => {
+  const h = await boardFixture(t)
+  const id = await h.add()
+  const { sessionId } = await h.note(id)
+  const text = `${'Đã dọn pane, đã lưu bằng chứng. '.repeat(200)}Hết.`
+  await h.reply({ sessionId, cardId: id, text })
+  assert.equal(h.card(id).notes.at(-1).text, text.trim())
+})
+
 function resumeFixture(t, notes, { group = room(), logs = {}, bots = {}, extras = {} } = {}) {
   const home = tempHome()
   writeFileSync(join(home, 'inflight.json'), JSON.stringify(notes))

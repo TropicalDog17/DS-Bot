@@ -1,6 +1,9 @@
+import { ensureSessionIndex } from './session-index.ts'
 import * as threadStore from './threads.ts'
 
 export function createCardThreads({ rt, threads = threadStore, freshRoute, selectRoute }) {
+  const index = ensureSessionIndex(rt)
+
   async function open(botId, cardId, title = '', roomId, mayOpen = () => true) {
     await rt.load()
     const bot = rt.botOf(botId)
@@ -22,7 +25,7 @@ export function createCardThreads({ rt, threads = threadStore, freshRoute, selec
       return mayOpen() ? raced : undefined
     }
     threads.addCardThread(bot, freshId, cardId, undefined, roomId)
-    rt.chatOwners.set(freshId, bot.id)
+    index.registerChat(freshId, bot.id)
     await rt.save()
     return freshId
   }
@@ -49,10 +52,7 @@ export function createCardThreads({ rt, threads = threadStore, freshRoute, selec
       return 'later'
     }
     const closed = threads.closeCardThread(bot, cardId, Date.now(), target)
-    if (closed !== undefined) {
-      rt.chatOwners.delete(closed.sessionId)
-      rt.pastOwners.set(closed.sessionId, { botId: bot.id })
-    }
+    if (closed !== undefined) index.archiveChat(closed.sessionId, bot.id)
     await rt.save()
     if (closed !== undefined) {
       await rt.ctx.workspaceRegistry.archiveSession(closed.sessionId, { stopActivity: false })
@@ -75,11 +75,11 @@ export function createCardThreads({ rt, threads = threadStore, freshRoute, selec
   }
   const sessionOf = (botId, cardId) => threads.cardThreadSession(rt.botOf(botId), cardId)
   function ofSession(sessionId) {
-    const botId = rt.chatOwners.get(sessionId)
+    const botId = index.chatOwners.get(sessionId)
     const cardId = threads.cardOfThread(rt.botOf(botId), sessionId)
     return cardId === undefined ? undefined : { botId, cardId }
   }
-  const roomOfSession = sessionId => threads.cardRoomOfThread(rt.botOf(rt.chatOwners.get(sessionId)), sessionId)
+  const roomOfSession = sessionId => threads.cardRoomOfThread(rt.botOf(index.chatOwners.get(sessionId)), sessionId)
   function isClosed(botId, cardId) {
     const bot = rt.botOf(botId)
     if (bot === undefined) return true

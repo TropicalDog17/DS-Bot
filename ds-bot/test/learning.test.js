@@ -452,6 +452,33 @@ test('a changed AGENTS proposal stays open, can be declined, and is included in 
   assert.match(JSON.stringify(runtime.requests.at(-1)), /Keep the report concise/)
 })
 
+test('an AGENTS revision validates its anchors against the current file', async t => {
+  const folder = projectFolder(t)
+  const path = join(folder, 'AGENTS.md')
+  const seed = JSON.parse(JSON.stringify(TEAM))
+  seed.bots.b2.workDir = folder
+  const updated = JSON.stringify({ action: 'edit', edits: [{
+    op: 'add', after: '- Current rule', text: '- Link the CI run.', why: 'The user asked for the link.',
+  }] })
+  const runtime = await startRuntime({ seed, replies: [noneReply, agentsEdit, agentsEdit, updated], config: { learningTimes: { tickMs: 100_000 } } })
+  t.after(() => runtime.stop())
+  await finishTurn(runtime.ctx)
+  await runtime.rt.learningRun()
+  const [proposal] = (await runtime.call('state')).value.learning.b2
+  const current = '# Project\n- Current rule\n'
+  writeFileSync(path, current)
+  const body = { id: proposal.id, note: 'Link the CI run.' }
+  assert.equal((await runtime.call('learning-revise', body)).ok, false)
+  assert.ok(runtime.learningState().proposals[proposal.id])
+
+  const { value } = await runtime.call('learning-revise', body)
+  assert.equal(value.revised, true)
+  assert.match(runtime.requests.at(-1).messages[0].content[0].text, /Current AGENTS\.md:[\s\S]*- Current rule/)
+  assert.equal(readFileSync(path, 'utf8'), current)
+  assert.equal((await runtime.call('learning-answer', { id: value.id, approve: true })).value.applied, true)
+  assert.equal(readFileSync(path, 'utf8'), `${current}- Link the CI run.\n`)
+})
+
 test('folders without a project marker, DSH data folders, and agentsMd:false are not reviewed', async t => {
   const cases = [
     { folder: projectFolder(t, { git: false, agents: null }), config: {} },
@@ -847,6 +874,29 @@ test('declined proposals are recorded and included in the next skill request', a
   assert.deepEqual(view.learningSettled.b2.map(entry => [entry.id, entry.name, entry.outcome, entry.sessionId]), [[proposal.id, 'release-checks', 'declined', 'b2']])
   assert.equal(typeof view.learningSettled.b2[0].settledAt, 'number')
   assert.equal((await runtime.call('learning-answer', { id: proposal.id, approve: true })).ok, false)
+})
+
+test('a delayed revision cannot replace a proposal that was answered while the model was running', async t => {
+  const { promise, resolve } = Promise.withResolvers()
+  const runtime = await startRuntime({ replies: [createReply, promise], config: { learningTimes: { tickMs: 100_000 } } })
+  t.after(() => {
+    resolve(noneReply)
+    return runtime.stop()
+  })
+  await finishTurn(runtime.ctx)
+  await runtime.rt.learningRun()
+  const [{ id }] = (await runtime.call('state')).value.learning.b2
+  const revision = runtime.call('learning-revise', { id, note: 'Add a CI check.' })
+  await until(() => runtime.requests.length === 2)
+  assert.equal((await runtime.call('learning-answer', { id, approve: false })).value.applied, false)
+  resolve(createReply)
+  const response = await revision
+  assert.equal(response.ok, false)
+  assert.match(JSON.stringify(response), /bot\/stale/)
+  const state = runtime.learningState()
+  assert.deepEqual(state.proposals, {})
+  assert.equal(state.settled[id].outcome, 'declined')
+  assert.equal(state.declined.length, 1)
 })
 
 test('an update approval fails if the learned skill description alone changed', async t => {

@@ -1,13 +1,15 @@
 import { join } from 'node:path'
 import { defineTool } from '../host/tool-schema.ts'
 import { dshHomeOf } from '../host/folders.ts'
+import { textOf } from '../host/text.ts'
 import { ACTIONS, BOT_STATUSES, createBoard, isOpen } from './cards.ts'
 import { USER } from './card-fields.ts'
 import { LEVELS, createLive, levelOf } from './live.ts'
 import { openBoardStore } from './store.ts'
-import { createHerdr, herdrBinary, panesIn } from './herdr.ts'
+import { createHerdr, createdPane, herdrBinary, paneCreation, panesIn } from './herdr.ts'
 import { WATCH_MS, idleNudge, idleStep, idleText, sweep } from './watch.ts'
 import { createPaneWaits } from './waits.ts'
+import { createPaneTeardown } from './teardown.ts'
 import { every } from './poller.ts'
 import { createPrs, ghBinary, prsOf } from './prs.ts'
 
@@ -29,7 +31,7 @@ const MAIN_BOARD_RULES = [
 const BOARD_RULES = [
   '## The board',
   '- Every task you take is a card. When the user asks you for one directly, open the card yourself (board open) with a brief: its work runs in a conversation of its own for the card, so tell the user in one line that you took it and stop there. Do not open a card for a step of the card you are working on.',
-  '- A card handed to you arrives in a conversation of its own that starts with "[Card …]". Do that card\'s work there: board update as it moves (when it waits on the user, review or blocked with need: what the user must do and the link to it), board ask when the user must choose, then board complete with a one-line result or board cancel with the reason. A card whose PR (a link on it) is not merged yet waits in Review after complete and moves to Done by itself once every PR on it is merged. Notes on the card arrive in the same conversation.',
+  '- A card handed to you arrives in a conversation of its own that starts with "[Card …]". Do that card\'s work there: board update as it moves (when it waits on the user, review or blocked with need: what the user must do and the link to it), board ask when the user must choose, then board complete with a one-line result or board cancel with the reason. A completed card waits in Review for the user to accept it, and only the user moves it to Done. A card whose PR (a link on it) is not merged yet stays in Review until every PR on it is merged. Notes on the card arrive in the same conversation.',
   '- Work you run in a herdr pane shows on the card by itself when you drive the pane from the card\'s conversation. From anywhere else, board update with pane (its id, like w1:p1T) so the user can watch it.',
   '- To wait for work in a herdr pane, call wait_pane with the pane and end your turn: you are woken in this conversation when it gets there, also after a restart. Never wait with herdr agent wait, herdr agent prompt --wait or a background job: a restart or a new part of your chat stops those, and nothing wakes you.',
   '- On a card that runs long, board update progress in one line at each step (when you hand work to a pane, when you are woken, when a test or deploy ends): the user reads it on the card and on the phone instead of asking how it is going.',
@@ -58,6 +60,7 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
   let disposed = false
   const cardOfSession = sessionId => identity.ownerOfSession(sessionId)?.cardId
   const delivering = new Map()
+  const paneCalls = new Map<string, Map<string, string>>()
 
   const unmergedOf = async (urls) => {
     const states = await Promise.all(urls.map(url => prs.state(url).catch(() => undefined)))
@@ -66,7 +69,7 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
 
   const tool = defineTool({
     name: 'board',
-    description: 'The user\'s work board, shared by the whole team. Put every piece of work on it so the user sees it without asking: open when you take it (or hand it to another Bot with a brief), update as it moves (status, progress, a PR link), complete with a one-line result, cancel with a reason. When you need the user to decide, ask with a question and the options: the card shows them as buttons and the pick comes back as a note. note passes something on to a card\'s assignee. Works from any chat. show lists the board.',
+    description: 'The user\'s work board, shared by the whole team. Put every piece of work on it so the user sees it without asking: open when you take it (or hand it to another Bot with a brief), update as it moves (status, progress, a PR link), complete with a one-line result (the card waits in Review for the user to accept it), cancel with a reason. When you need the user to decide, ask with a question and the options: the card shows them as buttons and the pick comes back as a note. note passes something on to a card\'s assignee. Works from any chat. show lists the board.',
     parameters: {
       action: { type: 'string', required: true, enum: ACTIONS, description: 'What to do' },
       id: { type: 'string', description: 'Card id or ticket key; default your newest open card' },
@@ -81,7 +84,7 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
       need: { type: 'string', description: 'update to review or blocked: what the user must do (approve, merge, answer) with the link to it; Markdown' },
       link: { type: 'string', description: 'A URL to attach, e.g. the PR' },
       pane: { type: 'string', description: 'update: the herdr pane the work runs in (e.g. w1:p1T), so the card shows it' },
-      result: { type: 'string', description: 'complete: the result, one line. A card with a PR not merged yet waits in Review until it is' },
+      result: { type: 'string', description: 'complete: the result, one line. The card waits in Review for the user to accept it; a PR not merged yet keeps it in Review until it is' },
       reason: { type: 'string', description: 'cancel: why it stops' },
       question: { type: 'string', description: 'ask: what the user decides; Markdown' },
       options: { type: 'array', items: { type: 'string' }, description: 'ask: 2 to 6 short choices, each one line' },
@@ -232,14 +235,53 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
   }
 
   async function readPane(id, pane) {
-    const card = Object.hasOwn(store.read().cards, id) ? store.read().cards[id] : undefined
+    const { cards, owned } = store.read()
+    const card = Object.hasOwn(cards, id) ? cards[id] : undefined
     if (card === undefined) return { error: 'No such card.', code: 'board/refused' }
-    if (!(card.panes ?? []).some(entry => entry.id === pane)) return { error: 'That pane is not on the card.', code: 'board/refused' }
+    const entry = owned?.[pane]
+    if (entry?.cardId !== id && !(card.panes ?? []).some(entry => entry.id === pane)) return { error: 'That pane is not on the card.', code: 'board/refused' }
+    if (entry?.closed !== undefined) return { value: { pane, ...entry.closed, closed: true } }
     return { value: { pane, at: now(), ...await herdr.read(pane) } }
   }
   async function notePanes(sessionId, event) {
+    const data = event?.data
+    if (event?.type === 'turn/end') {
+      paneCalls.delete(sessionId)
+      return
+    }
+    if (event?.type === 'tool/result') {
+      const message = data?.message
+      const calls = paneCalls.get(sessionId)
+      const command = calls?.get(message?.toolCallId)
+      if (command === undefined) return
+      calls.delete(message.toolCallId)
+      if (calls.size === 0) paneCalls.delete(sessionId)
+      if (message.isError === true) return
+      const created = createdPane(command, textOf(message.content))
+      const owner = identity.ownerOfSession(sessionId)
+      if (created === undefined || owner === undefined) return
+      const { pane, terminal } = created
+      const { botId, cardId } = owner
+      await store.change(draft => {
+        const previous = draft.owned?.[pane]
+        if (disposed || (previous !== undefined && (terminal === undefined || previous.terminal === terminal))) {
+          return { error: 'The pane was not registered.' }
+        }
+        const owned = draft.owned ??= {}
+        owned[pane] = { ...created, botId, ...(cardId === undefined ? {} : { cardId }), sessionId, at: now() }
+        if (cardId !== undefined) board.panes(draft.cards, cardId, [pane])
+      })
+      return
+    }
     if (event?.type !== 'tool/call') return
-    const ids = panesIn(commandOf(event.data?.arguments))
+    const command = commandOf(data?.arguments)
+    if (data?.name === 'bash' && typeof data.callId === 'string' && paneCreation(command) !== undefined
+      && identity.ownerOfSession(sessionId) !== undefined) {
+      const calls = paneCalls.get(sessionId) ?? new Map()
+      calls.set(data.callId, command)
+      paneCalls.set(sessionId, calls)
+    }
+    const ids = panesIn(command)
     if (ids.length === 0) return
     const cardId = cardOfSession(sessionId)
     if (cardId !== undefined) await store.change(data => board.panes(data.cards, cardId, ids))
@@ -254,6 +296,13 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
     store, herdr, notes, now, identity, roster, warn,
     every: (ms, job, options) => {
       const interval = config.waitPollMs ?? ms
+      return interval > 0 ? every(interval, job, options) : () => {}
+    },
+  })
+  const teardown = createPaneTeardown({
+    store, herdr, now, warn, roster,
+    every: (ms, job, options) => {
+      const interval = config.teardownPollMs ?? ms
       return interval > 0 ? every(interval, job, options) : () => {}
     },
   })
@@ -295,6 +344,7 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
     tools.register(waits.tool),
     bridge.share(waits.tool.name),
     waits.dispose,
+    teardown.dispose,
     mergePoller(),
     connection.fetch.register({
       path: ROUTE,
@@ -373,6 +423,7 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
     await roster.ready()
     for (const card of Object.values<any>(store.read().cards)) {
       if (!isOpen(card) || roster.bot(card.assignee) === undefined) continue
+      if (card.status === 'review' && card.completedBy !== undefined) continue
       if (await notes.cardThread({ botId: card.assignee, cardId: card.id }) !== undefined) continue
       if (await notes.busy?.({ botId: card.assignee })) { waiting += 1; continue }
       const { error } = await run(card, [{ kind: 'start', payload: board.adoptOf(card), adopt: true }]) ?? {}
@@ -479,6 +530,7 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
     idleOnce,
     adoptOnce,
     waits,
+    teardown,
     mergeOnce,
     rulesFor,
     openCardsDigest,
@@ -487,6 +539,7 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
     store,
     dispose() {
       disposed = true
+      paneCalls.clear()
       for (const dispose of disposers.reverse()) { try { dispose?.() } catch {} }
       store.dispose()
     },

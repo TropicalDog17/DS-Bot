@@ -97,6 +97,7 @@ export function createPaneWaits({ store, herdr, notes, now = Date.now, identity,
       until: { type: 'array', items: { type: 'string', enum: WAIT_STATES }, description: `States to wake on; default ${WAIT_STATES.join(', ')}. done: it finished a task; idle: it waits for a prompt; blocked: it needs input or approval` },
       note: { type: 'string', description: 'What to do once it is over, in one line; it comes back with the wake' },
       stop: { type: 'boolean', description: 'true ends your wait on this pane' },
+      release: { type: 'boolean', description: 'true: you are done with this pane; DS Bot closes it once nothing runs in it' },
     },
     output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: String(value) }] },
     async execute(args, exec) {
@@ -107,20 +108,26 @@ export function createPaneWaits({ store, herdr, notes, now = Date.now, identity,
       const pane = paneTarget(args.pane)
       if (pane === undefined) return 'pane is a herdr pane id, like w1:p1T.'
       if (store.readOnly()) return 'The board is read-only in this dsh, so a wait cannot be kept here.'
-      if (args.stop === true) {
+      if (args.release === true || args.stop === true) {
+        const release = args.release === true
         const stopped = await store.change((data) => {
           const wait = Object.values<any>(data.waits ?? {}).find(entry => entry.botId === owner.botId && entry.pane === pane)
-          if (wait === undefined) return { error: `You do not wait on ${pane}.` }
-          dropWait(data, wait.id)
+          if (release) {
+            const owned = data.owned?.[pane]
+            if (owned?.botId !== owner.botId) return { error: `DS Bot did not see you create herdr pane ${pane}, so it does not close it.` }
+            owned.released = true
+          } else if (wait === undefined) return { error: `You do not wait on ${pane}.` }
+          if (wait !== undefined) dropWait(data, wait.id)
           return {}
         })
-        return stopped.error ?? `Stopped waiting on ${pane}.`
+        return stopped.error ?? (release ? `Released herdr pane ${pane}.` : `Stopped waiting on ${pane}.`)
       }
       const seen = await herdr.status(pane)
       if (seen.gone === true) return `herdr has no pane ${pane}.`
       if (seen.error !== undefined && seen.status === undefined && /not installed/.test(seen.error)) return seen.error
       const { cardId } = owner
       const result = await store.change((data) => {
+        if (data.owned?.[pane]?.closed !== undefined) return { error: `herdr has no pane ${pane}.` }
         const added = addWait(data.waits ??= {}, { pane, until: args.until, botId: owner.botId, roomId: owner.roomId, cardId, note: args.note, id: `w_${randomUUID().slice(0, 8)}`, at: now() })
         if (added.error === undefined && cardId !== undefined) board.panes(data.cards, cardId, [pane])
         return added

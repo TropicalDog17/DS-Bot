@@ -65,21 +65,22 @@ Cards are kept in `<DSH_HOME>/bot-board/board.json`. To keep them elsewhere:
 - A card keeps its steps (`log`): every column and progress it moved to, with the time
   and who moved it, the last 40. The sheet shows the progress line and folds the earlier
   steps under History, so progress no longer overwrites how the work went.
-- A card is Done only when its code is in. When a Bot calls `board complete` on a card
-  with a GitHub pull request in its links (or the `link` it brings), the board asks
-  `gh pr view <url> --json state` first. If any PR is not reported `MERGED` (or gh can't
-  tell), the card goes to Review instead. It keeps the result, gets `need: Merge <the
-  PRs>`, and is marked `waitsMerge`. Its thread stays open, and the phone push says it
-  is ready for review. A Bot that moves a card into Review with a PR, or adds a PR to it
-  there, marks it the same way. Every 5 minutes (`config.mergePollMs`), the board asks
-  gh about the PRs of each card that waits, and moves the card to Done once all of them
-  are merged. Then it closes the card's thread and pushes "all merged". The Bot that
-  opened the card hears when the work is finished and waits for the merge, not a second
-  time at the merge; a card that got into Review another way is reported at the merge.
+- Only the user moves a card to Done, once its code is in. When a Bot calls `board
+  complete` on a card with a GitHub pull request in its links (or the `link` it brings),
+  the board asks `gh pr view <url> --json state` first. If any PR is not reported
+  `MERGED` (or gh can't tell), the card goes to Review instead. It keeps the result, gets
+  `need: Merge <the PRs>`, and is marked `waitsMerge`. Its thread stays open, and the
+  phone push says it is ready for review. A Bot that moves a card into Review with a PR,
+  or adds a PR to it there, marks it the same way. Every 5 minutes
+  (`config.mergePollMs`), the board asks gh about the PRs of each card that waits. Once
+  all of them are merged, the card stays in Review with a `need` that asks the user to
+  accept it; only the user moves it to Done. The Bot that opened the card hears when the
+  work is finished and waits for the merge, not a second time at the merge; a card that
+  got into Review another way is reported at the merge.
   A card that leaves Review (the user drags it back, the Bot moves it on) stops waiting.
   A PR closed without merging leaves the card in Review for the user, and the card says
   so: its `need` names the closed PR and the choices (reopen and merge, a note with what
-  to do instead, or Done), and one push tells the user. The same happens when gh cannot
+  to do instead, or the user moves it to Done), and one push tells the user. The same happens when gh cannot
   read a PR three polls in a row. Both clear by themselves when the PR is open or
   readable again. gh is found at `config.gh`, else `/usr/bin/gh`, else on the PATH, and runs as
   the user who runs dsh.

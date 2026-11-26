@@ -533,6 +533,7 @@ export function apply(ctx) {
       openChangesReview(changes)
     },
     learningAnswer: (id, approve) => after(call('learning-answer', { id, approve })),
+    learningRevise: (id, note) => after(call('learning-revise', { id, note })),
     isAgentSession: id => isAgentSessionId(id),
     openSession: (id) => {
       if (isAgentSessionId(id)) return actions.openAgentSession(id)

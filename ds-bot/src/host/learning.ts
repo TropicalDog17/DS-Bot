@@ -69,7 +69,7 @@ export function skillSystem() {
   ].join('\n')
 }
 
-export function skillRequest({ bot, lines, learned = [], library = [], declined = [], language, limit = LEARNING.learnedMax }) {
+export function skillRequest({ bot, lines = [], learned = [], library = [], declined = [], language = undefined, limit = LEARNING.learnedMax, revision = undefined }) {
   const parts = [`The Bot: ${bot.name}${bot.role ? `, ${bot.role}` : ''}.`]
   parts.push(learned.length === 0
     ? 'This Bot has no learned skills yet.'
@@ -77,7 +77,7 @@ export function skillRequest({ bot, lines, learned = [], library = [], declined 
   if (library.length > 0) parts.push(`Other skills on the team:\n${library.map(skill => `- ${skill.name}: ${skill.description}`).join('\n')}`)
   if (declined.length > 0) parts.push(`Proposals the user declined. Do not propose them again unless this work shows something new:\n${declined.map(entry => `- ${entry.name}: ${entry.description}`).join('\n')}`)
   if (language) parts.push(`Write the description and the content in ${language}.`)
-  parts.push(`The work, oldest first ("User:" lines are the user's own words):\n<work>\n${lines.join('\n')}\n</work>`)
+  parts.push(revision ?? `The work, oldest first ("User:" lines are the user's own words):\n<work>\n${lines.join('\n')}\n</work>`)
   return parts.join('\n\n')
 }
 
@@ -112,7 +112,7 @@ export function agentsSystem() {
   ].join('\n')
 }
 
-export function agentsRequest({ folder, current, lines, declined = [], language }) {
+export function agentsRequest({ folder, current, lines = [], declined = [], language = undefined, revision = undefined }) {
   const parts = [`Project folder: ${folder}`]
   parts.push(current === undefined ? 'There is no AGENTS.md yet.' : `Current AGENTS.md:\n\`\`\`md\n${current}\n\`\`\``)
   const turnedDown = declined.filter(entry => entry.kind === 'agents' && entry.folder === folder)
@@ -120,7 +120,7 @@ export function agentsRequest({ folder, current, lines, declined = [], language 
     .map(edit => `- ${edit.op}: ${clip(edit.text || edit.old || '', 200)}`)
   if (turnedDown.length > 0) parts.push(`Changes the user turned down before; do not propose them again:\n${turnedDown.join('\n')}`)
   if (language) parts.push(`The user writes in ${language}.`)
-  parts.push(`The work, oldest first:\n${lines.join('\n')}`)
+  parts.push(revision ?? `The work, oldest first:\n${lines.join('\n')}`)
   return parts.join('\n\n')
 }
 
@@ -369,20 +369,27 @@ export function install(rt) {
   const learnedOf = bot => (data().learned[bot.id] ?? []).filter(name => skillsOf()[name] !== undefined && (bot.capabilities ?? []).includes(name))
   const waitingFor = botId => (Object.values(data().proposals) as any[]).filter(entry => entry.botId === botId)
 
+  function skillContext(bot, skills: ReturnType<typeof skillsOf>, learned) {
+    const library = Object.values(skills).filter(item => !learned.includes(item.name)).map(item => ({ name: item.name, description: item.description }))
+    return { bot, learned: learned.map(name => skills[name]), library, limit: settings.learnedMax }
+  }
+
+  const learningShot = (bot, system, text) => rt.botShot(bot, system, text, { sessionId: rt.chatOf(bot.id), kind: 'memory' })
+
   async function reviewSkill(bot, lines) {
     const skills = skillsOf()
     const learned = learnedOf(bot)
-    const library = Object.values(skills).filter(item => !learned.includes(item.name)).map(item => ({ name: item.name, description: item.description }))
     const text = skillRequest({
-      bot,
+      ...skillContext(bot, skills, learned),
       lines,
-      learned: learned.map(name => skills[name]),
-      library,
       declined: data().declined.filter(entry => entry.kind !== 'agents'),
       language: writtenIn(lines.filter(line => line.startsWith('User: ')).map(line => line.slice(6)), rt.uiLanguage?.()),
-      limit: settings.learnedMax,
     })
-    const reply = await rt.botShot(bot, skillSystem(), text, { sessionId: rt.chatOf(bot.id), kind: 'memory' })
+    const reply = await learningShot(bot, skillSystem(), text)
+    return skillProposal(bot, reply, skills, learned)
+  }
+
+  function skillProposal(bot, reply, skills, learned) {
     const proposal = parseJson(reply)
     if (['description', 'content', 'why'].some(key => {
       const value = proposal?.[key]
@@ -419,7 +426,11 @@ export function install(rt) {
   async function reviewAgents(bot, folder, current, lines) {
     const language = writtenIn(lines.filter(line => line.startsWith('User: ')).map(line => line.slice(6)), rt.uiLanguage?.())
     const request = agentsRequest({ folder, current, lines, declined: data().declined, language })
-    const reply = await rt.botShot(bot, agentsSystem(), request, { sessionId: rt.chatOf(bot.id), kind: 'memory' })
+    const reply = await learningShot(bot, agentsSystem(), request)
+    return agentsProposal(bot, folder, current, reply)
+  }
+
+  function agentsProposal(bot, folder, current, reply) {
     const answer = agentsAnswer(reply, current)
     if (answer === undefined || answer === null || typeof answer !== 'object') throw new Error('the answer is not a JSON object')
     if (Array.isArray(answer.edits) && answer.edits.some(edit => [edit?.text, edit?.why].some(value => typeof value === 'string' && rt.redactSecrets(value) !== value))) {
@@ -622,17 +633,26 @@ export function install(rt) {
     }
   }, 'ds-bot: learning')
 
-  async function answer({ id, approve }) {
+  const approving = new Set()
+  function openProposal(id) {
+    const { proposals } = data()
+    if (stopped || !Object.hasOwn(proposals, id)) throw Object.assign(new Error('This proposal is no longer open'), { code: 'bot/stale' })
+    if (approving.has(id)) throw Object.assign(new Error('This proposal is being approved'), { code: 'bot/busy' })
+    return proposals[id]
+  }
+
+  function settle(proposal, outcome) {
     const store = data()
-    const proposal = Object.hasOwn(store.proposals, id) ? store.proposals[id] : undefined
-    if (proposal === undefined) throw Object.assign(new Error('This proposal is no longer open'), { code: 'bot/stale' })
-    const settle = (outcome) => {
-      delete store.proposals[id]
-      const { saved: _saved, ...kept } = proposal
-      store.settled[id] = { ...kept, sessionId: rt.chatOf(proposal.botId), outcome, settledAt: Date.now() }
-    }
+    const { saved: _saved, ...kept } = proposal
+    delete store.proposals[proposal.id]
+    store.settled[proposal.id] = { ...kept, sessionId: rt.chatOf(proposal.botId), outcome, settledAt: Date.now() }
+  }
+
+  async function answer({ id, approve }) {
+    const proposal = openProposal(id)
+    const store = data()
     if (approve !== true) {
-      settle('declined')
+      settle(proposal, 'declined')
       const decline = proposal.kind === 'agents'
         ? { kind: 'agents', folder: proposal.folder, edits: proposal.edits.map(({ op, text, old }) => ({ op, text, old })), at: Date.now() }
         : { name: proposal.name, description: proposal.description, at: Date.now() }
@@ -640,11 +660,61 @@ export function install(rt) {
       await persist()
       return { applied: false }
     }
-    if (proposal.kind === 'agents') await applyAgents(proposal)
-    else await applySkill(proposal)
-    settle('approved')
+    approving.add(id)
+    try {
+      if (proposal.kind === 'agents') await applyAgents(proposal)
+      else await applySkill(proposal)
+      settle(proposal, 'approved')
+      await persist()
+      return { applied: true }
+    } finally {
+      approving.delete(id)
+    }
+  }
+
+  const revisionBot = proposal => {
+    const bot = rt.botOf(proposal.botId)
+    if (bot === undefined) throw Object.assign(new Error('The Bot that made this proposal is gone'), { code: 'bot/not-found' })
+    return bot
+  }
+
+  async function revise({ id, note }) {
+    const proposal = openProposal(id)
+    if (typeof note !== 'string' || note.trim() === '') throw Object.assign(new Error('Enter what you want changed'), { code: 'bot/invalid' })
+    const bot = revisionBot(proposal)
+    const { action, name, description, content, edits, folder } = proposal
+    const agents = proposal.kind === 'agents'
+    const original = agents ? { edits } : { action, name, description, content }
+    const revision = [
+      'Revise the original proposal according to the user’s note. Keep the original language unless the note asks to change it.',
+      `Original proposal:\n${JSON.stringify(original, null, 2)}`,
+      `User’s revision note:\n${note.trim()}`,
+    ].join('\n\n')
+    let current
+    let request
+    if (agents) {
+      if (await rt.real(folder) !== folder) throw new Error('The project folder changed since this was proposed')
+      await rt.workFolder(folder)
+      current = await agentsFile(folder)
+      if (current === undefined) {
+        if (await exists(join(folder, 'AGENTS.md'))) throw new Error('AGENTS.md is too large to review')
+        if (!await exists(join(folder, '.git'))) throw new Error('This folder no longer has a project marker')
+      }
+      request = agentsRequest({ folder, current, revision })
+    } else {
+      request = skillRequest({ ...skillContext(bot, skillsOf(), learnedOf(bot)), revision })
+    }
+    const reply = await learningShot(bot, agents ? agentsSystem() : skillSystem(), rt.redactSecrets(request))
+    openProposal(id)
+    const currentBot = revisionBot(proposal)
+    const next = agents
+      ? agentsProposal(currentBot, folder, current, reply)
+      : skillProposal(currentBot, reply, skillsOf(), learnedOf(currentBot))
+    if (next === undefined) throw new Error('The Bot did not return a usable revision')
+    settle(proposal, 'revised')
+    data().proposals[next.id] = { ...next, revisionOf: id }
     await persist()
-    return { applied: true }
+    return { revised: true, id: next.id }
   }
 
   const agentsApplying = new Map()
@@ -717,6 +787,7 @@ export function install(rt) {
 
   async function learningEndpoint(endpoint, body) {
     if (endpoint === 'learning-answer') return answer({ id: String(body.id ?? ''), approve: body.approve === true })
+    if (endpoint === 'learning-revise') return revise({ id: String(body.id ?? ''), note: body.note })
     throw new Error(`Unknown endpoint ${endpoint}`)
   }
 
