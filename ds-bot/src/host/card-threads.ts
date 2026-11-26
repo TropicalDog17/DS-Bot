@@ -30,21 +30,28 @@ export function createCardThreads({ rt, threads = threadStore, freshRoute, selec
     return freshId
   }
 
-  async function close(botId, cardId) {
+  async function close(botId, cardId, sessionId?) {
     await rt.load()
     const bot = rt.botOf(botId)
-    const sessionId = threads.cardThreadSession(bot, cardId)
-    if (sessionId === undefined) return false
-    if (rt.live.get(sessionId)?.turn !== undefined) {
-      const part = (bot.openParts ?? []).find(entry => entry.card === cardId)
-      if (part === undefined ? bot.currentCardClosing !== true : part.closing !== true) {
-        if (part === undefined) bot.currentCardClosing = true
-        else part.closing = true
-        await rt.save()
+    if (bot === undefined) return false
+    const target = sessionId ?? threads.cardThreadSession(bot, cardId) ?? threads.closingCardThreadSession(bot, cardId)
+    if (target === undefined) return false
+    if (rt.live.get(target)?.turn !== undefined) {
+      if (threads.currentSession(bot) === target) {
+        if (bot.currentCardClosing !== true) {
+          bot.currentCardClosing = true
+          await rt.save()
+        }
+      } else {
+        const part = (bot.openParts ?? []).find(entry => entry.sessionId === target)
+        if (part !== undefined && part.closing !== true) {
+          part.closing = true
+          await rt.save()
+        }
       }
       return 'later'
     }
-    const closed = threads.closeCardThread(bot, cardId)
+    const closed = threads.closeCardThread(bot, cardId, Date.now(), target)
     if (closed !== undefined) index.archiveChat(closed.sessionId, bot.id)
     await rt.save()
     if (closed !== undefined) {
@@ -55,14 +62,14 @@ export function createCardThreads({ rt, threads = threadStore, freshRoute, selec
   }
 
   function turnEnded() {
-    const finish = (botId, cardId) => {
-      void close(botId, cardId).catch(error => rt.warn('ds-bot: closing a card thread failed: %s', error))
+    const finish = (botId, cardId, sessionId) => {
+      void close(botId, cardId, sessionId).catch(error => rt.warn('ds-bot: closing a card thread failed: %s', error))
     }
     for (const bot of Object.values(rt.state.bots) as any[]) {
-      if (bot.currentCardClosing === true && rt.live.get(threads.currentSession(bot))?.turn === undefined) finish(bot.id, bot.currentCard)
+      if (bot.currentCardClosing === true && rt.live.get(threads.currentSession(bot))?.turn === undefined) finish(bot.id, bot.currentCard, threads.currentSession(bot))
       for (const part of (bot.openParts ?? []).slice()) {
         if (part.closing !== true || rt.live.get(part.sessionId)?.turn !== undefined) continue
-        finish(bot.id, part.card)
+        finish(bot.id, part.card, part.sessionId)
       }
     }
   }
@@ -75,9 +82,10 @@ export function createCardThreads({ rt, threads = threadStore, freshRoute, selec
   const roomOfSession = sessionId => threads.cardRoomOfThread(rt.botOf(index.chatOwners.get(sessionId)), sessionId)
   function isClosed(botId, cardId) {
     const bot = rt.botOf(botId)
-    if (bot?.currentCard === cardId) return bot.currentCardClosing === true
-    const part = bot?.openParts?.find(entry => entry.card === cardId)
-    return part === undefined ? bot?.closedCards?.some(entry => entry.card === cardId) === true : part.closing === true
+    if (bot === undefined) return true
+    if (threads.cardThreadSession(bot, cardId) !== undefined) return false
+    if (threads.closingCardThreadSession(bot, cardId) !== undefined) return true
+    return bot.closedCards?.some(entry => entry.card === cardId) === true
   }
 
   return { open, ofSession, sessionOf, roomOfSession, isClosed, close, turnEnded }

@@ -162,8 +162,14 @@ export function cardRoomOfThread(bot: BotThreadState | undefined, sessionId: str
 
 export function cardThreadSession(bot: BotThreadState | undefined, cardId: string | undefined): string | undefined {
   if (bot === undefined || typeof cardId !== 'string') return undefined
-  if (bot.currentCard === cardId) return currentSession(bot)
-  return (bot.openParts ?? []).find(part => part?.card === cardId)?.sessionId
+  if (bot.currentCard === cardId && bot.currentCardClosing !== true) return currentSession(bot)
+  return (bot.openParts ?? []).find(part => part?.card === cardId && part.closing !== true)?.sessionId
+}
+
+export function closingCardThreadSession(bot: BotThreadState | undefined, cardId: string | undefined): string | undefined {
+  if (bot === undefined || typeof cardId !== 'string') return undefined
+  if (bot.currentCard === cardId && bot.currentCardClosing === true) return currentSession(bot)
+  return (bot.openParts ?? []).find(part => part?.card === cardId && part.closing === true)?.sessionId
 }
 
 export function addCardThread(bot: BotThreadState, freshId: string, cardId: string, startedAt = Date.now(), roomId?: string): void {
@@ -172,15 +178,20 @@ export function addCardThread(bot: BotThreadState, freshId: string, cardId: stri
 
 export const CLOSED_CARDS_MAX = 50
 
-export function closeCardThread(bot: BotThreadState | undefined, cardId: string | undefined, closedAt = Date.now()): ClosedCardThread | undefined {
+export function closeCardThread(bot: BotThreadState | undefined, cardId: string | undefined, closedAt = Date.now(), sessionId?: string): ClosedCardThread | undefined {
   if (bot === undefined || typeof cardId !== 'string') return undefined
   if (bot.currentCard === cardId) {
-    setCurrentCard(bot, {})
-    return undefined
+    if (sessionId === undefined || currentSession(bot) === sessionId) {
+      setCurrentCard(bot, {})
+      return undefined
+    }
   }
-  const at = (bot.openParts ?? []).findIndex(part => part?.card === cardId)
+  const parts = bot.openParts ?? []
+  const matches = (part: OpenPart | undefined) => part?.card === cardId && (sessionId === undefined || part.sessionId === sessionId)
+  const closing = parts.findIndex(part => matches(part) && part.closing === true)
+  const at = closing === -1 ? parts.findIndex(matches) : closing
   if (at === -1) return undefined
-  const [part] = bot.openParts!.splice(at, 1)
+  const [part] = parts.splice(at, 1)
   const closed: ClosedCardThread = { card: cardId, sessionId: part.sessionId, segments: part.segments ?? [], closedAt }
   ;(bot.closedCards ??= []).push(closed)
   if (bot.closedCards.length > CLOSED_CARDS_MAX) bot.closedCards.splice(0, bot.closedCards.length - CLOSED_CARDS_MAX)

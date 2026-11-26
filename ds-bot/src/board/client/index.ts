@@ -45,6 +45,7 @@ function BoardPage({ live, focus, call, close, paneLeft, leaving }) {
   const actions = useMemo(() => ({
     boardAdd: card => act('add', card),
     boardMove: (id, status) => act('move', { id, status }),
+    boardReassign: (id, assignee) => act('reassign', { id, assignee }),
     boardNote: (id, text) => act('note', { id, text }),
     boardCancel: (id, reason) => act('cancel', { id, reason }),
     boardSeen: id => act('seen', { id }),

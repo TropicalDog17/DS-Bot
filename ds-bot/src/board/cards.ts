@@ -315,6 +315,17 @@ export function createBoard({ roster, now = Date.now }) {
       const card = pick(cards, args.id, self)
       if (card === undefined) return { error: 'No open card of yours. Name one with its id or ticket key, or open a card first.' }
       if (!isOpen(card)) return { error: `${label(card)} is already finished.` }
+      let assignee
+      if (typeof args.assignee === 'string' && args.assignee.trim() !== '') {
+        const ref = args.assignee.trim()
+        if (/^(user|owner)$/i.test(ref)) assignee = USER
+        else {
+          const bot = roster.findBot(ref)
+          if (bot === undefined) return { error: `No Bot named ${ref}. Use an exact name from list_bots, or "user".` }
+          assignee = bot.id
+        }
+        if (!(isMain(self) || card.assignee === self)) return { error: `${label(card)} belongs to ${nameOf(card.assignee)}.` }
+      }
       if (!mayChange(card, self)) return { error: `${label(card)} belongs to ${nameOf(card.assignee)}.` }
       if (args.status !== undefined && !BOT_STATUSES.includes(args.status)) {
         return { error: `status is one of ${BOT_STATUSES.join(', ')}; finish a card with complete or cancel.` }
@@ -353,10 +364,22 @@ export function createBoard({ roster, now = Date.now }) {
       apply(card, ticket.fields)
       if (card.status === 'review' && (args.status === 'review' || prsOf([link]).length > 0) && prsOf(card.links).length > 0) card.waitsMerge = true
       dropMerge(card)
-      if (card.status !== before || card.progress !== progressBefore) logStep(card, self)
+      const reassigning = assignee !== undefined && assignee !== card.assignee
+      const effects = []
+      if (reassigning) {
+        const stop = self === card.assignee ? undefined : `${nameOf(self)} moved card ${label(card)} to ${nameOf(assignee)}.`
+        effects.push(...closeOf(card, stop))
+        card.assignee = assignee
+        delete card.awaiting
+        logStep(card, self)
+        if (assignee !== USER) effects.push({ kind: 'start', payload: adoptOf(card), fallback: false, reassign: true })
+      } else if (card.status !== before || card.progress !== progressBefore) {
+        logStep(card, self)
+      }
       touch(card)
       const ask = WAITING_STATUSES.includes(card.status) && !card.need ? ' Say with need what the user must do, with the link to it.' : ''
-      return withPush('update', outcome(card, `Updated ${label(card)} (${COLUMN[card.status]}).${ask}`), before, progressBefore)
+      const moved = reassigning ? ` Moved ${label(card)} to ${nameOf(assignee)}.` : ''
+      return withPush('update', outcome(card, `Updated ${label(card)} (${COLUMN[card.status]}).${moved}${ask}`, effects), before, progressBefore)
     },
     ask(cards, self, _roomId, args) {
       const card = pick(cards, args.id, self)
@@ -504,6 +527,21 @@ export function createBoard({ roster, now = Date.now }) {
         ])
       }
       return outcome(card, undefined, resumed ? [{ kind: 'start', payload: before === 'done' ? reopenOf(card) : rejectOf(card), fallback: true }] : [])
+    },
+    reassign(cards, id, assignee) {
+      const { card, error } = found(cards, id)
+      if (error !== undefined) return { error }
+      if (!isOpen(card)) return { error: 'That card is already finished.' }
+      const next = typeof assignee === 'string' ? assignee : ''
+      if (next !== USER && roster.bot(next) === undefined) return { error: 'No such Bot.' }
+      if (next === card.assignee) return outcome(card)
+      const effects: any[] = closeOf(card, `The user moved card ${label(card)} to ${nameOf(next)} on the board.`)
+      card.assignee = next
+      delete card.awaiting
+      logStep(card, USER)
+      touch(card)
+      if (next !== USER) effects.push({ kind: 'start', payload: adoptOf(card), fallback: false, reassign: true })
+      return outcome(card, undefined, effects)
     },
     note(cards, id, text) {
       const { card, error } = found(cards, id)
