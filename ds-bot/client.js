@@ -28827,6 +28827,21 @@ function CardDetail({ card, roster, actions, live, onOpenCard }) {
           }
         }, COLUMNS.map(([status, name]) => (0, import_react73.createElement)("option", { key: status, value: status }, t(name))))
       ),
+      open ? (0, import_react73.createElement)(
+        "label",
+        { className: "bt-board-assignee" },
+        (0, import_react73.createElement)("span", { className: "bt-board-age" }, t("Assignee")),
+        (0, import_react73.createElement)("select", {
+          className: "bt-input bt-board-select",
+          value: card.assignee,
+          disabled: busy,
+          "aria-label": t("Assignee"),
+          "data-action": "reassign",
+          onChange: (event) => {
+            if (event.target.value !== card.assignee) run2(actions.boardReassign(card.id, event.target.value));
+          }
+        }, (0, import_react73.createElement)("option", { value: USER }, t("You")), (roster.bots ?? []).map((bot) => (0, import_react73.createElement)("option", { key: bot.id, value: bot.id }, bot.name)))
+      ) : null,
       need ? (0, import_react73.createElement)(
         "div",
         { className: "bt-board-need", "data-status": card.status, role: "note" },
@@ -29084,6 +29099,8 @@ a.bt-board-key:hover{color:var(--bt-ink)}
 .bt-board-move:focus-within{box-shadow:0 0 0 2px var(--bt-accent-soft)}
 .bt-board-move select option{color:var(--bt-ink);background:var(--bt-card)}
 .bt-board-move::before{content:'';position:absolute;inset:0;border-radius:inherit}
+.bt-board-assignee{display:flex;align-items:center;gap:8px}
+.bt-board-assignee .bt-input{flex:1;min-width:0;height:36px;font-size:13px}
 .bt-board-line{margin:0;font-size:14px;line-height:21px;color:var(--bt-ink-2);overflow-wrap:anywhere}
 .bt-board-strong{color:var(--bt-ink)}
 .bt-board-need{padding:12px 14px;border-radius:12px;corner-shape:round;background:color-mix(in srgb,var(--bt-star) 12%,transparent);box-shadow:inset 3px 0 0 var(--bt-star)}
@@ -29245,6 +29262,7 @@ function BoardPage({ live, focus, call: call2, close, paneLeft, leaving }) {
   const actions = (0, import_react74.useMemo)(() => ({
     boardAdd: (card) => act("add", card),
     boardMove: (id, status) => act("move", { id, status }),
+    boardReassign: (id, assignee) => act("reassign", { id, assignee }),
     boardNote: (id, text) => act("note", { id, text }),
     boardCancel: (id, reason) => act("cancel", { id, reason }),
     boardSeen: (id) => act("seen", { id }),

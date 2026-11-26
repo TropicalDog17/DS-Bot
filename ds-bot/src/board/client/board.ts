@@ -346,6 +346,12 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
               value: card.status, disabled: busy, 'aria-label': t('Move to'),
               onChange: (event) => { if (event.target.value !== card.status) run(actions.boardMove(card.id, event.target.value)) },
             }, COLUMNS.map(([status, name]) => h('option', { key: status, value: status }, t(name))))),
+      open ? h('label', { className: 'bt-board-assignee' },
+        h('span', { className: 'bt-board-age' }, t('Assignee')),
+        h('select', {
+          className: 'bt-input bt-board-select', value: card.assignee, disabled: busy, 'aria-label': t('Assignee'), 'data-action': 'reassign',
+          onChange: (event) => { if (event.target.value !== card.assignee) run(actions.boardReassign(card.id, event.target.value)) },
+        }, h('option', { value: USER }, t('You')), (roster.bots ?? []).map(bot => h('option', { key: bot.id, value: bot.id }, bot.name)))) : null,
       need ? h('div', { className: 'bt-board-need', 'data-status': card.status, role: 'note' },
         h(BotText, { text: need, cards: allCards, className: 'bt-board-line bt-board-strong' })) : null,
       progress ? h(BotText, { text: progress, cards: allCards, className: 'bt-board-line' }) : null,
@@ -523,6 +529,8 @@ a.bt-board-key:hover{color:var(--bt-ink)}
 .bt-board-move:focus-within{box-shadow:0 0 0 2px var(--bt-accent-soft)}
 .bt-board-move select option{color:var(--bt-ink);background:var(--bt-card)}
 .bt-board-move::before{content:'';position:absolute;inset:0;border-radius:inherit}
+.bt-board-assignee{display:flex;align-items:center;gap:8px}
+.bt-board-assignee .bt-input{flex:1;min-width:0;height:36px;font-size:13px}
 .bt-board-line{margin:0;font-size:14px;line-height:21px;color:var(--bt-ink-2);overflow-wrap:anywhere}
 .bt-board-strong{color:var(--bt-ink)}
 .bt-board-need{padding:12px 14px;border-radius:12px;corner-shape:round;background:color-mix(in srgb,var(--bt-star) 12%,transparent);box-shadow:inset 3px 0 0 var(--bt-star)}

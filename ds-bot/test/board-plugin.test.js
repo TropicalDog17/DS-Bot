@@ -72,7 +72,7 @@ function fakeTeam({ threads = true, load = async () => {} } = {}) {
   return { state, owners, sent, requests, pushes, delivered, parts, live: rt.live, identity, roster: rosterService(rt), notes, bridge, bridged: () => rt.bridgedTools(), reply, cardNote: note => rt.cardNote(note) }
 }
 
-function host(t, { file, notes, now = Date.now, config = {}, threads = true, herdr, load, prs = {} } = {}) {
+function host(t, { file, notes: given, wrap = value => value, now = Date.now, config = {}, threads = true, herdr, load, prs = {} } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'ds-bot-board-plugin-'))
   t.after(() => rmSync(dir, { recursive: true, force: true }))
   const team = fakeTeam({ threads, load })
@@ -86,7 +86,8 @@ function host(t, { file, notes, now = Date.now, config = {}, threads = true, her
   const sections = new Map()
   const systemPrompt = { section: (section) => { sections.set(section.name, section); return () => { sections.delete(section.name) } } }
   const gh = { state: async url => (Object.hasOwn(prs, url) ? prs[url] : 'MERGED') }
-  const handle = install(ctx, { file: boardFile, adoptMs: -1, waitPollMs: -1, mergePollMs: -1, ...config }, { ...team, ...(notes ? { notes } : {}), ...(herdr ? { herdr } : {}), tools, connection, systemPrompt, store: openBoardStore(boardFile), prs: gh, now })
+  const notes = wrap(given ?? team.notes)
+  const handle = install(ctx, { file: boardFile, adoptMs: -1, waitPollMs: -1, mergePollMs: -1, ...config }, { ...team, notes, ...(herdr ? { herdr } : {}), tools, connection, systemPrompt, store: openBoardStore(boardFile), prs: gh, now })
   t.after(() => handle.dispose())
   const tool = (args, sessionId = 'b') => registered.tools.find(entry => entry.name === 'board').execute(args, { agent: { id: sessionId } })
   const cards = () => Object.values(JSON.parse(readFileSync(boardFile, 'utf8')).cards)
@@ -1344,4 +1345,168 @@ test('a PR closed without merging, or one gh cannot read, is said on the card an
   assert.deepEqual(await h.handle.mergeOnce(), [card.id]);
   [card] = h.cards()
   assert.deepEqual([card.status, card.mergeIssue, card.mergeMisses, card.need], ['done', undefined, undefined, undefined])
+})
+
+test('board update really moves a card to another Bot, with its brief, status, progress, links and notes', async (t) => {
+  const closes = []
+  const h = host(t, { wrap: notes => ({ ...notes, closeCard: async payload => { closes.push(payload); return notes.closeCard(payload) } }) })
+  const id = (await h.tool({ action: 'open', title: 'Review gate', assignee: 'user', brief: 'Gate the review.', key: 'LIFE-901' }, 'a')).match(/c_[0-9a-f]{8}/)[0]
+  await h.tool({ action: 'update', id, status: 'review', progress: 'PR up', link: 'https://github.com/o/r/pull/7', need: 'Approve it.' }, 'a')
+  await h.post('note', { id, text: 'wait for CI' })
+  const before = h.cards().find(card => card.id === id)
+  const said = await h.tool({ action: 'update', id, assignee: 'Coder' }, 'a')
+  assert.match(said, new RegExp(`Updated ${id}`))
+  assert.match(said, /Moved c_[0-9a-f]{8} · LIFE-901 to Coder\./)
+  const after = h.cards().find(card => card.id === id)
+  assert.equal(after.assignee, 'c')
+  assert.deepEqual(
+    [after.brief, after.status, after.progress, after.key, after.links, after.notes],
+    [before.brief, before.status, before.progress, before.key, before.links, before.notes])
+  assert.deepEqual(after.log.at(-1).by, 'a')
+  assert.equal(closes.length, 0)
+  assert.equal(h.team.sent.length, 1)
+  const [sessionId, text] = h.team.sent[0]
+  assert.equal(sessionId, `ct-${id}`)
+  assert.match(text, /Gate the review\./)
+  assert.match(text, /Status: Review\./)
+  assert.match(text, /PR up/)
+  assert.match(text, /https:\/\/github\.com\/o\/r\/pull\/7/)
+  assert.match(text, /wait for CI/)
+  assert.match(text, new RegExp(`board update \\(id ${id}\\)`))
+
+  const refused = await h.tool({ action: 'update', id, assignee: 'Nobody', progress: 'should not land' }, 'a')
+  assert.equal(refused, 'No Bot named Nobody. Use an exact name from list_bots, or "user".')
+  const unchanged = h.cards().find(card => card.id === id)
+  assert.equal(unchanged.assignee, 'c')
+  assert.equal(unchanged.progress, before.progress)
+})
+
+test('only a Main Bot or the current assignee may move a card', async (t) => {
+  const h = host(t)
+  const id = (await h.tool({ action: 'open', title: 'Fix CI', assignee: 'Coder', brief: 'The lint job fails.' }, 'b')).match(/c_[0-9a-f]{8}/)[0]
+  assert.equal(await h.tool({ action: 'update', id, assignee: 'Writer' }, 'b'), `${id} belongs to Coder.`)
+  assert.equal(await h.tool({ action: 'update', id, assignee: 'user' }, 'b'), `${id} belongs to Coder.`)
+  assert.equal(h.cards().find(card => card.id === id).assignee, 'c')
+
+  const userId = (await h.tool({ action: 'open', title: 'Approve it', assignee: 'user' }, 'a')).match(/c_[0-9a-f]{8}/)[0]
+  assert.equal(await h.tool({ action: 'update', id: userId, assignee: 'Coder' }, 'c'), `${userId} belongs to the user.`)
+  const opened = (await h.tool({ action: 'open', title: 'Sign off', assignee: 'user', brief: 'Check it.' }, 'b')).match(/c_[0-9a-f]{8}/)[0]
+  assert.equal(await h.tool({ action: 'update', id: opened, assignee: 'Writer' }, 'b'), `${opened} belongs to the user.`)
+
+  assert.doesNotMatch(await h.tool({ action: 'update', id, assignee: 'Writer' }, 'c'), /belongs|No Bot/)
+  assert.equal(h.cards().find(card => card.id === id).assignee, 'b')
+  assert.doesNotMatch(await h.tool({ action: 'update', id, assignee: 'Coder' }, 'a'), /belongs|No Bot/)
+  assert.equal(h.cards().find(card => card.id === id).assignee, 'c')
+})
+
+test('moving a card to its current assignee is a no-op, and other fields still apply', async (t) => {
+  const closes = []
+  const h = host(t, { wrap: notes => ({ ...notes, closeCard: async payload => { closes.push(payload); return notes.closeCard(payload) } }) })
+  const id = (await h.tool({ action: 'open', title: 'Fix CI', assignee: 'Coder', brief: 'The lint job fails.' }, 'a')).match(/c_[0-9a-f]{8}/)[0]
+  const sent = h.team.sent.length
+  const said = await h.tool({ action: 'update', id, assignee: 'Coder', progress: 'still on it' }, 'a')
+  assert.match(said, new RegExp(`Updated ${id}`))
+  assert.doesNotMatch(said, /Moved|belongs|No Bot/)
+  assert.equal(h.cards().find(card => card.id === id).progress, 'still on it')
+  assert.equal(h.team.sent.length, sent)
+  assert.equal(closes.length, 0)
+  assert.equal(cardThreadSession(h.team.state.bots.c, id), `ct-${id}`)
+})
+
+test('a card moved Bot to Bot closes the old thread with a stop and keeps its room', async (t) => {
+  const closes = []
+  const h = host(t, { wrap: notes => ({ ...notes, closeCard: async payload => { closes.push(payload); return notes.closeCard(payload) } }) })
+  const id = (await h.tool({ action: 'open', title: 'Fix CI', assignee: 'Coder', brief: 'The lint job fails.', key: 'LIFE-902' }, 'ga')).match(/c_[0-9a-f]{8}/)[0]
+  await h.tool({ action: 'update', id, progress: 'half way', link: 'https://github.com/o/r/pull/9' }, 'a')
+  const before = h.cards().find(card => card.id === id)
+  const sent = h.team.sent.length
+  await h.tool({ action: 'update', id, assignee: 'Writer' }, 'a')
+  assert.equal(closes.length, 1)
+  assert.equal(closes[0].botId, 'c')
+  assert.equal(closes[0].cardId, id)
+  assert.match(closes[0].stop, new RegExp(`Chief moved card ${id} · LIFE-902 to Writer\\.`))
+  assert.equal(cardThreadSession(h.team.state.bots.c, id), undefined)
+  assert.equal(cardThreadSession(h.team.state.bots.b, id), `ct-${id}`)
+  assert.equal(h.team.sent.length, sent + 1)
+  assert.match(h.team.sent.at(-1)[1], /The lint job fails\./)
+  assert.match(h.team.sent.at(-1)[1], /half way/)
+  const after = h.cards().find(card => card.id === id)
+  assert.deepEqual([after.assignee, after.roomId, after.brief, after.links], ['b', before.roomId, before.brief, before.links])
+
+  const sentToUser = h.team.sent.length
+  await h.tool({ action: 'update', id, assignee: 'user' }, 'a')
+  assert.equal(closes.length, 2)
+  assert.equal(closes[1].botId, 'b')
+  assert.match(closes[1].stop, new RegExp(`Chief moved card ${id} · LIFE-902 to the user\\.`))
+  assert.equal(cardThreadSession(h.team.state.bots.b, id), undefined)
+  assert.equal(h.team.sent.length, sentToUser)
+  assert.equal(h.cards().find(card => card.id === id).assignee, 'user')
+})
+
+test('the assignee moving its own card on is not told to stop by itself', async (t) => {
+  const closes = []
+  const h = host(t, { wrap: notes => ({ ...notes, closeCard: async payload => { closes.push(payload); return notes.closeCard(payload) } }) })
+  const id = (await h.tool({ action: 'open', title: 'Fix CI', assignee: 'Coder', brief: 'The lint job fails.' }, 'a')).match(/c_[0-9a-f]{8}/)[0]
+  await h.tool({ action: 'update', id, assignee: 'Writer' }, 'c')
+  assert.equal(closes.length, 1)
+  assert.equal(closes[0].botId, 'c')
+  assert.equal(closes[0].stop, undefined)
+  assert.equal(h.cards().find(card => card.id === id).assignee, 'b')
+})
+
+test('a failed start for a moved card does not fall back, and adoptOnce delivers it exactly once', async (t) => {
+  let fails = 1
+  const h = host(t, { wrap: notes => ({ ...notes, startCard: async payload => (fails-- > 0 ? { error: 'boom' } : notes.startCard(payload)) }) })
+  const id = (await h.tool({ action: 'open', title: 'Review gate', assignee: 'user', brief: 'Gate the review.' }, 'a')).match(/c_[0-9a-f]{8}/)[0]
+  const sent = h.team.sent.length
+  const said = await h.tool({ action: 'update', id, assignee: 'Coder' }, 'a')
+  assert.match(said, /The new assignee gets the card as soon as it can\./)
+  assert.doesNotMatch(said, /do its work here/)
+  assert.equal(h.cards().find(card => card.id === id).assignee, 'c')
+  assert.equal(h.team.sent.length, sent)
+  assert.equal(cardThreadSession(h.team.state.bots.c, id), undefined)
+
+  h.team.live.set('c', { turn: 't1' })
+  assert.deepEqual(await h.handle.adoptOnce(), { moved: [], waiting: 1 })
+  assert.equal(h.team.sent.length, sent)
+  h.team.live.clear()
+  assert.deepEqual(await h.handle.adoptOnce(), { moved: [id], waiting: 0 })
+  assert.equal(h.team.sent.length, sent + 1)
+  assert.equal(h.team.sent.at(-1)[0], `ct-${id}`)
+  assert.deepEqual(await h.handle.adoptOnce(), { moved: [], waiting: 0 })
+  assert.equal(h.team.sent.length, sent + 1)
+})
+
+test('the board route moves a card between the user and its Bots', async (t) => {
+  const closes = []
+  const h = host(t, { wrap: notes => ({ ...notes, closeCard: async payload => { closes.push(payload); return notes.closeCard(payload) } }) })
+  const id = (await h.tool({ action: 'open', title: 'Review gate', assignee: 'user', brief: 'Gate the review.' }, 'a')).match(/c_[0-9a-f]{8}/)[0]
+  const sent = h.team.sent.length
+  const moved = await h.post('reassign', { id, assignee: 'c' })
+  assert.equal(moved.ok, true)
+  assert.equal(moved.value.cards[id].assignee, 'c')
+  assert.equal(h.team.sent.length, sent + 1)
+  assert.equal(cardThreadSession(h.team.state.bots.c, id), `ct-${id}`)
+  assert.equal(h.cards().find(card => card.id === id).log.at(-1).by, 'user')
+
+  const again = await h.post('reassign', { id, assignee: 'c' })
+  assert.equal(again.ok, true)
+  assert.equal(h.team.sent.length, sent + 1)
+  assert.deepEqual((await h.post('reassign', { id, assignee: 'zz' })).error, { code: 'board/refused', message: 'No such Bot.' })
+  assert.equal((await h.post('reassign', { id: 'c_00000000', assignee: 'c' })).error.message, 'No such card.')
+  assert.equal(h.cards().find(card => card.id === id).assignee, 'c')
+
+  const back = await h.post('reassign', { id, assignee: 'user' })
+  assert.equal(back.value.cards[id].assignee, 'user')
+  assert.equal(cardThreadSession(h.team.state.bots.c, id), undefined)
+  assert.equal(closes.length, 1)
+  assert.match(closes[0].stop, /user/i)
+  await h.post('cancel', { id })
+  assert.equal((await h.post('reassign', { id, assignee: 'b' })).error.message, 'That card is already finished.')
+})
+
+test('the board tool says assignee also works on update', async (t) => {
+  const h = host(t)
+  const tool = h.registered.tools.find(entry => entry.name === 'board')
+  assert.match(tool.parameters.properties.assignee.description, /update/)
 })
