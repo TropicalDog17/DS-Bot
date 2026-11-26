@@ -8,9 +8,12 @@
     "src/host/diagnostics.ts",
     "src/host/dispatch.ts",
     "src/host/settlement.ts",
+    "src/host/session-index.ts",
+    "src/host/threads.ts",
     "src/host/im/outbox.ts",
     "test/dispatch.test.ts",
     "test/settlement.test.ts",
+    "test/session-index.test.ts",
     "test/im-outbox.test.ts"
   ]
 }

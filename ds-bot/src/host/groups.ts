@@ -12,6 +12,7 @@ import { viaOf } from '../shared/im-platforms.ts'
 import { mentionSpans, speakerOf } from '../shared/mentions.ts'
 import { GROUP_REF, output } from './tools.ts'
 import { searchGroupBook } from './group-search.ts'
+import { ensureSessionIndex } from './session-index.ts'
 import { failureLine } from './turns.ts'
 import { parseBook } from './ledger.ts'
 
@@ -327,7 +328,7 @@ export function install(rt) {
       return gone ? undefined : groupSessionFor(room, member)
     }
     room.sessions[member.id] = id
-    rt.groupOwners.set(id, { botId: member.id, roomId: room.id })
+    ensureSessionIndex(rt).registerGroupMember(id, member.id, room.id)
     delete room.seen[member.id]
     const ref = await rt.desiredModel(member)
     if (ref !== undefined) {
