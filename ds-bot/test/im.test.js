@@ -6,6 +6,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { test } from 'node:test'
 import { createRuntime } from '../index.js'
 import { fakeContext } from './fake-ctx.js'
+import { install as installBoard } from '../src/board/plugin.ts'
 import { adapters } from '../src/host/im/platforms/index.ts'
 
 import { fakeAdapter, startSwitchHarness, TEAM } from './im-fixture.js'
@@ -1827,6 +1828,39 @@ test('a board push reaches the Main Bot\'s direct chats only, and a reply to it 
 
   await dm(s, 'u1', 'plain', { replyTo: 999 })
   assert.deepEqual([s.prompts.at(-1).sessionId, s.prompts.at(-1).content[0].text], ['a', 'plain'])
+})
+
+test('a push reply over the limit is refused and reported', async (t) => {
+  const s = await start()
+  t.after(s.stop)
+  const boardCtx = fakeContext()
+  const board = installBoard(boardCtx, { file: join(s.home, 'board.json'), adoptMs: -1, waitPollMs: -1, watchMs: -1, mergePollMs: -1 }, {
+    ...s.rt.companions, identity: { ownerOfSession: s.rt.ownerOfSession }, tools: boardCtx.tools, connection: boardCtx.connection,
+  })
+  t.after(() => board.dispose())
+  const added = await board.handle('add', { title: 'Fix CI', assignee: 'b', brief: 'Check the build.' })
+  assert.equal(added.ok, true)
+  const [cardId] = Object.keys(added.value.cards)
+  const conn = await add(s)
+  s.rt.state.im.connections[conn.id].paired.push({ id: 'u1', name: 'U1', at: 1 })
+  await s.rt.save()
+  await dm(s, 'u1', 'hi')
+  assert.equal(await s.rt.imPush({ text: 'Writer asks: ship?', cardId, botId: 'b' }), 1)
+  await s.flush()
+  const replyTo = s.fake.sent.length
+  let fallbacks = 0
+  s.rt.cardSession = () => { fallbacks += 1; return 'ct-1' }
+  const before = s.prompts.length
+
+  await dm(s, 'u1', '🙂'.repeat(20_001), { replyTo })
+  assert.deepEqual(s.fake.sent.slice(replyTo).map(sent => [sent.chat.key, sent.text]), [
+    ['dm-u1', 'The note is 20001 characters; the limit is 20000. Shorten it and send it again.'],
+  ])
+  await dm(s, 'u1', '  \u00a0\u200b\n ', { replyTo })
+  assert.deepEqual([s.fake.sent.at(-1).chat.key, s.fake.sent.at(-1).text], ['dm-u1', 'Write a note first.'])
+  assert.equal(s.prompts.length, before)
+  assert.equal(fallbacks, 0)
+  assert.deepEqual(board.store.read().cards[cardId].notes, [])
 })
 
 test('no Main Bot, no push', async (t) => {

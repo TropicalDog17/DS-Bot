@@ -1,4 +1,4 @@
-import { createElement as h, useCallback, useEffect, useRef, useState } from 'react'
+import { createElement as h, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { BotMark } from '../../client/mark.ts'
 import { ChevronLeftIcon, PlusIcon } from '../../client/icons.ts'
 import { useEscape } from '../../client/overlay-hooks.ts'
@@ -6,7 +6,8 @@ import { clockLabel, elapsedLabel, relativeShort } from '../../client/text.ts'
 import { workPhrase } from '../../client/cells.ts'
 import { mdLabels, t } from '../../client/i18n.ts'
 import { MarkdownText } from '../../client/dsh-primitives.ts'
-import { NOTE_MAX, charCount, noteText } from '../card-fields.ts'
+import { sendsOnEnter } from '../../client/enter-key.ts'
+import { NOTE_MAX, charCount, isBlankNote, noteText } from '../card-fields.ts'
 import { LinkIcon, StepsIcon } from './icons.ts'
 import { CARD_LINK_ORIGIN, linkCards, nameCards } from './card-tag.ts'
 
@@ -302,6 +303,7 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
   const [confirming, setConfirming] = useState(false)
   const [error, setError] = useState('')
   const scroller = useRef(null)
+  const composer: { current: HTMLTextAreaElement | null } = useRef(null)
   const pendingSeq = useRef(0)
   const mountedCard = useRef(card.id)
   const notes = card.notes ?? []
@@ -312,7 +314,17 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
   const line = noteText(text)
   const count = charCount(line)
   const excess = count - NOTE_MAX
-  const sendDisabled = count === 0 || busy || pending.length > 0 || excess > 0
+  const sendDisabled = isBlankNote(line) || excess > 0
+  const open = OPEN.includes(card.status)
+  useLayoutEffect(() => {
+    const node = composer.current
+    if (node === null) return
+    const scrollTop = node.scrollTop
+    node.style.height = 'auto'
+    const border = node.offsetHeight - node.clientHeight
+    node.style.height = `${Math.min(180, Math.max(40, node.scrollHeight + border))}px`
+    node.scrollTop = scrollTop
+  }, [open, text])
   useEffect(() => {
     const node = scroller.current
     if (!node || typeof node.scrollTo !== 'function') return
@@ -330,7 +342,6 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
     const timer = setTimeout(() => setConfirming(false), 3000)
     return () => clearTimeout(timer)
   }, [confirming])
-  const open = OPEN.includes(card.status)
   const run = (promise, after?) => {
     setBusy(true)
     setError('')
@@ -339,7 +350,7 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
       (failure) => { setBusy(false); setError(String(failure?.message ?? failure)) },
     )
   }
-  const sendNote = (line, restore = false) => {
+  const sendNote = (line, draft?: string) => {
     const pendingId = `pending-${++pendingSeq.current}`
     const optimistic = { pendingId, pending: true, at: Date.now(), by: USER, text: line }
     setError('')
@@ -348,7 +359,7 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
       () => { setPending(list => list.filter(entry => entry.pendingId !== pendingId)) },
       (failure) => {
         setPending(list => list.filter(entry => entry.pendingId !== pendingId))
-        if (restore) setText(current => (current === '' ? line : current))
+        if (draft !== undefined) setText(current => (current === '' ? draft : current))
         setError(String(failure?.message ?? failure))
       },
     )
@@ -356,7 +367,7 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
   const send = () => {
     if (sendDisabled) return
     setText('')
-    sendNote(line, true)
+    sendNote(line, text)
   }
   const cancel = () => {
     if (!confirming) { setConfirming(true); return }
@@ -413,10 +424,11 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
       error ? h('div', { className: 'bt-error', role: 'alert' }, error) : null),
     open ? h('div', { className: 'bt-board-sheet-foot bt-board-write' },
       h('textarea', {
-        className: 'bt-input', value: text, placeholder: t('Message'), 'aria-label': t('Message'), rows: 1, 'aria-invalid': excess > 0 || undefined,
+        ref: composer, className: 'bt-input', value: text, placeholder: t('Message'), 'aria-label': t('Message'), rows: 1, 'aria-invalid': excess > 0 || undefined,
         onChange: event => setText(event.target.value),
         onKeyDown: (event) => {
-          if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent?.isComposing) return
+          if (event.key !== 'Enter' || !sendsOnEnter(roster.prefs) || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey
+            || event.keyCode === 229 || event.nativeEvent?.isComposing) return
           event.preventDefault()
           send()
         },
@@ -426,7 +438,7 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
         count > NOTE_COUNT_FROM ? h('span', { className: 'bt-board-write-count' },
           t('{count} / {limit}', { count: noteCountFormat.format(count), limit: noteCountFormat.format(NOTE_MAX) })) : null,
         h('span', { className: 'bt-board-write-error', 'aria-live': 'polite' },
-          excess > 0 ? t('Too long by {count} characters', { count: noteCountFormat.format(excess) }) : ''))) : null)
+          excess > 0 ? t(excess === 1 ? 'Too long by {count} character' : 'Too long by {count} characters', { count: noteCountFormat.format(excess) }) : ''))) : null)
 }
 
 const LEVELS = [['off', 'Off'], ['tools', 'Tool calls'], ['thinking', 'Thinking'], ['all', 'All']]
@@ -670,7 +682,7 @@ a.bt-board-key:hover{color:var(--bt-ink)}
 .bt-board-cancel:hover,.bt-board-cancel[data-confirm]{color:var(--bt-danger)}
 .bt-board-cancel[data-confirm]{font-weight:600}
 .bt-board-write{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:0 8px;align-items:end}
-.bt-board-write>.bt-input{height:auto;min-height:40px;max-height:180px;field-sizing:content;padding:9px 11px;line-height:20px;font-size:14px;resize:none;overflow-y:auto}
+.bt-board-write>.bt-input{height:auto;min-height:40px;max-height:180px;padding:9px 11px;line-height:20px;font-size:14px;resize:none;overflow-y:auto}
 .bt-board-write-status{grid-column:1/-1;text-align:right;color:var(--bt-ink-2);font-size:12px}
 .bt-board-write-status[data-over-limit]{color:var(--bt-danger)}
 .bt-board-write-count,.bt-board-write-error:not(:empty){display:block;margin-top:4px}

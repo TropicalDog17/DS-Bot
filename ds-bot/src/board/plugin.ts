@@ -346,9 +346,9 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
     }),
     ctx.on?.('agent/assistant-stream', ({ agent, frame }: any = {}) => live.onFrame(agent?.id, frame)),
     notes.onCardNote?.(async ({ cardId, text, requestId }) => {
-      if (typeof cardId !== 'string' || store.read().cards[cardId] === undefined) return false
+      if (typeof cardId !== 'string' || !Object.hasOwn(store.read().cards, cardId)) return false
       const result = await userNote(cardId, text, requestId)
-      return result?.error === undefined
+      return result?.error === undefined ? true : { error: result.error }
     }),
     roster.addRoutingPart?.(() => openCardsDigest()),
     systemPrompt?.section?.({ name: 'ds-bot-board-rules', order: RULES_ORDER, interpolate: false, text: context => rulesFor(context?.agent?.id) }),

@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto'
+import { isBlankNote, noteLengthError, noteText } from '../board/card-fields.ts'
 import { ownChatSessions, reach } from './threads.ts'
 
 export const NOTE_MAX = 2000
+// Matches the board's NOTE_MAX. The board rejects oversized notes before calling deliver.
+export const CARD_NOTE_MAX = 20_000
 export const BRIEF_MAX = 8000
 export const PUSH_MAX = 700
 
@@ -60,7 +63,8 @@ export function notesService(rt) {
   rt.cardNote = async (note) => {
     for (const listener of cardNotes) {
       try {
-        if (await listener(Object.freeze({ ...note })) === true) return true
+        const result = await listener(Object.freeze({ ...note }))
+        if (result === true || result?.error !== undefined) return result
       } catch (error) { rt.warn?.('ds-bot: card note listener failed: %s', error) }
     }
     return false
@@ -76,16 +80,21 @@ export function notesService(rt) {
     // A roomId the Bot is not (or no longer) a member of falls back to its own chat.
     // requestId is the note's id as a user message: an answer in the Bot's own chat or
     // in the group lists it in `heard` once a turn read the note.
-    // A note with a cardId keeps its text intact and goes to the card's thread if open (where: 'card').
+    // A note with a cardId goes to the card's thread if open (where: 'card').
+    // The optional prefix supplies the card context and is outside the note's character limit.
     // A requestId of the caller's (an IM message's) takes the place of a new one, so the
     // Bot's answer also goes back where that message came from.
-    async deliver({ botId, roomId, cardId, title, brief, text, requestId: given }: Record<string, any> = {}) {
+    async deliver({ botId, roomId, cardId, title, brief, text, prefix = '', requestId: given }: Record<string, any> = {}) {
       await rt.load()
       const bot = typeof botId === 'string' ? rt.botOf(botId) : undefined
       if (bot === undefined) return { error: 'No such Bot.' }
       const cardNote = typeof cardId === 'string' && cardId !== ''
-      const body = cardNote ? String(text ?? '') : oneLine(text, NOTE_MAX)
-      if (body.trim() === '') return { error: 'Write a note first.' }
+      const body = cardNote ? noteText(text) : oneLine(text, NOTE_MAX)
+      if (isBlankNote(body)) return { error: 'Write a note first.' }
+      if (cardNote) {
+        const error = noteLengthError(body, CARD_NOTE_MAX)
+        if (error !== undefined) return { error }
+      }
       let opened = false
       const mayOpen = () => cardNote && cardOpen(botId, cardId)
       if (mayOpen() && reach(bot, { cardId }).where !== 'card') {
@@ -98,7 +107,8 @@ export function notesService(rt) {
       if (rt.botOf(botId) === undefined) return { error: 'No such Bot.' }
       const { sessionId, where } = reach(rt.botOf(botId), { cardId: mayOpen() ? cardId : undefined, roomId, room: roomOf(roomId), user: true })
       const seed = opened && where === 'card' ? keepLines(brief, BRIEF_MAX) : ''
-      const message = where === 'group' ? `@${bot.name} ${body}` : [seed, body].filter(Boolean).join('\n\n')
+      const note = cardNote ? prefix + body : body
+      const message = where === 'group' ? `@${bot.name} ${note}` : [seed, note].filter(Boolean).join('\n\n')
       const requestId = typeof given === 'string' && given !== '' ? given : randomUUID()
       await rt.dispatch.sendUser({ sessionId, content: [{ type: 'text', text: message }], requestId, ...(where === 'card' ? { steer: true } : {}) })
       return { sessionId, where: where === 'own' ? 'chat' : where, requestId }

@@ -439,12 +439,22 @@ export function install(rt) {
     return sent
   }
   const replyToPush = async (conn, msg, body) => {
-    if (msg.replyTo === undefined || msg.replyTo === null || body === '') return false
+    if (msg.replyTo === undefined || msg.replyTo === null || typeof msg.text !== 'string' || msg.text === '') return false
     const pushed = (await runtimeOf(conn.id)).data.pushed[String(msg.replyTo)]
     if (pushed === undefined) return false
     const requestId = `im:${conn.platform}:${randomUUID()}`
     origin.rememberRequest(requestId, conn, msg.chat.key, msg.sender.id)
-    if (await rt.cardNote?.({ cardId: pushed.cardId, text: body, requestId }) === true) return true
+    const result = await rt.cardNote?.({ cardId: pushed.cardId, text: msg.text, requestId })
+    if (result === true) return true
+    if (result?.error !== undefined) {
+      origin.forgetRequest(requestId)
+      await sendTo(conn, msg.chat.key, msg.chat, result.error)
+      return true
+    }
+    if (body === '') {
+      origin.forgetRequest(requestId)
+      return false
+    }
     const thread = rt.cardSession?.(pushed.botId, pushed.cardId)
     if (thread !== undefined) {
       await rt.dispatch.sendUser({ sessionId: thread, content: [{ type: 'text', text: body }], requestId })
