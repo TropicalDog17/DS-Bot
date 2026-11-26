@@ -1691,6 +1691,46 @@ test('the board route moves a card between the user and its Bots', async (t) => 
   assert.equal((await h.post('reassign', { id, assignee: 'b' })).error.message, 'That card is already finished.')
 })
 
+test('a completed card in Review cannot be reassigned, while its other updates still apply', async (t) => {
+  const h = host(t)
+  const id = (await h.tool({ action: 'open', title: 'Review gate', brief: 'Gate it.' }, 'b')).match(/c_[0-9a-f]{8}/)[0]
+  await h.tool({ action: 'complete', id, result: 'Checked' }, 'b')
+  let card = h.cards().find(entry => entry.id === id)
+  assert.deepEqual([card.status, card.assignee, card.completedBy], ['review', 'b', 'b'])
+
+  assert.equal(await h.tool({ action: 'update', id, assignee: 'Coder' }, 'a'), `${id} is already finished.`)
+  card = h.cards().find(entry => entry.id === id)
+  assert.deepEqual([card.status, card.assignee, card.completedBy, card.progress], ['review', 'b', 'b', ''])
+
+  assert.match(await h.tool({ action: 'update', id, progress: 'Looks good' }, 'b'), /Updated/)
+  assert.match(await h.tool({ action: 'update', id, link: 'https://github.com/o/r/pull/7' }, 'b'), /Updated/)
+  card = h.cards().find(entry => entry.id === id)
+  assert.deepEqual([card.status, card.progress, card.links.map(link => link.url)], ['review', 'Looks good', ['https://github.com/o/r/pull/7']])
+
+  assert.match(await h.tool({ action: 'update', id, status: 'active' }, 'b'), /Updated/)
+  assert.equal(h.cards().find(entry => entry.id === id).completedBy, undefined)
+  assert.match(await h.tool({ action: 'update', id, assignee: 'Coder' }, 'b'), /Moved/)
+  assert.equal(h.cards().find(entry => entry.id === id).assignee, 'c')
+})
+
+test('the board route refuses to reassign a card that waits in Review', async (t) => {
+  const h = host(t)
+  const id = (await h.tool({ action: 'open', title: 'Review gate', brief: 'Gate it.' }, 'b')).match(/c_[0-9a-f]{8}/)[0]
+  await h.tool({ action: 'complete', id, result: 'Checked' }, 'b')
+  const sent = h.team.sent.length
+
+  assert.equal((await h.post('reassign', { id, assignee: 'c' })).error.message, 'That card is already finished.')
+  assert.equal(h.cards().find(entry => entry.id === id).assignee, 'b')
+  assert.equal(h.team.sent.length, sent)
+
+  await h.post('move', { id, status: 'active' })
+  const resumed = h.team.sent.length
+  const moved = await h.post('reassign', { id, assignee: 'c' })
+  assert.equal(moved.ok, true)
+  assert.equal(h.cards().find(entry => entry.id === id).assignee, 'c')
+  assert.equal(h.team.sent.length, resumed + 1)
+})
+
 test('the board tool says assignee also works on update', async (t) => {
   const h = host(t)
   const tool = h.registered.tools.find(entry => entry.name === 'board')
