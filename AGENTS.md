@@ -66,7 +66,8 @@ The full workflow is in [CONTRIBUTING.md](CONTRIBUTING.md#how-we-work). The part
 ## Style
 
 - Follow the code around your change. Keep functions small and names plain.
-- Write a comment only when the reason is not clear from the code: a hidden constraint, an invariant, a workaround. Do not describe what the code does.
+- Let names, types and structure explain the code. A comment is for what the code cannot say and we cannot change: behavior forced by DSH, a vendor, a platform or a protocol (with its issue or RFC link), a license header, or the contract of a public API. When our own code needs prose to be understood, rename, extract or type it until it reads without the comment.
+- Keep a lint or TypeScript suppression only for a style-only rule. When the rule catches real bugs, fix the code it flags.
 - Commit messages in English, imperative subject, the reason in the body. Keep commits small.
 - The person who asked for the change is the commit author. Do not set an AI agent or bot as author or committer, and do not add `Co-authored-by` lines for one.
 - User-facing text in the plugin is English. The docs are in English.
