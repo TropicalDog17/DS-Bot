@@ -32,4 +32,5 @@ A Bot runs outside herdr and drives it with the `herdr` binary (`herdr` on PATH,
 
 - `herdr agent read <pane> --lines 120`, board update the progress in one line, then report: the pane, what it did, the result, links to the PR or commit, and what the user must decide.
 - To stop a pane's work: `herdr agent send-keys <pane> esc`.
+- DS Bot tracks panes you create with `herdr tab create`, `herdr workspace create` or `herdr pane split`. When the card reaches Review, Done or Cancelled and the pane has finished its work, DS Bot saves the last output and closes it. For a pane created outside a card, call `wait_pane` with `release: true` when you finish.
 - Never close a pane, tab or workspace, and never `/clear` or restart an agent that is already there.

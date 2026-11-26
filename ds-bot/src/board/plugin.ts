@@ -1,13 +1,15 @@
 import { join } from 'node:path'
 import { defineTool } from '../host/tool-schema.ts'
 import { dshHomeOf } from '../host/folders.ts'
+import { textOf } from '../host/text.ts'
 import { ACTIONS, BOT_STATUSES, createBoard, isOpen } from './cards.ts'
 import { USER } from './card-fields.ts'
 import { LEVELS, createLive, levelOf } from './live.ts'
 import { openBoardStore } from './store.ts'
-import { createHerdr, herdrBinary, panesIn } from './herdr.ts'
+import { createHerdr, createdPane, herdrBinary, paneCreation, panesIn } from './herdr.ts'
 import { WATCH_MS, idleNudge, idleStep, idleText, sweep } from './watch.ts'
 import { createPaneWaits } from './waits.ts'
+import { createPaneTeardown } from './teardown.ts'
 import { every } from './poller.ts'
 import { createPrs, ghBinary, prsOf } from './prs.ts'
 
@@ -58,6 +60,7 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
   let disposed = false
   const cardOfSession = sessionId => identity.ownerOfSession(sessionId)?.cardId
   const delivering = new Map()
+  const paneCalls = new Map<string, Map<string, string>>()
 
   const unmergedOf = async (urls) => {
     const states = await Promise.all(urls.map(url => prs.state(url).catch(() => undefined)))
@@ -225,14 +228,49 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
   }
 
   async function readPane(id, pane) {
-    const card = Object.hasOwn(store.read().cards, id) ? store.read().cards[id] : undefined
+    const { cards, owned } = store.read()
+    const card = Object.hasOwn(cards, id) ? cards[id] : undefined
     if (card === undefined) return { error: 'No such card.', code: 'board/refused' }
-    if (!(card.panes ?? []).some(entry => entry.id === pane)) return { error: 'That pane is not on the card.', code: 'board/refused' }
+    const entry = owned?.[pane]
+    if (entry?.cardId !== id && !(card.panes ?? []).some(entry => entry.id === pane)) return { error: 'That pane is not on the card.', code: 'board/refused' }
+    if (entry?.closed !== undefined) return { value: { pane, ...entry.closed, closed: true } }
     return { value: { pane, at: now(), ...await herdr.read(pane) } }
   }
   async function notePanes(sessionId, event) {
+    const data = event?.data
+    if (event?.type === 'turn/end') {
+      paneCalls.delete(sessionId)
+      return
+    }
+    if (event?.type === 'tool/result') {
+      const message = data?.message
+      const calls = paneCalls.get(sessionId)
+      const command = calls?.get(message?.toolCallId)
+      if (command === undefined) return
+      calls.delete(message.toolCallId)
+      if (calls.size === 0) paneCalls.delete(sessionId)
+      if (message.isError === true) return
+      const pane = createdPane(command, textOf(message.content))
+      const owner = identity.ownerOfSession(sessionId)
+      if (pane === undefined || owner === undefined) return
+      const { botId, cardId } = owner
+      await store.change(draft => {
+        if (disposed || draft.owned?.[pane] !== undefined) return { error: 'The pane was not registered.' }
+        const owned = draft.owned ??= {}
+        owned[pane] = { pane, botId, ...(cardId === undefined ? {} : { cardId }), sessionId, at: now() }
+        if (cardId !== undefined) board.panes(draft.cards, cardId, [pane])
+      })
+      return
+    }
     if (event?.type !== 'tool/call') return
-    const ids = panesIn(commandOf(event.data?.arguments))
+    const command = commandOf(data?.arguments)
+    if (data?.name === 'bash' && typeof data.callId === 'string' && paneCreation(command) !== undefined
+      && identity.ownerOfSession(sessionId) !== undefined) {
+      const calls = paneCalls.get(sessionId) ?? new Map()
+      calls.set(data.callId, command)
+      paneCalls.set(sessionId, calls)
+    }
+    const ids = panesIn(command)
     if (ids.length === 0) return
     const cardId = cardOfSession(sessionId)
     if (cardId !== undefined) await store.change(data => board.panes(data.cards, cardId, ids))
@@ -247,6 +285,13 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
     store, herdr, notes, now, identity, roster, warn,
     every: (ms, job, options) => {
       const interval = config.waitPollMs ?? ms
+      return interval > 0 ? every(interval, job, options) : () => {}
+    },
+  })
+  const teardown = createPaneTeardown({
+    store, herdr, now, warn, roster,
+    every: (ms, job, options) => {
+      const interval = config.teardownPollMs ?? ms
       return interval > 0 ? every(interval, job, options) : () => {}
     },
   })
@@ -287,6 +332,7 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
     tools.register(waits.tool),
     bridge.share(waits.tool.name),
     waits.dispose,
+    teardown.dispose,
     mergePoller(),
     connection.fetch.register({
       path: ROUTE,
@@ -444,6 +490,7 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
     idleOnce,
     adoptOnce,
     waits,
+    teardown,
     mergeOnce,
     rulesFor,
     openCardsDigest,
@@ -452,6 +499,7 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
     store,
     dispose() {
       disposed = true
+      paneCalls.clear()
       for (const dispose of disposers.reverse()) { try { dispose?.() } catch {} }
       store.dispose()
     },
