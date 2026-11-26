@@ -1434,6 +1434,39 @@ test('the user moving a Review card back to In progress starts its Bot again, no
   assert.deepEqual([card.status, card.completedBy, card.doneAt], ['active', undefined, undefined])
 })
 
+test('a Review card the Bot did not complete is not rejected when the user moves it back', async (t) => {
+  const h = host(t)
+  await h.tool({ action: 'open', title: 'Deploy it', brief: 'Deploy.' })
+  const [{ id }] = h.cards()
+  await h.tool({ action: 'update', id, status: 'review', need: 'Approve the deploy' })
+  const sent = h.team.sent.length
+
+  await h.post('move', { id, status: 'active' })
+  assert.equal(h.cards()[0].status, 'active')
+  assert.equal(h.cards()[0].completedBy, undefined)
+  assert.equal(h.team.sent.length, sent)
+  assert.doesNotMatch(JSON.stringify(h.team.sent.slice(sent)), /did not accept/i)
+})
+
+test('completing again with the same result after the PR merged, before the poller ran, sends no second report', async (t) => {
+  const url = 'https://github.com/o/r/pull/41'
+  const prs = { [url]: 'OPEN' }
+  const h = host(t, { prs })
+  await h.tool({ action: 'open', title: 'Merge it', brief: 'x' })
+  const [{ id }] = h.cards()
+  await h.tool({ action: 'complete', id, result: 'PR open', link: url })
+  assert.deepEqual([h.cards()[0].status, h.cards()[0].waitsMerge], ['review', true])
+  const pushes = h.team.pushes.length
+  const reports = h.team.delivered.length
+
+  prs[url] = 'MERGED'
+  assert.match(await h.tool({ action: 'complete', id, result: 'PR open', link: url }), /already in Review and waits for the user to accept it/)
+  const [card] = h.cards()
+  assert.deepEqual([card.status, card.waitsMerge, card.need, card.doneAt], ['review', undefined, 'Review the result, then move the card to Done if you accept it.', undefined])
+  assert.equal(h.team.pushes.length, pushes)
+  assert.equal(h.team.delivered.length, reports)
+})
+
 test('a PR closed without merging, or one gh cannot read, is said on the card and told once', async (t) => {
   const url = 'https://github.com/o/r/pull/7'
   const prs = { [url]: 'OPEN' }

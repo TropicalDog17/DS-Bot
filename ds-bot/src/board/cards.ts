@@ -402,9 +402,13 @@ export function createBoard({ roster, now = Date.now }) {
       }
       if (card.status === 'review' && card.completedBy !== undefined) {
         const sameResult = result === card.result
-        const sameLink = link === undefined || (card.links ?? []).some(entry => entry.url === link)
-        const sameWait = unmerged.length === 0 ? card.waitsMerge !== true : card.waitsMerge === true
-        if (sameResult && sameLink && sameWait) {
+        const newLink = link !== undefined && !(card.links ?? []).some(entry => entry.url === link)
+        if (sameResult && !newLink) {
+          if (unmerged.length === 0 && card.waitsMerge === true) {
+            delete card.waitsMerge
+            card.need = ACCEPT_NEED
+            touch(card)
+          }
           return outcome(card, `${label(card)} is already in Review and waits for the user to accept it.`)
         }
       }
@@ -482,7 +486,9 @@ export function createBoard({ roster, now = Date.now }) {
       if (card.status === 'cancelled') return { error: 'That card is cancelled.' }
       if (card.status === status) return outcome(card)
       const before = card.status
-      const resumed = (before === 'done' || before === 'review') && status === 'active' && card.assignee !== USER && roster.bot(card.assignee) !== undefined
+      const completed = card.completedBy !== undefined
+      const rejected = before === 'review' && completed
+      const resumed = (before === 'done' || rejected) && status === 'active' && card.assignee !== USER && roster.bot(card.assignee) !== undefined
       card.status = status
       if (status === 'done') card.doneAt = now()
       else delete card.doneAt
