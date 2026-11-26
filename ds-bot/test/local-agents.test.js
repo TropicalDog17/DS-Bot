@@ -1621,3 +1621,40 @@ test('replay drops images outside the replay window without reading their attach
   assert.equal(out.finish?.kind, 'stop')
   assert.deepEqual(readIds, ['att-recent'])
 })
+
+test('claude: fresh turn passes system via --append-system-prompt without duplicating it in the user prompt', async (t) => {
+  const adapter = makeAdapter()
+  t.after(() => adapter.dispose())
+  const marker = 'UNIQUE-SYSTEM-MARKER'
+  const systemMsg = { id: 'sys-1', role: 'system', content: [{ type: 'text', text: marker }] }
+  const out = await collect(adapter.stream(options('s-dedup', [systemMsg, user('m1', 'hello world')], {
+    provider: 'local-claude-code',
+  })))
+  assert.equal(out.finish?.kind, 'stop')
+  const args = adapter.engines.get('local-claude-code').sessions.get('s-dedup').child.spawnargs
+  assert.equal(args[args.indexOf('--append-system-prompt') + 1], marker)
+  assert.match(out.text, /hello world/)
+  assert.doesNotMatch(out.text, new RegExp(marker))
+})
+
+test('claude: ephemeral side-calls pass --effort and disable persistence, MCP servers, and built-in tools', async (t) => {
+  const engine = new ClaudeEngine('local-claude-code', {
+    name: 'Claude Code',
+    kind: 'claude',
+    command: process.execPath,
+    args: [FIXTURE('fake-claude.mjs')],
+  }, { findExecutable: path => path })
+  t.after(() => engine.close())
+  const session = await engine.open('side-1', {
+    cwd: mkdtempSync(join(tmpdir(), 'dsb-cwd-')),
+    mode: 'default',
+    effort: 'off',
+    ephemeral: true,
+  })
+  const args = session.child.spawnargs
+  assert.equal(args[args.indexOf('--effort') + 1], 'low')
+  assert.ok(args.includes('--no-session-persistence'))
+  assert.ok(args.includes('--strict-mcp-config'))
+  assert.equal(args[args.indexOf('--tools') + 1], '')
+  assert.equal(args[args.indexOf('--mcp-config') + 1], '{"mcpServers":{}}')
+})

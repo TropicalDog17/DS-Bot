@@ -2,6 +2,9 @@ import { cleanEnv, findEngineExecutable, spawnAgent } from './discover.ts'
 
 const READ_TOOLS = new Set(['Read', 'Glob', 'Grep', 'LS', 'WebFetch', 'WebSearch', 'TodoWrite', 'NotebookRead'])
 
+const CLAUDE_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max'])
+const claudeEffort = effort => (effort === 'off' ? 'low' : CLAUDE_EFFORTS.has(effort) ? effort : undefined)
+
 export class ClaudeEngine {
   route: any
   engine: any
@@ -15,14 +18,14 @@ export class ClaudeEngine {
     this.sessions = new Map()
   }
 
-  open(dshSessionId, { cwd, resumeId, system, mode, mcp, model }) {
+  open(dshSessionId, { cwd, resumeId, system, mode, mcp, model, effort, ephemeral }: Record<string, any>) {
     let session = this.sessions.get(dshSessionId)
     if (session !== undefined && session.dead) session = undefined
     if (session === undefined) {
       session = new ClaudeSession(this, dshSessionId)
       this.sessions.set(dshSessionId, session)
     }
-    return session.start({ cwd, resumeId, system, mode, mcp, model })
+    return session.start({ cwd, resumeId, system, mode, mcp, model, effort, ephemeral })
   }
 
   prompt(session, blocks) {
@@ -98,7 +101,7 @@ class ClaudeSession {
     try { this.child?.stdin.write(`${JSON.stringify(message)}\n`) } catch { this.dead = true }
   }
 
-  async start({ cwd, resumeId, system, mode, mcp, model }) {
+  async start({ cwd, resumeId, system, mode, mcp, model, effort, ephemeral }: Record<string, any>) {
     if (this.child !== undefined) return this
     const bin = findEngineExecutable(this.engine.engine, name => this.engine.findExecutable(name))
     if (bin === undefined) throw Object.assign(new Error(`${this.engine.engine.name} is not installed`), { code: 'NO_ADAPTER' })
@@ -109,6 +112,11 @@ class ClaudeSession {
     if (system !== undefined) args.push('--append-system-prompt', system)
     if (mode !== undefined) args.push('--permission-mode', mode)
     if (model !== undefined && model !== 'default') args.push('--model', model)
+    const mappedEffort = claudeEffort(effort)
+    if (mappedEffort !== undefined) args.push('--effort', mappedEffort)
+    if (ephemeral === true) {
+      args.push('--no-session-persistence', '--strict-mcp-config', '--tools', '')
+    }
     // Print mode has no one to ask: without a prompt tool a call that needs
     // permission is refused outright. `stdio` sends it here as a
     // control_request, which becomes the Bot's approval card.
@@ -118,6 +126,8 @@ class ClaudeSession {
         mcpServers: { dsbot: { type: 'http', url: mcp.url, headers: { Authorization: `Bearer ${mcp.token}` } } },
       }))
       args.push('--allowedTools', 'mcp__dsbot')
+    } else if (ephemeral === true) {
+      args.push('--mcp-config', JSON.stringify({ mcpServers: {} }))
     }
     this.resumeId = resumeId
     const child = this.child = spawnAgent(bin, args, {

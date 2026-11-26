@@ -1047,6 +1047,11 @@ export function install(rt) {
   }))
 
   async function modelFor(bot) {
+    const background = await rt.backgroundModel?.()
+    if (background !== undefined) {
+      const route = splitRef(background)
+      if (route !== undefined) return route
+    }
     const desired = await rt.desiredModel(bot)
     const team = rt.isLocalAgentRef?.(state.prefs.defaultBotModel) === true ? undefined : state.prefs.defaultBotModel
     const ref = rt.isLocalAgentRef?.(desired) === true ? (team ?? await rt.defaultModel()) : desired ?? await rt.defaultModel()

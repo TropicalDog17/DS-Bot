@@ -9,7 +9,7 @@ import { createUserMessage, LlmAdapter } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { closeNamespace, contextSource, openNamespace } from '../src/optchat/core.ts'
 import { importStore } from '../src/optchat/import.ts'
-import { buildAll } from '../src/optchat/summarize.ts'
+import { buildAll, llmSummarizer } from '../src/optchat/summarize.ts'
 import { HISTORY_KIND, install } from '../src/optchat/plugin.ts'
 
 const temp = t => {
@@ -226,4 +226,29 @@ test('real loop: with a failing summarizer nothing is replaced and the transcrip
   assert.equal(ns.events.length, 8)
   assert.equal(ns.has({ l: 0, i: 0 }), false, 'the over-size leaf stays unbuilt')
   assert.match(ns.zoom(0, 1), /^0\+0\|user: turn 0 w{400}$/)
+})
+
+test('llmSummarizer requests compaction purpose and the lowest available reasoningEffort', async () => {
+  const seen = []
+  const makeLlm = (efforts) => ({
+    resolveModelInfo: async () => ({ reasoning: { efforts } }),
+    async *stream(req) {
+      seen.push(req)
+      yield { type: 'text-delta', index: 0, text: 'short summary' }
+      yield { type: 'finish', reason: { kind: 'stop' } }
+    },
+  })
+
+  const summarizeOff = llmSummarizer(makeLlm([{ id: 'low' }, { id: 'off' }, { id: 'high' }]), { provider: 'gateway', model: 'haiku' })
+  assert.equal(await summarizeOff('hello', 256), 'short summary')
+  assert.equal(seen.at(-1).reasoningEffort, 'off')
+  assert.equal(seen.at(-1).purpose, 'compaction')
+
+  const summarizeLow = llmSummarizer(makeLlm([{ id: 'low' }, { id: 'high' }]), { provider: 'gateway', model: 'haiku' })
+  await summarizeLow('hello', 256)
+  assert.equal(seen.at(-1).reasoningEffort, 'low')
+
+  const summarizeExplicit = llmSummarizer(makeLlm([{ id: 'off' }, { id: 'medium' }]), { provider: 'gateway', model: 'haiku', reasoningEffort: 'medium' })
+  await summarizeExplicit('hello', 256)
+  assert.equal(seen.at(-1).reasoningEffort, 'medium')
 })

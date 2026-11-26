@@ -443,7 +443,7 @@ export class LocalAgentAdapter extends LlmAdapter {
     const supportsImages = live.spec.kind !== 'acp' || live.engine.supportsImages?.(live.engineSession) !== false
     const resolveImage = block => this.resolveImageBlock(block, { supportsImages, signal: options.signal })
     let promptBlocks = fresh
-      ? await renderReplay(messages, system, resolveImage)
+      ? await renderReplay(messages, live.spec.kind === 'claude' ? '' : system, resolveImage)
       : await renderDelta(contextText, remaining, resolveImage)
     let sentInstructions = live.spec.kind !== 'acp' && freshCli && instructions !== undefined
     if (instructions !== undefined && !freshCli && live.promptHash !== promptHash) {
@@ -873,15 +873,15 @@ export class LocalAgentAdapter extends LlmAdapter {
     let session
     try {
       signal.throwIfAborted()
+      const efforts = (this.modelCache.get(route) ?? []).find(model => model.id === record.model)?.reasoning?.efforts ?? []
+      const effort = efforts.some(entry => entry.id === 'off') ? 'off' : efforts[0]?.id ?? (spec.kind === 'claude' ? 'low' : undefined)
       session = await engine.open(sideId, {
-        cwd: this.deps.probeCwd(), mcp: undefined, mode: cliMode(spec.kind, 'read-only'), preset: 'read-only', model: record.model, ephemeral: true,
+        cwd: this.deps.probeCwd(), mcp: undefined, mode: cliMode(spec.kind, 'read-only'), preset: 'read-only', model: record.model, ephemeral: true, effort,
         instructions: spec.kind === 'codex' ? system : undefined,
         system: spec.kind === 'claude' ? system : undefined,
       }).catch(error => { throw toLlmError(error, { spec }) })
       signal.throwIfAborted()
       const side = { state: 'running', pending: new Map(), spec }
-      const efforts = (this.modelCache.get(route) ?? []).find(model => model.id === record.model)?.reasoning?.efforts ?? []
-      const effort = efforts.some(entry => entry.id === 'off') ? 'off' : efforts[0]?.id
       // An ACP prompt resolves only when its turn ends, and its events wait in the
       // queue; a prompt the CLI refuses ends the request at once.
       const refused = Promise.resolve(engine.prompt(session, [{ type: 'text', text: spec.kind === 'acp' ? `${system}\n\n${prompt}` : prompt }], { signal, effort }))

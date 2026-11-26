@@ -46,12 +46,23 @@ export async function buildAll(ns, summarize, options: any = {}) {
   return built
 }
 
+async function lowestEffort(llm, route) {
+  if (typeof route.reasoningEffort === 'string') return route.reasoningEffort
+  const info = await llm.resolveModelInfo?.(route.provider, route.model).catch(() => undefined)
+  const efforts = info?.reasoning?.efforts ?? []
+  return efforts.some(entry => entry.id === 'off') ? 'off' : efforts[0]?.id
+}
+
 export function llmSummarizer(llm, route) {
+  let effortPromise
   return async (text, bytes, signal) => {
+    const effort = await (effortPromise ??= lowestEffort(llm, route))
     const assembler = new BlockAssembler()
     const request = {
       provider: route.provider,
       model: route.model,
+      ...(effort === undefined ? {} : { reasoningEffort: effort }),
+      purpose: 'compaction',
       system: INSTRUCTION.replace('{bytes}', String(bytes)),
       messages: [{ role: 'user', content: [{ type: 'text', text }] }],
       maxTokens: Math.max(64, Math.ceil(bytes / 2)),

@@ -187,6 +187,11 @@ export function install(rt) {
       else if (rt.isLocalAgentRef?.(body.defaultBotModel) === true) throw invalid('A local agent cannot be the default model: a new Bot chooses to run on one when it is created')
       else state.prefs.defaultBotModel = await rt.resolveModel(body.defaultBotModel)
     }
+    if (body.backgroundModel !== undefined) {
+      if (body.backgroundModel === null || body.backgroundModel === '') delete state.prefs.backgroundModel
+      else if (rt.isLocalAgentRef?.(body.backgroundModel) === true) throw invalid('A local agent cannot be the background model')
+      else state.prefs.backgroundModel = await rt.resolveModel(body.backgroundModel)
+    }
     if (body.thinking !== undefined) {
       if (body.thinking === true) state.prefs.thinking = true
       else if (body.thinking === false || body.thinking === null) delete state.prefs.thinking

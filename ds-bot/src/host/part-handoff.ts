@@ -562,14 +562,16 @@ export function createPartHandoff({ rt, clock, placeOf, partsOf, partsOfThread, 
     }
     const checkpoints = local ? rt.localAgentContext?.(agent.id)?.compactions ?? 0 : checkpointCount(session.deriveMessages())
     const request = stewardRequest({ lines, midTurn, checkpoints, group })
-    if (local) return parseDecision(await rt.localAgentAsk(agent.id, { system: STEWARD_SYSTEM, prompt: request, signal: AbortSignal.timeout(STEWARD_TIMEOUT_MS) }))
-    const route = own
+    const background = splitRef(await rt.backgroundModel?.().catch(() => undefined))
+    if (local && background === undefined) return parseDecision(await rt.localAgentAsk(agent.id, { system: STEWARD_SYSTEM, prompt: request, signal: AbortSignal.timeout(STEWARD_TIMEOUT_MS) }))
+    const route = background ?? own
     const info = await ctx.llm.resolveModelInfo(route.provider, route.model).catch(() => undefined)
-    const off = info?.reasoning?.efforts?.some((effort: any) => effort.id === 'off')
+    const efforts = info?.reasoning?.efforts ?? []
+    const effort = efforts.some((entry: any) => entry.id === 'off') ? 'off' : efforts.at(0)?.id
     const callOptions = {
       provider: route.provider,
       model: route.model,
-      ...(off ? { reasoningEffort: 'off' } : {}),
+      ...(effort === undefined ? {} : { reasoningEffort: effort }),
       system: STEWARD_SYSTEM,
       messages: rt.tagUsage([{ role: 'user', content: [{ type: 'text', text: request }] }], { sessionId: agent.id, kind: 'compaction' }),
       maxTokens: STEWARD_MAX_TOKENS,

@@ -55,7 +55,7 @@ export { COLORS } from './src/host/constants.ts'
 
 export { name, inject } from './src/host/entry.ts'
 
-const MODULES = [diagnostics, store, sessionIdentity, companions, ledger, models, providers, permissions, settlement, turns, steer, handoffs, dispatch, roster, folders, privacy, agents, prompt, routing, timeContext, tools, chatIndex, groups, agentCommands, approvals, resume, memory, parts, changes, images, avatarLibrary, secrets, connectors, capabilities, learning, schedules, browser, browserPlugins, computer, usage, update, dshUpdate, thinking, mobile, feed, phone, im, channel, remote, officeSkills, localAgents]
+const MODULES = [diagnostics, store, sessionIdentity, companions, ledger, models, providers, permissions, settlement, turns, steer, handoffs, dispatch, roster, folders, privacy, agents, prompt, routing, timeContext, tools, chatIndex, groups, agentCommands, approvals, resume, memory, images, parts, changes, avatarLibrary, secrets, connectors, capabilities, learning, schedules, browser, browserPlugins, computer, usage, update, dshUpdate, thinking, mobile, feed, phone, im, channel, remote, officeSkills, localAgents]
 
 export function apply(ctx, config = {}) {
   createRuntime(ctx, config)
