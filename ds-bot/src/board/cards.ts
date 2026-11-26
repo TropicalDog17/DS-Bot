@@ -315,6 +315,9 @@ export function createBoard({ roster, now = Date.now }) {
       const card = pick(cards, args.id, self)
       if (card === undefined) return { error: 'No open card of yours. Name one with its id or ticket key, or open a card first.' }
       if (!isOpen(card)) return { error: `${label(card)} is already finished.` }
+      if (typeof args.assignee === 'string' && args.assignee.trim() !== '' && card.status === 'review' && card.completedBy !== undefined) {
+        return { error: `${label(card)} is already finished.` }
+      }
       let assignee
       if (typeof args.assignee === 'string' && args.assignee.trim() !== '') {
         const ref = args.assignee.trim()
@@ -532,6 +535,7 @@ export function createBoard({ roster, now = Date.now }) {
       const { card, error } = found(cards, id)
       if (error !== undefined) return { error }
       if (!isOpen(card)) return { error: 'That card is already finished.' }
+      if (card.status === 'review' && card.completedBy !== undefined) return { error: 'That card is already finished.' }
       const next = typeof assignee === 'string' ? assignee : ''
       if (next !== USER && roster.bot(next) === undefined) return { error: 'No such Bot.' }
       if (next === card.assignee) return outcome(card)
