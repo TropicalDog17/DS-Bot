@@ -46,16 +46,19 @@ export function paneCreation(command: string) {
   return match?.[1].replace(/[ \t]+/, ' ')
 }
 
-export function createdPane(command: string, output: string) {
+export function createdPane(command: string, output: string): { pane: string; terminal?: string } | undefined {
   const creation = paneCreation(command)
   if (creation === undefined) return undefined
   const response = parsed(output.trim().replace(/\r?\n\[Command finished with exit code 0\]$/, ''))
   if (response?.error !== undefined) return undefined
   const result = response?.result
-  const pane = creation === 'pane split'
-    ? (response?.id === 'cli:pane:split' ? result?.pane?.pane_id : undefined)
-    : (result?.type === `${creation.split(' ')[0]}_created` ? result.root_pane?.pane_id : undefined)
-  return isPaneId(pane) ? pane : undefined
+  const created = creation === 'pane split'
+    ? (response?.id === 'cli:pane:split' ? result?.pane : undefined)
+    : (result?.type === `${creation.split(' ')[0]}_created` ? result.root_pane : undefined)
+  const pane = created?.pane_id
+  if (!isPaneId(pane)) return undefined
+  const terminal = created.terminal_id
+  return { pane, ...(typeof terminal === 'string' && terminal !== '' ? { terminal } : {}) }
 }
 
 function cliError(response, fallback) {
@@ -101,9 +104,16 @@ export function createHerdr({ binary = 'herdr', exec = run }: any = {}) {
       if ('error' in got) return got
       const status = got.pane?.agent_status
       if (typeof status !== 'string') return { error: 'herdr did not return a pane status.' }
-      const agent = got.pane.agent
-      const session = got.pane.agent_session?.value
-      return { status, ...(typeof agent === 'string' ? { agent } : {}), ...(typeof session === 'string' ? { session } : {}) }
+      const { agent, terminal_id: terminal, focused, agent_session: agentSession } = got.pane
+      const session = agentSession?.value
+      // An older response may omit focus. Teardown requires an explicit false.
+      return {
+        status,
+        ...(typeof agent === 'string' ? { agent } : {}),
+        ...(typeof session === 'string' ? { session } : {}),
+        ...(typeof terminal === 'string' && terminal !== '' ? { terminal } : {}),
+        ...(typeof focused === 'boolean' ? { focused } : {}),
+      }
     },
     async processes(target) {
       if (!isPaneId(target)) return { error: 'Not a pane.' }

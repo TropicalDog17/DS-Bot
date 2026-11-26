@@ -250,14 +250,18 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
       calls.delete(message.toolCallId)
       if (calls.size === 0) paneCalls.delete(sessionId)
       if (message.isError === true) return
-      const pane = createdPane(command, textOf(message.content))
+      const created = createdPane(command, textOf(message.content))
       const owner = identity.ownerOfSession(sessionId)
-      if (pane === undefined || owner === undefined) return
+      if (created === undefined || owner === undefined) return
+      const { pane, terminal } = created
       const { botId, cardId } = owner
       await store.change(draft => {
-        if (disposed || draft.owned?.[pane] !== undefined) return { error: 'The pane was not registered.' }
+        const previous = draft.owned?.[pane]
+        if (disposed || (previous !== undefined && (terminal === undefined || previous.terminal === terminal))) {
+          return { error: 'The pane was not registered.' }
+        }
         const owned = draft.owned ??= {}
-        owned[pane] = { pane, botId, ...(cardId === undefined ? {} : { cardId }), sessionId, at: now() }
+        owned[pane] = { ...created, botId, ...(cardId === undefined ? {} : { cardId }), sessionId, at: now() }
         if (cardId !== undefined) board.panes(draft.cards, cardId, [pane])
       })
       return

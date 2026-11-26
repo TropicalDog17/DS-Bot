@@ -1,7 +1,11 @@
+import { basename } from 'node:path'
 import { every as schedule } from './poller.ts'
+import type { OwnedPane } from './store.ts'
 
 const POLL_MS = 30_000
+const CLOSED_LIMIT = 200
 const FINISHED = new Set(['review', 'done', 'cancelled'])
+const QUIET_AGENT = new Set(['done', 'idle'])
 const SHELLS = new Set(['bash', 'zsh', 'sh', 'fish'])
 type ForegroundProcess = { name: string; argv: string[] }
 
@@ -15,59 +19,75 @@ function waitingWrapper(foreground: ForegroundProcess[]) {
   return /(?:^|\/)herdr-run-builder$/.test(script ?? '')
 }
 
-function eligible(data, owned) {
+function eligible(data, owned: OwnedPane | undefined) {
   if (owned === undefined || owned.closed !== undefined) return false
   const finished = owned.cardId === undefined ? owned.released === true : FINISHED.has(data.cards[owned.cardId]?.status)
   return finished && !Object.values<any>(data.waits ?? {}).some(wait => wait.pane === owned.pane)
 }
 
-const active = status => status === 'working' || status === 'blocked'
+function safeToClose(owned: OwnedPane, info, processes) {
+  if (owned.terminal === undefined || info.terminal !== owned.terminal || info.focused !== false
+    || info.error !== undefined || typeof info.status !== 'string' || info.status === 'working'
+    || processes.error !== undefined || !Array.isArray(processes.foreground)) return false
+  const foreground: ForegroundProcess[] = processes.foreground
+  if (waitingWrapper(foreground)) return QUIET_AGENT.has(info.status) || info.status === 'blocked'
+  if (info.status === 'blocked' || foreground.length !== 1) return false
+  const [process] = foreground
+  if (SHELLS.has(process.name) && process.argv.length === 1) return true
+  return QUIET_AGENT.has(info.status) && typeof info.agent === 'string' && info.agent !== ''
+    && (process.name === info.agent || basename(process.argv[0] ?? '') === info.agent)
+}
+
+function saveClosed(owned: Record<string, OwnedPane>, entry: OwnedPane, at: number) {
+  entry.closed = { text: '', ...entry.evidence, at }
+  delete entry.evidence
+  const older = Object.values(owned).filter(pane => pane !== entry && pane.closed !== undefined)
+  if (older.length < CLOSED_LIMIT) return
+  older.sort((a, b) => b.closed.at - a.closed.at || b.at - a.at)
+  for (const pane of older.slice(CLOSED_LIMIT - 1)) delete owned[pane.pane]
+}
 
 export function createPaneTeardown({ store, herdr, now = Date.now, warn = console.warn, every = schedule, roster }: any) {
   let disposed = false
   let polling = false
+  const warned = new Map<string, { terminal?: string; error: string }>()
 
-  function current(data, owned) {
+  function current(data, owned: OwnedPane): OwnedPane | undefined {
     const entry = data.owned?.[owned.pane]
     if (disposed || !eligible(data, entry) || entry.botId !== owned.botId
-      || entry.cardId !== owned.cardId || entry.sessionId !== owned.sessionId || entry.at !== owned.at) return undefined
+      || entry.cardId !== owned.cardId || entry.sessionId !== owned.sessionId || entry.at !== owned.at
+      || entry.terminal !== owned.terminal) return undefined
     return entry
   }
 
   const skipped = { error: 'The pane is no longer ready to close.' }
 
-  async function markGone(owned) {
+  async function markGone(owned: OwnedPane) {
     const result = await store.change(data => {
       const entry = current(data, owned)
       if (entry === undefined) return skipped
-      entry.closed = { text: '', ...entry.evidence, at: now() }
-      delete entry.evidence
+      saveClosed(data.owned, entry, now())
     })
     return result.error === undefined
   }
 
-  async function close(owned) {
+  async function close(owned: OwnedPane) {
     const { pane } = owned
-    const status = await herdr.status(pane)
-    if (status.gone === true) return markGone(owned)
-    if (status.error !== undefined || typeof status.status !== 'string' || disposed) return false
     const processes = await herdr.processes(pane)
     if (processes.gone === true) return markGone(owned)
-    if (processes.error !== undefined || !Array.isArray(processes.foreground) || disposed) return false
-    const foreground: ForegroundProcess[] = processes.foreground
-    const wrapper = waitingWrapper(foreground)
-    const shell = foreground.length === 1 && SHELLS.has(foreground[0].name) && foreground[0].argv.length === 1
-    if (!wrapper && (!shell || active(status.status))) return false
+    if (disposed) return false
+    const info = await herdr.info(pane)
+    if (info.gone === true) return markGone(owned)
+    if (disposed || !safeToClose(owned, info, processes)) return false
 
-    const [read, info] = await Promise.all([herdr.read(pane), herdr.info(pane)])
-    if (read.gone === true || info.gone === true) return markGone(owned)
-    if (read.error !== undefined || typeof read.text !== 'string' || info.error !== undefined
-      || typeof info.status !== 'string' || (!wrapper && (active(info.status) || active(read.status)))) return false
-    const { status: lastStatus, agent, session } = info
+    const read = await herdr.read(pane)
+    if (read.gone === true) return markGone(owned)
+    if (read.error !== undefined || typeof read.text !== 'string') return false
+    const { status, agent, session } = info
     const saved = await store.change(data => {
       const entry = current(data, owned)
       if (entry === undefined) return skipped
-      entry.evidence = { text: read.text, status: lastStatus, agent, session }
+      entry.evidence = { text: read.text, status, agent, session }
     })
     if (saved.error !== undefined) return false
 
@@ -75,13 +95,26 @@ export function createPaneTeardown({ store, herdr, now = Date.now, warn = consol
       const entry = current(data, owned)
       if (entry === undefined) return skipped
       // Keep wait and card changes queued from this check until herdr answers.
-      const closed = await herdr.close(pane)
-      if (closed.ok !== true && closed.gone !== true) {
-        warn('ds-bot-board: closing herdr pane %s failed: %s', pane, closed.error)
-        return { error: closed.error ?? 'herdr could not close the pane.' }
+      const foreground = await herdr.processes(pane)
+      if (disposed) return skipped
+      const latest = await herdr.info(pane)
+      if (disposed) return skipped
+      if (latest.gone === true || foreground.gone === true) {
+        saveClosed(data.owned, entry, now())
+        return
       }
-      entry.closed = { ...entry.evidence, at: now() }
-      delete entry.evidence
+      if (!safeToClose(entry, latest, foreground) || latest.agent !== agent || latest.session !== session) return skipped
+      const closed = await Promise.resolve().then(() => herdr.close(pane)).catch(error => ({ error: error?.message ?? String(error) }))
+      if (closed.ok !== true && closed.gone !== true) {
+        const error = closed.error ?? 'herdr could not close the pane.'
+        const previous = warned.get(pane)
+        if (previous?.terminal !== entry.terminal || previous?.error !== error) {
+          warned.set(pane, { terminal: entry.terminal, error })
+          warn('ds-bot-board: closing herdr pane %s failed: %s', pane, error)
+        }
+        return { error }
+      }
+      saveClosed(data.owned, entry, now())
     })
     return result.error === undefined
   }
@@ -92,11 +125,14 @@ export function createPaneTeardown({ store, herdr, now = Date.now, warn = consol
     const closed = []
     try {
       await roster.ready()
-      for (const owned of Object.values<any>(store.read().owned ?? {})) {
+      for (const owned of Object.values<OwnedPane>(store.read().owned ?? {})) {
         if (disposed) break
         if (!eligible(store.read(), owned)) continue
         try {
-          if (await close(owned)) closed.push(owned.pane)
+          if (await close(owned)) {
+            warned.delete(owned.pane)
+            closed.push(owned.pane)
+          }
         } catch (error) {
           warn('ds-bot-board: checking herdr pane %s failed: %s', owned.pane, error)
         }

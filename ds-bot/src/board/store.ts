@@ -6,12 +6,13 @@ import { homeLock } from '../host/home-lock.ts'
 
 export const READ_ONLY = 'The board is open in another dsh on this data; it is read-only here.'
 type PaneEvidence = { text: string; session?: string; agent?: string; status?: string }
-type OwnedPane = {
+export type OwnedPane = {
   pane: string
   botId: string
   cardId?: string
   sessionId: string
   at: number
+  terminal?: string
   released?: boolean
   evidence?: PaneEvidence
   closed?: PaneEvidence & { at: number }
