@@ -410,3 +410,25 @@ test('cardBusy tells a thread in a turn from a quiet one and from no thread', as
   assert.equal(notes.cardBusy({ botId: 'writer', cardId: 'c_none' }), undefined)
   assert.deepEqual(await notes.tellCard({ botId: 'writer', cardId: 'c_none', text: 'x' }), { error: 'The card has no conversation.' })
 })
+
+test('a note heard in a card thread is not taken by a reply from the Bot\'s own chat', async (t) => {
+  const h = await boardFixture(t)
+  const id = await h.add()
+  const { sessionId, requestId } = await h.note(id)
+  const emit = (session, type, data, time) => {
+    for (const listener of h.rt.ctx.listeners.get('session/event') ?? []) {
+      if (listener.length >= 2) listener({ id: session }, { type, data, ...(time === undefined ? {} : { time }) })
+    }
+  }
+  const say = text => ({ message: { content: [{ type: 'text', text }] } })
+  emit(sessionId, 'turn/start', { turn: 1 }, 1001)
+  emit(sessionId, 'user/message', { content: [{ type: 'text', text: 'Add the date.' }], source: { kind: 'user', rpcId: requestId } })
+  emit('writer', 'turn/start', { turn: 1 }, 1002)
+  emit('writer', 'assistant/message', say('Unrelated chat answer.'))
+  emit('writer', 'turn/end', { turn: 1, reason: { kind: 'completed' } })
+  emit(sessionId, 'assistant/message', say('I added the date.'))
+  emit(sessionId, 'turn/end', { turn: 1, reason: { kind: 'completed' } })
+  await h.settle()
+  assert.equal(h.card(id).notes.at(-1).text, 'I added the date.')
+  assert.equal(h.card(id).awaiting, undefined)
+})

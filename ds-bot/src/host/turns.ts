@@ -125,7 +125,7 @@ export function install(rt) {
   const promisedOpenings = new Set()
   const unanswered = new Map()
   const HEARD_KEPT = 50
-  const replyPlace = id => `${rt.selfOf(id)}\u0000${rt.groupOwners.get(id)?.roomId ?? ''}`
+  const replyPlace = id => [rt.selfOf(id), rt.groupOwners.get(id)?.roomId ?? '', rt.cardOfSession?.(id) ?? ''].join('\u0000')
   const noteHeard = (id, requestId) => {
     if (rt.selfOf(id) === undefined) return
     const key = replyPlace(id)
