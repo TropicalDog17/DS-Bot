@@ -532,7 +532,7 @@ export function createBoard({ roster, now = Date.now }) {
       if (said === '') return { error: 'Write a note first.' }
       say(card, USER, said)
       delete card.idle
-      const effects = bot === undefined ? [] : [{ kind: 'deliver', payload: { botId: bot.id, cardId: card.id, ...(card.roomId === undefined ? {} : { roomId: card.roomId }), text: `Note on card ${card.id} "${card.title}": ${said}` } }]
+      const effects = bot === undefined ? [] : [{ kind: 'deliver', payload: { botId: bot.id, cardId: card.id, ...(card.roomId === undefined ? {} : { roomId: card.roomId }), text: `Note on card ${label(card)} "${card.title}": ${said}` } }]
       return outcome(card, undefined, effects)
     },
     sent(cards, id, { botId, roomId, cardId, since, requestId }: any) {

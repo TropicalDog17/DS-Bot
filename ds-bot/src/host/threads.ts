@@ -94,8 +94,14 @@ export function cardRoomOfThread(bot: any, sessionId: any) {
 
 export function cardThreadSession(bot: any, cardId: any) {
   if (bot === undefined || typeof cardId !== 'string') return undefined
-  if (bot.currentCard === cardId) return currentSession(bot)
-  return (bot.openParts ?? []).find((part: any) => part?.card === cardId)?.sessionId
+  if (bot.currentCard === cardId && bot.currentCardClosing !== true) return currentSession(bot)
+  return (bot.openParts ?? []).find((part: any) => part?.card === cardId && part.closing !== true)?.sessionId
+}
+
+export function closingCardThreadSession(bot: any, cardId: any) {
+  if (bot === undefined || typeof cardId !== 'string') return undefined
+  if (bot.currentCard === cardId && bot.currentCardClosing === true) return currentSession(bot)
+  return (bot.openParts ?? []).find((part: any) => part?.card === cardId && part.closing === true)?.sessionId
 }
 
 export function addCardThread(bot: any, freshId: any, cardId: any, startedAt = Date.now(), roomId?: any) {
@@ -103,15 +109,20 @@ export function addCardThread(bot: any, freshId: any, cardId: any, startedAt = D
 }
 
 export const CLOSED_CARDS_MAX = 50
-export function closeCardThread(bot: any, cardId: any, closedAt = Date.now()) {
+export function closeCardThread(bot: any, cardId: any, closedAt = Date.now(), sessionId?: any) {
   if (bot === undefined || typeof cardId !== 'string') return undefined
   if (bot.currentCard === cardId) {
-    setCurrentCard(bot, {})
-    return undefined
+    if (sessionId === undefined || currentSession(bot) === sessionId) {
+      setCurrentCard(bot, {})
+      return undefined
+    }
   }
-  const at = (bot.openParts ?? []).findIndex((part: any) => part?.card === cardId)
+  const parts = bot.openParts ?? []
+  const matches = (part: any) => part?.card === cardId && (sessionId === undefined || part.sessionId === sessionId)
+  const closing = parts.findIndex((part: any) => matches(part) && part.closing === true)
+  const at = closing === -1 ? parts.findIndex(matches) : closing
   if (at === -1) return undefined
-  const [part] = bot.openParts.splice(at, 1)
+  const [part] = parts.splice(at, 1)
   const closed = { card: cardId, sessionId: part.sessionId, segments: part.segments ?? [], closedAt }
   ;(bot.closedCards ??= []).push(closed)
   if (bot.closedCards.length > CLOSED_CARDS_MAX) bot.closedCards.splice(0, bot.closedCards.length - CLOSED_CARDS_MAX)

@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
+import { setTimeout as delay } from 'node:timers/promises'
 import { apply, inject, name } from '../src/board/entry.ts'
 import { ROUTE, boardFileOf, install } from '../src/board/plugin.ts'
 import { READ_ONLY, openBoardStore } from '../src/board/store.ts'
@@ -1474,6 +1475,31 @@ test('a failed start for a moved card does not fall back, and adoptOnce delivers
   assert.equal(h.team.sent.length, sent + 1)
   assert.equal(h.team.sent.at(-1)[0], `ct-${id}`)
   assert.deepEqual(await h.handle.adoptOnce(), { moved: [], waiting: 0 })
+  assert.equal(h.team.sent.length, sent + 1)
+})
+
+test('a failed start on a move is retried by itself after the startup adopt loop stopped, and only once', async (t) => {
+  let fails = 1
+  const h = host(t, {
+    config: { adoptMs: 10 },
+    wrap: notes => ({ ...notes, startCard: async payload => (fails-- > 0 ? { error: 'boom' } : notes.startCard(payload)) }),
+  })
+  await delay(100)
+  const id = (await h.tool({ action: 'open', title: 'Review gate', assignee: 'user', brief: 'Gate the review.' }, 'a')).match(/c_[0-9a-f]{8}/)[0]
+  const sent = h.team.sent.length
+  await h.tool({ action: 'update', id, assignee: 'Coder' }, 'a')
+  assert.equal(h.cards().find(card => card.id === id).assignee, 'c')
+  assert.equal(cardThreadSession(h.team.state.bots.c, id), undefined)
+
+  h.team.live.set('c', { turn: 't1' })
+  await delay(50)
+  assert.equal(h.team.sent.length, sent)
+  h.team.live.clear()
+  const deadline = Date.now() + 2000
+  while (cardThreadSession(h.team.state.bots.c, id) === undefined && Date.now() < deadline) await delay(10)
+  assert.equal(cardThreadSession(h.team.state.bots.c, id), `ct-${id}`)
+  await delay(50)
+  assert.equal(h.team.sent.filter(entry => entry[0] === `ct-${id}`).length, 1)
   assert.equal(h.team.sent.length, sent + 1)
 })
 

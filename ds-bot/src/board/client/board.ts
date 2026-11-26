@@ -86,10 +86,22 @@ const Dot = ({ status }) => h('span', { className: 'bt-board-dot', 'data-status'
 
 function Who({ id, roster, size = 20 }) {
   const bot = id === USER ? undefined : roster.byId?.[id]
-  const name = bot?.name ?? t('You')
+  const name = bot?.name ?? (id === USER || id === undefined ? t('You') : id)
   return h('span', { className: 'bt-board-who' },
     bot ? h(BotMark, { bot, size }) : h('span', { className: 'bt-board-me', style: { width: size, height: size, fontSize: Math.round(size * 0.5) }, 'aria-hidden': true }, name.slice(0, 1).toUpperCase()),
     h('span', { className: 'bt-board-who-name' }, name))
+}
+
+function AssigneeOptions({ assignee, roster }) {
+  const bots = roster.bots ?? []
+  const known = assignee === USER || bots.some(bot => bot.id === assignee)
+  return [
+    h('option', { key: USER, value: USER }, t('You')),
+    ...bots.map(bot => h('option', { key: bot.id, value: bot.id }, bot.name)),
+    ...(typeof assignee === 'string' && !known
+      ? [h('option', { key: assignee, value: assignee }, roster.byId?.[assignee]?.name ?? assignee)]
+      : []),
+  ]
 }
 
 function Card({ card, roster, onOpen, onDrag }) {
@@ -136,8 +148,7 @@ function AddCard({ roster, actions, onDone }) {
         h('input', { className: 'bt-input bt-board-key-input', value: key, placeholder: 'LIFE-782', 'aria-label': t('Ticket'), maxLength: 32, onChange: event => setKey(event.target.value), onKeyDown: enter }),
         h('input', { className: 'bt-input', value: url, placeholder: 'https://', 'aria-label': t('Link'), inputMode: 'url', onChange: event => setUrl(event.target.value), onKeyDown: enter })),
       h('select', { className: 'bt-input bt-board-select', value: assignee, 'aria-label': t('Assignee'), onChange: event => setAssignee(event.target.value) },
-        h('option', { value: USER }, t('You')),
-        (roster.bots ?? []).map(bot => h('option', { key: bot.id, value: bot.id }, bot.name))),
+        h(AssigneeOptions, { assignee, roster })),
       error ? h('div', { className: 'bt-error', role: 'alert' }, error) : null),
     h('div', { className: 'bt-board-sheet-foot' },
       h('button', { type: 'button', className: 'bt-send bt-board-go', disabled: title.trim() === '' || busy, onClick: add }, t('Add card'))))
@@ -351,7 +362,7 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
         h('select', {
           className: 'bt-input bt-board-select', value: card.assignee, disabled: busy, 'aria-label': t('Assignee'), 'data-action': 'reassign',
           onChange: (event) => { if (event.target.value !== card.assignee) run(actions.boardReassign(card.id, event.target.value)) },
-        }, h('option', { value: USER }, t('You')), (roster.bots ?? []).map(bot => h('option', { key: bot.id, value: bot.id }, bot.name)))) : null,
+        }, h(AssigneeOptions, { assignee: card.assignee, roster }))) : null,
       need ? h('div', { className: 'bt-board-need', 'data-status': card.status, role: 'note' },
         h(BotText, { text: need, cards: allCards, className: 'bt-board-line bt-board-strong' })) : null,
       progress ? h(BotText, { text: progress, cards: allCards, className: 'bt-board-line' }) : null,

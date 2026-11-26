@@ -117,6 +117,7 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
           if (effect.adopt) return { error: started?.error ?? 'no card threads' }
           if (effect.reassign) {
             warn('ds-bot-board: %s could not reach %s: %s', card.id, payload.botId, started?.error ?? 'no card threads')
+            retryStart(card.id)
             return { said: 'The new assignee gets the card as soon as it can.' }
           }
           if (!effect.fallback) return { said: 'The card could not get a conversation of its own, so do its work here after all.' }
@@ -288,6 +289,7 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
     systemPrompt?.section?.({ name: 'ds-bot-board-rules', order: RULES_ORDER, interpolate: false, text: context => rulesFor(context?.agent?.id) }),
     watchdog(),
     adoptLater(),
+    stopRetries,
     tools.register(tool),
     bridge.share(tool.name),
     tools.register(waits.tool),
@@ -336,6 +338,33 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
       if (waiting === 0) dispose()
     }, { readOnly: () => store.readOnly(), onError: error => warn('ds-bot-board: moving cards to their threads failed: %s', error) })
     return dispose
+  }
+  const retryingStarts = new Set<string>()
+  let stopRetryStarts
+  function stopRetries() {
+    stopRetryStarts?.()
+    stopRetryStarts = undefined
+  }
+  function retryStart(cardId: string) {
+    if (disposed) return
+    retryingStarts.add(cardId)
+    if (stopRetryStarts !== undefined) return
+    const interval = config.adoptMs ?? ADOPT_MS
+    if (!(interval >= 0)) return
+    stopRetryStarts = every(interval, async () => {
+      if (disposed) { stopRetries(); return }
+      await roster.ready()
+      for (const id of [...retryingStarts]) {
+        const card = store.read().cards[id]
+        if (!isOpen(card) || roster.bot(card.assignee) === undefined) { retryingStarts.delete(id); continue }
+        if (typeof notes.cardThread === 'function' && await notes.cardThread({ botId: card.assignee, cardId: id }).catch(() => undefined) !== undefined) { retryingStarts.delete(id); continue }
+        if (await notes.busy?.({ botId: card.assignee })) continue
+        const { error } = await run(card, [{ kind: 'start', payload: board.adoptOf(card), adopt: true }]) ?? {}
+        if (error === undefined) retryingStarts.delete(id)
+        else warn('ds-bot-board: %s stays without a thread: %s', id, error)
+      }
+      if (retryingStarts.size === 0) stopRetries()
+    }, { readOnly: () => store.readOnly(), onError: error => warn('ds-bot-board: moving cards to their threads failed: %s', error) })
   }
   async function adoptOnce() {
     const moved = []

@@ -186,6 +186,35 @@ test('a finished card closes its thread, after the turn running in it ends; the 
   assert.deepEqual(archived, ['card1', 'card2'])
 })
 
+test('a card started again while its old thread waits to close gets a new thread, and the old close leaves it', async (t) => {
+  const { rt, archived, prompts, saved, stop } = await setup()
+  t.after(stop)
+  const { notes } = rt.companions
+  await notes.startCard({ botId: 'writer', cardId: 'c_1', text: 'first' })
+  rt.live.set('card1', { turn: {} })
+  assert.deepEqual(await notes.closeCard({ botId: 'writer', cardId: 'c_1' }), { closed: 'later' })
+  assert.equal(saved().bots.writer.openParts[0].closing, true)
+  assert.equal(rt.cardThreads.sessionOf('writer', 'c_1'), undefined)
+
+  const again = await notes.startCard({ botId: 'writer', cardId: 'c_1', text: 'again' })
+  assert.equal(again.sessionId, 'card2')
+  assert.equal(prompts.at(-1).sessionId, 'card2')
+  assert.equal(prompts.at(-1).content[0].text, 'again')
+  const delivered = await notes.deliver({ botId: 'writer', cardId: 'c_1', text: 'later note' })
+  assert.deepEqual([delivered.sessionId, delivered.where], ['card2', 'card'])
+  assert.equal(prompts.at(-1).sessionId, 'card2')
+
+  rt.live.delete('card1')
+  rt.cardThreads.turnEnded()
+  const deadline = performance.now() + 2000
+  while (!archived.includes('card1') && performance.now() < deadline) await delay(5)
+  assert.deepEqual(archived, ['card1'])
+  assert.deepEqual(rt.botOf('writer').openParts.map(part => [part.sessionId, part.card, part.closing]), [['card2', 'c_1', undefined]])
+  assert.equal(rt.cardThreads.sessionOf('writer', 'c_1'), 'card2')
+  assert.equal(rt.cardThreads.isClosed('writer', 'c_1'), false)
+  assert.equal(rt.chatOwners.get('card2'), 'writer')
+})
+
 test('a focused card thread finishes its pending close without archiving the foreground chat', async (t) => {
   const { rt, archived, stop } = await setup()
   t.after(stop)

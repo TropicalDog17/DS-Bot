@@ -146,6 +146,18 @@ test('an open card is a conversation: the user on the right, the Bot\'s replies 
   assert.equal(all(tree, 'bt-board-waiting').length, 0)
 })
 
+test('a card whose assignee was deleted shows that assignee, not You, in the detail and its select', () => {
+  const bot = { id: 'b', name: 'Writer', color: '#3b82f6' }
+  const roster = { byId: { b: bot }, bots: [bot] }
+  const tree = { type: CardDetail, props: { card: card('k', 'active', { assignee: 'gone' }), roster, actions: {} }, children: [] }
+  assert.equal(text(find(tree, 'bt-board-who-name')), 'gone')
+  const select = all(tree, 'bt-board-select').find(node => node.props['data-action'] === 'reassign')
+  assert.equal(select.props.value, 'gone')
+  const options = select.children.flatMap(child => (typeof child?.type === 'function' ? child.type(child.props) : child))
+  assert.equal(text(options.find(option => option.props.value === 'gone')), 'gone')
+  assert.equal(options.some(option => option.props.value === 'gone' && text(option) === 'You'), false)
+})
+
 test('a waiting card shows its Bot at work, and an answer keeps how it got there, folded', () => {
   const bot = { id: 'b', name: 'Writer', color: '#3b82f6' }
   const roster = { byId: { b: bot }, bots: [bot] }
