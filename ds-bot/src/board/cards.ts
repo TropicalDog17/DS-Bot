@@ -30,6 +30,7 @@ export const PANES_MAX = 4
 const ADOPT_NOTES = 3
 export const MERGE_MISSES = 3
 const ADOPT_NOTE_MAX = 300
+const ACCEPT_NEED = 'Review the result, then move the card to Done if you accept it.'
 
 export const replyText = (text, max) => String(text ?? '').replace(/\r\n?/g, '\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, max)
 export const newCardId = () => `c_${randomBytes(4).toString('hex')}`
@@ -172,7 +173,7 @@ export function createBoard({ roster, now = Date.now }) {
   const mayChange = (card, self) => card.assignee === self || card.openedBy === self || isMain(self)
   const mayCancel = (card, self) => mayChange(card, self) || (card.roomId !== undefined && roster.group(card.roomId)?.admin === self)
 
-  const cardRules = card => `This conversation is for this card only. Keep it moving with board update (id ${card.id}); when you need the user to decide, board ask; finish with board complete and a one-line result, or board cancel with the reason.`
+  const cardRules = card => `This conversation is for this card only. Keep it moving with board update (id ${card.id}); when you need the user to decide, board ask; finish with board complete and a one-line result: the card waits in Review for the user to accept it, and only the user moves it to Done; or board cancel with the reason.`
   const startOf = (card, from) => ({
     botId: card.assignee,
     cardId: card.id,
@@ -239,7 +240,7 @@ export function createBoard({ roster, now = Date.now }) {
     const text = pushFor(action, before, card, nameOf, { now: at, lastPush: card.pushedAt, progressBefore })
     if (text !== undefined) {
       effects.push({ kind: 'push', text })
-      if (isOpen(card)) card.pushedAt = at
+      if (isOpen(card) && !effects.some(effect => effect.kind === 'close')) card.pushedAt = at
     }
     return result
   }
@@ -337,6 +338,7 @@ export function createBoard({ roster, now = Date.now }) {
       const before = card.status
       const progressBefore = card.progress
       if (args.status !== undefined) card.status = args.status
+      if (card.status !== 'review') delete card.completedBy
       if (args.progress !== undefined) card.progress = oneLine(args.progress, PROGRESS_MAX)
       if (args.need !== undefined) {
         const need = replyText(args.need, NEED_MAX)
@@ -389,6 +391,9 @@ export function createBoard({ roster, now = Date.now }) {
       if (card === undefined) return { error: 'No open card of yours. Name one with its id or ticket key.' }
       if (!isOpen(card)) return { error: `${label(card)} is already finished.` }
       if (!mayChange(card, self)) return { error: `${label(card)} belongs to ${nameOf(card.assignee)}.` }
+      if (card.status === 'review' && card.completedBy !== undefined) {
+        return outcome(card, `${label(card)} is already in Review and waits for the user to accept it.`)
+      }
       const result = oneLine(args.result, RESULT_MAX)
       if (result === '') return { error: 'A finished card needs a one-line result.' }
       if (args.link !== undefined) {
@@ -396,26 +401,25 @@ export function createBoard({ roster, now = Date.now }) {
         if (link === undefined) return { error: 'link must be an http(s) address.' }
         addLink(card, link)
       }
+      card.status = 'review'
+      card.result = result
+      card.completedBy = self
+      delete card.doneAt
       if (unmerged.length > 0) {
-        card.status = 'review'
-        card.result = result
         card.waitsMerge = true
         card.need = mergeNeed(unmerged)
         logStep(card, self)
         touch(card)
         card.toldOpener = true
         const waitsFor = `${unmerged.map(prName).join(', ')} ${unmerged.length === 1 ? 'is' : 'are'} merged`
-        return withPush('complete', outcome(card, `${label(card)} waits in Review until ${waitsFor}, then moves to Done by itself. Your work on it is done: stop here.`,
+        return withPush('complete', outcome(card, `${label(card)} waits in Review until ${waitsFor}; after that the user moves it to Done. Your work on it is done: stop here.`,
           reportOf(card, `is finished (${nameOf(self)}) and waits in Review until ${waitsFor}: ${result}`, self, sessionId)))
       }
-      card.status = 'done'
-      card.result = result
       delete card.waitsMerge
-      card.doneAt = now()
-      dropNeed(card)
+      card.need = ACCEPT_NEED
       logStep(card, self)
       touch(card)
-      return withPush('complete', outcome(card, `Finished ${label(card)}: "${result}"`, [...closeOf(card), ...reportOf(card, `is done (${nameOf(self)}): ${result}`, self, sessionId)]))
+      return withPush('complete', outcome(card, `Finished ${label(card)}: "${result}". It waits in Review for the user to accept it; only the user moves it to Done.`, [...closeOf(card), ...reportOf(card, `is finished (${nameOf(self)}) and waits in Review for the user to accept it: ${result}`, self, sessionId)]))
     },
     cancel(cards, self, _roomId, args, { sessionId }: any = {}) {
       const card = pick(cards, args.id, self)
@@ -473,6 +477,7 @@ export function createBoard({ roster, now = Date.now }) {
       card.status = status
       if (status === 'done') card.doneAt = now()
       else delete card.doneAt
+      if (status !== 'review') delete card.completedBy
       dropNeed(card)
       dropMerge(card)
       logStep(card, USER)
@@ -579,18 +584,17 @@ export function createBoard({ roster, now = Date.now }) {
     const card = own(cards, id)
     if (card === undefined || card.status !== 'review' || card.waitsMerge !== true) return { error: 'No card waits for a merge.' }
     const urls = prsOf(card.links)
-    card.status = 'done'
     card.result ??= `Merged ${urls.map(prName).join(', ')}`
-    card.doneAt = now()
+    card.completedBy ??= card.assignee
     delete card.waitsMerge
-    dropNeed(card)
+    card.need = ACCEPT_NEED
     logStep(card, card.assignee)
     touch(card)
     const told = card.toldOpener === true
     delete card.toldOpener
     delete card.mergeIssue
     delete card.mergeMisses
-    return withPush('merged', outcome(card, undefined, [...closeOf(card), ...(told ? [] : reportOf(card, `is done: ${card.result} (merged)`))]))
+    return withPush('merged', outcome(card, undefined, told ? [] : reportOf(card, `is merged and waits in Review for the user to accept it: ${card.result}`)))
   }
   const mergeWait = (cards, id, { open = [], closed = [], unread = [] } = {}) => {
     const card = own(cards, id)
@@ -610,12 +614,12 @@ export function createBoard({ roster, now = Date.now }) {
     }
     card.mergeIssue = issue
     card.need = issue === 'closed'
-      ? `${names(closed)} ${closed.length === 1 ? 'was' : 'were'} closed without merging. Reopen and merge ${closed.length === 1 ? 'it' : 'them'}, send a note with what to do instead, or move the card to Done.`
-      : `gh could not read ${names(unread)} (not signed in, or no access), so the card cannot move to Done by itself. Merge ${unread.length === 1 ? 'it' : 'them'}, then move the card to Done.`
+      ? `${names(closed)} ${closed.length === 1 ? 'was' : 'were'} closed without merging. Reopen and merge ${closed.length === 1 ? 'it' : 'them'}, send a note with what to do instead, or move the card to Done if you accept it.`
+      : `gh could not read ${names(unread)} (not signed in, or no access), so the card stays in Review. Merge ${unread.length === 1 ? 'it' : 'them'}, then move the card to Done.`
     touch(card)
     const what = issue === 'closed'
       ? `"${card.title}": ${closed.map(prName).join(', ')} closed without merging, the card stays in Review`
-      : `"${card.title}": cannot read ${unread.map(prName).join(', ')}, the card will not move to Done by itself`
+      : `"${card.title}": cannot read ${unread.map(prName).join(', ')}, the card stays in Review`
     return outcome(card, undefined, [{ kind: 'push', text: pushText(card, nameOf(card.assignee), what) }])
   }
 
