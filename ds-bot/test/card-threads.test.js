@@ -215,6 +215,20 @@ test('a card started again while its old thread waits to close gets a new thread
   assert.equal(rt.chatOwners.get('card2'), 'writer')
 })
 
+test('a card with only a thread waiting to close counts as closed until it is opened again', async (t) => {
+  const { rt, stop } = await setup()
+  t.after(stop)
+  const { notes } = rt.companions
+  await notes.startCard({ botId: 'writer', cardId: 'c_1', text: 'first' })
+  rt.live.set('card1', { turn: {} })
+  assert.deepEqual(await notes.closeCard({ botId: 'writer', cardId: 'c_1' }), { closed: 'later' })
+  assert.equal(rt.cardThreads.isClosed('writer', 'c_1'), true)
+
+  const again = await notes.startCard({ botId: 'writer', cardId: 'c_1', text: 'again' })
+  assert.equal(again.sessionId, 'card2')
+  assert.equal(rt.cardThreads.isClosed('writer', 'c_1'), false)
+})
+
 test('a focused card thread finishes its pending close without archiving the foreground chat', async (t) => {
   const { rt, archived, stop } = await setup()
   t.after(stop)

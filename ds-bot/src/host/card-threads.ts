@@ -84,7 +84,7 @@ export function createCardThreads({ rt, threads = threadStore, freshRoute, selec
     const bot = rt.botOf(botId)
     if (bot === undefined) return true
     if (threads.cardThreadSession(bot, cardId) !== undefined) return false
-    if (threads.closingCardThreadSession(bot, cardId) !== undefined) return false
+    if (threads.closingCardThreadSession(bot, cardId) !== undefined) return true
     return bot.closedCards?.some(entry => entry.card === cardId) === true
   }
 
