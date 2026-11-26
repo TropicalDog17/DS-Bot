@@ -5,8 +5,8 @@
 import { readFileSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { HISTORY_TIMEOUT_MS, MESSAGE_INLINE_MAX, SOURCE_KIND, STEER_CUT } from './constants.ts'
-import { answerSender, cutOffText, failureLine, turnFailure } from './turns.ts'
+import { HISTORY_TIMEOUT_MS, SOURCE_KIND, STEER_CUT } from './constants.ts'
+import { createSettlement, cutOffText, turnFailure } from './settlement.ts'
 import { textOf } from './text.ts'
 import { reach, threadCurrentOfPart } from './threads.ts'
 
@@ -113,6 +113,7 @@ const readNotes = (file) => {
 
 export function install(rt) {
   const { ctx, home } = rt
+  const settlement = rt.settlement ??= createSettlement(rt)
   const file = join(home, 'inflight.json')
 
   let interrupted = readNotes(file)
@@ -326,7 +327,7 @@ export function install(rt) {
         where: room === undefined ? 'own chat' : `group "${room.name}"`,
         sessionId,
       })
-      answerSender(rt, sessionId, asker, text)
+      settlement.answerSender(sessionId, asker, text)
       return
     }
     const turn = turnOf(events, exchangeId)
@@ -346,42 +347,21 @@ export function install(rt) {
       await resumeTurn(sessionId, record)
       return
     }
-    if (reason.kind === 'error') {
-      const failure = turnFailure(reason.error)
-      answerSender(rt, sessionId, asker, `${name} could not answer your message: its model call failed (${failureLine(failure)}). Tell the user if it matters; do not retry right away.`)
-      return
-    }
-    if (reason.kind === 'aborted') {
-      answerSender(rt, sessionId, asker, `${name} was stopped before it could answer your message.`)
-      return
-    }
-    const cutOff = reason?.kind === 'max-tokens'
-    const withoutText = cutOff && turn.texts.length === 0
+    const failure = reason.kind === 'error' ? turnFailure(reason.error) : undefined
+    const aborted = reason.kind === 'aborted'
+    const cutOff = reason.kind === 'max-tokens'
     if (cutOff) {
+      const withoutText = turn.texts.length === 0
       rt.noteCutOffTurn?.(sessionId, { withoutText })
       const context = events.findLast(event => event?.type === 'request/context')?.data
       const ref = context?.provider && context?.model ? `${context.provider}/${context.model}` : undefined
-      const room = rt.roomOf(rt.groupOwners.get(sessionId)?.roomId)
-      rt.noteFailure?.({
-        level: 'warn',
-        source: 'turn',
-        code: 'MAX_TOKENS',
-        text: `${withoutText
-          ? 'the turn was cut off at the output limit before it wrote anything'
-          : 'the turn was cut off at the output limit, so its answer is not complete'}${ref ? ` (${ref})` : ''}`,
-        bot: name,
-        where: room === undefined ? 'own chat' : `group "${room.name}"`,
-        sessionId,
-      })
+      settlement.recordCutOff(sessionId, { wroteNothing: withoutText, ref })
     }
-    const answer = cutOff ? cutOffText(said) : said
-    if (rt.waitsWork(workId)) {
-      rt.holdWork(workId, answer)
-      return
-    }
-    const text = rt.answerText(workId, answer, name)
-    const long = text.length > MESSAGE_INLINE_MAX ? await rt.attachLong(text, `Answer from ${name}.txt`) : undefined
-    answerSender(rt, sessionId, asker, text, long)
+    await settlement.settleWork(sessionId, workId, asker, {
+      reply: cutOff ? cutOffText(said) : said,
+      failure,
+      aborted,
+    })
   }
 
   async function stoppedJobs(noted) {
