@@ -104,6 +104,15 @@ function collectAux(dbPath, sinceMs) {
 
 function collectTurns(sessionsRoot, sinceMs) {
   const turnByModel = {}
+  const solTurns = {
+    calls: 0,
+    input: 0,
+    cacheRead: 0,
+    output: 0,
+    crZero: 0,
+    crPartial: 0,
+    crHigh: 0,
+  }
   const opusTurns = {
     calls: 0,
     input: 0,
@@ -221,6 +230,15 @@ function collectTurns(sessionsRoot, sinceMs) {
           bucket.cacheWrite += row.cacheWrite
           bucket.output += row.output
 
+          if (String(row.model).includes('sol')) {
+            solTurns.calls += 1
+            solTurns.input += row.input
+            solTurns.cacheRead += row.cacheRead
+            solTurns.output += row.output
+            if (row.cacheRead === 0) solTurns.crZero += 1
+            else if (row.cacheRead / Math.max(1, row.input + row.cacheRead) < 0.8) solTurns.crPartial += 1
+            else solTurns.crHigh += 1
+          }
           if (String(row.model).includes('opus')) {
             opusTurns.calls += 1
             opusTurns.input += row.input
@@ -248,6 +266,7 @@ function collectTurns(sessionsRoot, sinceMs) {
 
   walk(sessionsRoot)
   const totalPrompt = opusTurns.input + opusTurns.cacheRead
+  const solPrompt = solTurns.input + solTurns.cacheRead
   return {
     opusTurns: {
       ...opusTurns,
@@ -256,6 +275,13 @@ function collectTurns(sessionsRoot, sinceMs) {
       avgPromptPerCall: opusTurns.calls > 0 ? Math.round(totalPrompt / opusTurns.calls) : 0,
       avgOutputPerCall: opusTurns.calls > 0 ? Math.round(opusTurns.output / opusTurns.calls) : 0,
       within5mMissRate: opusTurns.calls > 0 ? Number((opusTurns.within5mMissCalls / opusTurns.calls).toFixed(4)) : 0,
+    },
+    solTurns: {
+      ...solTurns,
+      cacheHitRatio: solPrompt > 0 ? Number((solTurns.cacheRead / solPrompt).toFixed(4)) : null,
+      avgUncachedInputPerCall: solTurns.calls > 0 ? Math.round(solTurns.input / solTurns.calls) : 0,
+      avgPromptPerCall: solTurns.calls > 0 ? Math.round(solPrompt / solTurns.calls) : 0,
+      crZeroRate: solTurns.calls > 0 ? Number((solTurns.crZero / solTurns.calls).toFixed(4)) : 0,
     },
     turnByModel: Object.values(turnByModel).sort(
       (a, b) => (b.input + b.cacheRead + b.output) - (a.input + a.cacheRead + a.output),
@@ -357,6 +383,14 @@ function runDiff(beforePath, afterPath) {
     ['Haiku optchat calls', before.dsBot.haikuOptchat?.calls ?? 0, after.dsBot.haikuOptchat?.calls ?? 0, 'num'],
     ['Haiku optchat output tokens', before.dsBot.haikuOptchat?.output ?? 0, after.dsBot.haikuOptchat?.output ?? 0, 'num'],
     ['Haiku optchat avg output / call', before.dsBot.haikuOptchat?.avgOutputPerCall ?? 0, after.dsBot.haikuOptchat?.avgOutputPerCall ?? 0, 'num'],
+    ...(before.dsBot.solTurns || after.dsBot.solTurns
+      ? [
+          ['Sol turn calls', before.dsBot.solTurns?.calls ?? 0, after.dsBot.solTurns?.calls ?? 0, 'num'],
+          ['Sol turn cache hit ratio', before.dsBot.solTurns?.cacheHitRatio ?? null, after.dsBot.solTurns?.cacheHitRatio ?? null, 'pct'],
+          ['Sol avg uncached input / call', before.dsBot.solTurns?.avgUncachedInputPerCall ?? 0, after.dsBot.solTurns?.avgUncachedInputPerCall ?? 0, 'num'],
+          ['Sol zero-cache call rate', before.dsBot.solTurns?.crZeroRate ?? 0, after.dsBot.solTurns?.crZeroRate ?? 0, 'pct'],
+        ]
+      : []),
   ]
   console.log(`Before: ${before.capturedAt} (${before.windowHours}h)  ->  After: ${after.capturedAt} (${after.windowHours}h)\n`)
   console.log('Metric'.padEnd(36), 'Before'.padStart(14), 'After'.padStart(14), 'Delta'.padStart(10))
@@ -397,6 +431,7 @@ if (cmd === 'diff') {
     windowHours,
     dsBot: {
       opusTurns: turns.opusTurns,
+      solTurns: turns.solTurns,
       opusAux: aux.opusAux,
       haikuOptchat: aux.haikuOptchat,
       turnByModel: turns.turnByModel,
@@ -410,6 +445,7 @@ if (cmd === 'diff') {
     sinceIso: snapshot.sinceIso,
     windowHours: snapshot.windowHours,
     opusTurns: snapshot.dsBot.opusTurns,
+    solTurns: snapshot.dsBot.solTurns,
     opusAux: snapshot.dsBot.opusAux,
     haikuOptchat: snapshot.dsBot.haikuOptchat,
     ...(claudeCodeCli === undefined ? {} : { claudeCodeCli }),

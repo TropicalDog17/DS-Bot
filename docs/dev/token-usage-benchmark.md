@@ -80,6 +80,22 @@ Raw token totals fluctuate with workload volume, so compare **rate metrics** fir
 | Opus `compaction` calls | `52` (`4.13M` total tokens) | `2` condenses (steward on Flash) | Steward moved off Opus |
 | Haiku `optchat` (`other`) | `200` calls / `580.6K` out (`2,903` out/call) | **`0`** | **-100% off Haiku** |
 
+### 2026-11-26 — ChatGPT `gpt-6.1-sol` prompt-cache affinity (`openai-completions` → `openai-responses`)
+
+**Root cause:**
+- `chatgpt/*` models run on the Codex Responses backend (`/v1/responses`), which uses `session_id` (populated from `prompt_cache_key` by the gateway) for sticky KV-cache shard routing.
+- Calling them through `api: openai-completions` on a non-`api.openai.com` proxy omits `prompt_cache_key`, causing the gateway to generate a random `uuid_v4()` `session_id` on every step and spray consecutive steps across cold replicas (`55.4%` zero-cache calls).
+- Switching the `chatgpt/*` route to a `gateway-responses` provider with `api: openai-responses` makes `dsh-llm-pi-ai` send `prompt_cache_key: <sessionId>` natively; verified with 6 consecutive probes (`0/7238`, then `7040/7238` × 5 = `97.3%` hit).
+
+**Baseline (24h before switch, `api: openai-completions`):**
+
+| Metric (`gpt-6.1-sol`) | Baseline 24h (`openai-completions`) | Target (`openai-responses`) |
+|---|---:|---|
+| Turn calls | `287` | — |
+| Cache hit ratio | `32.58%` (`10.44M` / `32.05M`) | `> 90%` |
+| Avg uncached input / call | `75,302` (`21.61M` total) | `< 10,000` |
+| Zero-cache calls (`cacheRead = 0`) | `159 / 287` (`55.4%`) | `< 10%` (mostly >5m idle gaps) |
+
 ### Next Run Template
 
 After 24 hours on `377d98a0` (or after changing a Bot's primary model / pruning tools), append a new section with the `diff` output from `ds-bot/dev/usage-benchmark.mjs`.
