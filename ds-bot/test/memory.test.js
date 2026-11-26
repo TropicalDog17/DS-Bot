@@ -2588,3 +2588,30 @@ test('parseShortened reads one list per long entry and passes over what is not o
   assert.deepEqual(parseShortened('```json\n{"entries": [["a", "b"], 3, [], ["c"]]}\n```', 5), [['a', 'b'], undefined, undefined, ['c'], undefined])
   assert.deepEqual(parseShortened('no json', 2), [undefined, undefined])
 })
+
+test('backgroundModel pref routes memory calls to the configured cheap model and resets cleanly', async (t) => {
+  const { call, requests, stop } = start({
+    models: ['v4', 'flash'],
+    replies: [
+      JSON.stringify({ reply: 'From flash.', changes: [] }),
+      JSON.stringify({ reply: 'Back to v4.', changes: [] }),
+    ],
+  })
+  t.after(() => stop())
+
+  const set = await call('set-prefs', { backgroundModel: 'deepseek/flash' })
+  assert.equal(set.ok, true)
+  assert.equal(set.value.backgroundModel, 'deepseek/flash')
+
+  const first = await call('memory-ask', { botId: 'b2', text: 'Check model' })
+  assert.equal(first.ok, true)
+  assert.equal(requests[0].model, 'flash')
+
+  const cleared = await call('set-prefs', { backgroundModel: null })
+  assert.equal(cleared.ok, true)
+  assert.equal(cleared.value.backgroundModel, undefined)
+
+  const second = await call('memory-ask', { botId: 'b2', text: 'Check fallback' })
+  assert.equal(second.ok, true)
+  assert.equal(requests[1].model, 'v4')
+})

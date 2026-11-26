@@ -220,6 +220,13 @@ export function install(rt) {
     return !isLocal(preferred) && entries.some(entry => entry.ref === preferred) ? preferred : pickDefault(entries)
   }
 
+  const backgroundModel = async () => {
+    const preferred = rt.config?.backgroundModel ?? state.prefs.backgroundModel
+    if (!preferred || isLocal(preferred)) return undefined
+    const entries = await catalog()
+    return entries.some(entry => entry.ref === preferred && entry.needsKey !== true) ? preferred : undefined
+  }
+
   async function resolveLocalModel(ref) {
     const { provider, model } = splitRef(ref)
     const service = llm()
@@ -415,7 +422,7 @@ export function install(rt) {
   Object.assign(rt, {
     hostClosing: () => llm() === undefined,
     catalog, cachedCatalog: () => answerable(catalogCache.value), cachedDefault: () => pickDefault(catalogCache.value),
-    defaultRef, defaultModel, defaultBotModel, defaultEffort, isUsable, resolveModel, desiredModel, reasoningOf, resolveEffort, desiredEffort,
+    defaultRef, defaultModel, defaultBotModel, backgroundModel, defaultEffort, isUsable, resolveModel, desiredModel, reasoningOf, resolveEffort, desiredEffort,
     selectSessionModel, applyModel, selectRoomSession, syncRoomSessions, waitForModel, syncModels, routeRefused, dropCatalog, assembleLlm,
   })
 }

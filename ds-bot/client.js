@@ -22097,6 +22097,20 @@ function GeneralPage({ roster, actions, run: run2, dsh }) {
           onPick: (ref) => run2(actions.setPrefs({ defaultBotModel: ref }))
         }),
         prefs.defaultBotModel ? (0, import_react51.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", onClick: () => run2(actions.setPrefs({ defaultBotModel: null })) }, t("Reset")) : null
+      ),
+      (0, import_react51.createElement)(
+        SetRow,
+        { label: t("Background model"), hint: t("Used for memory review, tidying, learning, and context checks."), className: "bt-set-model" },
+        (0, import_react51.createElement)(ModelMenu, {
+          bot: { id: "background-model", name: t("Background model"), model: isLocalRoute(prefs.backgroundModel) ? void 0 : prefs.backgroundModel },
+          roster,
+          actions,
+          run: run2,
+          wide: true,
+          withEfforts: false,
+          onPick: (ref) => run2(actions.setPrefs({ backgroundModel: ref }))
+        }),
+        prefs.backgroundModel ? (0, import_react51.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", onClick: () => run2(actions.setPrefs({ backgroundModel: null })) }, t("Reset")) : null
       )
     ),
     (0, import_react51.createElement)(
@@ -31945,7 +31959,7 @@ function apply(ctx) {
       if (typeof release === "function") release();
       if (snapshot.ready) {
         try {
-          localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: prefs.theme, accent: prefs.accent, motion: prefs.motion, layout: prefs.layout, effects: prefs.effects, width: prefs.width, flatWidth: prefs.flatWidth, thinking: prefs.thinking, defaultBotModel: prefs.defaultBotModel, enterToSend: prefs.enterToSend }));
+          localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: prefs.theme, accent: prefs.accent, motion: prefs.motion, layout: prefs.layout, effects: prefs.effects, width: prefs.width, flatWidth: prefs.flatWidth, thinking: prefs.thinking, defaultBotModel: prefs.defaultBotModel, backgroundModel: prefs.backgroundModel, enterToSend: prefs.enterToSend }));
         } catch {
         }
       }

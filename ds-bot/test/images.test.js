@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { install as imagesInstall, offloadTargets } from '../src/host/images.ts'
+import { install as imagesInstall, lastAssistantSeq, offloadTargets } from '../src/host/images.ts'
 import { assembleLlmStream } from '../src/host/models.ts'
 
 test('offloadTargets selects live images from prior user and tool messages', () => {
@@ -103,6 +103,96 @@ test('assembleLlmStream forwards lifetime disposal signal to in-flight streams a
   }, { provider: 'deepseek', model: 'v4', messages: [] })
   assert.equal(disabledCalls, 1)
   assert.equal(disabled.finish.kind, 'error')
+})
+
+test('agent/pre-step offloads images already seen before the last assistant message and keeps newer tool images live', async (t) => {
+  const home = mkdtempSync(join(tmpdir(), 'dsb-images-mid-'))
+  t.after(() => rmSync(home, { recursive: true, force: true }))
+  const events = [
+    { type: 'user/message' },
+    { type: 'assistant/message' },
+    { type: 'tool/result' },
+  ]
+  const messages = new Map([
+    [events[0], { content: [{ type: 'image', attachment: { attachmentId: 'seen' } }] }],
+    [events[1], { content: [{ type: 'text', text: 'checking screenshot' }] }],
+    [events[2], { content: [{ type: 'image', attachment: { attachmentId: 'unseen' } }] }],
+  ])
+  const appended = []
+  let flushes = 0
+  const session = {
+    surface: { nodes: [0, 1, 2] },
+    eventAt: seq => events[seq],
+    deriveEventMessage: event => messages.get(event),
+    append: (type, data) => appended.push({ type, data }),
+  }
+  assert.equal(lastAssistantSeq(session), 1)
+  assert.equal(lastAssistantSeq({ surface: { nodes: [0] }, eventAt: () => events[0] }), undefined)
+
+  const listeners = new Map()
+  const ctx = {
+    on: (name, fn) => {
+      listeners.set(name, [...(listeners.get(name) ?? []), fn])
+      return () => {}
+    },
+    sessions: {
+      messageProjections: [{ type: 'image/offload' }],
+      flush: async () => { flushes += 1 },
+    },
+    llm: {},
+  }
+  const rt = {
+    ctx,
+    config: {},
+    home,
+    warn: () => {},
+    isBotSession: id => id === 'bot-1',
+    readOnly: () => undefined,
+  }
+  imagesInstall(rt)
+
+  const preStep = listeners.get('agent/pre-step')?.[0]
+  assert.ok(preStep)
+  const result = await preStep({ agent: { id: 'bot-1', session }, step: 2, signal: new AbortController().signal }, async () => 'entered')
+  assert.equal(result, 'entered')
+  assert.equal(flushes, 1)
+  assert.deepEqual(appended, [{ type: 'image/offload', data: { targets: [{ seq: 0, imageIndexes: [0] }] } }])
+})
+
+test('image OCR prefers backgroundModel when it supports images', async (t) => {
+  const home = mkdtempSync(join(tmpdir(), 'dsb-images-bg-'))
+  t.after(() => rmSync(home, { recursive: true, force: true }))
+  const seen = []
+  const ctx = {
+    on: () => () => {},
+    llm: {
+      resolveModelInfo: async () => ({ inputModalities: ['text', 'image'] }),
+      async *stream(options) {
+        seen.push(`${options.provider}/${options.model}`)
+        yield { type: 'text-delta', index: 0, text: 'Image: Fast OCR.' }
+        yield { type: 'finish', reason: { kind: 'stop' } }
+      },
+    },
+  }
+  const rt = {
+    ctx,
+    config: {},
+    home,
+    warn: () => {},
+    catalog: async () => [
+      { ref: 'gateway/opus', name: 'Opus', input: ['text', 'image'] },
+      { ref: 'gateway/flash', name: 'Flash', input: ['text', 'image'] },
+    ],
+    defaultRef: () => 'gateway/opus',
+    backgroundModel: async () => 'gateway/flash',
+    isLocalAgentRef: () => false,
+    ownRequest: () => false,
+    tagUsage: messages => messages,
+  }
+  imagesInstall(rt)
+  const [line] = await rt.imagesForGroup([{ attachmentId: 'sha256:0123456789abcdef', name: 'bg.png' }], 'g1')
+  assert.deepEqual(seen, ['gateway/flash'])
+  assert.match(line, /read by Flash/)
 })
 
 

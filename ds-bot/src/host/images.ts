@@ -5,6 +5,16 @@ import { replaceFile } from './files.ts'
 import { assembleLlmStream } from './models.ts'
 import { splitRef } from './text.ts'
 
+export function lastAssistantSeq(session) {
+  const nodes = session?.surface?.nodes
+  if (!Array.isArray(nodes)) return undefined
+  for (let index = nodes.length - 1; index >= 0; index -= 1) {
+    const seq = nodes[index]
+    if (session.eventAt?.(seq)?.type === 'assistant/message') return seq
+  }
+  return undefined
+}
+
 export function offloadTargets(session, beforeSeq) {
   const targets = []
   for (const seq of session.surface.nodes) {
@@ -52,7 +62,8 @@ export function install(rt) {
     const served = new Set(models.map(entry => entry.ref))
     const declared = models.filter(entry => entry.input?.includes('image')).map(entry => entry.ref)
     const fallback = rt.defaultRef()
-    for (const ref of new Set([config.ocrModel, ...declared.filter(ref => ref === fallback), ...declared])) {
+    const background = await rt.backgroundModel?.()
+    for (const ref of new Set([config.ocrModel, background, ...declared.filter(ref => ref === fallback), ...declared])) {
       const route = splitRef(ref)
       if (route && served.has(ref) && await readsImages(route.provider, route.model)) return { ref, ...route }
     }
@@ -193,21 +204,33 @@ export function install(rt) {
     })()
   })
 
+  async function offloadSeenImages(session, beforeSeq) {
+    if (!session || beforeSeq === undefined || !ctx.sessions?.messageProjections?.some(projection => projection.type === 'image/offload')) return
+    const targets = offloadTargets(session, beforeSeq)
+    if (targets.length === 0) return
+    session.append('image/offload', { targets })
+    await ctx.sessions.flush(session)
+  }
+
+  ctx.on('agent/pre-step', async (payload, next) => {
+    const { agent, signal } = payload
+    if (agent?.session && rt.isBotSession(agent.id) && rt.readOnly() === undefined && !signal?.aborted) {
+      try {
+        await offloadSeenImages(agent.session, lastAssistantSeq(agent.session))
+      } catch (error) {
+        rt.warn('ds-bot: seen images for %s not offloaded: %s', agent.id, error)
+      }
+    }
+    return next()
+  })
+
   ctx.on('agent/status', ({ agent, status }) => {
     if (status !== 'idle' || !agent?.session || !rt.isBotSession(agent.id) || rt.readOnly() !== undefined) return
     const beforeSeq = agent.session.seq
     setImmediate(() => {
-      void (async () => {
-        try {
-          if (!ctx.sessions.messageProjections.some(projection => projection.type === 'image/offload')) return
-          const targets = offloadTargets(agent.session, beforeSeq)
-          if (targets.length === 0) return
-          agent.session.append('image/offload', { targets })
-          await ctx.sessions.flush(agent.session)
-        } catch (error) {
-          rt.warn('ds-bot: old images for %s not offloaded: %s', agent.id, error)
-        }
-      })()
+      void offloadSeenImages(agent.session, beforeSeq).catch((error) => {
+        rt.warn('ds-bot: old images for %s not offloaded: %s', agent.id, error)
+      })
     })
   })
 
