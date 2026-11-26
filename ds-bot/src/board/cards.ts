@@ -211,7 +211,7 @@ export function createBoard({ roster, now = Date.now }) {
       ].join('\n'),
     }
   }
-  const reopenOf = (card) => {
+  const backOf = (card, was, guidance) => {
     const latest = (card.notes ?? []).slice(-ADOPT_NOTES).map(note => `- ${nameOf(note.by)}: ${oneLine(note.text, ADOPT_NOTE_MAX)}`)
     const links = (card.links ?? []).map(link => link.url)
     return {
@@ -220,19 +220,21 @@ export function createBoard({ roster, now = Date.now }) {
       title: card.title,
       ...(card.roomId === undefined ? {} : { roomId: card.roomId }),
       text: [
-        `[Card ${label(card)} · "${card.title}"] was Done; the user moved it back to In progress.`,
+        `[Card ${label(card)} · "${card.title}"] was ${was}; the user moved it back to In progress.`,
         '',
         card.brief ?? card.title,
         '',
         [card.result ? `Result so far: ${card.result}.` : '', links.length > 0 ? `Links: ${links.join(' ')}` : ''].filter(Boolean).join(' '),
         ...(latest.length > 0 ? ['', 'Latest on the card:', ...latest] : []),
         '',
-        'The user wants more done on it. If the card does not say what, ask with board ask before you change anything; do not redo what is done.',
+        guidance,
         '',
         cardRules(card),
       ].filter((line, index, lines) => !(line === '' && lines[index - 1] === '')).join('\n'),
     }
   }
+  const reopenOf = card => backOf(card, 'Done', 'The user wants more done on it. If the card does not say what, ask with board ask before you change anything; do not redo what is done.')
+  const rejectOf = card => backOf(card, 'in Review', 'The user did not accept it. If the card does not say what to change, ask with board ask before you change anything; do not redo what is done.')
   const outcome = (card, said?, effects: any[] = []) => ({ card, said, effects })
   const withPush = (action, result, before?, progressBefore?) => {
     const { card, effects } = result
@@ -391,16 +393,22 @@ export function createBoard({ roster, now = Date.now }) {
       if (card === undefined) return { error: 'No open card of yours. Name one with its id or ticket key.' }
       if (!isOpen(card)) return { error: `${label(card)} is already finished.` }
       if (!mayChange(card, self)) return { error: `${label(card)} belongs to ${nameOf(card.assignee)}.` }
-      if (card.status === 'review' && card.completedBy !== undefined) {
-        return outcome(card, `${label(card)} is already in Review and waits for the user to accept it.`)
-      }
       const result = oneLine(args.result, RESULT_MAX)
       if (result === '') return { error: 'A finished card needs a one-line result.' }
+      let link
       if (args.link !== undefined) {
-        const link = webUrl(args.link)
+        link = webUrl(args.link)
         if (link === undefined) return { error: 'link must be an http(s) address.' }
-        addLink(card, link)
       }
+      if (card.status === 'review' && card.completedBy !== undefined) {
+        const sameResult = result === card.result
+        const sameLink = link === undefined || (card.links ?? []).some(entry => entry.url === link)
+        const sameWait = unmerged.length === 0 ? card.waitsMerge !== true : card.waitsMerge === true
+        if (sameResult && sameLink && sameWait) {
+          return outcome(card, `${label(card)} is already in Review and waits for the user to accept it.`)
+        }
+      }
+      if (link !== undefined) addLink(card, link)
       card.status = 'review'
       card.result = result
       card.completedBy = self
@@ -473,7 +481,8 @@ export function createBoard({ roster, now = Date.now }) {
       if (!USER_STATUSES.includes(status)) return { error: 'Unknown column.' }
       if (card.status === 'cancelled') return { error: 'That card is cancelled.' }
       if (card.status === status) return outcome(card)
-      const reopened = card.status === 'done' && status === 'active' && card.assignee !== USER && roster.bot(card.assignee) !== undefined
+      const before = card.status
+      const resumed = (before === 'done' || before === 'review') && status === 'active' && card.assignee !== USER && roster.bot(card.assignee) !== undefined
       card.status = status
       if (status === 'done') card.doneAt = now()
       else delete card.doneAt
@@ -488,7 +497,7 @@ export function createBoard({ roster, now = Date.now }) {
           ...reportOf(card, 'was moved to Done by the user', undefined, undefined, { quiet: true }),
         ])
       }
-      return outcome(card, undefined, reopened ? [{ kind: 'start', payload: reopenOf(card), fallback: true }] : [])
+      return outcome(card, undefined, resumed ? [{ kind: 'start', payload: before === 'done' ? reopenOf(card) : rejectOf(card), fallback: true }] : [])
     },
     note(cards, id, text) {
       const { card, error } = found(cards, id)

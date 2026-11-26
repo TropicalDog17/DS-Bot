@@ -338,6 +338,7 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
     await roster.ready()
     for (const card of Object.values<any>(store.read().cards)) {
       if (!isOpen(card) || roster.bot(card.assignee) === undefined) continue
+      if (card.status === 'review' && card.completedBy !== undefined) continue
       if (await notes.cardThread({ botId: card.assignee, cardId: card.id }) !== undefined) continue
       if (await notes.busy?.({ botId: card.assignee })) { waiting += 1; continue }
       const { error } = await run(card, [{ kind: 'start', payload: board.adoptOf(card), adopt: true }]) ?? {}
