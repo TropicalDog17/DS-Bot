@@ -29,7 +29,7 @@ const MAIN_BOARD_RULES = [
 const BOARD_RULES = [
   '## The board',
   '- Every task you take is a card. When the user asks you for one directly, open the card yourself (board open) with a brief: its work runs in a conversation of its own for the card, so tell the user in one line that you took it and stop there. Do not open a card for a step of the card you are working on.',
-  '- A card handed to you arrives in a conversation of its own that starts with "[Card …]". Do that card\'s work there: board update as it moves (when it waits on the user, review or blocked with need: what the user must do and the link to it), board ask when the user must choose, then board complete with a one-line result or board cancel with the reason. A card whose PR (a link on it) is not merged yet waits in Review after complete and moves to Done by itself once every PR on it is merged. Notes on the card arrive in the same conversation.',
+  '- A card handed to you arrives in a conversation of its own that starts with "[Card …]". Do that card\'s work there: board update as it moves (when it waits on the user, review or blocked with need: what the user must do and the link to it), board ask when the user must choose, then board complete with a one-line result or board cancel with the reason. A completed card waits in Review for the user to accept it, and only the user moves it to Done. A card whose PR (a link on it) is not merged yet stays in Review until every PR on it is merged. Notes on the card arrive in the same conversation.',
   '- Work you run in a herdr pane shows on the card by itself when you drive the pane from the card\'s conversation. From anywhere else, board update with pane (its id, like w1:p1T) so the user can watch it.',
   '- To wait for work in a herdr pane, call wait_pane with the pane and end your turn: you are woken in this conversation when it gets there, also after a restart. Never wait with herdr agent wait, herdr agent prompt --wait or a background job: a restart or a new part of your chat stops those, and nothing wakes you.',
   '- On a card that runs long, board update progress in one line at each step (when you hand work to a pane, when you are woken, when a test or deploy ends): the user reads it on the card and on the phone instead of asking how it is going.',
@@ -66,7 +66,7 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
 
   const tool = defineTool({
     name: 'board',
-    description: 'The user\'s work board, shared by the whole team. Put every piece of work on it so the user sees it without asking: open when you take it (or hand it to another Bot with a brief), update as it moves (status, progress, a PR link), complete with a one-line result, cancel with a reason. When you need the user to decide, ask with a question and the options: the card shows them as buttons and the pick comes back as a note. note passes something on to a card\'s assignee. Works from any chat. show lists the board.',
+    description: 'The user\'s work board, shared by the whole team. Put every piece of work on it so the user sees it without asking: open when you take it (or hand it to another Bot with a brief), update as it moves (status, progress, a PR link), complete with a one-line result (the card waits in Review for the user to accept it), cancel with a reason. When you need the user to decide, ask with a question and the options: the card shows them as buttons and the pick comes back as a note. note passes something on to a card\'s assignee. Works from any chat. show lists the board.',
     parameters: {
       action: { type: 'string', required: true, enum: ACTIONS, description: 'What to do' },
       id: { type: 'string', description: 'Card id or ticket key; default your newest open card' },
@@ -81,7 +81,7 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
       need: { type: 'string', description: 'update to review or blocked: what the user must do (approve, merge, answer) with the link to it; Markdown' },
       link: { type: 'string', description: 'A URL to attach, e.g. the PR' },
       pane: { type: 'string', description: 'update: the herdr pane the work runs in (e.g. w1:p1T), so the card shows it' },
-      result: { type: 'string', description: 'complete: the result, one line. A card with a PR not merged yet waits in Review until it is' },
+      result: { type: 'string', description: 'complete: the result, one line. The card waits in Review for the user to accept it; a PR not merged yet keeps it in Review until it is' },
       reason: { type: 'string', description: 'cancel: why it stops' },
       question: { type: 'string', description: 'ask: what the user decides; Markdown' },
       options: { type: 'array', items: { type: 'string' }, description: 'ask: 2 to 6 short choices, each one line' },
@@ -338,6 +338,7 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
     await roster.ready()
     for (const card of Object.values<any>(store.read().cards)) {
       if (!isOpen(card) || roster.bot(card.assignee) === undefined) continue
+      if (card.status === 'review' && card.completedBy !== undefined) continue
       if (await notes.cardThread({ botId: card.assignee, cardId: card.id }) !== undefined) continue
       if (await notes.busy?.({ botId: card.assignee })) { waiting += 1; continue }
       const { error } = await run(card, [{ kind: 'start', payload: board.adoptOf(card), adopt: true }]) ?? {}
