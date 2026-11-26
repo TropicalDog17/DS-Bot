@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { LEGACY_THEMES, MAX_EXCHANGES, ROOM_MODES, SECTION_COLORS, SECTION_NAME_MAX, TEXT_KEPT } from './constants.ts'
 import { replaceFile } from './files.ts'
 import { homeLock } from './home-lock.ts'
+import { createSessionIndex, nonEmptyId } from './session-index.ts'
 import { currentColor, headOf, normalize, unquote } from './text.ts'
 import { AMBIGUOUS_OLD_ROUTES, legacyRoute } from './local-agents/engines.ts'
 
@@ -40,7 +41,7 @@ export function install(rt) {
   let storeReady = false
   let writing = Promise.resolve()
   const { warn } = rt
-  const sessionIdOf = id => (typeof id === 'string' && id !== '' ? id : undefined)
+  const sessionIdOf = nonEmptyId
 
   const EMPTY = JSON.stringify(state)
   let holder
@@ -434,14 +435,11 @@ export function install(rt) {
     return writing.finally(() => lock.release())
   }, 'ds-bot: state lock')
 
+  const sessionIndex = createSessionIndex({ warn })
+  const { chatOwners, groupOwners, roomOwners, pastOwners } = sessionIndex
   const botOf = id => (id === undefined ? undefined : own(state.bots, id))
-  const roomOf = id => (id === undefined ? undefined : own(state.rooms, id) ?? own(state.rooms, roomOwners.get(id)))
+  const roomOf = id => (id === undefined ? undefined : own(state.rooms, id) ?? own(state.rooms, sessionIndex.roomOwnerOf(id)))
   const isMain = id => id !== undefined && state.mainBotIds.includes(id)
-
-  const chatOwners = new Map()
-  const groupOwners = new Map()
-  const roomOwners = new Map()
-  const pastOwners = new Map()
   const chatOf = botId => sessionIdOf(botOf(botId)?.sessionId) ?? botId
   const sessionOfRoom = room => (room === undefined ? undefined : sessionIdOf(room.sessionId) ?? room.id)
   // DSH turns away every step of an archived Session and every task aimed at it, so a
@@ -458,7 +456,7 @@ export function install(rt) {
     } catch {
       return
     }
-    const held = [...chatOwners.keys(), ...groupOwners.keys(), ...roomOwners.keys()].filter(id => archived.has(id))
+    const held = sessionIndex.currentSessionIds().filter(id => archived.has(id))
     if (held.length === 0) return
     restoring = (async () => {
       for (const sessionId of held) {
@@ -468,62 +466,16 @@ export function install(rt) {
       }
     })().finally(() => { restoring = undefined })
   }
-  const identityListeners = new Set<() => void>()
-  const onSessionIdentityChange = listener => {
-    identityListeners.add(listener)
-    return () => identityListeners.delete(listener)
-  }
-  const identityChanged = () => {
-    for (const listener of identityListeners) {
-      try { listener() } catch (error) { warn('ds-bot: identity subscriber failed: %s', error) }
-    }
-  }
+  const onSessionIdentityChange = sessionIndex.onChange
   const indexSessions = () => {
-    chatOwners.clear()
-    groupOwners.clear()
-    roomOwners.clear()
-    pastOwners.clear()
-    const indexPast = (segments, owner) => {
-      if (!Array.isArray(segments)) return
-      for (const segment of segments) {
-        const sid = sessionIdOf(segment?.sessionId)
-        if (sid !== undefined) pastOwners.set(sid, owner)
-      }
-    }
-    for (const [id, bot] of Object.entries(state.bots) as [string, any][]) {
-      const botId = sessionIdOf(bot?.id) ?? sessionIdOf(id)
-      if (botId === undefined) continue
-      indexPast(bot.segments, { botId })
-      const currentSid = chatOf(botId)
-      if (sessionIdOf(currentSid) !== undefined) chatOwners.set(currentSid, botId)
-      for (const part of bot.openParts ?? []) {
-        const partSid = sessionIdOf(part?.sessionId)
-        if (partSid !== undefined) chatOwners.set(partSid, botId)
-        indexPast(part?.segments, { botId })
-      }
-      for (const closed of Array.isArray(bot.closedCards) ? bot.closedCards : []) {
-        indexPast([{ sessionId: closed?.sessionId }, ...(Array.isArray(closed?.segments) ? closed.segments : [])], { botId })
-      }
-    }
-    for (const [id, room] of Object.entries(state.rooms) as [string, any][]) {
-      const roomId = sessionIdOf(room?.id) ?? sessionIdOf(id)
-      if (roomId === undefined) continue
-      const sessionId = sessionOfRoom(room)
-      if (sessionId !== undefined) roomOwners.set(sessionId, roomId)
-      indexPast(room.parts, { roomId })
-      for (const [botId, segments] of Object.entries(room.segments ?? {})) indexPast(segments, { botId, roomId })
-      for (const [botId, sessionId] of Object.entries(room.sessions ?? {})) {
-        const sid = sessionIdOf(sessionId)
-        if (sid !== undefined) groupOwners.set(sid, { botId, roomId })
-      }
-    }
+    sessionIndex.reindex({ bots: state.bots, rooms: state.rooms })
     rt.indexAgents?.()
     rt.syncScopedTools?.()
-    identityChanged()
+    sessionIndex.notifyChanged()
     restoreCurrent()
   }
-  const selfOf = id => chatOwners.get(id) ?? groupOwners.get(id)?.botId ?? pastOwners.get(id)?.botId
-  const isBotSession = id => chatOwners.has(id) || groupOwners.has(id)
+  const selfOf = sessionIndex.selfOf
+  const isBotSession = sessionIndex.isBotSession
   const groupSessionsOf = botId => (Object.values(state.rooms) as any[]).map(room => room.sessions?.[botId]).filter(Boolean)
   const dropGroupSession = (room, botId) => {
     if (room.memberDirs !== undefined) delete room.memberDirs[botId]
@@ -533,8 +485,7 @@ export function install(rt) {
     for (const segment of room.segments?.[botId] ?? []) delete state.switching[segment.sessionId]
     if (room.segments !== undefined) delete room.segments[botId]
     delete state.switching[sessionId]
-    groupOwners.delete(sessionId)
-    identityChanged()
+    sessionIndex.removeGroupMember(sessionId)
     rt.cancelApprovals?.(sessionId)
     // A plain archive refuses a running Session, which would go on working for a group
     // that no longer has it.
@@ -544,8 +495,7 @@ export function install(rt) {
     const sessionId = room.sessions?.[botId]
     if (sessionId === undefined) return
     delete room.sessions[botId]
-    groupOwners.delete(sessionId)
-    identityChanged()
+    sessionIndex.removeGroupMember(sessionId)
     rt.cancelApprovals?.(sessionId)
     void ctx.workspaceRegistry.archiveSession(sessionId, { stopActivity: true }).catch(() => {})
   }
@@ -580,7 +530,7 @@ export function install(rt) {
   Object.assign(rt, {
     state, load, save, refresh, readOnly, hasLoaded, syncReadOnly, own, onSaved, closeCard,
     botOf, roomOf, isMain, chatOf, sessionOfRoom, selfOf, isBotSession,
-    chatOwners, groupOwners, roomOwners, pastOwners, onSessionIdentityChange,
+    sessionIndex, chatOwners, groupOwners, roomOwners, pastOwners, onSessionIdentityChange,
     groupSessionsOf, dropGroupSession, retireGroupSession, findBot, findRooms, isAdminOf,
   })
 }

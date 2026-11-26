@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { LATE_ANSWER, MESSAGE_INLINE_MAX } from './constants.ts'
 import { cleanText } from './diagnostics.ts'
-import { threadCurrentOfPart } from './threads.ts'
+import { threadCurrentOfPart, type BotThreadState } from './threads.ts'
 
 export const BLOCKING_CODES = new Set([
   'MISSING_CREDENTIAL',
@@ -85,7 +85,7 @@ export interface SettlementRuntime {
   }
   groupOwners: Map<string, { roomId: string; botId: string }>
   selfOf(sessionId: string): string | undefined
-  botOf(botId: string | undefined): { name?: string } | undefined
+  botOf(botId: string | undefined): (BotThreadState & { name?: string }) | undefined
   roomOf(roomId: string | undefined): { name?: string; sessions?: Record<string, string> } | undefined
   warn(template: string, ...args: unknown[]): void
   dispatch: {
