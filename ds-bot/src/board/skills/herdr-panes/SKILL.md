@@ -32,4 +32,15 @@ A Bot runs outside herdr and drives it with the `herdr` binary (`herdr` on PATH,
 
 - `herdr agent read <pane> --lines 120`, board update the progress in one line, then report: the pane, what it did, the result, links to the PR or commit, and what the user must decide.
 - To stop a pane's work: `herdr agent send-keys <pane> esc`.
-- Never close a pane, tab or workspace, and never `/clear` or restart an agent that is already there.
+- Never `/clear` or restart an agent that is already there.
+
+## Close the pane when its work is finished
+
+Close a pane only when all of these hold:
+
+- you opened it for this card (`tab create` or `workspace create`) and it is on the card's `herdr pane:` line; a pane you found already there is never yours to close;
+- nothing waits on it: you are completing the card, and no open PR may still need fixes from it;
+- its agent is `idle` or `done`, and `git status` in its cwd shows nothing uncommitted or unpushed;
+- you read its last screen (`herdr agent read <pane> --lines 120`) and put the result and links on the card.
+
+Then `herdr pane close <pane>`. If you created a tab or workspace for it and it is now empty, close that too (`herdr tab close <tab id>`). When one condition fails, leave the pane open and say why in your report.

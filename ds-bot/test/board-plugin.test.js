@@ -1122,7 +1122,6 @@ test('the herdr-panes skill tells a Bot how to hand work to a pane without holdi
   assert.doesNotMatch(skill.content, /^---/)
   assert.match(skill.content, /herdr agent prompt <pane> "<task>"`, without `--wait`/)
   assert.match(skill.content, /call `wait_pane` with the pane, and end your turn/)
-  assert.match(skill.content, /Never close a pane/)
 })
 
 test('a card finished while its PR is open waits in Review and moves to Done once every PR is merged', async (t) => {
