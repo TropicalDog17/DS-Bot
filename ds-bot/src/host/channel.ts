@@ -519,6 +519,7 @@ export function install(rt) {
           await rt.load()
           return ok(await rt.memoryEndpoint(endpoint, body))
         case 'learning-answer':
+        case 'learning-revise':
           await rt.load()
           return ok(await rt.learningEndpoint(endpoint, body))
         case 'hello':

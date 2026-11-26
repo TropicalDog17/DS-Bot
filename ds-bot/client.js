@@ -30462,12 +30462,12 @@ function ProposalCard({ proposal, initialError = "", onFailure, onResolved, acti
   const [open, setOpen] = (0, import_react75.useState)(false);
   const busyRef = (0, import_react75.useRef)(false);
   const titleId = (0, import_react75.useId)();
-  const answer = (approve) => {
+  const submit = (action) => {
     if (busyRef.current) return;
     busyRef.current = true;
     setBusy(true);
     setError("");
-    void Promise.resolve().then(() => actions.learningAnswer(proposal.id, approve)).then(() => onResolved(proposal.id), (failure) => {
+    void Promise.resolve().then(action).then(() => onResolved(proposal.id), (failure) => {
       setError(failure?.message ?? String(failure));
       onFailure(proposal, failure);
     }).finally(() => {
@@ -30491,6 +30491,7 @@ function ProposalCard({ proposal, initialError = "", onFailure, onResolved, acti
   const kind = t(agents ? "AGENTS.md update" : update ? "Skill update" : "New skill");
   if (outcome) {
     const what = agents ? proposal.folder : proposal.name;
+    const label = outcome === "revised" ? t("Revision requested") : t(outcome === "approved" ? "Approved" : "Declined");
     return (0, import_react75.createElement)(
       "section",
       { className: "bt-q bt-q-settled bt-learning-card bt-learning-settled", role: "group", "aria-label": `${kind} · ${what}`, "data-outcome": outcome },
@@ -30499,7 +30500,7 @@ function ProposalCard({ proposal, initialError = "", onFailure, onResolved, acti
         { type: "button", className: "bt-learning-fold", "aria-expanded": open, onClick: () => setOpen(!open) },
         (0, import_react75.createElement)("span", { className: "bt-learning-icon", "aria-hidden": true }, (0, import_react75.createElement)(agents ? PencilIcon : MemoryIcon)),
         (0, import_react75.createElement)("span", { className: "bt-learning-kind" }, kind),
-        (0, import_react75.createElement)("span", { className: "bt-learning-sum" }, `${t(outcome === "approved" ? "Approved" : "Declined")} · ${what}`)
+        (0, import_react75.createElement)("span", { className: "bt-learning-sum" }, `${label} · ${what}`)
       ),
       open ? change : null
     );
@@ -30510,8 +30511,13 @@ function ProposalCard({ proposal, initialError = "", onFailure, onResolved, acti
     { className: "bt-q bt-learning-card", role: "group", "aria-labelledby": titleId, "aria-busy": busy },
     agents ? (0, import_react75.createElement)(ProposalHead, { titleId, icon: PencilIcon, title: kind }) : (0, import_react75.createElement)(ProposalHead, { titleId, title: proposal.name, kind, detail: proposal.description, oldDetail }),
     change,
-    error ? (0, import_react75.createElement)("div", { className: "bt-learning-error", role: "alert" }, error) : null,
-    (0, import_react75.createElement)(ProposalFoot, { busy, answer })
+    (0, import_react75.createElement)(ProposalFoot, {
+      busy,
+      error,
+      clearError: () => setError(""),
+      answer: (approve) => submit(() => actions.learningAnswer(proposal.id, approve)),
+      revise: (note) => submit(() => actions.learningRevise(proposal.id, note))
+    })
   );
 }
 function ProposalHead({ titleId, icon: icon2 = MemoryIcon, title, kind, detail, oldDetail }) {
@@ -30530,16 +30536,80 @@ function ProposalHead({ titleId, icon: icon2 = MemoryIcon, title, kind, detail, 
     (0, import_react75.createElement)("span", { className: "bt-q-badge bt-learning-status" }, (0, import_react75.createElement)("span", { className: "bt-learning-dot", "aria-hidden": true }), t("Awaiting approval"))
   );
 }
-function ProposalFoot({ busy, answer }) {
+function ProposalFoot({ busy, error, clearError, answer, revise }) {
+  const [note, setNote] = (0, import_react75.useState)(null);
+  const noteId = (0, import_react75.useId)();
+  const suggest = (0, import_react75.useRef)(null);
+  const restoreFocus = (0, import_react75.useRef)(false);
+  const editing = note !== null;
+  (0, import_react75.useEffect)(() => {
+    if (!editing && restoreFocus.current) {
+      restoreFocus.current = false;
+      suggest.current?.focus();
+    }
+  }, [editing]);
+  const cancel = () => {
+    if (busy) return;
+    restoreFocus.current = true;
+    clearError();
+    setNote(null);
+  };
+  const send = () => {
+    if (!busy && note?.trim()) revise(note);
+  };
+  const onNoteKeyDown = (event) => {
+    if (event.nativeEvent.isComposing) return;
+    const escape = event.key === "Escape";
+    if (!escape && !(event.key === "Enter" && (event.ctrlKey || event.metaKey))) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (escape) cancel();
+    else send();
+  };
   return (0, import_react75.createElement)(
     "div",
-    { className: "bt-q-foot bt-learning-foot" },
-    (0, import_react75.createElement)("button", { type: "button", className: "bt-learning-btn bt-learning-decline", disabled: busy, onClick: () => answer(false) }, t("Decline")),
-    (0, import_react75.createElement)(
-      "button",
-      { type: "button", className: "bt-learning-btn bt-learning-approve", disabled: busy, onClick: () => answer(true) },
-      (0, import_react75.createElement)(CheckIcon),
-      t("Approve")
+    { className: "bt-learning-controls" },
+    editing ? (0, import_react75.createElement)(
+      "div",
+      { className: "bt-learning-editor" },
+      (0, import_react75.createElement)("label", { htmlFor: noteId }, t("What should change?")),
+      (0, import_react75.createElement)("textarea", {
+        id: noteId,
+        rows: 3,
+        autoFocus: true,
+        placeholder: t("Describe the changes you want"),
+        value: note,
+        readOnly: busy,
+        onChange: (event) => setNote(event.currentTarget.value),
+        onKeyDown: onNoteKeyDown
+      })
+    ) : null,
+    error ? (0, import_react75.createElement)("div", { className: "bt-learning-error", role: "alert" }, error) : null,
+    editing ? (0, import_react75.createElement)(
+      "div",
+      { className: "bt-q-foot bt-learning-foot" },
+      (0, import_react75.createElement)("button", { type: "button", className: "bt-learning-btn bt-learning-decline", disabled: busy, onClick: cancel }, t("Cancel")),
+      (0, import_react75.createElement)("button", { type: "button", className: "bt-learning-btn bt-learning-send", disabled: busy || !note.trim(), onClick: send }, t("Send"))
+    ) : (0, import_react75.createElement)(
+      "div",
+      { className: "bt-q-foot bt-learning-foot" },
+      (0, import_react75.createElement)("button", { type: "button", className: "bt-learning-btn bt-learning-decline", disabled: busy, onClick: () => answer(false) }, t("Decline")),
+      (0, import_react75.createElement)("button", {
+        type: "button",
+        className: "bt-learning-btn bt-learning-suggest",
+        disabled: busy,
+        ref: suggest,
+        onClick: () => {
+          clearError();
+          setNote("");
+        }
+      }, t("Suggest changes")),
+      (0, import_react75.createElement)(
+        "button",
+        { type: "button", className: "bt-learning-btn bt-learning-approve", disabled: busy, onClick: () => answer(true) },
+        (0, import_react75.createElement)(CheckIcon),
+        t("Approve")
+      )
     )
   );
 }
@@ -30677,12 +30747,19 @@ var LEARNING_CSS = `
 .bt-learning-more:hover{background:var(--bt-hover);color:var(--bt-ink)}
 .bt-learning-more:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
 .bt-learning-why{margin:0;font-size:12px;line-height:17px;color:var(--bt-ink-2)}
+.bt-learning-controls,.bt-learning-editor{display:flex;flex-direction:column;gap:8px;min-width:0}
+.bt-learning-editor label{font-size:13px;font-weight:500;color:var(--bt-ink)}
+.bt-learning-editor textarea{box-sizing:border-box;width:100%;padding:8px 10px;resize:vertical;border:1px solid var(--bt-line-2);border-radius:8px;background:var(--bt-card);color:var(--bt-ink);font:inherit;font-size:16px;line-height:1.4}
+.bt-learning-editor textarea::placeholder{color:var(--bt-ink-2);opacity:1}
+.bt-learning-editor textarea:focus{outline:2px solid var(--bt-accent);outline-offset:2px}
+.bt-learning-foot{flex-wrap:wrap}
 .bt-learning-btn{flex:none;display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 16px;border:0;border-radius:999px;font:inherit;font-size:14px;font-weight:500;cursor:pointer;transition:background-color .12s ease,opacity .12s ease,${spring(SPRING_TAP, "scale")}}
 .bt-learning-btn svg{width:15px;height:15px}
-.bt-learning-decline{background:transparent;box-shadow:inset 0 0 0 1px var(--bt-line-2);color:var(--bt-ink)}
-.bt-learning-decline:hover:not(:disabled){background:var(--bt-hover)}
-.bt-learning-approve{padding-left:13px;background:var(--bt-accent);color:var(--bt-accent-ink)}
-.bt-learning-approve:hover:not(:disabled){opacity:.86}
+.bt-learning-decline,.bt-learning-suggest{background:transparent;box-shadow:inset 0 0 0 1px var(--bt-line-2);color:var(--bt-ink)}
+.bt-learning-decline:hover:not(:disabled),.bt-learning-suggest:hover:not(:disabled){background:var(--bt-hover)}
+.bt-learning-approve{padding-left:13px}
+.bt-learning-approve,.bt-learning-send{background:var(--bt-accent);color:var(--bt-accent-ink)}
+.bt-learning-approve:hover:not(:disabled),.bt-learning-send:hover:not(:disabled){opacity:.86}
 .bt-learning-btn:disabled{opacity:.45;cursor:default}
 .bt-learning-btn:active:not(:disabled){scale:.96}
 .bt-learning-btn:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
@@ -32002,6 +32079,7 @@ function apply(ctx) {
       openChangesReview(changes);
     },
     learningAnswer: (id, approve) => after(call("learning-answer", { id, approve })),
+    learningRevise: (id, note) => after(call("learning-revise", { id, note })),
     isAgentSession: (id) => isAgentSessionId(id),
     openSession: (id) => {
       if (isAgentSessionId(id)) return actions.openAgentSession(id);
