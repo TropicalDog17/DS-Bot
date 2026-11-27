@@ -347,7 +347,7 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
     ctx.on?.('agent/assistant-stream', ({ agent, frame }: any = {}) => live.onFrame(agent?.id, frame)),
     notes.onCardNote?.(async ({ cardId, text, requestId }) => {
       const cards = store.read().cards
-      if (typeof cardId !== 'string' || !Object.hasOwn(cards, cardId) || !isOpen(cards[cardId])) return false
+      if (typeof cardId !== 'string' || !Object.hasOwn(cards, cardId)) return false
       const line = noteText(text)
       if (isBlankNote(line)) return { error: 'Write a note first.' }
       const error = noteLengthError(line)
