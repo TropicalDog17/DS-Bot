@@ -4,7 +4,7 @@ import { dshHomeOf } from '../host/folders.ts'
 import { textOf } from '../host/text.ts'
 import { pathOfLink } from '../host/file-view.ts'
 import { ACTIONS, BOT_STATUSES, createBoard, isOpen } from './cards.ts'
-import { USER } from './card-fields.ts'
+import { NOTE_MAX, USER, isBlankNote, noteLengthError, noteText } from './card-fields.ts'
 import { LEVELS, createLive, levelOf } from './live.ts'
 import { openBoardStore } from './store.ts'
 import { createHerdr, createdPane, herdrBinary, paneCreation, panesIn } from './herdr.ts'
@@ -79,7 +79,7 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
       url: { type: 'string', description: 'Ticket URL' },
       assignee: { type: 'string', description: 'open or update: exact Bot name, or "user"; default you on open. On update it moves the card to that Bot (Main Bot or the current assignee only)' },
       brief: { type: 'string', description: 'open for another Bot: everything it needs (goal, context, limits, what done looks like); it cannot see your conversation' },
-      text: { type: 'string', description: 'note: what to pass on to the card\'s assignee' },
+      text: { type: 'string', description: `note: what to pass on to the card's assignee. Up to ${NOTE_MAX.toLocaleString('en-US')} characters, with line breaks preserved.` },
       status: { type: 'string', enum: BOT_STATUSES, description: 'todo, active (in progress), review (waits for the user), blocked' },
       progress: { type: 'string', description: 'Latest progress, one line' },
       need: { type: 'string', description: 'update to review or blocked: what the user must do (approve, merge, answer) with the link to it; Markdown' },
@@ -185,10 +185,13 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
     const turn = live.current({ botId: card.assignee, cardId: card.id, since: 0 }, trace)
     return turn === undefined || turn.endedAt !== undefined ? undefined : turn
   }
-  let viewCache: { json: string; key: string } | undefined
   let liveCache: { json: string; key: string } | undefined
-  let viewSeq = 0
   let liveSeq = 0
+  const revisionOf = (bots, readOnly, trace) => {
+    const storeVersion = typeof store.version === 'function' ? store.version() : String(Object.keys(store.read().cards).length)
+    const botsKey = bots.map(bot => `${bot.id}:${bot.name}:${bot.color ?? ''}:${bot.avatar?.shape ?? ''}:${bot.avatar?.image ?? ''}`).join(',')
+    return `${storeVersion}|${readOnly ? 1 : 0}|${trace}|${botsKey}`
+  }
   const viewSnapshot = () => {
     const { cards } = store.read()
     const trace = level()
@@ -198,12 +201,12 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
       const now = (card.awaiting === undefined ? undefined : live.current(card.awaiting, trace)) ?? running(card, trace)
       if (now !== undefined) working[card.id] = now
     }
-    const base = { cards, bots: roster.bots(), readOnly: store.readOnly(), trace }
-    const baseJson = JSON.stringify(base)
-    if (viewCache?.json !== baseJson) viewCache = { json: baseJson, key: `b:${++viewSeq}` }
+    const bots = roster.bots()
+    const readOnly = store.readOnly()
+    const revision = revisionOf(bots, readOnly, trace)
     const liveJson = JSON.stringify(working)
     if (liveCache?.json !== liveJson) liveCache = { json: liveJson, key: `l:${++liveSeq}` }
-    return { ...base, live: working, revision: viewCache.key, liveKey: liveCache.key }
+    return { cards, bots, readOnly, trace, live: working, revision, liveKey: liveCache.key }
   }
   const view = () => viewSnapshot()
   async function handle(endpoint, payload) {
@@ -361,9 +364,14 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
     }),
     ctx.on?.('agent/assistant-stream', ({ agent, frame }: any = {}) => live.onFrame(agent?.id, frame)),
     notes.onCardNote?.(async ({ cardId, text, requestId }) => {
-      if (typeof cardId !== 'string' || store.read().cards[cardId] === undefined) return false
-      const result = await userNote(cardId, text, requestId)
-      return result?.error === undefined
+      const cards = store.read().cards
+      if (typeof cardId !== 'string' || !Object.hasOwn(cards, cardId)) return false
+      const line = noteText(text)
+      if (isBlankNote(line)) return { error: 'Write a note first.' }
+      const error = noteLengthError(line)
+      if (error !== undefined) return { error }
+      const result = await userNote(cardId, line, requestId)
+      return result.error === undefined
     }),
     roster.addRoutingPart?.(() => openCardsDigest()),
     systemPrompt?.section?.({ name: 'ds-bot-board-rules', order: RULES_ORDER, interpolate: false, text: context => rulesFor(context?.agent?.id) }),

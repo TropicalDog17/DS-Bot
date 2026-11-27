@@ -1,4 +1,6 @@
-import { createElement as h, useCallback, useEffect, useRef, useState } from 'react'
+import { createElement as h, memo as reactMemo, useCallback, useEffect, useLayoutEffect, useMemo as reactUseMemo, useRef, useState } from 'react'
+const memo = typeof reactMemo === 'function' ? reactMemo : (fn => fn)
+const useMemo = typeof reactUseMemo === 'function' ? reactUseMemo : (fn => fn())
 import { BotMark } from '../../client/mark.ts'
 import { ChevronLeftIcon, PlusIcon } from '../../client/icons.ts'
 import { useEscape } from '../../client/overlay-hooks.ts'
@@ -6,6 +8,8 @@ import { clockLabel, elapsedLabel, relativeShort } from '../../client/text.ts'
 import { workPhrase } from '../../client/cells.ts'
 import { mdLabels, t } from '../../client/i18n.ts'
 import { MarkdownText } from '../../client/dsh-primitives.ts'
+import { sendsOnEnter } from '../../client/enter-key.ts'
+import { NOTE_MAX, charCount, isBlankNote, noteText } from '../card-fields.ts'
 import { LinkIcon, StepsIcon } from './icons.ts'
 import { CARD_LINK_ORIGIN, linkCards, nameCards } from './card-tag.ts'
 import { FILE_LINK_ORIGIN, fileLinkTarget, fileName, linkFiles } from './file-link.ts'
@@ -16,6 +20,8 @@ const DONE_DAYS = 7
 const DONE_SHOWN = 10
 const USER = 'user'
 const DRAG_TYPE = 'text/x-ds-bot-card'
+const NOTE_COUNT_FROM = 18_000
+const noteCountFormat = new Intl.NumberFormat('en-US')
 
 export function boardColumns(cards, now = Date.now()) {
   const all = Object.values<any>(cards ?? {}).filter(card => card && typeof card.id === 'string').sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0))
@@ -46,10 +52,12 @@ export function plainLine(text) {
     .trim()
 }
 
-function BotText({ text, cards, className }) {
+const BotText = memo(function BotText({ text, cards, className }) {
+  const linked = useMemo(() => linkCards(linkFiles(text ?? ''), cards), [text, cards])
+  const labels = useMemo(() => mdLabels(), [])
   return h('div', { className: `bt-board-md ${className}` },
-    h(MarkdownText, { text: linkCards(linkFiles(text ?? ''), cards), labels: mdLabels(), variant: 'compact' }))
-}
+    h(MarkdownText, { text: linked, labels, variant: 'compact' }))
+})
 
 export function linkLabel(href) {
   let url
@@ -212,16 +220,16 @@ export function Trace({ steps, live = false, open = false }) {
       : h(ToolStep, { key: index, step, open })))
 }
 
-function TraceFold({ trace, open }) {
+const TraceFold = memo(function TraceFold({ trace, open }) {
   const steps = Array.isArray(trace?.steps) ? trace.steps : []
   if (steps.length === 0) return null
   return h('details', { className: 'bt-board-fold' },
     h('summary', null, t('Thought it through'),
       typeof trace.ms === 'number' ? h('span', { className: 'bt-board-age' }, `· ${elapsedLabel(Math.max(1000, trace.ms))}`) : null),
     h(Trace, { steps, open }))
-}
+})
 
-function Thread({ notes, roster, awaiting, worker, live, pick, busy }) {
+const Thread = memo(function Thread({ notes, roster, awaiting, worker, live, pick, busy }) {
   const cards = roster.board?.cards ?? {}
   const asked = notes.findLastIndex(note => Array.isArray(note.options) && note.options.length > 0)
   const answer = asked < 0 ? undefined : notes.slice(asked + 1).find(note => note.by === undefined || note.by === USER)
@@ -247,9 +255,9 @@ function Thread({ notes, roster, awaiting, worker, live, pick, busy }) {
       h('div', { className: 'bt-board-msg-body' },
         working ? h(Trace, { steps: working, live: true, open }) : null,
         h('span', { className: 'bt-board-msg-text bt-board-dots', 'aria-hidden': true }, h('i'), h('i'), h('i')))) : null)
-}
+})
 
-function Steps({ card, cards }) {
+const Steps = memo(function Steps({ card, cards }) {
   const [open, setOpen] = useState(false)
   const earlier = (card.log ?? []).slice(0, -1).reverse()
   if (earlier.length === 0) return null
@@ -261,7 +269,7 @@ function Steps({ card, cards }) {
         h(Dot, { status: step.status }),
         h('span', { className: 'bt-board-age' }, clockLabel(step.at ?? 0)),
         step.progress ? h(BotText, { text: step.progress, cards, className: 'bt-board-step-text' }) : null))) : null)
-}
+})
 
 const PANE_MS = 2000
 export function Panes({ card, actions }) {
@@ -314,48 +322,114 @@ export function Panes({ card, actions }) {
 }
 
 const BRIEF_FOLD = 280
-function Brief({ text, cards }) {
+const Brief = memo(function Brief({ text, cards }) {
   const [open, setOpen] = useState(false)
   const long = text.length > BRIEF_FOLD || text.split('\n').length > 4
   return h('div', { className: 'bt-board-brief', 'data-folded': long && !open ? true : undefined },
     h(BotText, { text, cards, className: 'bt-board-line' }),
     long ? h('button', { type: 'button', className: 'bt-more', 'aria-expanded': open, onClick: () => setOpen(value => !value) },
       open ? t('Show less') : t('Show more')) : null)
+})
+
+function fitComposer(node: HTMLTextAreaElement, canShrink = true) {
+  const border = node.offsetHeight - node.clientHeight
+  if (!canShrink && node.style.height !== '') {
+    const height = `${Math.min(180, Math.max(40, node.scrollHeight + border))}px`
+    if (parseFloat(height) > parseFloat(node.style.height)) node.style.height = height
+    return
+  }
+  if (node.style.height === '40px') {
+    const height = `${Math.min(180, Math.max(40, node.scrollHeight + border))}px`
+    if (node.style.height !== height) node.style.height = height
+    return
+  }
+  const scrollTop = node.scrollTop
+  const { maxHeight, overflowY } = node.style
+  node.style.maxHeight = '0px'
+  node.style.overflowY = 'hidden'
+  const height = `${Math.min(180, Math.max(40, node.scrollHeight + border))}px`
+  node.style.maxHeight = maxHeight
+  node.style.overflowY = overflowY
+  if (node.style.height !== height) node.style.height = height
+  if (node.scrollTop !== scrollTop) node.scrollTop = scrollTop
 }
 
+const EMPTY_DRAFT = { typed: '', refused: [] as { seq: number; text: string }[] }
+
 export function CardDetail({ card, roster, actions, live, onOpenCard }) {
-  const [text, setText] = useState('')
+  const [draft, setDraft] = useState(EMPTY_DRAFT)
   const [busy, setBusy] = useState(false)
   const [pending, setPending] = useState([])
   const [confirming, setConfirming] = useState(false)
   const [error, setError] = useState('')
   const [file, setFile] = useState(null)
   const scroller = useRef(null)
+  const composer: { current: HTMLTextAreaElement | null } = useRef(null)
+  const prevTextLen = useRef(0)
   const pendingSeq = useRef(0)
-  const mountedCard = useRef(card.id)
+  const mountedCard = useRef(null)
+  const follow = useRef(true)
   const notes = card.notes ?? []
-  const shownNotes = pending.length > 0 ? [...notes, ...pending] : notes
+  const shownNotes = useMemo(() => (pending.length > 0 ? [...notes, ...pending] : notes), [notes, pending])
   const said = shownNotes.length
   const steps = live?.steps?.length ?? 0
   const waiting = card.awaiting !== undefined || steps > 0
-  useEffect(() => {
+  const text = [draft.typed, ...draft.refused.map(entry => entry.text)].filter(part => part !== '').join('\n\n')
+  const line = noteText(text)
+  const count = charCount(line)
+  const excess = count - NOTE_MAX
+  const sendDisabled = isBlankNote(line) || excess > 0
+  const open = OPEN.includes(card.status)
+  useLayoutEffect(() => {
+    const node = composer.current
+    const canShrink = text.length < prevTextLen.current
+    prevTextLen.current = text.length
+    if (node !== null) {
+      if (node.value !== text) node.value = text
+      fitComposer(node, canShrink)
+    }
+  }, [open, text])
+  useLayoutEffect(() => {
+    const node = composer.current
+    if (node === null || typeof ResizeObserver !== 'function') return undefined
+    let width = node.getBoundingClientRect().width
+    let frame: number | undefined
+    const observer = new ResizeObserver(() => {
+      const next = node.getBoundingClientRect().width
+      if (next === width) return
+      width = next
+      if (frame !== undefined) cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => {
+        frame = undefined
+        fitComposer(node)
+      })
+    })
+    observer.observe(node, { box: 'border-box' })
+    return () => {
+      observer.disconnect()
+      if (frame !== undefined) cancelAnimationFrame(frame)
+    }
+  }, [open])
+  useLayoutEffect(() => {
     const node = scroller.current
-    if (!node || typeof node.scrollTo !== 'function') return
+    if (!node) return
     const switched = mountedCard.current !== card.id
-    mountedCard.current = card.id
-    node.scrollTo({ top: node.scrollHeight, behavior: switched ? 'instant' : 'smooth' })
+    if (switched) {
+      mountedCard.current = card.id
+      follow.current = true
+    }
+    if (switched || follow.current) node.scrollTop = node.scrollHeight
   }, [card.id, said, waiting])
-  useEffect(() => {
+  useLayoutEffect(() => {
     const node = scroller.current
-    if (!node || typeof node.scrollTo !== 'function' || steps === 0) return
-    if (node.scrollHeight - node.scrollTop - node.clientHeight < 120) node.scrollTo({ top: node.scrollHeight })
+    if (!node || steps === 0) return
+    if (follow.current) node.scrollTop = node.scrollHeight
   }, [steps])
   useEffect(() => {
     if (!confirming) return undefined
     const timer = setTimeout(() => setConfirming(false), 3000)
     return () => clearTimeout(timer)
   }, [confirming])
-  const open = OPEN.includes(card.status)
   const run = (promise, after?) => {
     setBusy(true)
     setError('')
@@ -364,25 +438,36 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
       (failure) => { setBusy(false); setError(String(failure?.message ?? failure)) },
     )
   }
-  const sendNote = (line, restore = false) => {
-    const pendingId = `pending-${++pendingSeq.current}`
+  const editDraft = (typed: string) => {
+    setDraft(current => ({
+      typed,
+      refused: current.refused.filter(entry => !draft.refused.includes(entry)),
+    }))
+  }
+  const sendNote = useCallback((line, original?: string) => {
+    const seq = ++pendingSeq.current
+    const pendingId = `pending-${seq}`
     const optimistic = { pendingId, pending: true, at: Date.now(), by: USER, text: line }
+    follow.current = true
     setError('')
     setPending(list => [...list, optimistic])
     Promise.resolve(actions.boardNote(card.id, line)).then(
       () => { setPending(list => list.filter(entry => entry.pendingId !== pendingId)) },
       (failure) => {
         setPending(list => list.filter(entry => entry.pendingId !== pendingId))
-        if (restore) setText(current => (current === '' ? line : current))
+        if (original !== undefined) setDraft(current => ({
+          typed: current.typed,
+          refused: [...current.refused, { seq, text: original }].sort((a, b) => a.seq - b.seq),
+        }))
         setError(String(failure?.message ?? failure))
       },
     )
-  }
+  }, [actions, card.id])
+  const handlePick = useCallback(option => sendNote(option), [sendNote])
   const send = () => {
-    const line = text.trim()
-    if (line === '') return
-    setText('')
-    sendNote(line, true)
+    if (sendDisabled) return
+    editDraft('')
+    sendNote(line, text)
   }
   const cancel = () => {
     if (!confirming) { setConfirming(true); return }
@@ -394,8 +479,12 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
   const waitsOnUser = card.status === 'review' || card.status === 'blocked'
   const need = waitsOnUser ? card.need || card.progress || '' : ''
   const progress = need !== '' && !card.need ? '' : card.progress
+  const onDetailScroll = (event) => {
+    const node = event.currentTarget
+    follow.current = node.scrollHeight - node.scrollTop - node.clientHeight < 120
+  }
   return h('div', { className: 'bt-board-sheet-body', 'data-status': card.status },
-    h('div', { className: 'bt-board-detail', ref: scroller, onClick: linkTap({ openCard: onOpenCard, openFile: setFile }) },
+    h('div', { className: 'bt-board-detail', ref: scroller, onScroll: onDetailScroll, onClick: linkTap({ openCard: onOpenCard, openFile: setFile }) },
       card.key ? (card.url
         ? h('a', { className: 'bt-board-key', href: card.url, target: '_blank', rel: 'noreferrer noopener' }, card.key)
         : h('span', { className: 'bt-board-key' }, card.key)) : null,
@@ -434,16 +523,26 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
       }, t('Cancel card')) : null,
       shownNotes.length > 0 || (open && steps > 0) ? h(Thread, {
         notes: shownNotes, roster, awaiting: open ? card.awaiting : undefined, worker: card.assignee, live: open ? live : undefined, busy,
-        pick: open ? option => sendNote(option) : undefined,
+        pick: open ? handlePick : undefined,
       }) : null,
       error ? h('div', { className: 'bt-error', role: 'alert' }, error) : null),
     open ? h('div', { className: 'bt-board-sheet-foot bt-board-write' },
-      h('input', {
-        className: 'bt-input', value: text, placeholder: t('Message'), 'aria-label': t('Message'), maxLength: 500,
-        onChange: event => setText(event.target.value),
-        onKeyDown: (event) => { if (event.key === 'Enter' && !event.nativeEvent?.isComposing) { event.preventDefault(); send() } },
+      h('textarea', {
+        ref: composer, className: 'bt-input', defaultValue: '', placeholder: t('Message'), 'aria-label': t('Message'), rows: 1, 'aria-invalid': excess > 0 || undefined,
+        onChange: event => editDraft(event.target.value),
+        onKeyDown: (event) => {
+          if (event.key !== 'Enter' || !sendsOnEnter(roster.prefs) || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey
+            || event.keyCode === 229 || event.nativeEvent?.isComposing) return
+          event.preventDefault()
+          send()
+        },
       }),
-      h('button', { type: 'button', className: 'bt-send', disabled: text.trim() === '', onClick: send }, t('Send'))) : null,
+      h('button', { type: 'button', className: 'bt-send', disabled: sendDisabled, onClick: send }, t('Send')),
+      h('div', { className: 'bt-board-write-status', 'data-over-limit': excess > 0 || undefined },
+        count > NOTE_COUNT_FROM ? h('span', { className: 'bt-board-write-count' },
+          t('{count} / {limit}', { count: noteCountFormat.format(count), limit: noteCountFormat.format(NOTE_MAX) })) : null,
+        h('span', { className: 'bt-board-write-error', 'aria-live': 'polite' },
+          excess > 0 ? t(excess === 1 ? 'Too long by {count} character' : 'Too long by {count} characters', { count: noteCountFormat.format(excess) }) : ''))) : null,
     file !== null && actions.boardFile ? h(FileView, { cardId: card.id, target: file, actions, onClose: () => setFile(null) }) : null)
 }
 
@@ -576,12 +675,12 @@ a.bt-board-key:hover{color:var(--bt-ink)}
 .bt-board-sheet-head .bt-icon-btn{width:36px;height:36px}
 .bt-board-sheet-head h3{margin:0;font-size:16px;line-height:24px;font-weight:600}
 .bt-board-sheet-body{flex:1;min-height:0;display:flex;flex-direction:column}
-.bt-board-form,.bt-board-detail{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;align-items:stretch;gap:16px;padding:8px 24px 24px}
+.bt-board-form,.bt-board-detail{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;align-items:stretch;gap:16px;padding:8px 24px 24px;contain:layout style}
 .bt-board-form .bt-input{height:40px;font-size:14px}
 .bt-board-title-input{font-weight:500}
 .bt-board-form-row{display:flex;gap:8px}
 .bt-board-key-input{flex:0 0 128px;font-family:var(--bt-mono,ui-monospace,SFMono-Regular,Menlo,monospace);text-transform:uppercase}
-.bt-board-sheet-foot{flex:none;display:flex;gap:8px;align-items:center;padding:12px 24px calc(12px + env(safe-area-inset-bottom,0px));border-top:.5px solid var(--bt-line);background:var(--bt-main)}
+.bt-board-sheet-foot{flex:none;display:flex;gap:8px;align-items:center;padding:12px 24px calc(12px + env(safe-area-inset-bottom,0px));border-top:.5px solid var(--bt-line);background:var(--bt-main);contain:layout style}
 .bt-board-go{flex:1}
 .bt-board-detail>.bt-board-key{align-self:flex-start;margin-bottom:-8px}
 .bt-board-detail-title{margin:0;font-size:18px;line-height:26px;font-weight:600;letter-spacing:-.01em;overflow-wrap:anywhere}
@@ -696,7 +795,11 @@ a.bt-board-key:hover{color:var(--bt-ink)}
 .bt-board-cancel{align-self:flex-start;margin-top:8px;height:32px;padding:0;border:0;background:none;color:var(--bt-ink-3);font:inherit;font-size:13px;cursor:pointer}
 .bt-board-cancel:hover,.bt-board-cancel[data-confirm]{color:var(--bt-danger)}
 .bt-board-cancel[data-confirm]{font-weight:600}
-.bt-board-write>.bt-input{flex:1;min-width:0;height:40px;font-size:14px}
+.bt-board-write{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:0 8px;align-items:end}
+.bt-board-write>.bt-input{height:auto;min-height:40px;max-height:180px;padding:9px 11px;line-height:20px;font-size:14px;resize:none;overflow-y:auto}
+.bt-board-write-status{grid-column:1/-1;text-align:right;color:var(--bt-ink-2);font-size:12px}
+.bt-board-write-status[data-over-limit]{color:var(--bt-danger)}
+.bt-board-write-count,.bt-board-write-error:not(:empty){display:block;margin-top:4px}
 @media (max-width:640px){
   .bt-board-page{top:0}
   .bt-board-head{padding:12px 8px 8px 16px}
