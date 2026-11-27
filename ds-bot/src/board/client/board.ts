@@ -324,7 +324,8 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
   const scroller = useRef(null)
   const composer: { current: HTMLTextAreaElement | null } = useRef(null)
   const pendingSeq = useRef(0)
-  const mountedCard = useRef(card.id)
+  const mountedCard = useRef(null)
+  const follow = useRef(true)
   const notes = card.notes ?? []
   const shownNotes = useMemo(() => (pending.length > 0 ? [...notes, ...pending] : notes), [notes, pending])
   const said = shownNotes.length
@@ -361,17 +362,20 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
       if (frame !== undefined) cancelAnimationFrame(frame)
     }
   }, [open])
-  useEffect(() => {
+  useLayoutEffect(() => {
     const node = scroller.current
-    if (!node || typeof node.scrollTo !== 'function') return
+    if (!node) return
     const switched = mountedCard.current !== card.id
-    mountedCard.current = card.id
-    node.scrollTo({ top: node.scrollHeight, behavior: switched ? 'instant' : 'smooth' })
+    if (switched) {
+      mountedCard.current = card.id
+      follow.current = true
+    }
+    if (switched || follow.current) node.scrollTop = node.scrollHeight
   }, [card.id, said, waiting])
-  useEffect(() => {
+  useLayoutEffect(() => {
     const node = scroller.current
-    if (!node || typeof node.scrollTo !== 'function' || steps === 0) return
-    if (node.scrollHeight - node.scrollTop - node.clientHeight < 120) node.scrollTo({ top: node.scrollHeight })
+    if (!node || steps === 0) return
+    if (follow.current) node.scrollTop = node.scrollHeight
   }, [steps])
   useEffect(() => {
     if (!confirming) return undefined
@@ -396,6 +400,7 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
     const seq = ++pendingSeq.current
     const pendingId = `pending-${seq}`
     const optimistic = { pendingId, pending: true, at: Date.now(), by: USER, text: line }
+    follow.current = true
     setError('')
     setPending(list => [...list, optimistic])
     Promise.resolve(actions.boardNote(card.id, line)).then(
@@ -426,8 +431,12 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
   const waitsOnUser = card.status === 'review' || card.status === 'blocked'
   const need = waitsOnUser ? card.need || card.progress || '' : ''
   const progress = need !== '' && !card.need ? '' : card.progress
+  const onDetailScroll = (event) => {
+    const node = event.currentTarget
+    follow.current = node.scrollHeight - node.scrollTop - node.clientHeight < 120
+  }
   return h('div', { className: 'bt-board-sheet-body', 'data-status': card.status },
-    h('div', { className: 'bt-board-detail', ref: scroller, onClick: cardLinkTap(onOpenCard) },
+    h('div', { className: 'bt-board-detail', ref: scroller, onScroll: onDetailScroll, onClick: cardLinkTap(onOpenCard) },
       card.key ? (card.url
         ? h('a', { className: 'bt-board-key', href: card.url, target: '_blank', rel: 'noreferrer noopener' }, card.key)
         : h('span', { className: 'bt-board-key' }, card.key)) : null,
