@@ -330,9 +330,10 @@ test('the Board page adds, moves, notes and cancels; notes reach the Bot through
   await h.post('note', { id: mineId, text: 'remember' })
   assert.match(h.team.sent[0][1], /^\[Card c_\w+ · "Đặt lịch khám răng"\] from the user\./)
   assert.deepEqual(h.team.sent.slice(1), [
-    ['b', `Note on card ${card.id} "Đặt lịch khám răng": gọi trước 5h`],
+    ['b', `Note on card ${card.id} "Đặt lịch khám răng":   gọi trước 5h`],
     ['r1', `@Writer Note on card ${group.id} "Group work": add tests`],
   ])
+  assert.deepEqual(h.cards().find(entry => entry.id === card.id).notes.map(note => note.text), ['  gọi trước 5h'])
   assert.deepEqual(h.cards().find(entry => entry.id === mineId).notes.map(note => note.text), ['remember'])
 
   assert.equal((await h.post('cancel', { id: card.id, reason: 'not needed' })).value.cards[card.id].status, 'cancelled')

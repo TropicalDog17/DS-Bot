@@ -31,13 +31,14 @@ export async function boardCall(endpoint, payload?, { fetchImpl = globalThis.fet
   return result.value
 }
 
-function BoardPage({ live, focus, call, close, paneLeft, leaving }) {
+function BoardPage({ live, focus, call, close, paneLeft, leaving, prefsSource }) {
   const view = useSyncExternalStore(live.source.subscribe, live.source.getSnapshot)
+  const prefs = useSyncExternalStore(prefsSource.subscribe, prefsSource.getSnapshot)
   useEffect(() => live.opened(), [live])
   const roster = useMemo(() => {
     const bots = view?.bots ?? []
-    return { bots, byId: Object.fromEntries(bots.map(bot => [bot.id, bot])), board: { cards: view?.cards ?? {}, live: view?.live ?? {}, trace: view?.trace } }
-  }, [view])
+    return { bots, byId: Object.fromEntries(bots.map(bot => [bot.id, bot])), prefs, board: { cards: view?.cards ?? {}, live: view?.live ?? {}, trace: view?.trace } }
+  }, [view, prefs])
   const act = useCallback((endpoint, payload) => call(endpoint, payload).then(
     (value) => { if (value) live.take(value) },
     (error) => { live.refresh(); throw error },
@@ -148,7 +149,7 @@ function tagCards(live, cardTags) {
   return () => { offWatch(); off?.() }
 }
 
-export function installBoardPage(pages, { call = boardCall, retryMs = 3000, watchMs = WATCH_MS, cardTags }: any = {}) {
+export function installBoardPage(pages, { call = boardCall, retryMs = 3000, watchMs = WATCH_MS, cardTags, prefsSource = createSource(undefined) }: any = {}) {
   let disposed = false
   let unregister
   let untag
@@ -164,7 +165,7 @@ export function installBoardPage(pages, { call = boardCall, retryMs = 3000, watc
         order: 10,
         Page: ({ close, paneLeft, leaving }) => {
           const [focus] = useState(() => live.focus())
-          return h(BoardPage, { live, focus, call, close, paneLeft, leaving })
+          return h(BoardPage, { live, focus, call, close, paneLeft, leaving, prefsSource })
         },
       })
       live = boardWatch(pages, { first: value, call, closedMs: watchMs })

@@ -1,16 +1,14 @@
 import { randomBytes } from 'node:crypto'
 import { prName, prsOf } from './prs.ts'
 import { pushFor, pushText } from './watch.ts'
-import { OPEN_STATUSES, USER, isOpen, oneLine } from './card-fields.ts'
+import { REPLY_MAX, OPEN_STATUSES, USER, isBlankNote, isOpen, noteLengthError, noteText, oneLine } from './card-fields.ts'
 
-export { OPEN_STATUSES, USER, isOpen, oneLine } from './card-fields.ts'
+export { NOTE_MAX, REPLY_MAX, OPEN_STATUSES, USER, isOpen, oneLine } from './card-fields.ts'
 
 export const CARD_STATUSES = ['todo', 'active', 'review', 'blocked', 'done', 'cancelled']
 export const TITLE_MAX = 200
 export const PROGRESS_MAX = 300
 export const RESULT_MAX = 2000
-export const NOTE_MAX = 500
-export const REPLY_MAX = 20_000
 export const THREAD_MAX = 200
 export const AWAIT_MAX_MS = 12 * 60 * 60 * 1000
 export const REQUESTS_MAX = 20
@@ -32,7 +30,19 @@ export const MERGE_MISSES = 3
 const ADOPT_NOTE_MAX = 300
 const ACCEPT_NEED = 'Review the result, then move the card to Done if you accept it.'
 
-export const replyText = (text, max) => String(text ?? '').replace(/\r\n?/g, '\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, max)
+const multilineText = text => String(text ?? '')
+  .replace(/\r\n?/g, '\n')
+  .replace(/(?<![ \t])[ \t]+\n/g, '\n')
+  .replace(/\n{3,}/g, '\n\n')
+  .trim()
+const fieldText = (text, max) => multilineText(text).slice(0, max)
+
+export function replyText(text, max) {
+  const body = multilineText(text)
+  const points = [...body]
+  return points.length > max ? points.slice(0, max - 1).join('') + '…' : body
+}
+
 export const newCardId = () => `c_${randomBytes(4).toString('hex')}`
 
 export function ticketKey(text) {
@@ -290,7 +300,7 @@ export function createBoard({ roster, now = Date.now }) {
       }
       const status = args.status ?? 'active'
       if (!BOT_STATUSES.includes(status)) return { error: `status is one of ${BOT_STATUSES.join(', ')}.` }
-      const brief = replyText(args.brief, BRIEF_MAX)
+      const brief = fieldText(args.brief, BRIEF_MAX)
       const forBot = assignee !== USER
       const handed = forBot && assignee !== self
       if (handed && brief === '') return { error: `A card for ${nameOf(assignee)} needs a brief: everything it needs to do the work, since it cannot see this conversation.` }
@@ -357,7 +367,7 @@ export function createBoard({ roster, now = Date.now }) {
       if (card.status !== 'review') delete card.completedBy
       if (args.progress !== undefined) card.progress = oneLine(args.progress, PROGRESS_MAX)
       if (args.need !== undefined) {
-        const need = replyText(args.need, NEED_MAX)
+        const need = fieldText(args.need, NEED_MAX)
         if (need === '') delete card.need
         else card.need = need
       }
@@ -389,7 +399,7 @@ export function createBoard({ roster, now = Date.now }) {
       if (card === undefined) return { error: 'No open card of yours. Name one with its id or ticket key.' }
       if (!isOpen(card)) return { error: `${label(card)} is already finished.` }
       if (card.assignee !== self) return { error: `${label(card)} belongs to ${nameOf(card.assignee)}; only its assignee asks on it.` }
-      const question = replyText(args.question, QUESTION_MAX)
+      const question = fieldText(args.question, QUESTION_MAX)
       if (question === '') return { error: 'ask needs a question.' }
       const options = [...new Set((Array.isArray(args.options) ? args.options : []).map(option => oneLine(option, OPTION_MAX)).filter(option => option !== ''))]
       if (options.length < OPTIONS_MIN || options.length > OPTIONS_MAX) return { error: `ask needs ${OPTIONS_MIN} to ${OPTIONS_MAX} different options.` }
@@ -407,11 +417,17 @@ export function createBoard({ roster, now = Date.now }) {
       if (!isOpen(card)) return { error: `${label(card)} is already finished.` }
       if (card.assignee === self) return { error: `${label(card)} is yours; just do it.` }
       if (!mayChange(card, self)) return { error: `${label(card)} belongs to ${nameOf(card.assignee)}.` }
-      const said = oneLine(args.text, NOTE_MAX)
-      if (said === '') return { error: 'note needs the text to pass on.' }
+      const said = noteText(args.text)
+      if (isBlankNote(said)) return { error: 'note needs the text to pass on.' }
+      const error = noteLengthError(said)
+      if (error !== undefined) return { error }
       say(card, self, said)
       const bot = card.assignee === USER ? undefined : roster.bot(card.assignee)
-      const effects = bot === undefined ? [] : [{ kind: 'deliver', payload: { botId: bot.id, cardId: card.id, ...(card.roomId === undefined ? {} : { roomId: card.roomId }), text: `Note on card ${label(card)} "${card.title}" from ${nameOf(self)}: ${said}` } }]
+      const effects = bot === undefined ? [] : [{
+        kind: 'deliver',
+        payload: { botId: bot.id, cardId: card.id, ...(card.roomId === undefined ? {} : { roomId: card.roomId }),
+          text: said, prefix: `Note on card ${label(card)} "${card.title}" from ${nameOf(self)}: ` },
+      }]
       return outcome(card, bot === undefined ? `Noted on ${label(card)}; the user holds it.` : `Passed on to ${bot.name} on ${label(card)}.`, effects)
     },
     complete(cards, self, _roomId, args, { sessionId, unmerged = [] }: any = {}) {
@@ -498,7 +514,7 @@ export function createBoard({ roster, now = Date.now }) {
       })
       if (ticket.error !== undefined) return ticket
       const at = now()
-      const brief = replyText(input.brief, BRIEF_MAX)
+      const brief = fieldText(input.brief, BRIEF_MAX)
       const card = { id: newCardId(), title, assignee, openedBy: USER, status, progress: '', links: [], notes: [], createdAt: at, updatedAt: at, ...(brief === '' ? {} : { brief }) }
       apply(card, ticket.fields)
       logStep(card, USER)
@@ -552,11 +568,17 @@ export function createBoard({ roster, now = Date.now }) {
       if (error !== undefined) return { error }
       const bot = card.assignee === USER ? undefined : roster.bot(card.assignee)
       if (!isOpen(card) && bot === undefined) return { error: 'That card is already finished.' }
-      const said = oneLine(text, NOTE_MAX)
-      if (said === '') return { error: 'Write a note first.' }
+      const said = noteText(text)
+      if (isBlankNote(said)) return { error: 'Write a note first.' }
+      const lengthError = noteLengthError(said)
+      if (lengthError !== undefined) return { error: lengthError }
       say(card, USER, said)
       delete card.idle
-      const effects = bot === undefined ? [] : [{ kind: 'deliver', payload: { botId: bot.id, cardId: card.id, ...(card.roomId === undefined ? {} : { roomId: card.roomId }), text: `Note on card ${label(card)} "${card.title}": ${said}` } }]
+      const effects = bot === undefined ? [] : [{
+        kind: 'deliver',
+        payload: { botId: bot.id, cardId: card.id, ...(card.roomId === undefined ? {} : { roomId: card.roomId }),
+          text: said, prefix: `Note on card ${label(card)} "${card.title}": ` },
+      }]
       return outcome(card, undefined, effects)
     },
     sent(cards, id, { botId, roomId, cardId, since, requestId }: any) {

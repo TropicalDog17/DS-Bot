@@ -999,6 +999,7 @@ export function apply(ctx) {
   // only when that plugin's route answers. A card's note line in a chat shows as a tag
   // of the card (on releases that draw user text by rules), and so does a card a Bot names.
   ctx.effect(() => installBoardPage(pages.service, {
+    prefsSource: { subscribe: roster.subscribe, getSnapshot: () => roster.getSnapshot().prefs },
     cardTags: ({ rule, Node, botText }) => {
       const offLinks = textLinks.add(botText)
       if (!hostDrawsUserText) return offLinks

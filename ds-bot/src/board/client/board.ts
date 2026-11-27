@@ -1,4 +1,4 @@
-import { createElement as h, useCallback, useEffect, useRef, useState } from 'react'
+import { createElement as h, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { BotMark } from '../../client/mark.ts'
 import { ChevronLeftIcon, PlusIcon } from '../../client/icons.ts'
 import { useEscape } from '../../client/overlay-hooks.ts'
@@ -6,6 +6,8 @@ import { clockLabel, elapsedLabel, relativeShort } from '../../client/text.ts'
 import { workPhrase } from '../../client/cells.ts'
 import { mdLabels, t } from '../../client/i18n.ts'
 import { MarkdownText } from '../../client/dsh-primitives.ts'
+import { sendsOnEnter } from '../../client/enter-key.ts'
+import { NOTE_MAX, charCount, isBlankNote, noteText } from '../card-fields.ts'
 import { LinkIcon, StepsIcon } from './icons.ts'
 import { CARD_LINK_ORIGIN, linkCards, nameCards } from './card-tag.ts'
 
@@ -15,6 +17,8 @@ const DONE_DAYS = 7
 const DONE_SHOWN = 10
 const USER = 'user'
 const DRAG_TYPE = 'text/x-ds-bot-card'
+const NOTE_COUNT_FROM = 18_000
+const noteCountFormat = new Intl.NumberFormat('en-US')
 
 export function boardColumns(cards, now = Date.now()) {
   const all = Object.values<any>(cards ?? {}).filter(card => card && typeof card.id === 'string').sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0))
@@ -292,13 +296,29 @@ function Brief({ text, cards }) {
       open ? t('Show less') : t('Show more')) : null)
 }
 
+function fitComposer(node: HTMLTextAreaElement) {
+  const scrollTop = node.scrollTop
+  const { maxHeight, overflowY } = node.style
+  node.style.maxHeight = '0px'
+  node.style.overflowY = 'hidden'
+  const border = node.offsetHeight - node.clientHeight
+  const height = `${Math.min(180, Math.max(40, node.scrollHeight + border))}px`
+  node.style.maxHeight = maxHeight
+  node.style.overflowY = overflowY
+  if (node.style.height !== height) node.style.height = height
+  if (node.scrollTop !== scrollTop) node.scrollTop = scrollTop
+}
+
+const EMPTY_DRAFT = { typed: '', refused: [] as { seq: number; text: string }[] }
+
 export function CardDetail({ card, roster, actions, live, onOpenCard }) {
-  const [text, setText] = useState('')
+  const [draft, setDraft] = useState(EMPTY_DRAFT)
   const [busy, setBusy] = useState(false)
   const [pending, setPending] = useState([])
   const [confirming, setConfirming] = useState(false)
   const [error, setError] = useState('')
   const scroller = useRef(null)
+  const composer: { current: HTMLTextAreaElement | null } = useRef(null)
   const pendingSeq = useRef(0)
   const mountedCard = useRef(card.id)
   const notes = card.notes ?? []
@@ -306,6 +326,37 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
   const said = shownNotes.length
   const steps = live?.steps?.length ?? 0
   const waiting = card.awaiting !== undefined || steps > 0
+  const text = [draft.typed, ...draft.refused.map(entry => entry.text)].filter(part => part !== '').join('\n\n')
+  const line = noteText(text)
+  const count = charCount(line)
+  const excess = count - NOTE_MAX
+  const sendDisabled = isBlankNote(line) || excess > 0
+  const open = OPEN.includes(card.status)
+  useLayoutEffect(() => {
+    const node = composer.current
+    if (node !== null) fitComposer(node)
+  }, [open, text])
+  useLayoutEffect(() => {
+    const node = composer.current
+    if (node === null || typeof ResizeObserver !== 'function') return undefined
+    let width = node.getBoundingClientRect().width
+    let frame: number | undefined
+    const observer = new ResizeObserver(() => {
+      const next = node.getBoundingClientRect().width
+      if (next === width) return
+      width = next
+      if (frame !== undefined) cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => {
+        frame = undefined
+        fitComposer(node)
+      })
+    })
+    observer.observe(node, { box: 'border-box' })
+    return () => {
+      observer.disconnect()
+      if (frame !== undefined) cancelAnimationFrame(frame)
+    }
+  }, [open])
   useEffect(() => {
     const node = scroller.current
     if (!node || typeof node.scrollTo !== 'function') return
@@ -323,7 +374,6 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
     const timer = setTimeout(() => setConfirming(false), 3000)
     return () => clearTimeout(timer)
   }, [confirming])
-  const open = OPEN.includes(card.status)
   const run = (promise, after?) => {
     setBusy(true)
     setError('')
@@ -332,8 +382,15 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
       (failure) => { setBusy(false); setError(String(failure?.message ?? failure)) },
     )
   }
-  const sendNote = (line, restore = false) => {
-    const pendingId = `pending-${++pendingSeq.current}`
+  const editDraft = (typed: string) => {
+    setDraft(current => ({
+      typed,
+      refused: current.refused.filter(entry => !draft.refused.includes(entry)),
+    }))
+  }
+  const sendNote = (line, original?: string) => {
+    const seq = ++pendingSeq.current
+    const pendingId = `pending-${seq}`
     const optimistic = { pendingId, pending: true, at: Date.now(), by: USER, text: line }
     setError('')
     setPending(list => [...list, optimistic])
@@ -341,16 +398,18 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
       () => { setPending(list => list.filter(entry => entry.pendingId !== pendingId)) },
       (failure) => {
         setPending(list => list.filter(entry => entry.pendingId !== pendingId))
-        if (restore) setText(current => (current === '' ? line : current))
+        if (original !== undefined) setDraft(current => ({
+          typed: current.typed,
+          refused: [...current.refused, { seq, text: original }].sort((a, b) => a.seq - b.seq),
+        }))
         setError(String(failure?.message ?? failure))
       },
     )
   }
   const send = () => {
-    const line = text.trim()
-    if (line === '') return
-    setText('')
-    sendNote(line, true)
+    if (sendDisabled) return
+    editDraft('')
+    sendNote(line, text)
   }
   const cancel = () => {
     if (!confirming) { setConfirming(true); return }
@@ -406,12 +465,22 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
       }) : null,
       error ? h('div', { className: 'bt-error', role: 'alert' }, error) : null),
     open ? h('div', { className: 'bt-board-sheet-foot bt-board-write' },
-      h('input', {
-        className: 'bt-input', value: text, placeholder: t('Message'), 'aria-label': t('Message'), maxLength: 500,
-        onChange: event => setText(event.target.value),
-        onKeyDown: (event) => { if (event.key === 'Enter' && !event.nativeEvent?.isComposing) { event.preventDefault(); send() } },
+      h('textarea', {
+        ref: composer, className: 'bt-input', value: text, placeholder: t('Message'), 'aria-label': t('Message'), rows: 1, 'aria-invalid': excess > 0 || undefined,
+        onChange: event => editDraft(event.target.value),
+        onKeyDown: (event) => {
+          if (event.key !== 'Enter' || !sendsOnEnter(roster.prefs) || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey
+            || event.keyCode === 229 || event.nativeEvent?.isComposing) return
+          event.preventDefault()
+          send()
+        },
       }),
-      h('button', { type: 'button', className: 'bt-send', disabled: text.trim() === '', onClick: send }, t('Send'))) : null)
+      h('button', { type: 'button', className: 'bt-send', disabled: sendDisabled, onClick: send }, t('Send')),
+      h('div', { className: 'bt-board-write-status', 'data-over-limit': excess > 0 || undefined },
+        count > NOTE_COUNT_FROM ? h('span', { className: 'bt-board-write-count' },
+          t('{count} / {limit}', { count: noteCountFormat.format(count), limit: noteCountFormat.format(NOTE_MAX) })) : null,
+        h('span', { className: 'bt-board-write-error', 'aria-live': 'polite' },
+          excess > 0 ? t(excess === 1 ? 'Too long by {count} character' : 'Too long by {count} characters', { count: noteCountFormat.format(excess) }) : ''))) : null)
 }
 
 const LEVELS = [['off', 'Off'], ['tools', 'Tool calls'], ['thinking', 'Thinking'], ['all', 'All']]
@@ -654,7 +723,11 @@ a.bt-board-key:hover{color:var(--bt-ink)}
 .bt-board-cancel{align-self:flex-start;margin-top:8px;height:32px;padding:0;border:0;background:none;color:var(--bt-ink-3);font:inherit;font-size:13px;cursor:pointer}
 .bt-board-cancel:hover,.bt-board-cancel[data-confirm]{color:var(--bt-danger)}
 .bt-board-cancel[data-confirm]{font-weight:600}
-.bt-board-write>.bt-input{flex:1;min-width:0;height:40px;font-size:14px}
+.bt-board-write{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:0 8px;align-items:end}
+.bt-board-write>.bt-input{height:auto;min-height:40px;max-height:180px;padding:9px 11px;line-height:20px;font-size:14px;resize:none;overflow-y:auto}
+.bt-board-write-status{grid-column:1/-1;text-align:right;color:var(--bt-ink-2);font-size:12px}
+.bt-board-write-status[data-over-limit]{color:var(--bt-danger)}
+.bt-board-write-count,.bt-board-write-error:not(:empty){display:block;margin-top:4px}
 @media (max-width:640px){
   .bt-board-page{top:0}
   .bt-board-head{padding:12px 8px 8px 16px}
