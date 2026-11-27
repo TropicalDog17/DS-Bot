@@ -61,6 +61,7 @@ export function openBoardStore(file, { warn = (() => {}) as any, lock = homeLock
   mkdirSync(dirname(file), { recursive: true })
   let data = EMPTY()
   let seen = ''
+  let rev = 0
   const stamp = () => {
     try { const { mtimeMs, size } = statSync(file); return `${mtimeMs}:${size}` } catch { return '' }
   }
@@ -68,6 +69,7 @@ export function openBoardStore(file, { warn = (() => {}) as any, lock = homeLock
     const now = stamp()
     if (now === seen) return
     seen = now
+    rev += 1
     if (now === '') { data = EMPTY(); return }
     try {
       data = clean(JSON.parse(readFileSync(file, 'utf8')))
@@ -88,6 +90,7 @@ export function openBoardStore(file, { warn = (() => {}) as any, lock = homeLock
   return {
     file,
     read() { refresh(); return data },
+    version() { refresh(); return `${rev}:${seen}` },
     readOnly: () => !writable(),
     change(fn) {
       const run = queue.then(async () => {
@@ -99,6 +102,7 @@ export function openBoardStore(file, { warn = (() => {}) as any, lock = homeLock
         await writeAtomic(file, `${JSON.stringify(draft, null, 1)}\n`)
         data = draft
         seen = stamp()
+        rev += 1
         return result ?? {}
       })
       queue = run.catch(() => {})

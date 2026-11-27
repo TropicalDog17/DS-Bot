@@ -1,4 +1,6 @@
-import { createElement as h, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createElement as h, memo as reactMemo, useCallback, useEffect, useLayoutEffect, useMemo as reactUseMemo, useRef, useState } from 'react'
+const memo = typeof reactMemo === 'function' ? reactMemo : (fn => fn)
+const useMemo = typeof reactUseMemo === 'function' ? reactUseMemo : (fn => fn())
 import { BotMark } from '../../client/mark.ts'
 import { ChevronLeftIcon, PlusIcon } from '../../client/icons.ts'
 import { useEscape } from '../../client/overlay-hooks.ts'
@@ -49,10 +51,12 @@ export function plainLine(text) {
     .trim()
 }
 
-function BotText({ text, cards, className }) {
+const BotText = memo(function BotText({ text, cards, className }) {
+  const linked = useMemo(() => linkCards(text ?? '', cards), [text, cards])
+  const labels = useMemo(() => mdLabels(), [])
   return h('div', { className: `bt-board-md ${className}` },
-    h(MarkdownText, { text: linkCards(text ?? '', cards), labels: mdLabels(), variant: 'compact' }))
-}
+    h(MarkdownText, { text: linked, labels, variant: 'compact' }))
+})
 
 export function linkLabel(href) {
   let url
@@ -185,16 +189,16 @@ export function Trace({ steps, live = false, open = false }) {
       : h(ToolStep, { key: index, step, open })))
 }
 
-function TraceFold({ trace, open }) {
+const TraceFold = memo(function TraceFold({ trace, open }) {
   const steps = Array.isArray(trace?.steps) ? trace.steps : []
   if (steps.length === 0) return null
   return h('details', { className: 'bt-board-fold' },
     h('summary', null, t('Thought it through'),
       typeof trace.ms === 'number' ? h('span', { className: 'bt-board-age' }, `· ${elapsedLabel(Math.max(1000, trace.ms))}`) : null),
     h(Trace, { steps, open }))
-}
+})
 
-function Thread({ notes, roster, awaiting, worker, live, pick, busy }) {
+const Thread = memo(function Thread({ notes, roster, awaiting, worker, live, pick, busy }) {
   const cards = roster.board?.cards ?? {}
   const asked = notes.findLastIndex(note => Array.isArray(note.options) && note.options.length > 0)
   const answer = asked < 0 ? undefined : notes.slice(asked + 1).find(note => note.by === undefined || note.by === USER)
@@ -220,9 +224,9 @@ function Thread({ notes, roster, awaiting, worker, live, pick, busy }) {
       h('div', { className: 'bt-board-msg-body' },
         working ? h(Trace, { steps: working, live: true, open }) : null,
         h('span', { className: 'bt-board-msg-text bt-board-dots', 'aria-hidden': true }, h('i'), h('i'), h('i')))) : null)
-}
+})
 
-function Steps({ card, cards }) {
+const Steps = memo(function Steps({ card, cards }) {
   const [open, setOpen] = useState(false)
   const earlier = (card.log ?? []).slice(0, -1).reverse()
   if (earlier.length === 0) return null
@@ -234,7 +238,7 @@ function Steps({ card, cards }) {
         h(Dot, { status: step.status }),
         h('span', { className: 'bt-board-age' }, clockLabel(step.at ?? 0)),
         step.progress ? h(BotText, { text: step.progress, cards, className: 'bt-board-step-text' }) : null))) : null)
-}
+})
 
 const PANE_MS = 2000
 export function Panes({ card, actions }) {
@@ -287,14 +291,14 @@ export function Panes({ card, actions }) {
 }
 
 const BRIEF_FOLD = 280
-function Brief({ text, cards }) {
+const Brief = memo(function Brief({ text, cards }) {
   const [open, setOpen] = useState(false)
   const long = text.length > BRIEF_FOLD || text.split('\n').length > 4
   return h('div', { className: 'bt-board-brief', 'data-folded': long && !open ? true : undefined },
     h(BotText, { text, cards, className: 'bt-board-line' }),
     long ? h('button', { type: 'button', className: 'bt-more', 'aria-expanded': open, onClick: () => setOpen(value => !value) },
       open ? t('Show less') : t('Show more')) : null)
-}
+})
 
 function fitComposer(node: HTMLTextAreaElement) {
   const scrollTop = node.scrollTop
@@ -322,7 +326,7 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
   const pendingSeq = useRef(0)
   const mountedCard = useRef(card.id)
   const notes = card.notes ?? []
-  const shownNotes = pending.length > 0 ? [...notes, ...pending] : notes
+  const shownNotes = useMemo(() => (pending.length > 0 ? [...notes, ...pending] : notes), [notes, pending])
   const said = shownNotes.length
   const steps = live?.steps?.length ?? 0
   const waiting = card.awaiting !== undefined || steps > 0
@@ -388,7 +392,7 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
       refused: current.refused.filter(entry => !draft.refused.includes(entry)),
     }))
   }
-  const sendNote = (line, original?: string) => {
+  const sendNote = useCallback((line, original?: string) => {
     const seq = ++pendingSeq.current
     const pendingId = `pending-${seq}`
     const optimistic = { pendingId, pending: true, at: Date.now(), by: USER, text: line }
@@ -405,7 +409,8 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
         setError(String(failure?.message ?? failure))
       },
     )
-  }
+  }, [actions, card.id])
+  const handlePick = useCallback(option => sendNote(option), [sendNote])
   const send = () => {
     if (sendDisabled) return
     editDraft('')
@@ -461,7 +466,7 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
       }, t('Cancel card')) : null,
       shownNotes.length > 0 || (open && steps > 0) ? h(Thread, {
         notes: shownNotes, roster, awaiting: open ? card.awaiting : undefined, worker: card.assignee, live: open ? live : undefined, busy,
-        pick: open ? option => sendNote(option) : undefined,
+        pick: open ? handlePick : undefined,
       }) : null,
       error ? h('div', { className: 'bt-error', role: 'alert' }, error) : null),
     open ? h('div', { className: 'bt-board-sheet-foot bt-board-write' },
@@ -612,7 +617,7 @@ a.bt-board-key:hover{color:var(--bt-ink)}
 .bt-board-sheet-head .bt-icon-btn{width:36px;height:36px}
 .bt-board-sheet-head h3{margin:0;font-size:16px;line-height:24px;font-weight:600}
 .bt-board-sheet-body{flex:1;min-height:0;display:flex;flex-direction:column}
-.bt-board-form,.bt-board-detail{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;align-items:stretch;gap:16px;padding:8px 24px 24px}
+.bt-board-form,.bt-board-detail{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;align-items:stretch;gap:16px;padding:8px 24px 24px;contain:layout style}
 .bt-board-form .bt-input{height:40px;font-size:14px}
 .bt-board-title-input{font-weight:500}
 .bt-board-form-row{display:flex;gap:8px}
