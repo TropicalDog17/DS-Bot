@@ -352,7 +352,10 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
     const node = composer.current
     const canShrink = text.length < prevTextLen.current
     prevTextLen.current = text.length
-    if (node !== null) fitComposer(node, canShrink)
+    if (node !== null) {
+      if (node.value !== text) node.value = text
+      fitComposer(node, canShrink)
+    }
   }, [open, text])
   useLayoutEffect(() => {
     const node = composer.current
@@ -493,7 +496,7 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
       error ? h('div', { className: 'bt-error', role: 'alert' }, error) : null),
     open ? h('div', { className: 'bt-board-sheet-foot bt-board-write' },
       h('textarea', {
-        ref: composer, className: 'bt-input', value: text, placeholder: t('Message'), 'aria-label': t('Message'), rows: 1, 'aria-invalid': excess > 0 || undefined,
+        ref: composer, className: 'bt-input', defaultValue: '', placeholder: t('Message'), 'aria-label': t('Message'), rows: 1, 'aria-invalid': excess > 0 || undefined,
         onChange: event => editDraft(event.target.value),
         onKeyDown: (event) => {
           if (event.key !== 'Enter' || !sendsOnEnter(roster.prefs) || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey

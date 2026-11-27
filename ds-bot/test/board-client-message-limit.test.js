@@ -16,6 +16,8 @@ function composer(boardNote = () => {}, prefs = {}, dom) {
   const state = []
   const effects = new Map()
   const scheduled = []
+  const fallbackNode = { value: '', style: { height: '', maxHeight: '', overflowY: '' }, offsetHeight: 40, clientHeight: 38, scrollTop: 0, scrollHeight: 38 }
+  const targetNode = dom?.node ?? fallbackNode
   const react = {
     createElement: (type, props, ...children) => ({ type, props: props ?? {}, children: children.flat(Infinity) }),
     createContext: () => ({}), useContext: () => undefined,
@@ -28,7 +30,6 @@ function composer(boardNote = () => {}, prefs = {}, dom) {
     useEffect: () => {},
     useLayoutEffect(effect, deps) {
       const slot = hook++
-      if (!dom) return
       const previous = effects.get(slot)
       if (previous && deps.every((dep, index) => Object.is(dep, previous.deps[index]))) return
       scheduled.push(() => {
@@ -51,8 +52,9 @@ function composer(boardNote = () => {}, prefs = {}, dom) {
     const tree = CardDetail({ card, roster: { byId: {}, bots: [], prefs }, actions: { boardNote } })
     const footer = tree.children.find(node => node?.props.className?.includes('bt-board-write'))
     const [box, send, status] = footer.children
-    if (dom) box.props.ref.current = dom.node
+    box.props.ref.current = targetNode
     for (const effect of scheduled.splice(0)) effect()
+    box.props.value = targetNode.value
     const [count, error] = status.children
     const thread = tree.children[0].children.find(node => node?.props?.notes)
     const pending = thread?.type(thread.props).children.filter(node => node?.props['data-pending']).map(node => (
