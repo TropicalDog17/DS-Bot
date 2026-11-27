@@ -30,6 +30,7 @@ const bundled = async (entry) => {
 const { BoardScreen, CardDetail, boardColumns, leadColumn, linkLabel, plainLine, COLUMNS } = await bundled('board/client/board.js')
 const { installBoardPage, boardCall, boardWatch, replyNotice, BOARD_ROUTE } = await bundled('board/client/index.js')
 const { cardTagRule, cardTagNode, CARD_TAG_ID, linkCards, nameCards, CARD_LINK_ORIGIN } = await bundled('board/client/card-tag.js')
+const { linkFiles, fileLinkTarget, fileName, FILE_LINK_ORIGIN } = await bundled('board/client/file-link.js')
 const plain = value => JSON.parse(JSON.stringify(value))
 
 const all = (node, cls, out = []) => {
@@ -534,4 +535,26 @@ test('a card with herdr panes offers its newest pane as a terminal, closed until
   assert.equal(find(box, 'bt-board-term'), null)
   assert.equal(find(box, 'bt-board-pane-pick'), null)
   assert.equal(find(view(card('k', 'active')), 'bt-board-panes'), null)
+})
+
+test('local file links in a Bot\'s text open on the board, other links and code stay as written', () => {
+  const href = target => `<${FILE_LINK_ORIGIN}${encodeURIComponent(target)}>`
+  const text = [
+    'Spec in [spec.md](/home/me/spec.md) and [the report](</home/me/a b/REPORT.md#L3>).',
+    'Code: [`tools.ts`](file:///home/me/src/tools.ts), log `/home/me/run.log`, folder `/home/me/logs/`.',
+    'Web [site](https://example.com), picture ![shot](/home/me/shot.png).',
+    '```',
+    '[raw](/home/me/raw.md)',
+    '```',
+  ].join('\n')
+  assert.equal(linkFiles(text), [
+    `Spec in [spec.md](${href('/home/me/spec.md')}) and [the report](${href('/home/me/a b/REPORT.md#L3')}).`,
+    `Code: [\`tools.ts\`](${href('file:///home/me/src/tools.ts')}), log [\`/home/me/run.log\`](${href('/home/me/run.log')}), folder \`/home/me/logs/\`.`,
+    'Web [site](https://example.com), picture ![shot](/home/me/shot.png).',
+    '```',
+    '[raw](/home/me/raw.md)',
+    '```',
+  ].join('\n'))
+  assert.equal(fileLinkTarget(`${FILE_LINK_ORIGIN}${encodeURIComponent('/home/me/a b/REPORT.md#L3')}`), '/home/me/a b/REPORT.md#L3')
+  assert.equal(fileName('/home/me/a b/REPORT.md#L3'), 'REPORT.md')
 })

@@ -52,6 +52,7 @@ function BoardPage({ live, focus, call, close, paneLeft, leaving, prefsSource })
     boardSeen: id => act('seen', { id }),
     boardTrace: trace => act('trace', { trace }),
     boardPane: (id, pane) => call('pane', { id, pane }),
+    boardFile: (id, link) => call('file', { id, link }),
     closeBoard: close,
     reportError: () => live.refresh(),
   }), [act, close, live])

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { CARD_NOTE_MAX, isBlankNote, noteLengthError, noteText, oneLine } from './note-text.ts'
 import { ownChatSessions, reach } from './threads.ts'
+import { readTextFile } from './file-view.ts'
 
 export const NOTE_MAX = 2000
 export { CARD_NOTE_MAX } from './note-text.ts'
@@ -234,6 +235,9 @@ export function notesService(rt) {
       cardStatuses.add(read)
       return () => { cardStatuses.delete(read) }
     },
+    // absolute path -> { name, path, text, size, truncated }: a text file for the user to read;
+    // throws for a missing, binary or data file.
+    readFile: path => readTextFile(String(path ?? ''), { isData: rt.inData }),
     // listener({ botId, sessionId?, roomId?, cardId?, text, since, heard? }) once per finished answer; since is
     // when its turn started, heard the request ids of the user's messages it answers.
     // Returns the unsubscribe.

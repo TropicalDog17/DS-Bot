@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import { defineTool } from '../host/tool-schema.ts'
 import { dshHomeOf } from '../host/folders.ts'
 import { textOf } from '../host/text.ts'
+import { pathOfLink } from '../host/file-view.ts'
 import { ACTIONS, BOT_STATUSES, createBoard, isOpen } from './cards.ts'
 import { NOTE_MAX, USER, isBlankNote, noteLengthError, noteText } from './card-fields.ts'
 import { LEVELS, createLive, levelOf } from './live.ts'
@@ -239,6 +240,8 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
         return userNote(String(body.id ?? ''), body.text)
       case 'pane':
         return readPane(String(body.id ?? ''), String(body.pane ?? ''))
+      case 'file':
+        return readCardFile(String(body.id ?? ''), String(body.link ?? ''))
       default:
         return { error: 'Unknown board endpoint.', code: 'board/unknown' }
     }
@@ -261,6 +264,18 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
     if (entry?.cardId !== id && !(card.panes ?? []).some(entry => entry.id === pane)) return { error: 'That pane is not on the card.', code: 'board/refused' }
     if (entry?.closed !== undefined) return { value: { pane, ...entry.closed, closed: true } }
     return { value: { pane, at: now(), ...await herdr.read(pane) } }
+  }
+  async function readCardFile(id, link) {
+    const { cards } = store.read()
+    const card = Object.hasOwn(cards, id) ? cards[id] : undefined
+    if (card === undefined) return { error: 'No such card.', code: 'board/refused' }
+    const path = pathOfLink(link)
+    if (path === undefined || !JSON.stringify(card).includes(JSON.stringify(link).slice(1, -1))) return { error: 'That file is not on the card.', code: 'board/refused' }
+    try {
+      return { value: await notes.readFile(path) }
+    } catch (error) {
+      return { error: error?.message ?? String(error), code: 'board/refused' }
+    }
   }
   async function notePanes(sessionId, event) {
     const data = event?.data
