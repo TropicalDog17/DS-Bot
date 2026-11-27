@@ -300,12 +300,22 @@ const Brief = memo(function Brief({ text, cards }) {
       open ? t('Show less') : t('Show more')) : null)
 })
 
-function fitComposer(node: HTMLTextAreaElement) {
+function fitComposer(node: HTMLTextAreaElement, canShrink = true) {
+  const border = node.offsetHeight - node.clientHeight
+  if (!canShrink && node.style.height !== '') {
+    const height = `${Math.min(180, Math.max(40, node.scrollHeight + border))}px`
+    if (parseFloat(height) > parseFloat(node.style.height)) node.style.height = height
+    return
+  }
+  if (node.style.height === '40px') {
+    const height = `${Math.min(180, Math.max(40, node.scrollHeight + border))}px`
+    if (node.style.height !== height) node.style.height = height
+    return
+  }
   const scrollTop = node.scrollTop
   const { maxHeight, overflowY } = node.style
   node.style.maxHeight = '0px'
   node.style.overflowY = 'hidden'
-  const border = node.offsetHeight - node.clientHeight
   const height = `${Math.min(180, Math.max(40, node.scrollHeight + border))}px`
   node.style.maxHeight = maxHeight
   node.style.overflowY = overflowY
@@ -323,6 +333,7 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
   const [error, setError] = useState('')
   const scroller = useRef(null)
   const composer: { current: HTMLTextAreaElement | null } = useRef(null)
+  const prevTextLen = useRef(0)
   const pendingSeq = useRef(0)
   const mountedCard = useRef(null)
   const follow = useRef(true)
@@ -339,7 +350,9 @@ export function CardDetail({ card, roster, actions, live, onOpenCard }) {
   const open = OPEN.includes(card.status)
   useLayoutEffect(() => {
     const node = composer.current
-    if (node !== null) fitComposer(node)
+    const canShrink = text.length < prevTextLen.current
+    prevTextLen.current = text.length
+    if (node !== null) fitComposer(node, canShrink)
   }, [open, text])
   useLayoutEffect(() => {
     const node = composer.current
@@ -631,7 +644,7 @@ a.bt-board-key:hover{color:var(--bt-ink)}
 .bt-board-title-input{font-weight:500}
 .bt-board-form-row{display:flex;gap:8px}
 .bt-board-key-input{flex:0 0 128px;font-family:var(--bt-mono,ui-monospace,SFMono-Regular,Menlo,monospace);text-transform:uppercase}
-.bt-board-sheet-foot{flex:none;display:flex;gap:8px;align-items:center;padding:12px 24px calc(12px + env(safe-area-inset-bottom,0px));border-top:.5px solid var(--bt-line);background:var(--bt-main)}
+.bt-board-sheet-foot{flex:none;display:flex;gap:8px;align-items:center;padding:12px 24px calc(12px + env(safe-area-inset-bottom,0px));border-top:.5px solid var(--bt-line);background:var(--bt-main);contain:layout style}
 .bt-board-go{flex:1}
 .bt-board-detail>.bt-board-key{align-self:flex-start;margin-bottom:-8px}
 .bt-board-detail-title{margin:0;font-size:18px;line-height:26px;font-weight:600;letter-spacing:-.01em;overflow-wrap:anywhere}
