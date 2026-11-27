@@ -43,6 +43,10 @@ export function addWait(waits: Record<string, any>, { pane, until, botId, roomId
   return { wait, replaced: earlier !== undefined }
 }
 
+// Interactive agents in herdr often settle to `idle` (or leave `done` before the next
+// poll), so waiting for `done` also matches `idle`.
+const matchesUntil = (until, status) => until.includes(status) || (status === 'idle' && until.includes('done'))
+
 // A pane without an agent never gets to done, idle or blocked: the agent ended (or never
 // started) and left a shell, so after ARM_MS in that state the Bot is woken as well.
 export function check(wait, seen, at): any {
@@ -50,7 +54,7 @@ export function check(wait, seen, at): any {
   if (at - wait.since >= WAIT_MAX_MS) return { kind: 'expired', ...(seen?.status ? { status: seen.status } : {}) }
   const status = seen?.status
   if (typeof status !== 'string') return undefined
-  if (wait.until.includes(status)) return wait.armed === true || at - wait.since >= ARM_MS ? { kind: 'match', status } : undefined
+  if (matchesUntil(wait.until, status)) return wait.armed === true || at - wait.since >= ARM_MS ? { kind: 'match', status } : undefined
   const bare = status === NO_AGENT
   if (bare && wait.noAgentSince !== undefined && at - wait.noAgentSince >= ARM_MS) return { kind: 'left' }
   const marks = {
@@ -94,7 +98,7 @@ export function createPaneWaits({ store, herdr, notes, now = Date.now, identity,
     description: 'Wait for the agent in a herdr pane to finish, stop or need input, without holding your turn. Call it once you handed the work to the pane, then end your turn: when the pane gets to one of the states you name, you are woken in this conversation with what it shows. The wait is kept by DS Bot, so a restart or a new part of your chat does not lose it. stop: true ends your wait on that pane.',
     parameters: {
       pane: { type: 'string', required: true, description: 'The herdr pane id, like w1:p1T' },
-      until: { type: 'array', items: { type: 'string', enum: WAIT_STATES }, description: `States to wake on; default ${WAIT_STATES.join(', ')}. done: it finished a task; idle: it waits for a prompt; blocked: it needs input or approval` },
+      until: { type: 'array', items: { type: 'string', enum: WAIT_STATES }, description: `States to wake on; omit for the default (${WAIT_STATES.join(', ')}). done: it finished a task (also wakes on idle once it stops working); idle: it waits for a prompt; blocked: it needs input or approval` },
       note: { type: 'string', description: 'What to do once it is over, in one line; it comes back with the wake' },
       stop: { type: 'boolean', description: 'true ends your wait on this pane' },
       release: { type: 'boolean', description: 'true: you are done with this pane; DS Bot closes it once nothing runs in it' },
