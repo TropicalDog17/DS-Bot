@@ -126,7 +126,7 @@ export function useTeamLink(computer: SavedComputer, identity: PhoneIdentity) {
     await ensureUnlock(endpoint)
     if (clientRef.current !== client) throw offline()
     try {
-      if (endpoint === 'state' || endpoint === 'hello' || endpoint === 'notices') {
+      if (endpoint === 'state' || endpoint === 'hello' || endpoint === 'notices' || endpoint === 'board') {
         return await callBot(client, endpoint, payload)
       }
       // Show the write's effect at once; the reply's state (or a full reload
