@@ -1,0 +1,20 @@
+{
+  "extends": "../ds-bot/tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "rootDir": "../ds-bot/src",
+    "outDir": "./node_modules/.cache/dsb-tsc/shared",
+    "tsBuildInfoFile": "./node_modules/.cache/dsb-tsc/shared.tsbuildinfo",
+    "types": []
+  },
+  "include": [
+    "../ds-bot/src/client/characters.ts",
+    "../ds-bot/src/client/inks.ts",
+    "../ds-bot/src/client/sources.ts",
+    "../ds-bot/src/client/themes.ts",
+    "../ds-bot/src/shared/file-chunks.ts",
+    "../ds-bot/src/shared/im-platforms.ts"
+  ]
+}

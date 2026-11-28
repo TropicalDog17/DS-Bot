@@ -1,12 +1,12 @@
 import { Image, StyleSheet, Text, View } from 'react-native'
 import { SvgXml } from 'react-native-svg'
-import { characterMarkup, lookOf, MAIN_LOOK, MASK_ID, shapeOf } from '../../../ds-bot/src/client/characters.js'
-import { INKS } from '../../../ds-bot/src/client/inks.js'
+import { characterMarkup, lookOf, MAIN_LOOK, MASK_ID, shapeOf } from '../../../ds-bot/src/client/characters.ts'
+import { INKS } from '../../../ds-bot/src/client/inks.ts'
 import type { Bot, Room } from '../connection.ts'
 import { MainStarIcon } from './icons.tsx'
 
 // The Bot's own mascot, drawn by the same generator as the desktop mark
-// (ds-bot/src/client/characters.js). CSS ink variables resolve to the mode's color.
+// (ds-bot/src/client/characters.ts). CSS ink variables resolve to the mode's color.
 
 let serial = 0
 

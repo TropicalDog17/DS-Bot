@@ -5,6 +5,8 @@
     "allowJs": true,
     "allowImportingTsExtensions": true,
     "erasableSyntaxOnly": true,
-    "types": ["node"]
-  }
+    "types": ["node"],
+    "tsBuildInfoFile": "./node_modules/.cache/dsb-tsc/mobile.tsbuildinfo"
+  },
+  "references": [{ "path": "./tsconfig.ds-bot.json" }]
 }

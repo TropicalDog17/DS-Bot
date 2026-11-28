@@ -3,7 +3,7 @@ import { Linking, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Swi
 import { ScrollView as GHScrollView } from 'react-native-gesture-handler'
 import * as Clipboard from 'expo-clipboard'
 import * as Haptics from 'expo-haptics'
-import { INKS } from '../../../../ds-bot/src/client/inks.js'
+import { INKS } from '../../../../ds-bot/src/client/inks.ts'
 import Svg, { Circle, Line, Path, Polygon, Polyline, Rect } from 'react-native-svg'
 import { compileFormula, createScope, evaluate, isFormula, choiceValue, show } from 'deep-view/core'
 import { t } from '../../ui/i18n.ts'

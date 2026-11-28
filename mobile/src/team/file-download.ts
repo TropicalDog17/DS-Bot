@@ -1,5 +1,5 @@
 import { Directory, File, FileMode, Paths } from 'expo-file-system'
-import { fileChunks } from '../../../ds-bot/src/shared/file-chunks.js'
+import { fileChunks } from '../../../ds-bot/src/shared/file-chunks.ts'
 
 export async function downloadFile(call: (endpoint: string, payload: object) => Promise<unknown>, target: object) {
   const dir = new Directory(Paths.cache, 'downloads', `${Date.now()}-${Math.random().toString(36).slice(2)}`)
