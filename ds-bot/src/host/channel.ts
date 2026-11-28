@@ -9,6 +9,7 @@ import { COLORS, EXTRA_COLORS, ROUTE } from './constants.ts'
 
 const STAGED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
 const STAGED_MS = 30 * 60_000
+const BOARD_ACTIONS = new Set(['state', 'seen', 'note', 'move', 'cancel'])
 
 const LANGUAGES = {
   zh: 'Chinese (简体中文)',
@@ -41,6 +42,13 @@ export function install(rt) {
   installBtw(rt)
   installSide(rt)
   const { ctx, state } = rt
+
+  let boardEndpoint
+  ctx.inject?.(['dsBotBoard'], (sub) => {
+    const endpoint = sub.dsBotBoard
+    boardEndpoint = endpoint
+    sub.effect(() => () => { if (boardEndpoint === endpoint) boardEndpoint = undefined }, 'ds-bot: board endpoint')
+  })
 
   let uiLocale
   rt.uiLanguage = () => {
@@ -501,6 +509,12 @@ export function install(rt) {
         case 'phone-pair-cancel':
         case 'phone-remove':
           return ok(await rt.phoneEndpoint(endpoint, body))
+        case 'board': {
+          const action = body.endpoint
+          if (!BOARD_ACTIONS.has(action)) return fail('This board action is not available here', 'board/refused')
+          if (boardEndpoint === undefined) return fail('The board plugin is off', 'board/off')
+          return await boardEndpoint(action, body.payload)
+        }
         case 'capability-save':
         case 'capability-delete':
         case 'capability-approve':
