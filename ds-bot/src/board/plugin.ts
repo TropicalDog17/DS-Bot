@@ -326,6 +326,12 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
     return { ok: true, value: result?.value ?? view() }
   }
 
+  async function call(endpoint, payload) {
+    let result
+    try { result = await handle(endpoint, payload) } catch (error) { result = { error: error?.message ?? String(error), code: 'board/failed' } }
+    return respond(result)
+  }
+
   const waits = createPaneWaits({
     store, herdr, notes, now, identity, roster, warn,
     every: (ms, job, options) => {
@@ -392,9 +398,8 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
       fetch: async (request) => {
         let body
         try { body = await request.json() } catch { body = {} }
-        let result
-        try { result = await handle(String(body?.endpoint ?? ''), body?.payload) } catch (error) { result = { error: error?.message ?? String(error), code: 'board/failed' } }
-        return new Response(JSON.stringify(respond(result)), { status: 200, headers: { 'content-type': 'application/json' } })
+        const result = await call(String(body?.endpoint ?? ''), body?.payload)
+        return new Response(JSON.stringify(result), { status: 200, headers: { 'content-type': 'application/json' } })
       },
     }),
   ]
@@ -573,7 +578,7 @@ export function install(ctx, config: any, { identity, roster, notes, bridge, too
     mergeOnce,
     rulesFor,
     openCardsDigest,
-    handle: async (endpoint, payload) => respond(await handle(endpoint, payload)),
+    handle: call,
     tool,
     store,
     dispose() {

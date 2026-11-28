@@ -19,6 +19,7 @@ export function apply(ctx, config = {}) {
       identity: ctx.botSessionIdentity, roster: ctx.dsBotRoster, notes: ctx.dsBotNotes, bridge: ctx.dsBotBridge,
       tools: ctx.tools, connection: ctx.connection, systemPrompt: ctx.systemPrompt,
     })
+    ctx.provide('dsBotBoard', handle.handle)
     return () => handle.dispose()
   }, 'ds-bot-board')
 }
