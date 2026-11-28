@@ -1,10 +1,10 @@
 import { createContext, useContext } from 'react'
 import { Platform } from 'react-native'
-import { allThemes } from '../../../ds-bot/src/client/themes.js'
-import { ACCENT_INKS, INKS, luminance } from '../../../ds-bot/src/client/inks.js'
+import { allThemes } from '../../../ds-bot/src/client/themes.ts'
+import { ACCENT_INKS, INKS, luminance } from '../../../ds-bot/src/client/inks.ts'
 
 // The phone palette derives from the same eight theme colors as the desktop team
-// UI (ds-bot/src/client/themes.js), through allThemes() so custom themes follow too.
+// UI (ds-bot/src/client/themes.ts), through allThemes() so custom themes follow too.
 
 export interface ThemeMode {
   bg: string; sidebar: string; bubble: string; card: string

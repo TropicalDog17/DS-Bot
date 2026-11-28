@@ -13,6 +13,7 @@ import { shadow, type as typeScale, useTheme } from '../ui/tokens.ts'
 import { Avatar, RoomAvatar } from '../ui/marks.tsx'
 import { GearIcon, PeopleIcon, PlusIcon, SearchIcon, SidebarIcon, SideIcon } from '../ui/icons.tsx'
 import { ChatView, prefetchChat } from '../screens/Chat.tsx'
+import { Board } from '../screens/Board.tsx'
 import { NeedsYou } from '../screens/NeedsYou.tsx'
 import { Settings } from '../screens/Settings.tsx'
 import { TeamList, type ChatTarget } from '../screens/TeamList.tsx'
@@ -52,10 +53,11 @@ function DrawerContent() {
   }, [navigation, fallbackId])
   // A chat replaces the one on screen; nothing stays stacked under it. Needs you and
   // Settings slide up over the chat and go back down to it.
-  const open = (target: ChatTarget | { kind: 'needs' } | { kind: 'settings' }) => {
+  const open = (target: ChatTarget | { kind: 'needs' } | { kind: 'settings' } | { kind: 'board' }) => {
     drawer.close()
     if (target.kind === 'needs') navigation.navigate('Needs')
     else if (target.kind === 'settings') navigation.navigate('Settings')
+    else if (target.kind === 'board') navigation.navigate('Board')
     else openChat(navigation, target)
   }
   return (
@@ -84,6 +86,10 @@ function DrawerContent() {
           <View style={[styles.badge, { backgroundColor: p.accent }]}><Text style={{ color: p.accentInk, fontSize: 12, fontWeight: '600' }}>{pending}</Text></View>
         </Pressable>
       ) : null}
+      <Pressable accessibilityRole="button" onPress={() => open({ kind: 'board' })}
+        style={({ pressed }) => [styles.needsRow, { backgroundColor: pressed ? p.hover : 'transparent' }]}>
+        <Text style={[typeScale.rowName, { color: p.ink }]}>{t('Board')}</Text>
+      </Pressable>
       <View style={{ flex: 1 }}>
         <TeamList onOpen={open} query={searching ? query : ''} current={current} />
       </View>
@@ -297,6 +303,7 @@ function Inner({ initial }: { initial: ChatTarget | null }) {
     <NoticeBanner />
     <Stack.Navigator initialRouteName="Chat" screenOptions={{ headerShown: false, animation: PUSH, contentStyle: { backgroundColor: p.main } }}>
       <Stack.Screen name="Chat" component={ChatScreenB} initialParams={initial ?? undefined} />
+      <Stack.Screen name="Board" component={Board} />
       <Stack.Screen name="BotDetails" component={BotDetails} />
       <Stack.Screen name="BotEdit" component={BotEdit} />
       <Stack.Screen name="GroupDetails" component={GroupDetails} />
